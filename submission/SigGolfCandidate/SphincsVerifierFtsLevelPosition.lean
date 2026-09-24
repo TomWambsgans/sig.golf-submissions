@@ -152,4 +152,10 @@ theorem firstLevelPosition (start : MachineState)
     by rw [levelPosition_mem_frame _ 0x43018 (by decide)];
        exact shiftedIndex⟩
 
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsLevelPosition.firstLevelPosition' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstLevelPosition
+
 end SigGolfCandidate.SphincsVerifierFtsLevelPosition
