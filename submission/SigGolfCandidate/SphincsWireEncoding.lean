@@ -152,6 +152,79 @@ theorem wire_randomizer (pk : SphincsSecurity.PublicKey)
   (wire_prefix_byte pk signature (40 + i) (by omega)).trans
     (prefix_randomizer_byte pk signature i hi)
 
+private theorem concatFields_first {n : Nat}
+    (fields : Fin (n + 1) → List UInt8)
+    (i : Nat) (hi : i < (fields 0).length) :
+    (concatFields (n + 1) fields)[i]'(by
+      simpa [concatFields] using Nat.lt_add_right
+        (concatFields n (fun j => fields j.succ)).length hi) =
+      (fields 0)[i] := by
+  simp only [concatFields]
+  rw [List.getElem_append_left hi]
+
+private theorem ftsOpening_firstSecret (signature : Signature)
+    (i : Nat) (hi : i < 20) :
+    ((ftsOpening signature ⟨0, by decide⟩).map UInt8.toBitVec)[i]'(by
+      rw [List.length_map, ftsOpening_length]
+      simp [ftsOpeningBytes, digestBytes]
+      omega) =
+      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
+  simp only [ftsOpening, List.map_append]
+  rw [List.getElem_append_left (by simp [bytesLE, digestBytes]; omega)]
+  simp only [List.getElem_map, bytesLE, List.getElem_ofFn,
+    UInt8.toBitVec_ofBitVec]
+  rfl
+
+private theorem firstFtsBlock_min_length (signature : Signature) :
+    20 ≤ (concatFields (ftsTrees - 1) (ftsOpening signature)).length := by
+  rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+  norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes]
+
+private theorem restBytes_firstSecret (signature : Signature)
+    (i : Nat) (hi : i < 20) :
+    ((restBytes signature).map UInt8.toBitVec)[i]'(by
+      simp only [List.length_map, restBytes, List.length_append]
+      have h := firstFtsBlock_min_length signature
+      omega) =
+      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
+  simp only [restBytes, List.map_append, List.append_assoc]
+  rw [List.getElem_append_left (by
+    simp only [List.length_map]
+    have h := firstFtsBlock_min_length signature
+    omega)]
+  simp only [List.getElem_map]
+  simp only [ftsTrees, Nat.reduceSub]
+  rw [concatFields_first (ftsOpening signature) i (by
+    change i < (ftsOpening signature ⟨0, by decide⟩).length
+    rw [ftsOpening_length]
+    norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
+    omega)]
+  change ((ftsOpening signature ⟨0, by decide⟩)[i]'(by
+    rw [ftsOpening_length]
+    norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
+    omega)).toBitVec =
+    (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8
+  simpa only [List.getElem_map] using ftsOpening_firstSecret signature i hi
+
+/-- The first FORS opening in the wire witness is the abstract secret. -/
+theorem wire_firstFtsSecret (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (i : Nat) (hi : i < 20) :
+    (wire pk signature).extractLsb' (8 * (60 + i)) 8 =
+      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
+  have full : 60 + i < SphincsWire.signatureBytes := by
+    rw [SphincsWire.signatureBytes_eq]
+    omega
+  rw [wire_byte pk signature (60 + i) full]
+  simp only [encodeBytes_prefix]
+  rw [List.getElem_append_right (by
+    simp [prefixBytes, bytesLE])]
+  simp only [List.length_map]
+  have plen : (prefixBytes pk signature).length = 60 := by
+    simp [prefixBytes, bytesLE]
+  simp only [plen, Nat.add_sub_cancel_left]
+  exact restBytes_firstSecret signature i hi
+
 /-- An honestly serialized signature reaches the exact abstract message query. -/
 theorem loaded_honest_message_ready (publicKey : SigGolf.PublicKey)
     (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
@@ -206,6 +279,10 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_randomizer' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_randomizer
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_firstFtsSecret' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms wire_firstFtsSecret
 
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_message_ready' depends on axioms: [propext,
  Classical.choice,
