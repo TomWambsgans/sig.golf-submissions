@@ -9,6 +9,8 @@ open SigGolfCandidate.SphincsVerifierCopy
 open SigGolfCandidate.SphincsVerifierFtsCopyAccess
 open SigGolfCandidate.SphincsVerifierFtsLevelBranch
 open SigGolfCandidate.SphincsVerifierCopyMemory
+open SigGolfCandidate.SphincsVerifierCopy20DataGeneral
+open SigGolfCandidate.SphincsVerifierFtsRightPath
 set_option maxRecDepth 16384
 
 def leftCurrentPointers (state : MachineState) : MachineState :=
@@ -31,6 +33,11 @@ theorem leftCurrentPointers_regs (state : MachineState) :
 
 theorem leftCurrentPointers_mem (state : MachineState) (address : Word) :
     (leftCurrentPointers state).getMem address = state.getMem address := by
+  simp [leftCurrentPointers, execInstrBr]
+
+theorem leftCurrentPointers_word (state : MachineState) (address : Word) :
+    (leftCurrentPointers state).getWord32 address =
+      state.getWord32 address := by
   simp [leftCurrentPointers, execInstrBr]
 
 theorem leftCurrentPointers_block (state : MachineState)
@@ -94,6 +101,82 @@ theorem leftCurrentCopy_pointer (state : MachineState)
   rw [destination]
   fin_cases offset <;> decide
 
+theorem leftCurrent_source_frame (written read : Fin 5)
+    (state : MachineState) (destination : state.getReg .x7 = 0x40028) :
+    (copyWordState written state).getWord32
+      (BitVec.ofNat 64 (0x44a00 + 4 * read.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * read.val)) := by
+  fin_cases written <;> fin_cases read <;>
+    simp_all [copyWordState, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_ne] <;>
+    (rw [getWord32_setWord32_other _ _ _ _ (by decide)]; simp)
+
+private def LeftCurrentInvariant (original : MachineState) (count : Nat)
+    (state : MachineState) : Prop :=
+  state.getReg .x6 = 0x44a00 ∧
+  state.getReg .x7 = 0x40028 ∧
+  (∀ index : Fin 5,
+    state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) =
+      original.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val))) ∧
+  (∀ index : Fin 5, index.val < count →
+    state.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      original.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)))
+
+private theorem leftCurrentStep (original state : MachineState) (slot : Fin 5)
+    (invariant : LeftCurrentInvariant original slot.val state) :
+    LeftCurrentInvariant original (slot.val + 1)
+      (copyWordState slot state) := by
+  rcases invariant with ⟨source, destination, sourceWords, copiedWords⟩
+  obtain ⟨sourceAfter, destinationAfter⟩ := copyWord_pointers slot state
+  refine ⟨sourceAfter.trans source, destinationAfter.trans destination, ?_, ?_⟩
+  · intro index
+    rw [leftCurrent_source_frame slot index state destination]
+    exact sourceWords index
+  · intro index before
+    by_cases same : slot = index
+    · subst index
+      rw [copyWord_data_general slot state 0x44a00 0x40028 source destination]
+      exact sourceWords slot
+    · rw [copyWord_other_fts slot index same state destination]
+      have smaller : index.val < slot.val := by
+        have unequal : slot.val ≠ index.val := fun h => same (Fin.ext h)
+        omega
+      exact copiedWords index smaller
+
+theorem leftCurrentCopy_data (original : MachineState)
+    (source : original.getReg .x6 = 0x44a00)
+    (destination : original.getReg .x7 = 0x40028)
+    (index : Fin 5) :
+    (copyRootState original).getWord32
+      (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      original.getWord32
+        (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) := by
+  have initial : LeftCurrentInvariant original 0 original := by
+    refine ⟨source, destination, fun _ => rfl, ?_⟩
+    intro index impossible
+    omega
+  have after0 := leftCurrentStep original original 0 initial
+  have after1 := leftCurrentStep original (copyWordState 0 original) 1 after0
+  have after2 := leftCurrentStep original (copyWordState 1
+    (copyWordState 0 original)) 2 after1
+  have after3 := leftCurrentStep original (copyWordState 2
+    (copyWordState 1 (copyWordState 0 original))) 3 after2
+  have after4 := leftCurrentStep original (copyWordState 3
+    (copyWordState 2 (copyWordState 1 (copyWordState 0 original)))) 4 after3
+  exact after4.2.2.2 index (by have := index.isLt; omega)
+
+theorem leftCurrentCopy_witness_frame (state : MachineState)
+    (destination : state.getReg .x7 = 0x40028) (index : Fin 5) :
+    (copyRootState state).getWord32
+      (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) =
+      state.getWord32
+        (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) := by
+  simp only [MachineState.getWord32]
+  rw [copyRoot_mem_frame]
+  intro offset
+  rw [destination]
+  fin_cases index <;> fin_cases offset <;> decide
+
 def leftSiblingPointers (state : MachineState) : MachineState :=
   let state := execInstrBr state (.LUI .x28 0x43)
   let state := execInstrBr state (.ADDI .x28 .x28 40)
@@ -112,6 +195,11 @@ theorem leftSiblingPointers_regs (state : MachineState) :
   constructor <;>
     simp [leftSiblingPointers, execInstrBr, signExtend12,
       MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem leftSiblingPointers_word (state : MachineState) (address : Word) :
+    (leftSiblingPointers state).getWord32 address =
+      state.getWord32 address := by
+  simp [leftSiblingPointers, execInstrBr]
 
 theorem leftSiblingPointers_block (state : MachineState)
     (pc : state.pc = 0x19d8) :
@@ -175,11 +263,132 @@ theorem leftSiblingCopy_pc (state : MachineState)
     (copyRootState state).pc = 0x1a14 := by
   simpa using copy20_final_pc state 635 (by simpa using pc)
 
+theorem leftSibling_source_frame (written read : Fin 5)
+    (state : MachineState) (destination : state.getReg .x7 = 0x4003c) :
+    (copyWordState written state).getWord32
+      (BitVec.ofNat 64 (0x22cf0 + 4 * read.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x22cf0 + 4 * read.val)) := by
+  fin_cases written <;> fin_cases read <;>
+    simp_all [copyWordState, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_ne] <;>
+    (rw [getWord32_setWord32_other _ _ _ _ (by decide)]; simp)
+
+private def LeftSiblingInvariant (original : MachineState) (count : Nat)
+    (state : MachineState) : Prop :=
+  state.getReg .x6 = 0x22cf0 ∧
+  state.getReg .x7 = 0x4003c ∧
+  (∀ index : Fin 5,
+    state.getWord32 (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) =
+      original.getWord32 (BitVec.ofNat 64 (0x22cf0 + 4 * index.val))) ∧
+  (∀ index : Fin 5, index.val < count →
+    state.getWord32 (BitVec.ofNat 64 (0x4003c + 4 * index.val)) =
+      original.getWord32 (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)))
+
+private theorem leftSiblingStep (original state : MachineState) (slot : Fin 5)
+    (invariant : LeftSiblingInvariant original slot.val state) :
+    LeftSiblingInvariant original (slot.val + 1)
+      (copyWordState slot state) := by
+  rcases invariant with ⟨source, destination, sourceWords, copiedWords⟩
+  obtain ⟨sourceAfter, destinationAfter⟩ := copyWord_pointers slot state
+  refine ⟨sourceAfter.trans source, destinationAfter.trans destination, ?_, ?_⟩
+  · intro index
+    rw [leftSibling_source_frame slot index state destination]
+    exact sourceWords index
+  · intro index before
+    by_cases same : slot = index
+    · subst index
+      rw [copyWord_data_general slot state 0x22cf0 0x4003c source destination]
+      exact sourceWords slot
+    · rw [rightCurrent_other slot index same state destination]
+      have smaller : index.val < slot.val := by
+        have unequal : slot.val ≠ index.val := fun h => same (Fin.ext h)
+        omega
+      exact copiedWords index smaller
+
+theorem leftSiblingCopy_data (original : MachineState)
+    (source : original.getReg .x6 = 0x22cf0)
+    (destination : original.getReg .x7 = 0x4003c)
+    (index : Fin 5) :
+    (copyRootState original).getWord32
+      (BitVec.ofNat 64 (0x4003c + 4 * index.val)) =
+      original.getWord32
+        (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) := by
+  have initial : LeftSiblingInvariant original 0 original := by
+    refine ⟨source, destination, fun _ => rfl, ?_⟩
+    intro index impossible
+    omega
+  have after0 := leftSiblingStep original original 0 initial
+  have after1 := leftSiblingStep original (copyWordState 0 original) 1 after0
+  have after2 := leftSiblingStep original (copyWordState 1
+    (copyWordState 0 original)) 2 after1
+  have after3 := leftSiblingStep original (copyWordState 2
+    (copyWordState 1 (copyWordState 0 original))) 3 after2
+  have after4 := leftSiblingStep original (copyWordState 3
+    (copyWordState 2 (copyWordState 1 (copyWordState 0 original)))) 4 after3
+  exact after4.2.2.2 index (by have := index.isLt; omega)
+
 def leftPairState (state : MachineState) : MachineState :=
   let currentPointers := leftCurrentPointers state
   let currentCopy := copyRootState currentPointers
   let siblingPointers := leftSiblingPointers currentCopy
   copyRootState siblingPointers
+
+theorem leftPair_data (branched : MachineState)
+    (pointer : branched.getMem 0x43028 = 0x22cf0)
+    (index : Fin 5) :
+    (leftPairState branched).getWord32
+      (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      branched.getWord32
+        (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) ∧
+      (leftPairState branched).getWord32
+        (BitVec.ofNat 64 (0x4003c + 4 * index.val)) =
+        branched.getWord32
+          (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) := by
+  let currentPointers := leftCurrentPointers branched
+  let currentCopy := copyRootState currentPointers
+  let siblingPointers := leftSiblingPointers currentCopy
+  have currentSource := (leftCurrentPointers_regs branched).1
+  have currentDestination := (leftCurrentPointers_regs branched).2
+  have pointerAtCopy : currentCopy.getMem 0x43028 = 0x22cf0 := by
+    rw [leftCurrentCopy_pointer currentPointers currentDestination,
+      leftCurrentPointers_mem]
+    exact pointer
+  have siblingSource : siblingPointers.getReg .x6 = 0x22cf0 :=
+    (leftSiblingPointers_regs currentCopy).1.trans pointerAtCopy
+  have siblingDestination : siblingPointers.getReg .x7 = 0x4003c :=
+    (leftSiblingPointers_regs currentCopy).2
+  constructor
+  · unfold leftPairState
+    rw [rightCurrentCopy_preserve_sibling siblingPointers siblingDestination,
+      leftSiblingPointers_word,
+      leftCurrentCopy_data currentPointers currentSource currentDestination,
+      leftCurrentPointers_word]
+  · unfold leftPairState
+    rw [leftSiblingCopy_data siblingPointers siblingSource siblingDestination,
+      leftSiblingPointers_word,
+      leftCurrentCopy_witness_frame currentPointers currentDestination,
+      leftCurrentPointers_word]
+
+theorem leftPath_pair_data (start : MachineState)
+    (pointer : start.getMem 0x43028 = 0x22cf0)
+    (index : Fin 5) :
+    let parity := parityState start
+    let branched := branchState parity
+    let pair := leftPairState branched
+    pair.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      start.getWord32
+        (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) ∧
+      pair.getWord32 (BitVec.ofNat 64 (0x4003c + 4 * index.val)) =
+        start.getWord32
+          (BitVec.ofNat 64 (0x22cf0 + 4 * index.val)) := by
+  let parity := parityState start
+  let branched := branchState parity
+  have pointerAtBranch : branched.getMem 0x43028 = 0x22cf0 := by
+    rw [branch_mem, parity_mem]
+    exact pointer
+  have pair := leftPair_data branched pointerAtBranch index
+  exact ⟨by rw [pair.1, branch_word, parity_word],
+    by rw [pair.2, branch_word, parity_word]⟩
 
 theorem leftPath_from_parity (start : MachineState)
     (pc : (parityState start).pc = 0x1924)
