@@ -61,6 +61,56 @@ theorem parity_mem (state : MachineState) (address : Word) :
     (parityState state).getMem address = state.getMem address := by
   simp [parityState, execInstrBr]
 
+theorem selection_scratch_after_advance (selection : MachineState) :
+    let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
+    let copied := SphincsVerifierCopy.copyRootState pointers
+    let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState copied
+    advanced.getMem 0x43070 = selection.getMem 0x43070 ∧
+      advanced.getMem 0x43040 = selection.getMem 0x43040 := by
+  let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
+  let copied := SphincsVerifierCopy.copyRootState pointers
+  have frame (address : Word) (notPointer : address ≠ 0x43028)
+      (notIndex : address ≠ 0x43018)
+      (notCopy : ∀ offset : Fin 5,
+        address ≠ alignToDword
+          (0x40028 + signExtend12
+            (4#12 * BitVec.ofNat 12 offset.val))) :
+      (SphincsVerifierFtsAdvance.ftsAdvanceState copied).getMem address =
+        selection.getMem address := by
+    rw [SphincsVerifierFtsAdvance.ftsAdvance_mem_frame _ address
+      notPointer notIndex]
+    change (SphincsVerifierCopy.copyRootState pointers).getMem address = _
+    rw [SphincsVerifierCopyMemory.copyRoot_mem_frame]
+    · exact SphincsVerifierFtsCopyPointers.ftsCopyPointers_mem selection address
+    · intro offset
+      rw [(SphincsVerifierFtsCopyPointers.ftsCopyPointers_regs selection).2]
+      exact notCopy offset
+  constructor
+  · apply frame
+    all_goals try { intro offset; fin_cases offset <;> decide }
+    all_goals decide
+  · apply frame
+    all_goals try { intro offset; fin_cases offset <;> decide }
+    all_goals decide
+
+theorem selection_firstPath_parity (selection : MachineState)
+    (answer : BitVec 256) :
+    let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
+    let copied := SphincsVerifierCopy.copyRootState pointers
+    let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState copied
+    let ready := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+    let start := levelInitState (resultState (writeHash ready answer))
+    (parityState start).getReg .x6 = selection.getMem 0x43070 &&& 1 ∧
+      start.getMem 0x43040 = selection.getMem 0x43040 := by
+  let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
+  let copied := SphincsVerifierCopy.copyRootState pointers
+  let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState copied
+  let ready := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+  let start := levelInitState (resultState (writeHash ready answer))
+  have scratch := firstFts_levelStart_scratch advanced answer
+  have selected := selection_scratch_after_advance selection
+  exact ⟨by rw [parity_reg, scratch.2.1, selected.1],
+    by rw [scratch.2.2, selected.2]⟩
 theorem parity_preserve_witness (state : MachineState)
     (signature : SphincsSecurity.Signature)
     (witness : SphincsVerifierFtsEarlyFrame.FtsWitness state signature) :
