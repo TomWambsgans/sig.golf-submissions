@@ -1,5 +1,5 @@
 import SigGolfCandidate.SphincsVerifierIndexStore
-import SigGolfCandidate.Hypertree.SignEncode
+import RiscvZkvm.Rv64.Logic.MemRegionWrite
 
 /-!
 # First FORS leaf-selection instruction block
@@ -15,11 +15,35 @@ open SigGolfCandidate.SphincsVerifierIndexStore
 open SigGolfCandidate.SphincsVerifierIndexPrefix
 open SigGolfCandidate.SphincsVerifierDigestDecode
 open SigGolfCandidate.SphincsVerifierMessageHash
-open SigGolfCandidate.Hypertree.Signing
 
 private theorem getByte_setPC (s : MachineState) (pc a : Word) :
     (s.setPC pc).getByte a = s.getByte a := by
   simp [MachineState.getByte]
+
+@[simp] private theorem mem_setMem (s : MachineState) (a v b : Word) :
+    (s.setMem a v).getMem b = if b = a then v else s.getMem b := by
+  simp [MachineState.setMem, MachineState.getMem]
+
+private theorem getByte_setByte (s : MachineState) (address : Word)
+    (b : Byte) (a : Word) :
+    (s.setByte address b).getByte a =
+      if a = address then b else s.getByte a := by
+  by_cases same : a = address
+  · subst a
+    simp only [MachineState.getByte, MachineState.setByte, mem_setMem, if_pos rfl]
+    exact extractByte_replaceByte_same _ ⟨byteOffset address, byteOffset_lt_8⟩ b
+  · rw [if_neg same]
+    simp only [MachineState.getByte, MachineState.setByte, mem_setMem]
+    by_cases aligned : alignToDword a = alignToDword address
+    · rw [if_pos aligned]
+      have offset : byteOffset a ≠ byteOffset address := by
+        intro eq
+        apply same
+        rw [← alignToDword_add_byteOffset a,
+          ← alignToDword_add_byteOffset address, aligned, eq]
+      rw [extractByte_replaceByte_diff _ _ (byteOffset_lt_8)
+        (byteOffset_lt_8) offset, aligned]
+    · rw [if_neg aligned]
 
 def leaf0State (state : MachineState) : MachineState :=
   let state := execInstrBr state (.LUI .x6 0x42)
