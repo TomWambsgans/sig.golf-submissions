@@ -64,6 +64,102 @@ theorem pair_pointer_frame (start : MachineState) :
     simp only [pairState, zero, if_false]
     rw [rightPair_pointer_frame, branch_mem, parity_mem]
 
+theorem copyRoot_scratch_frame (state : MachineState) (address : Word)
+    (destination : state.getReg .x7 = 0x40028 ∨
+      state.getReg .x7 = 0x4003c)
+    (outside28 : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40028 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val)))
+    (outside3c : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x4003c + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (copyRootState state).getMem address = state.getMem address := by
+  apply copyRoot_mem_frame
+  intro offset
+  rcases destination with h | h
+  · rw [h]
+    exact outside28 offset
+  · rw [h]
+    exact outside3c offset
+
+theorem rightPair_scratch_frame (branched : MachineState)
+    (address : Word)
+    (outside28 : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40028 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val)))
+    (outside3c : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x4003c + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (rightFinishState (copyRootState (rightPointers branched))).getMem
+        address = branched.getMem address := by
+  let first := copyRootState (rightPointers branched)
+  change (rightJump (copyRootState (rightCurrentPointers first))).getMem
+    address = _
+  rw [rightJump_mem,
+    copyRoot_scratch_frame _ address
+      (Or.inr (rightCurrentPointers_regs first).2) outside28 outside3c,
+    rightCurrentPointers_mem,
+    copyRoot_scratch_frame _ address
+      (Or.inl (rightPointers_regs branched).2) outside28 outside3c,
+    rightPointers_mem]
+
+theorem leftPair_scratch_frame (branched : MachineState)
+    (address : Word)
+    (outside28 : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40028 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val)))
+    (outside3c : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x4003c + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (leftPairState branched).getMem address =
+      branched.getMem address := by
+  let first := copyRootState (leftCurrentPointers branched)
+  change (copyRootState (leftSiblingPointers first)).getMem address = _
+  rw [copyRoot_scratch_frame _ address
+      (Or.inr (leftSiblingPointers_regs first).2) outside28 outside3c,
+    leftSiblingPointers_mem,
+    copyRoot_scratch_frame _ address
+      (Or.inl (leftCurrentPointers_regs branched).2) outside28 outside3c,
+    leftCurrentPointers_mem]
+
+theorem pair_scratch_frame (start : MachineState) (address : Word)
+    (outside28 : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40028 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val)))
+    (outside3c : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x4003c + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (pairState start).getMem address = start.getMem address := by
+  let parity := parityState start
+  let branched := branchState parity
+  by_cases zero : parity.getReg .x6 = 0
+  · change (parityState start).getReg .x6 = 0 at zero
+    simp only [pairState, zero, if_true]
+    rw [leftPair_scratch_frame _ address outside28 outside3c,
+      branch_mem, parity_mem]
+  · change (parityState start).getReg .x6 ≠ 0 at zero
+    simp only [pairState, zero, if_false]
+    rw [rightPair_scratch_frame _ address outside28 outside3c,
+      branch_mem, parity_mem]
+
+theorem pair_level_frame (start : MachineState) :
+    (pairState start).getMem 0x43048 = start.getMem 0x43048 := by
+  apply pair_scratch_frame
+  all_goals intro offset <;> fin_cases offset <;> decide
+
+theorem pair_selector_frame (start : MachineState) :
+    (pairState start).getMem 0x43070 = start.getMem 0x43070 := by
+  apply pair_scratch_frame
+  all_goals intro offset <;> fin_cases offset <;> decide
+
 theorem pair_trace_and_data (start : MachineState)
     (pc : (parityState start).pc = 0x1924)
     (pointer : start.getMem 0x43028 = 0x22cf0) :
