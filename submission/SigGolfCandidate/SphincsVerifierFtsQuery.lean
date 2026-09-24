@@ -10,6 +10,16 @@ open SigGolfCandidate.SphincsVerifierFtsSetup
 open SigGolfCandidate.SphincsVerifierFtsAdvance
 open SigGolfCandidate.SphincsVerifierFtsPayload
 open SigGolfCandidate.SphincsVerifierHashBytes
+open SigGolfCandidate.SphincsVerifierMessageHash
+open SigGolfCandidate.SphincsVerifierIndexPrefix
+open SigGolfCandidate.SphincsVerifierIndexStore
+open SigGolfCandidate.SphincsVerifierLeavesTrace
+open SigGolfCandidate.SphincsVerifierLastLeaf
+open SigGolfCandidate.SphincsVerifierFtsEntry
+open SigGolfCandidate.SphincsVerifierFtsTreeHeader
+open SigGolfCandidate.SphincsVerifierFtsSelect
+open SigGolfCandidate.SphincsVerifierFtsCopyPointers
+open SigGolfCandidate.SphincsVerifierFtsHeaderFields
 
 def firstFtsInput (pk : SphincsSecurity.PublicKey) (index : Index)
     (leaf : FtsLeaf) (secret : Digest) : HashInput :=
@@ -169,6 +179,98 @@ theorem readyFirstFts_hashStep (hash : Hash) (pointers : MachineState)
   exact SphincsVerifierFtsHash.hash_step hash ready readyPc
     regs.1 regs.2.1 regs.2.2.1 regs.2.2.2 steps result tail'
 
+def firstFtsPointers (state : MachineState) (answer : BitVec 256) : MachineState :=
+  let initial := indexStoredState (indexValueState (writeHash state answer))
+  let selected := leafStates initial 24 (by decide)
+  let accepted := lastAcceptState selected
+  let entered := ftsEntryState accepted
+  let header := ftsTreeHeaderState entered
+  ftsCopyPointers (ftsSelectState header)
+
+theorem pointerWitnessPrefix (selection : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (witnessPrefix : WitnessPrefix selection pk) :
+    WitnessPrefix (ftsCopyPointers selection) pk := by
+  constructor
+  · intro i hi
+    simpa [MachineState.getByte, ftsCopyPointers_mem] using
+      witnessPrefix.root i hi
+  · intro i hi
+    simpa [MachineState.getByte, ftsCopyPointers_mem] using
+      witnessPrefix.parameter i hi
+
+theorem pointerSecretBytes (selection : MachineState) (secret : Digest)
+    (encoded : ∀ i, (hi : i < 20) →
+      selection.getByte (BitVec.ofNat 64 (0x22cdc + i)) =
+        secret.extractLsb' (8 * i) 8) :
+    ∀ i, (hi : i < 20) →
+      (ftsCopyPointers selection).getByte (BitVec.ofNat 64 (0x22cdc + i)) =
+        secret.extractLsb' (8 * i) 8 := by
+  intro i hi
+  simpa [MachineState.getByte, ftsCopyPointers_mem] using encoded i hi
+
+theorem messageReady_firstFts_hashInput (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (message : SphincsSecurity.Message)
+    (randomness : SphincsSecurity.Randomness)
+    (ready : MessageReady state pk message randomness)
+    (pc : state.pc = 0x12a0) (answer : BitVec 256)
+    (admissible : SphincsSecurity.Concrete.Admissible
+      (SphincsSecurity.truncateMessageDigest answer))
+    (witnessPrefix : WitnessPrefix (firstFtsPointers state answer) pk)
+    (secret : Digest)
+    (secretEncoded : ∀ i, (hi : i < 20) →
+      (firstFtsPointers state answer).getByte
+        (BitVec.ofNat 64 (0x22cdc + i)) =
+        secret.extractLsb' (8 * i) 8) :
+    let pointers := firstFtsPointers state answer
+    let advanced := ftsAdvanceState (copyRootState pointers)
+    let final := ftsHashReadyState advanced
+    OrdinarySteps SphincsImages.verify (writeHash state answer) 392 final ∧
+      final.pc = 0x18c8 ∧
+      hashInput final = toQuery (firstFtsInput pk
+        (SphincsSecurity.Concrete.digestIndex
+          (SphincsSecurity.truncateMessageDigest answer))
+        (SphincsSecurity.Concrete.digestLeaves
+          (SphincsSecurity.truncateMessageDigest answer) ⟨0, by decide⟩)
+        secret) := by
+  let pointers := firstFtsPointers state answer
+  let advanced := ftsAdvanceState (copyRootState pointers)
+  let index := SphincsSecurity.Concrete.digestIndex
+    (SphincsSecurity.truncateMessageDigest answer)
+  let leaf := SphincsSecurity.Concrete.digestLeaves
+    (SphincsSecurity.truncateMessageDigest answer) ⟨0, by decide⟩
+  obtain ⟨front, finalPc, _, _, _, _⟩ :=
+    messageReady_admissible_ftsHashReady state pk message randomness
+      ready pc answer admissible
+  obtain ⟨_, _, source, destination, _, _⟩ :=
+    messageReady_admissible_ftsCopyPointers state pk message randomness
+      ready pc answer admissible
+  obtain ⟨_, _, _, leafNat, treeIndex⟩ :=
+    messageReady_admissible_ftsAdvance state pk message randomness
+      ready pc answer admissible
+  have layerZero : advanced.getMem 0x43000 = 0 :=
+    messageReady_firstFts_layerZero state pk message randomness
+      ready pc answer admissible
+  have positionZero : advanced.getMem 0x43010 = 0 :=
+    messageReady_firstFts_positionZero state pk message randomness
+      ready pc answer
+  have leafIndex : advanced.getMem 0x43018 = BitVec.ofNat 64 leaf.val := by
+    apply BitVec.eq_of_toNat_eq
+    have leafNat' : (advanced.getMem 0x43018).toNat = leaf.val := by
+      simpa [advanced, pointers, firstFtsPointers, leaf, abstractLeaf] using leafNat
+    have small : leaf.val < 2 ^ 64 := by
+      have h := leaf.isLt
+      simp only [SphincsSecurity.FtsLeaf, SphincsSecurity.ftsTreeHeight] at h
+      omega
+    rw [leafNat']
+    simp [BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by simpa using small)]
+  have query := readyFirstFts_hashInput pointers pk index leaf secret
+    source destination witnessPrefix secretEncoded layerZero positionZero
+    treeIndex leafIndex
+  exact ⟨front, finalPc, query⟩
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsQuery.readyFirstFts_hashInput' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -180,5 +282,11 @@ theorem readyFirstFts_hashStep (hash : Hash) (pointers : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms readyFirstFts_hashStep
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsQuery.messageReady_firstFts_hashInput' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms messageReady_firstFts_hashInput
 
 end SigGolfCandidate.SphincsVerifierFtsQuery
