@@ -164,6 +164,68 @@ theorem firstFtsPointers_allWitness_frame (state : MachineState)
   exact firstFtsPointers_lowMessageByte_frame state answer address
     low alignedLow destination
 
+theorem firstFtsCopy_lowByte_frame (state : MachineState)
+    (address : Word) (alignedLow : (alignToDword address).toNat < 0x40000)
+    (destination : state.getReg .x7 = 0x40028) :
+    (SphincsVerifierCopy.copyRootState state).getByte address =
+      state.getByte address := by
+  simp only [MachineState.getByte]
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame state
+    (alignToDword address) (by
+      intro offset
+      have high : 0x40000 ≤
+          (alignToDword
+            (state.getReg .x7 + signExtend12
+              (4#12 * BitVec.ofNat 12 offset.val))).toNat := by
+        rw [destination]
+        fin_cases offset <;> decide
+      exact low_ne_high (alignToDword address) _ alignedLow high)]
+
+theorem firstFtsAdvance_lowByte_frame (state : MachineState)
+    (address : Word) (alignedLow : (alignToDword address).toNat < 0x40000) :
+    (SphincsVerifierFtsAdvance.ftsAdvanceState state).getByte address =
+      state.getByte address := by
+  simp only [MachineState.getByte]
+  rw [SphincsVerifierFtsAdvance.ftsAdvance_mem_frame state
+    (alignToDword address)
+    (low_ne_high (alignToDword address) _ alignedLow (by decide))
+    (low_ne_high (alignToDword address) _ alignedLow (by decide))]
+
+theorem firstFtsAdvanced_allWitness_frame (state : MachineState)
+    (answer : BitVec 256) (i : Nat)
+    (hi : i < SphincsWire.signatureBytes)
+    (destination : state.getReg .x12 = 0x42000) :
+    (SphincsVerifierFtsAdvance.ftsAdvanceState
+      (SphincsVerifierCopy.copyRootState
+        (firstFtsPointers state answer))).getByte
+      (BitVec.ofNat 64 (0x22ca0 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := by
+  let address : Word := BitVec.ofNat 64 (0x22ca0 + i)
+  have low : (alignToDword address).toNat < 0x40000 := by
+    have length := SphincsWire.signatureBytes_eq
+    have small : 0x22ca0 + i < 2 ^ 64 := by omega
+    have range : 0x22ca0 + i < 0x40000 := by omega
+    have aligned : (alignToDword address).toNat ≤ address.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have exactAddress : address.toNat = 0x22ca0 + i := by
+      simp only [address, BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt small
+    omega
+  have pointer : (firstFtsPointers state answer).getReg .x7 = 0x40028 := by
+    unfold firstFtsPointers
+    exact (SphincsVerifierFtsCopyPointers.ftsCopyPointers_regs _).2
+  rw [firstFtsAdvance_lowByte_frame _ address low,
+    firstFtsCopy_lowByte_frame _ address low pointer]
+  exact firstFtsPointers_allWitness_frame state answer i hi destination
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsWitnessFrame.firstFtsAdvanced_allWitness_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstFtsAdvanced_allWitness_frame
+
 theorem firstFtsPointers_prefix (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (answer : BitVec 256)
     (destination : state.getReg .x12 = 0x42000)
