@@ -174,6 +174,31 @@ theorem loaded_honest_message_ready (publicKey : SigGolf.PublicKey)
     (wire_encodedWitness inner signature)
     (wire_randomizer inner signature)
 
+theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (state : MachineState) (answer : BitVec 256)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (answerMatches : ∀ index : Fin 2,
+      answer.extractLsb' (64 * index.val) 64 =
+        publicKey.extractLsb' (64 * index.val) 64) :
+    ∃ ready, OrdinarySteps SphincsImages.verify
+      (writeHash (SphincsVerifierHashSetup.firstHashState state) answer)
+      107 ready ∧ ready.pc = 0x12a0 ∧
+      hashInput ready = SphincsBridge.toQuery
+        (SphincsVerifierMessageHash.messageInput inner message
+          signature.randomness) ∧
+      compressions (hashInput ready).1 = 2 := by
+  obtain ⟨ready, trace, pc, prepared⟩ :=
+    loaded_honest_message_ready publicKey message inner signature state answer
+      loaded answerMatches
+  exact ⟨ready, trace, pc,
+    SphincsVerifierMessageHash.messageReady_hashInput ready inner message
+      signature.randomness prepared,
+    (SphincsVerifierMessageHash.messageReady_hashCost ready inner message
+      signature.randomness prepared).2⟩
+
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_encodedWitness' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_encodedWitness
@@ -187,6 +212,12 @@ theorem loaded_honest_message_ready (publicKey : SigGolf.PublicKey)
  Quot.sound] -/
 #guard_msgs in
 #print axioms loaded_honest_message_ready
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_message_query' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_message_query
 
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
