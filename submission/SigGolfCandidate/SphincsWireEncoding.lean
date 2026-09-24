@@ -225,6 +225,20 @@ theorem wire_firstFtsSecret (pk : SphincsSecurity.PublicKey)
   simp only [plen, Nat.add_sub_cancel_left]
   exact restBytes_firstSecret signature i hi
 
+theorem loaded_honest_firstFtsSecret (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (i : Nat) (hi : i < 20) :
+    state.getByte (BitVec.ofNat 64 (0x22ca0 + (60 + i))) =
+      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
+  rw [SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded (60 + i) (by
+      rw [SphincsWire.signatureBytes_eq]
+      omega)]
+  exact wire_firstFtsSecret inner signature i hi
+
 /-- An honestly serialized signature reaches the exact abstract message query. -/
 theorem loaded_honest_message_ready (publicKey : SigGolf.PublicKey)
     (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
@@ -283,6 +297,12 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_firstFtsSecret' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_firstFtsSecret
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_firstFtsSecret' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_firstFtsSecret
 
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_message_ready' depends on axioms: [propext,
  Classical.choice,
