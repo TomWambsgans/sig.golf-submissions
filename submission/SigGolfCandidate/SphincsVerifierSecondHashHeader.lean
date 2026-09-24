@@ -206,7 +206,7 @@ private theorem extractByte_of_extractWord32 (word : Word) (lane : Fin 2)
   congr 1
   omega
 
-private theorem extractByte_from_word32 (word : Word) (position : Fin 8) :
+theorem extractByte_from_word32 (word : Word) (position : Fin 8) :
     extractByte word position.val =
       (extractWord32 word (position.val / 4)).extractLsb'
         (8 * (position.val % 4)) 8 := by
