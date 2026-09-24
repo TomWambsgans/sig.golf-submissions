@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsVerifierFtsCopyAccess
 import SigGolfCandidate.SphincsVerifierCopyMemory
+import SigGolfCandidate.SphincsVerifierCopy20DataGeneral
 
 /-! The first FORS leaf opening is copied from the witness into the HASH input. -/
 
@@ -9,6 +10,7 @@ open SigGolfCandidate.SphincsVerifierCopy
 open SigGolfCandidate.SphincsVerifierCopyMemory
 open SigGolfCandidate.SphincsVerifierMessageCopy
 open SigGolfCandidate.SphincsVerifierFtsCopyAccess
+open SigGolfCandidate.SphincsVerifierCopy20DataGeneral
 open SigGolfCandidate.SphincsVerifierFtsCopyPointers
 open SigGolfCandidate.SphincsVerifierFtsSelect
 open SigGolfCandidate.SphincsVerifierFtsTreeHeader
@@ -70,7 +72,10 @@ theorem messageReady_admissible_ftsLeafCopy (state : MachineState)
         BitVec.ofNat 64 (SphincsSecurity.Concrete.digestIndex
           (SphincsSecurity.truncateMessageDigest answer)).val ∧
       (final.getMem 0x43020).toNat = abstractLeaf answer (0 : Fin 24) ∧
-      final.getMem 0x43028 = 0x22cdc := by
+      final.getMem 0x43028 = 0x22cdc ∧
+      ∀ index : Fin 5,
+        final.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+          pointers.getWord32 (BitVec.ofNat 64 (0x22cdc + 4 * index.val)) := by
   obtain ⟨front, pointersPc, source, destination, treeIndex, leaf⟩ :=
     messageReady_admissible_ftsCopyPointers state pk message randomness
       ready pc answer admissible
@@ -101,7 +106,9 @@ theorem messageReady_admissible_ftsLeafCopy (state : MachineState)
     by rw [frame 0x43020 (by intro offset; fin_cases offset <;> decide)];
        exact leaf,
     by rw [frame 0x43028 (by intro offset; fin_cases offset <;> decide)];
-       exact pointer⟩
+       exact pointer,
+    by intro index
+       exact firstFtsCopy_data pointers source destination index⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsLeafCopy.messageReady_admissible_ftsLeafCopy' depends on axioms: [propext,
  Classical.choice,
