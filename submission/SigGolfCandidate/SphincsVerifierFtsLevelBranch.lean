@@ -131,6 +131,10 @@ theorem selector_parity_toNat (selection start : MachineState) (leaf : Nat)
 def branchState (state : MachineState) : MachineState :=
   execInstrBr state (.BEQ .x6 .x0 124)
 
+theorem branch_mem (state : MachineState) (address : Word) :
+    (branchState state).getMem address = state.getMem address := by
+  simp [branchState, execInstrBr]
+
 theorem branch_block (state : MachineState) (pc : state.pc = 0x1924) :
     OrdinarySteps SphincsImages.verify state 1 (branchState state) := by
   apply OrdinarySteps.step state _ _ (.base (.BEQ .x6 .x0 124)) 0
