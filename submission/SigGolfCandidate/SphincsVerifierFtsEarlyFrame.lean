@@ -495,6 +495,10 @@ theorem loaded_honest_firstFts_query
       OrdinarySteps SphincsImages.verify
         (writeHash ready digestAnswer) 392 final ∧
       final.pc = 0x18c8 ∧
+      final.getReg .x10 = 0x40000 ∧
+      final.getReg .x11 = 480 ∧
+      final.getReg .x12 = 0x42000 ∧
+      final.getReg .x5 = 1 ∧
       hashInput final = SphincsBridge.toQuery
         (SphincsVerifierFtsQuery.firstFtsInput inner
           (SphincsSecurity.Concrete.digestIndex
@@ -524,10 +528,11 @@ theorem loaded_honest_firstFts_query
     digestAnswer signature messageReady.destination witnessReady
   have finalWitness : FtsWitness final signature := by
     simpa only [final, advanced, pointers] using witnessFinal
-  exact ⟨ready, final, trace, query.1, query.2.1, query.2.2,
+  have regs := SphincsVerifierFtsSetup.ftsHashReady_regs advanced
+  exact ⟨ready, final, trace, query.1, query.2.1,
+    regs.1, regs.2.1, regs.2.2.1, regs.2.2.2, query.2.2,
     finalWitness, fun oracleAnswer => firstFtsHashAnswer_preserve_FtsWitness
-      final oracleAnswer signature (SphincsVerifierFtsSetup.ftsHashReady_regs advanced).2.2.1
-      finalWitness⟩
+      final oracleAnswer signature regs.2.2.1 finalWitness⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_honest_firstFts_query' depends on axioms: [propext,
  Classical.choice,
