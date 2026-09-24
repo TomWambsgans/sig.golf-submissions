@@ -152,78 +152,251 @@ theorem wire_randomizer (pk : SphincsSecurity.PublicKey)
   (wire_prefix_byte pk signature (40 + i) (by omega)).trans
     (prefix_randomizer_byte pk signature i hi)
 
-private theorem concatFields_first {n : Nat}
-    (fields : Fin (n + 1) → List UInt8)
-    (i : Nat) (hi : i < (fields 0).length) :
-    (concatFields (n + 1) fields)[i]'(by
-      simpa [concatFields] using Nat.lt_add_right
-        (concatFields n (fun j => fields j.succ)).length hi) =
-      (fields 0)[i] := by
-  simp only [concatFields]
-  rw [List.getElem_append_left hi]
+theorem concatFields_byte {n width : Nat}
+    (fields : Fin n → List UInt8)
+    (hlen : ∀ tree, (fields tree).length = width)
+    (tree : Fin n) (i : Nat) (hi : i < width) :
+    (concatFields n fields)[tree.val * width + i]'(by
+      rw [concatFields_length n fields width hlen]
+      have hnext : (tree.val + 1) * width ≤ n * width :=
+        Nat.mul_le_mul_right width (Nat.succ_le_of_lt tree.isLt)
+      have hbyte : tree.val * width + i < (tree.val + 1) * width := by
+        rw [Nat.add_mul]
+        omega
+      exact lt_of_lt_of_le hbyte hnext) =
+      (fields tree)[i]'(by rw [hlen]; exact hi) := by
+  induction n with
+  | zero => exact tree.elim0
+  | succ n ih =>
+      cases tree using Fin.cases with
+      | zero =>
+          simp only [Fin.val_zero, Nat.zero_mul, Nat.zero_add,
+            concatFields]
+          rw [List.getElem_append_left (by rw [hlen]; exact hi)]
+      | succ tree =>
+          simp only [Fin.val_succ, concatFields]
+          rw [List.getElem_append_right (by
+            rw [hlen]
+            have h : width ≤ (tree.val + 1) * width := by
+              rw [Nat.add_mul]
+              omega
+            omega)]
+          simp only [hlen]
+          have htail : ∀ child : Fin n,
+              (fields child.succ).length = width := by
+            intro child
+            exact hlen child.succ
+          have indexEq : (tree.val + 1) * width + i - width =
+              tree.val * width + i := by
+            rw [Nat.add_mul]
+            omega
+          simpa only [indexEq] using
+            ih (fun j : Fin n => fields j.succ) htail tree
 
-private theorem ftsOpening_firstSecret (signature : Signature)
-    (i : Nat) (hi : i < 20) :
-    ((ftsOpening signature ⟨0, by decide⟩).map UInt8.toBitVec)[i]'(by
+private theorem openingPosition_lt (tree : FtsTree) (j : Nat)
+    (hj : j < ftsOpeningBytes) :
+    tree.val * ftsOpeningBytes + j <
+      (ftsTrees - 1) * ftsOpeningBytes := by
+  have treeBound := tree.isLt
+  norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes] at *
+  omega
+
+theorem restBytes_opening_byte (signature : Signature)
+    (tree : FtsTree) (j : Nat) (hj : j < ftsOpeningBytes) :
+    ((restBytes signature).map UInt8.toBitVec)[tree.val * ftsOpeningBytes + j]'(by
+          simp only [List.length_map, restBytes, List.length_append]
+          rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+          have h := openingPosition_lt tree j hj
+          omega) =
+      ((ftsOpening signature tree).map UInt8.toBitVec)[j]'(by
+        rw [List.length_map, ftsOpening_length]
+        exact hj) := by
+  simp only [restBytes, List.map_append, List.append_assoc]
+  rw [List.getElem_append_left (by
+    simp only [List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    exact openingPosition_lt tree j hj)]
+  simp only [List.getElem_map]
+  simpa only [List.getElem_map] using congrArg UInt8.toBitVec
+    (concatFields_byte (ftsOpening signature)
+      (ftsOpening_length signature) tree j hj)
+
+theorem ftsOpening_secretByte (signature : Signature)
+    (tree : FtsTree) (i : Nat) (hi : i < 20) :
+    ((ftsOpening signature tree).map UInt8.toBitVec)[i]'(by
       rw [List.length_map, ftsOpening_length]
       simp [ftsOpeningBytes, digestBytes]
       omega) =
-      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
+      (signature.ftsSecret tree).extractLsb' (8 * i) 8 := by
   simp only [ftsOpening, List.map_append]
   rw [List.getElem_append_left (by simp [bytesLE, digestBytes]; omega)]
   simp only [List.getElem_map, bytesLE, List.getElem_ofFn,
     UInt8.toBitVec_ofBitVec]
   rfl
 
-private theorem firstFtsBlock_min_length (signature : Signature) :
-    20 ≤ (concatFields (ftsTrees - 1) (ftsOpening signature)).length := by
-  rw [concatFields_length _ _ _ (ftsOpening_length signature)]
-  norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes]
+theorem digestVectorBytes_byte {n : Nat}
+    (values : Fin n → Digest) (digest : Fin n)
+    (i : Nat) (hi : i < digestBytes) :
+    ((digestVectorBytes values).map UInt8.toBitVec)[digest.val * digestBytes + i]'(by
+          rw [List.length_map, digestVectorBytes_length]
+          have h := digest.isLt
+          norm_num [digestBytes] at *
+          omega) =
+      (values digest).extractLsb' (8 * i) 8 := by
+  simp only [digestVectorBytes, List.getElem_map, List.getElem_ofFn,
+    UInt8.toBitVec_ofBitVec]
+  have quotient : (digest.val * digestBytes + i) / digestBytes =
+      digest.val := by
+    norm_num [digestBytes] at *
+    omega
+  have remainder : (digest.val * digestBytes + i) % digestBytes = i := by
+    norm_num [digestBytes] at *
+    omega
+  simp only [quotient, remainder]
 
-private theorem restBytes_firstSecret (signature : Signature)
-    (i : Nat) (hi : i < 20) :
-    ((restBytes signature).map UInt8.toBitVec)[i]'(by
-      simp only [List.length_map, restBytes, List.length_append]
-      have h := firstFtsBlock_min_length signature
-      omega) =
-      (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
-  simp only [restBytes, List.map_append, List.append_assoc]
-  rw [List.getElem_append_left (by
-    simp only [List.length_map]
-    have h := firstFtsBlock_min_length signature
+theorem ftsOpening_pathByte (signature : Signature)
+    (tree : FtsTree) (level : Fin ftsTreeHeight)
+    (i : Nat) (hi : i < digestBytes) :
+    ((ftsOpening signature tree).map UInt8.toBitVec)[digestBytes + level.val * digestBytes + i]'(by
+          rw [List.length_map, ftsOpening_length]
+          have h := level.isLt
+          norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes] at *
+          omega) =
+      (signature.ftsPath tree level).extractLsb' (8 * i) 8 := by
+  simp only [ftsOpening, List.map_append]
+  rw [List.getElem_append_right (by
+    simp [bytesLE, digestBytes]
     omega)]
-  simp only [List.getElem_map]
-  simp only [ftsTrees, Nat.reduceSub]
-  rw [concatFields_first (ftsOpening signature) i (by
-    change i < (ftsOpening signature ⟨0, by decide⟩).length
-    rw [ftsOpening_length]
-    norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
-    omega)]
-  change ((ftsOpening signature ⟨0, by decide⟩)[i]'(by
-    rw [ftsOpening_length]
-    norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
-    omega)).toBitVec =
-    (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8
-  simpa only [List.getElem_map] using ftsOpening_firstSecret signature i hi
+  simp only [List.length_map]
+  have prefixLength : (bytesLE digestBytes (signature.ftsSecret tree)).length =
+      digestBytes := by simp [bytesLE]
+  simp only [prefixLength]
+  have indexEq : digestBytes + level.val * digestBytes + i -
+      digestBytes = level.val * digestBytes + i := by omega
+  simp only [indexEq]
+  exact digestVectorBytes_byte (signature.ftsPath tree) level i hi
 
-/-- The first FORS opening in the wire witness is the abstract secret. -/
+/-- Every byte of every FORS opening occupies its declared wire slot. -/
+theorem wire_ftsOpeningByte (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (tree : FtsTree) (j : Nat) (hj : j < ftsOpeningBytes) :
+    (wire pk signature).extractLsb'
+        (8 * (60 + tree.val * ftsOpeningBytes + j)) 8 =
+      ((ftsOpening signature tree).map UInt8.toBitVec)[j]'(by
+        rw [List.length_map, ftsOpening_length]
+        exact hj) := by
+  have full : 60 + tree.val * ftsOpeningBytes + j <
+      SphincsWire.signatureBytes := by
+    rw [SphincsWire.signatureBytes_eq]
+    have h := openingPosition_lt tree j hj
+    norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes] at h ⊢
+    omega
+  rw [wire_byte pk signature
+    (60 + tree.val * ftsOpeningBytes + j) full]
+  simp only [encodeBytes_prefix]
+  rw [List.getElem_append_right (by
+    simp [prefixBytes, bytesLE]
+    omega)]
+  simp only [List.length_map]
+  have plen : (prefixBytes pk signature).length = 60 := by
+    simp [prefixBytes, bytesLE]
+  simp only [plen]
+  have indexEq : 60 + tree.val * ftsOpeningBytes + j - 60 =
+      tree.val * ftsOpeningBytes + j := by omega
+  simp only [indexEq]
+  exact restBytes_opening_byte signature tree j hj
+
+/-- Every FORS opening's secret occupies its declared wire slot. -/
+theorem wire_ftsSecret (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (tree : FtsTree) (i : Nat) (hi : i < 20) :
+    (wire pk signature).extractLsb'
+        (8 * (60 + tree.val * ftsOpeningBytes + i)) 8 =
+      (signature.ftsSecret tree).extractLsb' (8 * i) 8 := by
+  have bound : i < ftsOpeningBytes := by
+    norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
+    omega
+  exact (wire_ftsOpeningByte pk signature tree i bound).trans
+    (ftsOpening_secretByte signature tree i hi)
+
+/-- Authentication-path nodes follow the secret in each FORS opening. -/
+theorem wire_ftsPath (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (tree : FtsTree) (level : Fin ftsTreeHeight)
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb'
+        (8 * (60 + tree.val * ftsOpeningBytes +
+          (digestBytes + level.val * digestBytes + i))) 8 =
+      (signature.ftsPath tree level).extractLsb' (8 * i) 8 := by
+  have bound : digestBytes + level.val * digestBytes + i <
+      ftsOpeningBytes := by
+    have h := level.isLt
+    norm_num [ftsTreeHeight, ftsOpeningBytes, digestBytes] at *
+    omega
+  exact (wire_ftsOpeningByte pk signature tree
+    (digestBytes + level.val * digestBytes + i) bound).trans
+      (ftsOpening_pathByte signature tree level i hi)
+
+/-- The first FORS opening is the first secret of the abstract signature. -/
 theorem wire_firstFtsSecret (pk : SphincsSecurity.PublicKey)
     (signature : SphincsSecurity.Signature)
     (i : Nat) (hi : i < 20) :
     (wire pk signature).extractLsb' (8 * (60 + i)) 8 =
       (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
-  have full : 60 + i < SphincsWire.signatureBytes := by
+  simpa using wire_ftsSecret pk signature ⟨0, by decide⟩ i hi
+
+theorem loaded_honest_ftsSecret (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (tree : FtsTree) (i : Nat) (hi : i < 20) :
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + (60 + tree.val * ftsOpeningBytes + i))) =
+      (signature.ftsSecret tree).extractLsb' (8 * i) 8 := by
+  have bound : 60 + tree.val * ftsOpeningBytes + i <
+      SphincsWire.signatureBytes := by
     rw [SphincsWire.signatureBytes_eq]
+    have fieldBound : i < ftsOpeningBytes := by
+      norm_num [ftsOpeningBytes, ftsTreeHeight, digestBytes]
+      omega
+    have h := openingPosition_lt tree i fieldBound
+    norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes] at h ⊢
     omega
-  rw [wire_byte pk signature (60 + i) full]
-  simp only [encodeBytes_prefix]
-  rw [List.getElem_append_right (by
-    simp [prefixBytes, bytesLE])]
-  simp only [List.length_map]
-  have plen : (prefixBytes pk signature).length = 60 := by
-    simp [prefixBytes, bytesLE]
-  simp only [plen, Nat.add_sub_cancel_left]
-  exact restBytes_firstSecret signature i hi
+  rw [SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded
+    (60 + tree.val * ftsOpeningBytes + i) bound]
+  exact wire_ftsSecret inner signature tree i hi
+
+theorem loaded_honest_ftsPath (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (tree : FtsTree) (level : Fin ftsTreeHeight)
+    (i : Nat) (hi : i < digestBytes) :
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + (60 + tree.val * ftsOpeningBytes +
+        (digestBytes + level.val * digestBytes + i)))) =
+      (signature.ftsPath tree level).extractLsb' (8 * i) 8 := by
+  have fieldBound : digestBytes + level.val * digestBytes + i <
+      ftsOpeningBytes := by
+    have h := level.isLt
+    norm_num [ftsTreeHeight, ftsOpeningBytes, digestBytes] at *
+    omega
+  have bound : 60 + tree.val * ftsOpeningBytes +
+      (digestBytes + level.val * digestBytes + i) <
+      SphincsWire.signatureBytes := by
+    rw [SphincsWire.signatureBytes_eq]
+    have h := openingPosition_lt tree
+      (digestBytes + level.val * digestBytes + i) fieldBound
+    norm_num [ftsTrees, ftsOpeningBytes, ftsTreeHeight, digestBytes] at h ⊢
+    omega
+  rw [SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded
+    (60 + tree.val * ftsOpeningBytes +
+      (digestBytes + level.val * digestBytes + i)) bound]
+  exact wire_ftsPath inner signature tree level i hi
 
 theorem loaded_honest_firstFtsSecret (publicKey : SigGolf.PublicKey)
     (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
@@ -233,11 +406,8 @@ theorem loaded_honest_firstFtsSecret (publicKey : SigGolf.PublicKey)
     (i : Nat) (hi : i < 20) :
     state.getByte (BitVec.ofNat 64 (0x22ca0 + (60 + i))) =
       (signature.ftsSecret ⟨0, by decide⟩).extractLsb' (8 * i) 8 := by
-  rw [SphincsVerifierLoader.loaded_witness publicKey message
-    (wire inner signature) state loaded (60 + i) (by
-      rw [SphincsWire.signatureBytes_eq]
-      omega)]
-  exact wire_firstFtsSecret inner signature i hi
+  simpa using loaded_honest_ftsSecret publicKey message inner signature
+    state loaded ⟨0, by decide⟩ i hi
 
 /-- An honestly serialized signature reaches the exact abstract message query. -/
 theorem loaded_honest_message_ready (publicKey : SigGolf.PublicKey)
@@ -297,6 +467,20 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_firstFtsSecret' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_firstFtsSecret
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_ftsPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms wire_ftsPath
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_ftsSecret' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_ftsSecret
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_ftsPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_ftsPath
 
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_firstFtsSecret' depends on axioms: [propext,
  Classical.choice,
