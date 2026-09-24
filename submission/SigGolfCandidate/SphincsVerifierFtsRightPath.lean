@@ -228,6 +228,12 @@ theorem rightCurrentPointers_word (state : MachineState)
       state.getWord32 address := by
   simp [rightCurrentPointers, execInstrBr]
 
+theorem rightCurrentPointers_mem (state : MachineState)
+    (address : Word) :
+    (rightCurrentPointers state).getMem address =
+      state.getMem address := by
+  simp [rightCurrentPointers, execInstrBr]
+
 theorem rightCurrentPointers_block (state : MachineState)
     (pc : state.pc = 0x1964) :
     OrdinarySteps SphincsImages.verify state 4
@@ -414,6 +420,10 @@ theorem rightJump_pc (state : MachineState)
 
 theorem rightJump_word (state : MachineState) (address : Word) :
     (rightJump state).getWord32 address = state.getWord32 address := by
+  simp [rightJump, execInstrBr]
+
+theorem rightJump_mem (state : MachineState) (address : Word) :
+    (rightJump state).getMem address = state.getMem address := by
   simp [rightJump, execInstrBr]
 
 def rightFinishState (state : MachineState) : MachineState :=

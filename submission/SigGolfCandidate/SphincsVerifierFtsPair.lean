@@ -8,6 +8,7 @@ open SigGolfCandidate.SphincsVerifierFtsLevelBranch
 open SigGolfCandidate.SphincsVerifierFtsRightPath
 open SigGolfCandidate.SphincsVerifierFtsLeftPath
 open SigGolfCandidate.SphincsVerifierCopy
+open SigGolfCandidate.SphincsVerifierCopyMemory
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -16,6 +17,52 @@ def pairState (start : MachineState) : MachineState :=
   let branched := branchState parity
   if parity.getReg .x6 = 0 then leftPairState branched
   else rightFinishState (copyRootState (rightPointers branched))
+
+theorem copyRoot_pointer_frame (state : MachineState)
+    (destination : state.getReg .x7 = 0x40028 ∨
+      state.getReg .x7 = 0x4003c) :
+    (copyRootState state).getMem 0x43028 =
+      state.getMem 0x43028 := by
+  apply copyRoot_mem_frame
+  intro offset
+  rcases destination with h | h <;> rw [h] <;>
+    fin_cases offset <;> decide
+
+theorem rightPair_pointer_frame (branched : MachineState) :
+    (rightFinishState (copyRootState (rightPointers branched))).getMem
+        0x43028 = branched.getMem 0x43028 := by
+  let first := copyRootState (rightPointers branched)
+  change (rightJump (copyRootState (rightCurrentPointers first))).getMem
+    0x43028 = _
+  rw [rightJump_mem,
+    copyRoot_pointer_frame _ (Or.inr (rightCurrentPointers_regs first).2),
+    rightCurrentPointers_mem,
+    copyRoot_pointer_frame _ (Or.inl (rightPointers_regs branched).2),
+    rightPointers_mem]
+
+theorem leftPair_pointer_frame (branched : MachineState) :
+    (leftPairState branched).getMem 0x43028 =
+      branched.getMem 0x43028 := by
+  let first := copyRootState (leftCurrentPointers branched)
+  change (copyRootState (leftSiblingPointers first)).getMem 0x43028 = _
+  rw [copyRoot_pointer_frame _
+      (Or.inr (leftSiblingPointers_regs first).2),
+    leftSiblingPointers_mem,
+    copyRoot_pointer_frame _
+      (Or.inl (leftCurrentPointers_regs branched).2),
+    leftCurrentPointers_mem]
+
+theorem pair_pointer_frame (start : MachineState) :
+    (pairState start).getMem 0x43028 = start.getMem 0x43028 := by
+  let parity := parityState start
+  let branched := branchState parity
+  by_cases zero : parity.getReg .x6 = 0
+  · change (parityState start).getReg .x6 = 0 at zero
+    simp only [pairState, zero, if_true]
+    rw [leftPair_pointer_frame, branch_mem, parity_mem]
+  · change (parityState start).getReg .x6 ≠ 0 at zero
+    simp only [pairState, zero, if_false]
+    rw [rightPair_pointer_frame, branch_mem, parity_mem]
 
 theorem pair_trace_and_data (start : MachineState)
     (pc : (parityState start).pc = 0x1924)

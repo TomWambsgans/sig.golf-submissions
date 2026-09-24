@@ -201,6 +201,11 @@ theorem leftSiblingPointers_word (state : MachineState) (address : Word) :
       state.getWord32 address := by
   simp [leftSiblingPointers, execInstrBr]
 
+theorem leftSiblingPointers_mem (state : MachineState) (address : Word) :
+    (leftSiblingPointers state).getMem address =
+      state.getMem address := by
+  simp [leftSiblingPointers, execInstrBr]
+
 theorem leftSiblingPointers_block (state : MachineState)
     (pc : state.pc = 0x19d8) :
     OrdinarySteps SphincsImages.verify state 5
