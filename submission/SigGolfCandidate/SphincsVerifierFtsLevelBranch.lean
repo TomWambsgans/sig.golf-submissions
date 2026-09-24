@@ -120,6 +120,56 @@ theorem selection_firstPath_parity (selection : MachineState)
   exact ⟨by rw [parity_reg, scratch.2.1, selected.1],
     by rw [scratch.2.2, selected.2]⟩
 
+theorem selector_parity_toNat (selection start : MachineState) (leaf : Nat)
+    (loaded : (parityState start).getReg .x6 =
+      selection.getMem 0x43070 &&& 1)
+    (value : (selection.getMem 0x43070).toNat = leaf) :
+    ((parityState start).getReg .x6).toNat = leaf % 2 := by
+  rw [loaded, BitVec.toNat_and, value]
+  simp [Nat.and_comm, Nat.one_and_eq_mod_two]
+
+def branchState (state : MachineState) : MachineState :=
+  execInstrBr state (.BEQ .x6 .x0 124)
+
+theorem branch_block (state : MachineState) (pc : state.pc = 0x1924) :
+    OrdinarySteps SphincsImages.verify state 1 (branchState state) := by
+  apply OrdinarySteps.step state _ _ (.base (.BEQ .x6 .x0 124)) 0
+  · rw [fetch_index SphincsImages.verify state 585 (by decide)
+      (by simpa using pc)]
+    decide
+  · rfl
+  exact OrdinarySteps.refl _
+
+theorem branch_pc_even (state : MachineState)
+    (pc : state.pc = 0x1924) (even : state.getReg .x6 = 0) :
+    (branchState state).pc = 0x19a0 := by
+  simp [branchState, execInstrBr, pc, even, signExtend13]
+
+theorem branch_pc_odd (state : MachineState)
+    (pc : state.pc = 0x1924) (odd : state.getReg .x6 ≠ 0) :
+    (branchState state).pc = 0x1928 := by
+  change state.getReg .x6 ≠ 0#64 at odd
+  simp [branchState, execInstrBr, pc, odd, signExtend13]
+
+theorem branch_pc_of_leaf (selection start : MachineState) (leaf : Nat)
+    (loaded : (parityState start).getReg .x6 =
+      selection.getMem 0x43070 &&& 1)
+    (value : (selection.getMem 0x43070).toNat = leaf)
+    (pc : (parityState start).pc = 0x1924) :
+    (branchState (parityState start)).pc =
+      if leaf % 2 = 0 then 0x19a0 else 0x1928 := by
+  have parity := selector_parity_toNat selection start leaf loaded value
+  by_cases even : leaf % 2 = 0
+  · have zero : (parityState start).getReg .x6 = 0 := by
+      apply BitVec.eq_of_toNat_eq
+      simpa [even] using parity
+    simp [even, branch_pc_even _ pc zero]
+  · have nonzero : (parityState start).getReg .x6 ≠ 0 := by
+      intro zero
+      apply even
+      simpa [zero] using parity.symm
+    simp [even, branch_pc_odd _ pc nonzero]
+
 set_option maxHeartbeats 0 in
 theorem messageReady_admissible_firstPathParity (state : MachineState)
     (pk : SphincsSecurity.PublicKey)
