@@ -159,6 +159,12 @@ theorem loaded_message32_block_with_data (publicKey : SigGolf.PublicKey)
   refine ⟨final, ?_, invariant, contents⟩
   simpa using copies.append messageCopy
 
+theorem copyData_final_word (original final : MachineState)
+    (data : CopyData original 4 final) (index : Fin 4) :
+    final.getMem (BitVec.ofNat 64 (0x40050 + 8 * index.val)) =
+      original.getMem (BitVec.ofNat 64 (8 * index.val)) := by
+  simpa [destinationWord, sourceWord] using data.1 index (by omega)
+
 /-- info: 'SigGolfCandidate.SphincsVerifierMessage32Data.copyData_step' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms copyData_step
