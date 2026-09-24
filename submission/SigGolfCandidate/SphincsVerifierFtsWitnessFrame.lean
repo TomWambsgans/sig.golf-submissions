@@ -127,6 +127,27 @@ theorem writeHash_lowByte_frame (state : MachineState)
   simp [MachineState.getByte, writeHash, MachineState.writeWords_cons,
     destination, not0, not8, not16, not24]
 
+theorem writeHash_allWitness_frame (state : MachineState)
+    (answer : BitVec 256) (i : Nat)
+    (hi : i < SphincsWire.signatureBytes)
+    (destination : state.getReg .x12 = 0x42000) :
+    (writeHash state answer).getByte (BitVec.ofNat 64 (0x22ca0 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := by
+  let address : Word := BitVec.ofNat 64 (0x22ca0 + i)
+  have low : (alignToDword address).toNat < 0x40000 := by
+    have length := SphincsWire.signatureBytes_eq
+    have small : 0x22ca0 + i < 2 ^ 64 := by omega
+    have range : 0x22ca0 + i < 0x40000 := by omega
+    have aligned : (alignToDword address).toNat ≤ address.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have exactAddress : address.toNat = 0x22ca0 + i := by
+      simp only [address, BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt small
+    omega
+  exact writeHash_lowByte_frame state answer address low destination
+
 theorem firstFtsPointers_lowMessageByte_frame (state : MachineState)
     (answer : BitVec 256) (address : Word)
     (low : address.toNat < 0x40000)

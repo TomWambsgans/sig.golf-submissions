@@ -34,6 +34,35 @@ structure FtsWitness (state : MachineState)
         (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i)))) =
       (signature.ftsPath tree level).extractLsb' (8 * i) 8
 
+theorem FtsWitness.transport (before after : MachineState)
+    (signature : SphincsSecurity.Signature)
+    (witness : FtsWitness before signature)
+    (frame : ∀ i, i < SphincsWire.signatureBytes →
+      after.getByte (BitVec.ofNat 64 (0x22ca0 + i)) =
+        before.getByte (BitVec.ofNat 64 (0x22ca0 + i))) :
+    FtsWitness after signature := by
+  constructor
+  · intro tree i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
+        SphincsWire.signatureBytes := by
+      have h := tree.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (frame _ bound).trans (witness.secret tree i hi)
+  · intro tree level i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
+        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
+        SphincsWire.signatureBytes := by
+      have htree := tree.isLt
+      have hlevel := level.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (frame _ bound).trans (witness.path tree level i hi)
+
 private theorem low_ne_high (read address : Word)
     (low : read.toNat < 0x40000)
     (high : 0x40000 ≤ address.toNat) : read ≠ address := by
@@ -351,29 +380,10 @@ theorem firstFtsPointers_preserve_FtsWitness (state : MachineState)
     (witness : FtsWitness state signature) :
     FtsWitness (SphincsVerifierFtsQuery.firstFtsPointers state answer)
       signature := by
-  constructor
-  · intro tree i hi
-    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
-        SphincsWire.signatureBytes := by
-      have h := tree.isLt
-      rw [SphincsWire.signatureBytes_eq]
-      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
-        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
-      omega
-    exact (SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
-      state answer _ bound destination).trans (witness.secret tree i hi)
-  · intro tree level i hi
-    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
-        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
-        SphincsWire.signatureBytes := by
-      have htree := tree.isLt
-      have hlevel := level.isLt
-      rw [SphincsWire.signatureBytes_eq]
-      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
-        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
-      omega
-    exact (SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
-      state answer _ bound destination).trans (witness.path tree level i hi)
+  apply FtsWitness.transport state _ signature witness
+  intro i hi
+  exact SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
+    state answer i hi destination
 
 theorem firstFtsHashReady_preserve_FtsWitness (state : MachineState)
     (answer : BitVec 256) (signature : SphincsSecurity.Signature)
@@ -384,35 +394,31 @@ theorem firstFtsHashReady_preserve_FtsWitness (state : MachineState)
         (SphincsVerifierCopy.copyRootState
           (SphincsVerifierFtsQuery.firstFtsPointers state answer))))
       signature := by
-  constructor
-  · intro tree i hi
-    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
-        SphincsWire.signatureBytes := by
-      have h := tree.isLt
-      rw [SphincsWire.signatureBytes_eq]
-      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
-        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
-      omega
-    exact (SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame
-      state answer _ bound destination).trans (witness.secret tree i hi)
-  · intro tree level i hi
-    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
-        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
-        SphincsWire.signatureBytes := by
-      have htree := tree.isLt
-      have hlevel := level.isLt
-      rw [SphincsWire.signatureBytes_eq]
-      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
-        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
-      omega
-    exact (SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame
-      state answer _ bound destination).trans (witness.path tree level i hi)
+  apply FtsWitness.transport state _ signature witness
+  intro i hi
+  exact SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame
+    state answer i hi destination
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.firstFtsHashReady_preserve_FtsWitness' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms firstFtsHashReady_preserve_FtsWitness
+
+theorem firstFtsHashAnswer_preserve_FtsWitness (state : MachineState)
+    (answer : BitVec 256) (signature : SphincsSecurity.Signature)
+    (destination : state.getReg .x12 = 0x42000)
+    (witness : FtsWitness state signature) :
+    FtsWitness (writeHash state answer) signature := by
+  apply FtsWitness.transport state _ signature witness
+  intro i hi
+  exact SphincsVerifierFtsWitnessFrame.writeHash_allWitness_frame
+    state answer i hi destination
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.firstFtsHashAnswer_preserve_FtsWitness' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstFtsHashAnswer_preserve_FtsWitness
 
 theorem loaded_honest_message_ready_with_witness
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
@@ -497,7 +503,9 @@ theorem loaded_honest_firstFts_query
             (SphincsSecurity.truncateMessageDigest digestAnswer)
             ⟨0, by decide⟩)
           (signature.ftsSecret ⟨0, by decide⟩)) ∧
-      FtsWitness final signature := by
+      FtsWitness final signature ∧
+      ∀ oracleAnswer : BitVec 256,
+        FtsWitness (writeHash final oracleAnswer) signature := by
   obtain ⟨ready, trace, pc, messageReady, prefixWitness, secret⟩ :=
     loaded_honest_message_ready_with_witness publicKey message inner
       signature state commitmentAnswer loaded answerMatches
@@ -514,8 +522,12 @@ theorem loaded_honest_firstFts_query
     ready trace
   have witnessFinal := firstFtsHashReady_preserve_FtsWitness ready
     digestAnswer signature messageReady.destination witnessReady
+  have finalWitness : FtsWitness final signature := by
+    simpa only [final, advanced, pointers] using witnessFinal
   exact ⟨ready, final, trace, query.1, query.2.1, query.2.2,
-    by simpa only [final, advanced, pointers] using witnessFinal⟩
+    finalWitness, fun oracleAnswer => firstFtsHashAnswer_preserve_FtsWitness
+      final oracleAnswer signature (SphincsVerifierFtsSetup.ftsHashReady_regs advanced).2.2.1
+      finalWitness⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_honest_firstFts_query' depends on axioms: [propext,
  Classical.choice,
