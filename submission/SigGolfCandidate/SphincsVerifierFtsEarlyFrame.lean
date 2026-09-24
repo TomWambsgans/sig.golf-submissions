@@ -19,6 +19,21 @@ open SigGolfCandidate.SphincsVerifierSecondHashFrame
 open SigGolfCandidate.SphincsVerifierSecondHashSetup
 open SigGolfCandidate.Sphincs.Expansion
 
+/-- The witness bytes encode every opened FORS secret and authentication path. -/
+structure FtsWitness (state : MachineState)
+    (signature : SphincsSecurity.Signature) : Prop where
+  secret : ∀ tree : SphincsSecurity.FtsTree, ∀ i, (hi : i < 20) →
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes + i))) =
+      (signature.ftsSecret tree).extractLsb' (8 * i) 8
+  path : ∀ tree : SphincsSecurity.FtsTree,
+    ∀ level : Fin SphincsSecurity.ftsTreeHeight,
+    ∀ i, (hi : i < SphincsWire.digestBytes) →
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes +
+        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i)))) =
+      (signature.ftsPath tree level).extractLsb' (8 * i) 8
+
 private theorem low_ne_high (read address : Word)
     (low : read.toNat < 0x40000)
     (high : 0x40000 ≤ address.toNat) : read ≠ address := by
@@ -299,17 +314,7 @@ theorem loaded_honest_allFts_at_secondHash
     (ready : MachineState)
     (trace : OrdinarySteps SphincsImages.verify
       (writeHash (firstHashState state) answer) 107 ready) :
-    (∀ tree : SphincsSecurity.FtsTree, ∀ i, (hi : i < 20) →
-      ready.getByte (BitVec.ofNat 64
-        (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes + i))) =
-        (signature.ftsSecret tree).extractLsb' (8 * i) 8) ∧
-    (∀ tree : SphincsSecurity.FtsTree,
-      ∀ level : Fin SphincsSecurity.ftsTreeHeight,
-      ∀ i, (hi : i < SphincsWire.digestBytes) →
-      ready.getByte (BitVec.ofNat 64
-        (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes +
-          (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i)))) =
-        (signature.ftsPath tree level).extractLsb' (8 * i) 8) := by
+    FtsWitness ready signature := by
   constructor
   · intro tree i hi
     have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
@@ -339,6 +344,36 @@ theorem loaded_honest_allFts_at_secondHash
       answerMatches ready trace _ bound).trans
         (SphincsWireEncoding.loaded_honest_ftsPath publicKey message
           inner signature state loaded tree level i hi)
+
+theorem firstFtsPointers_preserve_FtsWitness (state : MachineState)
+    (answer : BitVec 256) (signature : SphincsSecurity.Signature)
+    (destination : state.getReg .x12 = 0x42000)
+    (witness : FtsWitness state signature) :
+    FtsWitness (SphincsVerifierFtsQuery.firstFtsPointers state answer)
+      signature := by
+  constructor
+  · intro tree i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
+        SphincsWire.signatureBytes := by
+      have h := tree.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
+      state answer _ bound destination).trans (witness.secret tree i hi)
+  · intro tree level i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
+        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
+        SphincsWire.signatureBytes := by
+      have htree := tree.isLt
+      have hlevel := level.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
+      state answer _ bound destination).trans (witness.path tree level i hi)
 
 theorem loaded_honest_message_ready_with_witness
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
@@ -388,7 +423,7 @@ theorem loaded_honest_message_ready_with_witness
   refine ⟨ready, trace, pc, messageReady, prefixReady, ?_⟩
   intro i hi
   have opening := (loaded_honest_allFts_at_secondHash publicKey message
-    inner signature state answer loaded answerMatches ready trace).1
+    inner signature state answer loaded answerMatches ready trace).secret
       (⟨0, by decide⟩ : SphincsSecurity.FtsTree) i hi
   have address : 0x22ca0 + (60 + i) = 0x22cdc + i := by omega
   simp only [Nat.zero_mul] at opening
