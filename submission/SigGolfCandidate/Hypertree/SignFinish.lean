@@ -5,7 +5,7 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp Expansion
 set_option maxRecDepth 4096
 set_option linter.unusedSimpArgs false
 
-/-- Template for the final root/public-key comparison, independent of the rest of the signer. -/
+/-- Template for the verifier's final root/public-key comparison, independent of the rest of the program. -/
 def footerInstructions : List Instr := [
   .LUI .x28 0x80, .ADDI .x28 .x28 0x500, .LD .x6 .x28 0,
   .ADDI .x28 .x0 0x40, .LD .x7 .x28 0, .BNE .x6 .x7 40,
@@ -243,18 +243,31 @@ theorem footer_executes (hash : Hash) (image : Image) (base : Word)
 #guard_msgs in
 #print axioms footer_executes
 
-/-- The randomized signing image contains this exact checked footer. -/
-theorem sign_footer_code : FooterCode sign 0x12f8 := by
-  intro s i pc
-  simp only [fetch, pc]
-  fin_cases i <;> decide
-
-/-- Actual signing bytecode from its final root check, independent of all prefix invariants. -/
+/-- Signing has no public key to compare, so its footer halts successfully at once.
+The padding after the halt keeps the addresses of the signer's subroutines. -/
 theorem sign_footer_executes (hash : Hash) (s : MachineState) (pc : s.pc = 0x12f8) :
-    ∃ (steps : Nat) (final : MachineState), steps ≤ 15 ∧
-      Executes hash sign s steps
-        ⟨if RootMatches s then .success else .failure, final, steps, 0, 0⟩ ∧
-      ∀ a, final.getMem a = s.getMem a :=
-  footer_executes hash sign 0x12f8 sign_footer_code s pc
+    ∃ final : MachineState,
+      Executes hash sign s 3 ⟨.success, final, 3, 0, 0⟩ ∧ ∀ a, final.getMem a = s.getMem a := by
+  have block : OrdinarySteps sign s 2 (terminalState s true) := by
+    let s1 := execInstrBr s (.ADDI .x5 .x0 0)
+    apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 0)) 1
+    · simp only [fetch, pc]; decide
+    · rfl
+    apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 1)) 0
+    · have hp : s1.pc = 0x12fc := by simp [s1, execInstrBr, pc]
+      simp only [fetch, hp]; decide
+    · rfl
+    exact OrdinarySteps.refl _
+  have hf : fetch sign (terminalState s true) = some (.base .ECALL) := by
+    have hp : (terminalState s true).pc = 0x1300 := by simp [terminalState, execInstrBr, pc]
+    simp only [fetch, hp]; decide
+  have hs : (terminalState s true).getReg .x5 = 0 := rfl
+  have hv : (terminalState s true).getReg .x10 = 1 := rfl
+  refine ⟨terminalState s true, ?_, terminal_mem s true⟩
+  simpa [hv, Execution.charge] using block.then_executes (Executes.halt (hash := hash) _ hf hs)
+
+/-- info: 'SigGolfCandidate.Hypertree.Signing.sign_footer_executes' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms sign_footer_executes
 
 end SigGolfCandidate.Hypertree.Signing

@@ -25,12 +25,12 @@ theorem record_view (transcript : Transcript submission.sizes) (message : Messag
 /-- Every value observed by the organizer security experiment, excluding unobserved cycle fields. -/
 structure Interface where
   keygen : SecretKey → OracleComp HashSpec (Option (PublicKey×Cache) × Nat)
-  sign : SecretKey → PublicKey → SigningRequest → OracleComp HashSpec (Option (Bytes submission.sizes.signature) × Nat)
+  sign : SecretKey → SigningRequest → OracleComp HashSpec (Option (Bytes submission.sizes.signature) × Nat)
   check : PublicKey → Transcript submission.sizes → Forgery submission.sizes → OracleComp HashSpec AttackResult
 
 def actualInterface : Interface where
   keygen secretKey := view <$> submission.run .keygen secretKey
-  sign secretKey pk request := view <$> submission.signingOracle secretKey pk request
+  sign secretKey request := view <$> submission.signingOracle secretKey request
   check := submission.checkForgery
 
 def interactWith (scheme : Interface) (adversary : Adversary submission.sizes)
@@ -44,7 +44,7 @@ def interactWith (scheme : Interface) (adversary : Adversary submission.sizes)
           interactWith scheme adversary secretKey pk rounds (resume answer) {transcript with hashCalls:=transcript.hashCalls+1}
       | .sign request resume => do
           if transcript.signingRequests<LIFETIME then
-            let result ← (scheme.sign secretKey pk request).liftComp World
+            let result ← (scheme.sign secretKey request).liftComp World
             interactWith scheme adversary secretKey pk rounds (resume result.1) (recordView transcript request.message result)
           else pure ⟨false,transcript.hashCalls⟩
       | .sample n resume => do
@@ -72,7 +72,7 @@ theorem actual_interact (adversary : Adversary submission.sizes) (secretKey : Se
     case hash input resume => simp only [ih]
     case sign request resume =>
       split
-      · change ((view <$> submission.signingOracle secretKey pk request).liftComp World >>= _) = _
+      · change ((view <$> submission.signingOracle secretKey request).liftComp World >>= _) = _
         rw [OracleComp.liftComp_map,bind_map_left]
         apply bind_congr
         intro result

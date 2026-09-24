@@ -53,30 +53,30 @@ theorem signUpper (count level index : Nat) (hl : count + level ≤ 160) (hi : i
 theorem randomizer (message : Message) : Safe allowed (SecurityIdealSign.randomizer message) :=
   Safe.ask (spec := SplitWorld) allowed (.inl (.randomizer message)) trivial
 
-theorem randomizedIndex (pk : PublicKey) (message : Message) :
-    Safe allowed (SecurityIdealSign.randomizedIndex pk message) := by
+theorem randomizedIndex (message : Message) :
+    Safe allowed (SecurityIdealSign.randomizedIndex message) := by
   unfold SecurityIdealSign.randomizedIndex
   simpa only [map_eq_pure_bind] using
     (randomizer message).bind _ (fun nonce =>
       (publicCall (Safe.ask (spec := HashSpec) (fun query => ¬SecretKeyEligible query)
-        (SecurityRandomOracle.indexInput pk message nonce)
+        (SecurityRandomOracle.indexInput message nonce)
         (SecurityDomains.not_secretKeyEligible_addressedInput 5 0 0 0 0 0 _ (by decide) (by decide)))).map
         (fun answer => (nonce, answer.extractLsb' 0 160)))
 
-theorem signCompact (pk : PublicKey) (message : Message) : Safe allowed (SecurityIdealSign.signCompact pk message) := by
+theorem signCompact (message : Message) : Safe allowed (SecurityIdealSign.signCompact message) := by
   unfold SecurityIdealSign.signCompact
-  exact (randomizedIndex pk message).bind _ (fun ri =>
+  exact (randomizedIndex message).bind _ (fun ri =>
     (signLayerWithRoot ⟨0,by decide⟩ _ _ _).bind _ (fun bottom =>
       (signUpper 159 1 (ri.2.toNat / 2) _ _ bottom.2).bind _ (fun _ => Safe.pure _)))
 
-theorem signWire (pk : PublicKey) (message : Message) : Safe allowed (SecurityExperiment.signWire pk message) :=
-  (signCompact pk message).map SecurityExperiment.serialize
+theorem signWire (message : Message) : Safe allowed (SecurityExperiment.signWire message) :=
+  (signCompact message).map SecurityExperiment.serialize
 
 /-- Honest signing cannot activate the secret key monitor, on any oracle history. -/
-theorem stop_signWire_bind {α : Type} (secretKey : SecretKey) (pk : PublicKey) (message : Message)
+theorem stop_signWire_bind {α : Type} (secretKey : SecretKey) (message : Message)
     (next : Option (Bytes submission.sizes.signature) → OracleComp GameWorld α) :
-    stop secretKey ((SecurityExperiment.signWire pk message).liftComp GameWorld >>= next) =
-      ((SecurityExperiment.signWire pk message).liftComp GameWorld >>= fun response => stop secretKey (next response)) :=
-  ((signWire pk message).lift secretKey).stop_bind secretKey next
+    stop secretKey ((SecurityExperiment.signWire message).liftComp GameWorld >>= next) =
+      ((SecurityExperiment.signWire message).liftComp GameWorld >>= fun response => stop secretKey (next response)) :=
+  ((signWire message).lift secretKey).stop_bind secretKey next
 
 end SigGolfCandidate.Hypertree.SecuritySecretKeyHonest

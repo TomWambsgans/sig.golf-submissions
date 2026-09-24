@@ -49,13 +49,13 @@ theorem calls_signUpper (hash : Hash) (secretKey : SecretKey) (count level index
     rw [ih _ _ _ (by omega)]
     omega
 
-theorem calls_randomizedIndex (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    calls hash (SecurityRandomOracle.randomizedIndex secretKey pk message)=2 := by
+theorem calls_randomizedIndex (hash : Hash) (secretKey : SecretKey) (message : Message) :
+    calls hash (SecurityRandomOracle.randomizedIndex secretKey message)=2 := by
   simp [SecurityRandomOracle.randomizedIndex,calls_bind,KeygenQueryAccounting.calls_query]
 
 /-- Shared chain work makes the full reference signer match the bytecode's exact H-call count. -/
-theorem calls_signCompact (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    calls hash (SecurityReference.signCompact secretKey pk message)=117508 := by
+theorem calls_signCompact (hash : Hash) (secretKey : SecretKey) (message : Message) :
+    calls hash (SecurityReference.signCompact secretKey message)=117508 := by
   simp only [SecurityReference.signCompact,calls_bind,calls_randomizedIndex,calls_signLayerWithRoot,
     calls_signUpper hash secretKey 159 1 _ _ (by decide),calls_pure]
   rfl

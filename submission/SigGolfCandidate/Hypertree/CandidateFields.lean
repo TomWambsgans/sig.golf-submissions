@@ -13,8 +13,8 @@ theorem termination : submission.Terminates := by
     dsimp only
     exact ⟨rfl,by decide⟩
   | sign =>
-    rcases input with ⟨secretKey,pk,cache,message⟩
-    have bound := Signing.sign_run_bound hash secretKey pk cache message
+    rcases input with ⟨secretKey,cache,message⟩
+    have bound := Signing.sign_run_bound hash secretKey cache message
     exact ⟨bound.1,bound.2.2.1⟩
   | expand =>
     have bound := Expansion.run_bound hash input

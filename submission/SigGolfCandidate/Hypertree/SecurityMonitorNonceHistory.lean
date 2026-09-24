@@ -15,8 +15,8 @@ def Tracks (cache : SecurityNonceMonitor.NonceCache) (history : History) : Prop 
 @[simp] theorem tracks_empty : Tracks ∅ {} := by intro message; simp
 
 theorem Tracks.public {cache : SecurityNonceMonitor.NonceCache} {history : History}
-    (tracked : Tracks cache history) (pk : PublicKey) (input : Query) (cached : Bool) (answer : BitVec 256) :
-    Tracks cache (recordPublic pk history input cached answer) := by
+    (tracked : Tracks cache history) (input : Query) (cached : Bool) (answer : BitVec 256) :
+    Tracks cache (recordPublic history input cached answer) := by
   intro message
   simpa only [public_messages] using tracked message
 
@@ -67,12 +67,12 @@ theorem accumulate_parsed {α : Type} (nonces : NonceTable) (cache : SecurityNon
       · omega
 
 theorem accumulate_query {α : Type} (nonces : NonceTable) (cache : SecurityNonceMonitor.NonceCache)
-    (history : History) (tracked : Tracks cache history) (pk : PublicKey) (query : Query)
+    (history : History) (tracked : Tracks cache history) (query : Query)
     (cached : Bool) (answer : BitVec 256) (next : NP α) :
-    accumulate nonces history <$> SecurityNonceProgram.run nonces cache (guessQuery pk history query next) =
-      accumulate nonces (recordPublic pk history query cached answer) <$>
+    accumulate nonces history <$> SecurityNonceProgram.run nonces cache (guessQuery history query next) =
+      accumulate nonces (recordPublic history query cached answer) <$>
         SecurityNonceProgram.run nonces cache next :=
-  accumulate_parsed nonces cache history tracked query (SecurityIndexQuery.parse pk query)
+  accumulate_parsed nonces cache history tracked query (SecurityIndexQuery.parse query)
     (decide (SecuritySeparation.SecretKeyEligible query)) cached answer next
 
 @[simp] theorem accumulate_sign {α : Type} (nonces : NonceTable) (history : History)
@@ -88,23 +88,23 @@ theorem accumulate_parsed_irrel {α : Type} (nonces : NonceTable) (history : His
   | none => cases eligible <;> rfl
   | some pair => cases pair; rfl
 
-theorem accumulate_public_irrel {α : Type} (nonces : NonceTable) (history : History) (pk : PublicKey)
+theorem accumulate_public_irrel {α : Type} (nonces : NonceTable) (history : History)
     (query : Query) (cached : Bool) (answer other : BitVec 256) :
-    accumulate (α := α) nonces (recordPublic pk history query cached answer) =
-      accumulate nonces (recordPublic pk history query cached other) :=
-  accumulate_parsed_irrel nonces history query (SecurityIndexQuery.parse pk query)
+    accumulate (α := α) nonces (recordPublic history query cached answer) =
+      accumulate nonces (recordPublic history query cached other) :=
+  accumulate_parsed_irrel nonces history query (SecurityIndexQuery.parse query)
     (decide (SecuritySeparation.SecretKeyEligible query)) cached answer other
 
 /-- Joint flag/counter/output law: the nonce monitor's entire passive observation
 is already determined by the common final public history and the fixed table. -/
 theorem run_compile {α : Type} (points : PointTable) (nonces : NonceTable)
-    (metadata : MetadataTable) (pk : PublicKey) (view : View α) (remaining : Nat)
+    (metadata : MetadataTable) (view : View α) (remaining : Nat)
     (exposed : QueryCache PointSpec) (residual : QueryCache HashSpec) (history : History)
     (nonceCache : SecurityNonceMonitor.NonceCache) (tracked : Tracks nonceCache history) :
     accumulate nonces history <$>
-        SecurityNonceProgram.run nonces nonceCache (compile points metadata pk view remaining exposed residual history) =
+        SecurityNonceProgram.run nonces nonceCache (compile points metadata view remaining exposed residual history) =
       annotate nonces <$> SecurityGraphMonitorObserve.observe points exposed
-        (SecurityMonitorGraphView.compile nonces metadata pk view remaining exposed residual history) := by
+        (SecurityMonitorGraphView.compile nonces metadata view remaining exposed residual history) := by
   induction view generalizing remaining exposed residual history nonceCache with
   | done value =>
     simp only [compile, SecurityMonitorGraphView.compile, SecurityNonceProgram.run,
@@ -119,13 +119,13 @@ theorem run_compile {α : Type} (points : PointTable) (nonces : NonceTable)
       simp only [compile, SecurityMonitorGraphView.compile, SecurityNonceProgram.run,
         SecurityGraphMonitorObserve.observe_done, map_pure, accumulate, annotate, Bool.or_false, Nat.add_zero]
     | succ remaining =>
-      rw [compile, SecurityMonitorGraphView.compile, accumulate_query nonces nonceCache history tracked pk input _ 0,
+      rw [compile, SecurityMonitorGraphView.compile, accumulate_query nonces nonceCache history tracked input _ 0,
         run_liftValue, map_bind, SecurityGraphMonitorObserve.observe_publicStep_bind, map_bind]
       apply bind_congr
       intro result
-      rw [accumulate_public_irrel nonces history pk input _ 0 result.1]
-      exact ih result.1 _ _ _ _ _ (tracked.public pk input _ result.1)
-  | sign signPk message next ih =>
+      rw [accumulate_public_irrel nonces history input _ 0 result.1]
+      exact ih result.1 _ _ _ _ _ (tracked.public input _ result.1)
+  | sign message next ih =>
     rw [compile, SecurityMonitorGraphView.compile]
     by_cases allowed : 117508 ≤ remaining
     · rw [if_pos allowed, if_pos allowed, SecurityNonceProgram.run, run_liftValue, map_bind]
@@ -147,10 +147,10 @@ theorem run_compile {α : Type} (points : PointTable) (nonces : NonceTable)
 /-- Starting from no signed messages, the exact nonce hit and counter are the
 correct guesses and length of the common final history. -/
 theorem run_start {α : Type} (points : PointTable) (nonces : NonceTable) (metadata : MetadataTable)
-    (pk : PublicKey) (view : View α) (budget : Nat) :
-    SecurityNonceProgram.run nonces ∅ (start points metadata pk view budget) =
+    (view : View α) (budget : Nat) :
+    SecurityNonceProgram.run nonces ∅ (start points metadata view budget) =
       annotate nonces <$> SecurityGraphMonitorObserve.observe points ∅
-        (SecurityMonitorGraphView.start nonces metadata pk view budget) := by
+        (SecurityMonitorGraphView.start nonces metadata view budget) := by
   rw [start, SecurityMonitorGraphView.start]
   split
   · rw [run_liftValue]
@@ -159,7 +159,7 @@ theorem run_start {α : Type} (points : PointTable) (nonces : NonceTable) (metad
     rw [SecurityGraphMonitorObserve.observe_disclose, SecurityGraphMonitorObserve.observe_done, pure_bind,
       SecurityGraphMonitorObserve.observe_disclose]
     have tracked : Tracks ∅ (recordKeygen {}) := tracks_empty
-    have same := run_compile points nonces metadata pk view (budget - 739)
+    have same := run_compile points nonces metadata view (budget - 739)
       (SecurityGraphDisclosure.revealCache points (SecurityGraphMonitorSetup.points metadata) ∅) ∅ (recordKeygen {}) ∅ tracked
     have identity : accumulate (α := Result α) nonces (recordKeygen {}) = id := by
       funext result
@@ -172,11 +172,11 @@ theorem run_start {α : Type} (points : PointTable) (nonces : NonceTable) (metad
 
 /-- The eager uniform nonce experiment is precisely the annotated common view. -/
 theorem execute_start {α : Type} (points : PointTable) (metadata : MetadataTable)
-    (pk : PublicKey) (view : View α) (budget : Nat) :
-    SecurityNonceProgram.execute (start points metadata pk view budget) ∅ = (do
+    (view : View α) (budget : Nat) :
+    SecurityNonceProgram.execute (start points metadata view budget) ∅ = (do
       let nonces ← $ᵗ NonceTable
       annotate nonces <$> SecurityGraphMonitorObserve.observe points ∅
-        (SecurityMonitorGraphView.start nonces metadata pk view budget)) := by
+        (SecurityMonitorGraphView.start nonces metadata view budget)) := by
   unfold SecurityNonceProgram.execute
   apply bind_congr
   intro nonces

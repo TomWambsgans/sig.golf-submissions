@@ -173,31 +173,31 @@ theorem eval_signLayer (privateAnswers : PrivateTable) (labels : Labels) (residu
 
 /-- Honest message-index hashing is outside every planted graph address. -/
 theorem programmed_index (privateAnswers : PrivateTable) (labels : Labels) (residual : Hash)
-    (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    programmed privateAnswers labels residual (SecurityRandomOracle.indexInput pk message r) =
-      residual (SecurityRandomOracle.indexInput pk message r) := by
+    (message : Message) (r : Bytes 32) :
+    programmed privateAnswers labels residual (SecurityRandomOracle.indexInput message r) =
+      residual (SecurityRandomOracle.indexInput message r) := by
   unfold programmed
   split
   next found =>
     obtain ⟨position, same⟩ := found
     change position.address.input (position.payload privateAnswers labels) =
-      (⟨5, 0, 0, 0, 0, 0⟩ : Address).input (bytes pk ++ bytes message ++ bytes r) at same
+      (⟨5, 0, 0, 0, 0, 0⟩ : Address).input (bytes (0 : Bytes 16) ++ bytes message ++ bytes r) at same
     have tag := congrArg Address.tag (Address.eq_of_input_eq same)
     cases position <;> cases tag
   next absent => rfl
 
 theorem eval_randomizedIndex (privateAnswers : PrivateTable) (labels : Labels) (residual : Hash)
-    (pk : PublicKey) (message : Message) :
+    (message : Message) :
     evalWithAnswerFn (answers privateAnswers (programmed privateAnswers labels residual))
-      (SecurityIdealSign.randomizedIndex pk message) =
+      (SecurityIdealSign.randomizedIndex message) =
       (privateAnswers (.randomizer message),
-        (residual (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))).extractLsb' 0 160) := by
+        (residual (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))).extractLsb' 0 160) := by
   have nonce : evalWithAnswerFn (answers privateAnswers (programmed privateAnswers labels residual))
       (SecurityIdealSign.randomizer message) = privateAnswers (.randomizer message) := rfl
   simp only [SecurityIdealSign.randomizedIndex, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
     nonce, eval_public]
   change (privateAnswers (.randomizer message),
-    (programmed privateAnswers labels residual (SecurityRandomOracle.indexInput pk message
+    (programmed privateAnswers labels residual (SecurityRandomOracle.indexInput message
       (privateAnswers (.randomizer message)))).extractLsb' 0 160) = _
   rw [programmed_index]
 
@@ -242,11 +242,11 @@ def signature (privateAnswers : PrivateTable) (labels : Labels) (r : Bytes 32)
 /-- The actual full ideal signing program has exactly this graph-coordinate
 signature, with its secret deterministic nonce and residual-oracle index. -/
 theorem eval_signCompact (privateAnswers : PrivateTable) (labels : Labels) (residual : Hash)
-    (pk : PublicKey) (message : Message) :
+    (message : Message) :
     evalWithAnswerFn (answers privateAnswers (programmed privateAnswers labels residual))
-      (SecurityIdealSign.signCompact pk message) =
+      (SecurityIdealSign.signCompact message) =
       signature privateAnswers labels (privateAnswers (.randomizer message))
-        ((residual (SecurityRandomOracle.indexInput pk message
+        ((residual (SecurityRandomOracle.indexInput message
           (privateAnswers (.randomizer message)))).extractLsb' 0 160) := by
   simp only [SecurityIdealSign.signCompact, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
     eval_randomizedIndex, eval_signLayer, eval_signUpper]

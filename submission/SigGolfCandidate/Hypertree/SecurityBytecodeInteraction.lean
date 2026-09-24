@@ -22,7 +22,7 @@ theorem interact_equivalent_generic (left right : Interface) (fact : Hash → Pr
     (rounds : Nat) (state : adversary.State) (transcript : Transcript submission.sizes)
     (cache : QueryCache HashSpec) (known : Knows cache fact)
     (sameSign : ∀ hash, fact hash → ∀ request,
-      evalWithAnswerFn hash (left.sign secretKey pk request)=evalWithAnswerFn hash (right.sign secretKey pk request))
+      evalWithAnswerFn hash (left.sign secretKey request)=evalWithAnswerFn hash (right.sign secretKey request))
     (sameCheck : ∀ hash transcript candidate,
       evalWithAnswerFn hash (left.check pk transcript candidate)=evalWithAnswerFn hash (right.check pk transcript candidate)) :
     𝒮[observe (interactWith left adversary secretKey pk rounds state transcript) cache] =
@@ -46,7 +46,7 @@ theorem interact_equivalent_generic (left right : Interface) (fact : Hash → Pr
     case sign request resume =>
       split
       · calc
-          _ = 𝒮[observe ((right.sign secretKey pk request).liftComp World >>= fun result =>
+          _ = 𝒮[observe ((right.sign secretKey request).liftComp World >>= fun result =>
             interactWith left adversary secretKey pk rounds (resume result.1)
               (recordView transcript request.message result)) cache] :=
             contextual_equivalence_at _ _ _ cache (fun hash agree => sameSign hash (known hash agree) request)
@@ -69,7 +69,7 @@ theorem interact_equivalent (adversary : Adversary submission.sizes) (secretKey 
     𝒮[observe (interactWith actualInterface adversary secretKey pk rounds state transcript) cache] =
       𝒮[observe (interactWith referenceInterface adversary secretKey pk rounds state transcript) cache] :=
   interact_equivalent_generic actualInterface referenceInterface _ adversary secretKey pk rounds state transcript cache known
-    (fun hash valid request => sign_equivalent hash secretKey pk request valid)
+    (fun hash _ request => sign_equivalent hash secretKey request)
     (fun hash transcript candidate => check_equivalent hash pk transcript candidate)
 
 /-- info: 'SigGolfCandidate.Hypertree.SecurityBytecode.interact_equivalent' depends on axioms: [propext,

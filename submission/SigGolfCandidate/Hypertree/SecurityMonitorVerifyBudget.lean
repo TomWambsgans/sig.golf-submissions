@@ -11,11 +11,11 @@ attribute [local irreducible] recordParsed
 
 /-- A completed budgeted hash-only phase is an actual completed raw verifier
 run. Budget failures and graph contacts cannot supply a completed value. -/
-theorem completed {α β : Type} (factors : Factors) (pk : PublicKey) (program : OracleComp HashSpec α)
+theorem completed {α β : Type} (factors : Factors) (program : OracleComp HashSpec α)
     (finish : α → β) (remaining : Nat) (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec)
     (history : History) (ready : Ready factors history exposed cache)
     (result : SecurityMonitorGraphView.Result β)
-    (member : some result ∈ support (execute factors pk
+    (member : some result ∈ support (execute factors
       (ofHash program (fun value => .done (finish value))) remaining exposed cache history))
     (finished : result.value ≠ none) :
     ∃ value, result.value = some (finish value) ∧
@@ -46,7 +46,7 @@ theorem completed {α β : Type} (factors : Factors) (pk : PublicKey) (program :
         · simp only [if_pos second, support_pure, Set.mem_singleton_iff, Option.some_ne_none] at tail
         · rw [if_neg second] at tail
           have read := read_supported factors history exposed cache ready query answer queried first second
-          have nextReady := public_ready factors pk history exposed cache ready query _ read
+          have nextReady := public_ready factors history exposed cache ready query _ read
           obtain ⟨value, output, raw, messages, indices⟩ := ih answer.1 remaining _ answer.2 _ nextReady tail
           refine ⟨value, output, ?_, ?_, ?_⟩
           · rw [SecurityGraphMonitorVerify.compile_query,

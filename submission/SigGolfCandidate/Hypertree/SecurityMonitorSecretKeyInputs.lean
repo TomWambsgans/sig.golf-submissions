@@ -15,8 +15,8 @@ def Eligible (history : History) : Prop := ∀ query ∈ history.secretKeyInputs
 
 @[simp] theorem eligible_empty : Eligible {} := by intro query member; cases member
 
-theorem Eligible.recordPublic {history : History} (eligible : Eligible history) (pk : PublicKey)
-    (query : Query) (cached : Bool) (answer : BitVec 256) : Eligible (SecurityMonitorIndexState.recordPublic pk history query cached answer) := by
+theorem Eligible.recordPublic {history : History} (eligible : Eligible history)
+    (query : Query) (cached : Bool) (answer : BitVec 256) : Eligible (SecurityMonitorIndexState.recordPublic history query cached answer) := by
   intro other member
   rw [SecuritySecretKeyTraceView.public_secretKeyInputs] at member
   split at member
@@ -29,10 +29,10 @@ theorem Eligible.recordPublic {history : History} (eligible : Eligible history) 
 theorem Eligible.recordSign {history : History} (eligible : Eligible history) (message : Message)
     (cached : Bool) (answer : BitVec 256) : Eligible (SecurityMonitorIndexState.recordSign history message cached answer) := eligible
 
-theorem execute_eligible {α : Type} (factors : Factors) (pk : PublicKey) (view : View α)
+theorem execute_eligible {α : Type} (factors : Factors) (view : View α)
     (remaining : Nat) (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec) (history : History)
     (eligible : Eligible history) (result : Result α)
-    (member : result ∈ support (execute factors pk view remaining exposed cache history)) : Eligible result.history := by
+    (member : result ∈ support (execute factors view remaining exposed cache history)) : Eligible result.history := by
   induction view generalizing remaining exposed cache history with
   | done value =>
     simp only [execute, support_pure, Set.mem_singleton_iff] at member
@@ -51,8 +51,8 @@ theorem execute_eligible {α : Type} (factors : Factors) (pk : PublicKey) (view 
     | succ remaining =>
       rw [execute, mem_support_bind_iff] at member
       obtain ⟨answer, _, member⟩ := member
-      exact ih answer.1 remaining _ answer.2 _ (eligible.recordPublic pk query _ answer.1) member
-  | sign signPk message next ih =>
+      exact ih answer.1 remaining _ answer.2 _ (eligible.recordPublic query _ answer.1) member
+  | sign message next ih =>
     rw [execute] at member
     split at member
     next enough =>
@@ -64,12 +64,12 @@ theorem execute_eligible {α : Type} (factors : Factors) (pk : PublicKey) (view 
       subst result
       exact eligible
 
-theorem start_eligible {α : Type} (factors : Factors) (pk : PublicKey) (view : View α)
-    (budget : Nat) (result : Result α) (member : result ∈ support (SecurityMonitorGraphCoupling.start factors pk view budget)) :
+theorem start_eligible {α : Type} (factors : Factors) (view : View α)
+    (budget : Nat) (result : Result α) (member : result ∈ support (SecurityMonitorGraphCoupling.start factors view budget)) :
     Eligible result.history := by
   rw [SecurityMonitorGraphCoupling.start] at member
   split at member
-  · exact execute_eligible factors pk view _ _ _ (recordKeygen {})
+  · exact execute_eligible factors view _ _ _ (recordKeygen {})
       (show Eligible (recordKeygen {}) from eligible_empty) result member
   · simp only [support_pure, Set.mem_singleton_iff] at member
     subst result

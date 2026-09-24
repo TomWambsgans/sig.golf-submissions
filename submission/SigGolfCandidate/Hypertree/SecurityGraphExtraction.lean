@@ -70,7 +70,7 @@ theorem path_fault (factors : Factors) (signed : Finset (BitVec 160)) (base : Ha
 def publicKey (factors : Factors) : PublicKey := truncate (factors.2.2 (.node 159 0))
 
 noncomputable def index (factors : Factors) (base : Hash) (message : Message) (signature : Compact) : BitVec 160 :=
-  indexOf (programmed (privateTable factors) (labels factors) base) (publicKey factors) message signature.randomizer
+  indexOf (programmed (privateTable factors) (labels factors) base) message signature.randomizer
 
 noncomputable def Signed (factors : Factors) (base : Hash) (history : SecurityForgery.History) : Finset (BitVec 160) :=
   (history.map fun entry => index factors base entry.1 entry.2).toFinset
@@ -79,14 +79,14 @@ def HonestHistory (factors : Factors) (base : Hash) (history : SecurityForgery.H
   ∀ entry ∈ history, entry.2 =
     SecurityGraphSigner.signature (privateTable factors) (labels factors)
       (privateTable factors (.randomizer entry.1))
-      (indexOf (programmed (privateTable factors) (labels factors) base) (publicKey factors)
+      (indexOf (programmed (privateTable factors) (labels factors) base)
         entry.1 (privateTable factors (.randomizer entry.1)))
 
 def IndexReuse (factors : Factors) (base : Hash) (history : SecurityForgery.History)
     (message : Message) (signature : Compact) : Prop :=
   ∃ entry ∈ history,
-    SecurityRandomOracle.indexInput (publicKey factors) entry.1 entry.2.randomizer ≠
-      SecurityRandomOracle.indexInput (publicKey factors) message signature.randomizer ∧
+    SecurityRandomOracle.indexInput entry.1 entry.2.randomizer ≠
+      SecurityRandomOracle.indexInput message signature.randomizer ∧
     index factors base entry.1 entry.2 = index factors base message signature
 
 def BottomExposure (factors : Factors) (base : Hash) (history : SecurityForgery.History)
@@ -96,14 +96,13 @@ def BottomExposure (factors : Factors) (base : Hash) (history : SecurityForgery.
   signature.bottom = truncate (factors.1 (pathAddress 0 (index factors base message signature).toNat 0, 0))
 
 theorem completed_index (factors : Factors) (base : Hash) (message : Message) (signature : Compact) :
-    SecurityForgery.index (hash (privateTable factors) (labels factors) base) 0 message signature =
+    SecurityForgery.index (hash (privateTable factors) (labels factors) base) message signature =
       index factors base message signature := by
   unfold SecurityForgery.index index
-  rw [keygen_label, index_public]
-  rfl
+  rw [index_public]
 
 theorem completed_signed (factors : Factors) (base : Hash) (history : SecurityForgery.History) :
-    signedIndices (hash (privateTable factors) (labels factors) base) 0 history = Signed factors base history := by
+    signedIndices (hash (privateTable factors) (labels factors) base) history = Signed factors base history := by
   simp only [signedIndices, Signed, completed_index]
 
 /-- Strong-forgery extraction for arbitrary independent private values and graph
@@ -118,7 +117,7 @@ theorem strong_extraction (factors : Factors) (base : Hash) (history : SecurityF
     IndexReuse factors base history message signature ∨ BottomExposure factors base history message signature := by
   have honest' : SecurityForgery.HonestHistory (hash (privateTable factors) (labels factors) base) 0 history := by
     intro entry member
-    rw [keygen_label, signCompact_graph]
+    rw [signCompact_graph]
     exact honest entry member
   have accepted' : Reference.verify (hash (privateTable factors) (labels factors) base)
       (Reference.keygen (hash (privateTable factors) (labels factors) base) 0) message signature.toReference := by
@@ -135,11 +134,11 @@ theorem strong_extraction (factors : Factors) (base : Hash) (history : SecurityF
       (lt_of_lt_of_le (index factors base message signature).isLt
         (Nat.pow_le_pow_right (by decide) (by decide))) fault
   · right; left
-    have reuse' := SecurityForgery.indexReuse_distinct_inputs _ 0 history message signature reuse
+    have reuse' := SecurityForgery.indexReuse_distinct_inputs _ history message signature reuse
     unfold IndexReuse
     simpa only [keygen_label, completed_index, publicKey, labels_node] using reuse'
   · right; right
-    have freshness := fresh_index_not_signed _ 0 history message signature bottom.1
+    have freshness := fresh_index_not_signed _ history message signature bottom.1
     rw [completed_index, completed_signed] at freshness
     have bound : (index factors base message signature).toNat < 2 ^ 192 :=
       lt_of_lt_of_le (index factors base message signature).isLt
@@ -153,12 +152,12 @@ theorem strong_extraction (factors : Factors) (base : Hash) (history : SecurityF
     simp only [pathAddress, Fin.val_zero, BitVec.toNat_ofNat, Nat.mod_eq_of_lt half] at source
     exact value.trans (source.trans (assembled_chainPoint factors _ 0))
 
-theorem index_residual (factors : Factors) (base : Hash) (pk : PublicKey)
+theorem index_residual (factors : Factors) (base : Hash)
     (message : Message) (nonce : Bytes 32) :
-    indexOf (programmed (privateTable factors) (labels factors) base) pk message nonce =
-      (base (SecurityRandomOracle.indexInput pk message nonce)).extractLsb' 0 160 := by
+    indexOf (programmed (privateTable factors) (labels factors) base) message nonce =
+      (base (SecurityRandomOracle.indexInput message nonce)).extractLsb' 0 160 := by
   change (programmed (privateTable factors) (labels factors) base
-    (SecurityRandomOracle.indexInput pk message nonce)).extractLsb' 0 160 = _
+    (SecurityRandomOracle.indexInput message nonce)).extractLsb' 0 160 = _
   rw [SecurityGraphSigner.programmed_index]
 
 /-- The same extraction with hypotheses directly on the actual ideal signer and
@@ -167,7 +166,7 @@ theorem ideal_strong_extraction (factors : Factors) (base : Hash) (history : Sec
     (honest : ∀ entry ∈ history, entry.2 = evalWithAnswerFn
       (SecurityGraphSigner.answers (privateTable factors)
         (programmed (privateTable factors) (labels factors) base))
-      (SecurityIdealSign.signCompact (publicKey factors) entry.1))
+      (SecurityIdealSign.signCompact entry.1))
     (message : Message) (signature : Compact)
     (accepted : evalWithAnswerFn (programmed (privateTable factors) (labels factors) base)
       (SecurityVerify.verifyCompact (publicKey factors) message signature) = true)

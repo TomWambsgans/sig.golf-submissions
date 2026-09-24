@@ -51,7 +51,7 @@ theorem pipeline_cost {σ ω : Type} (hash : Hash) (keygen : OracleComp HashSpec
 
 theorem honest_eq_pipeline (s : Submission) (secretKey : SecretKey) (message : Message) :
     s.honest secretKey message = pipeline (s.run .keygen secretKey)
-      (fun pk cache => s.run .sign (secretKey,pk,cache,message))
+      (fun _ cache => s.run .sign (secretKey,cache,message))
       (fun pk signature => s.run .expand (message,pk,signature))
       (fun pk witness => s.run .verify (message,pk,witness)) := by
   simp only [Submission.honest,pipeline]
@@ -76,7 +76,7 @@ theorem honest_eq_pipeline (s : Submission) (secretKey : SecretKey) (message : M
 theorem honest_cost (hash : Hash) (secretKey : SecretKey) (message : Message) :
     (evalWithAnswerFn hash (submission.honest secretKey message)).costs .keygen = 761 := by
   have h := pipeline_cost hash (submission.run .keygen secretKey)
-    (fun pk cache => submission.run .sign (secretKey,pk,cache,message))
+    (fun _ cache => submission.run .sign (secretKey,cache,message))
     (fun pk signature => submission.run .expand (message,pk,signature))
     (fun pk witness => submission.run .verify (message,pk,witness))
   have costEq := congrArg (fun result : RunResult (PublicKey × Cache) => result.hashCompressions) (eval_keygen hash secretKey)

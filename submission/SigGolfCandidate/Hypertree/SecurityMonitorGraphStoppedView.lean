@@ -14,12 +14,12 @@ attribute [local irreducible] recordParsed
 /-- Mathematical stopped execution through the actual graph oracle. Secret
 coordinates are inspected only to define the stopping events, never to supply
 extra information to the passive simulator's continuation. -/
-noncomputable def execute {α : Type} (factors : Factors) (pk : PublicKey) :
+noncomputable def execute {α : Type} (factors : Factors) :
     View α → Nat → QueryCache PointSpec → QueryCache HashSpec → History → ProbComp (Option (Result α))
   | .done value, remaining, exposed, cache, history => pure (some ⟨some value, remaining, exposed, cache, history⟩)
   | .coin n next, remaining, exposed, cache, history => do
       let answer ← $ᵗ Fin (n + 1)
-      execute factors pk (next answer) remaining exposed cache history
+      execute factors (next answer) remaining exposed cache history
   | .hash input next, remaining, exposed, cache, history =>
       match remaining with
       | 0 => pure (some ⟨none, 0, exposed, cache, history⟩)
@@ -27,19 +27,19 @@ noncomputable def execute {α : Type} (factors : Factors) (pk : PublicKey) :
           if inputHit factors exposed input then pure none else do
             let result ← (SecurityGraphOracle.publicOracle (privateTable factors) (labels factors) input).run cache
             if outputHit factors input result.1 then pure none else
-              execute factors pk (next result.1) remaining (opened factors exposed input) result.2
-                (recordPublic pk history input (cache input).isSome result.1)
-  | .sign signPk message next, remaining, exposed, cache, history =>
+              execute factors (next result.1) remaining (opened factors exposed input) result.2
+                (recordPublic history input (cache input).isSome result.1)
+  | .sign message next, remaining, exposed, cache, history =>
       if 117508 ≤ remaining then do
         let result ← (randomOracle (spec := HashSpec)
-          (SecurityRandomOracle.indexInput signPk message (factors.2.1 message))).run cache
+          (SecurityRandomOracle.indexInput message (factors.2.1 message))).run cache
         let index := result.1.extractLsb' 0 160
         let response := SecurityExperiment.serialize
           (SecurityGraphSigner.signature (privateTable factors) (labels factors) (factors.2.1 message) index)
         let opened := revealCache factors.1 (needed factors.2.2 exposed index) exposed
-        execute factors pk (next response) (remaining - 117508) opened result.2
+        execute factors (next response) (remaining - 117508) opened result.2
           (recordSign history message
-            (cache (SecurityRandomOracle.indexInput signPk message (factors.2.1 message))).isSome result.1)
+            (cache (SecurityRandomOracle.indexInput message (factors.2.1 message))).isSome result.1)
       else pure (some ⟨none, remaining, exposed, cache, history⟩)
 
 theorem stopped_indexStep {α : Type} (table : PointTable) (exposed : QueryCache PointSpec)
@@ -65,12 +65,12 @@ theorem read_supported (factors : Factors) (history : History) (exposed : QueryC
 /-- Exact full adaptive-view coupling. This is the actual shared compiler, with
 signing responses, both caches, history, remaining budget, and every private coin
 preserved up to the first graph contact. -/
-theorem stopped_compile {α : Type} (factors : Factors) (pk : PublicKey) (view : View α)
+theorem stopped_compile {α : Type} (factors : Factors) (view : View α)
     (remaining : Nat) (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec) (history : History)
     (ready : Ready factors history exposed cache) :
     𝒮[stopped factors.1 exposed
-      (compile factors.2.1 factors.2.2 pk view remaining exposed cache history)] =
-      𝒮[execute factors pk view remaining exposed cache history] := by
+      (compile factors.2.1 factors.2.2 view remaining exposed cache history)] =
+      𝒮[execute factors view remaining exposed cache history] := by
   induction view generalizing remaining exposed cache history with
   | done value => rfl
   | coin n next ih =>
@@ -94,8 +94,8 @@ theorem stopped_compile {α : Type} (factors : Factors) (pk : PublicKey) (view :
         · simp only [if_neg second]
           have queried := read_supported factors history exposed cache ready query result member first second
           exact ih result.1 remaining _ result.2 _
-            (public_ready factors pk history exposed cache ready query _ queried)
-  | sign signPk message next ih =>
+            (public_ready factors history exposed cache ready query _ queried)
+  | sign message next ih =>
     simp only [compile, execute]
     by_cases enough : 117508 ≤ remaining
     · simp only [if_pos enough]
@@ -105,7 +105,7 @@ theorem stopped_compile {α : Type} (factors : Factors) (pk : PublicKey) (view :
       rw [stopped_disclose]
       rw [opened_signature factors.1 factors.2.1 factors.2.2 exposed ready.2]
       exact ih _ (remaining - 117508) _ result.2 _
-        (sign_ready factors history exposed cache ready signPk message result.1 result.2 member)
+        (sign_ready factors history exposed cache ready message result.1 result.2 member)
     · simp only [if_neg enough, stopped]
 
 /-- info: 'SigGolfCandidate.Hypertree.SecurityMonitorGraphStoppedView.stopped_compile' depends on axioms: [propext,

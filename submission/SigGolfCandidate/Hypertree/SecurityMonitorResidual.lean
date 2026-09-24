@@ -117,9 +117,9 @@ theorem verifier_index_present (factors : Factors) (signed : Finset (BitVec 160)
     (result : SecurityGraphMonitorVerify.Result Bool)
     (member : some result ∈ support (stopped factors.1 exposed
       (compile factors.2.2 (SecurityVerify.verifyCompact pk message signature) exposed cache))) :
-    result.2.2 (SecurityRandomOracle.indexInput pk message signature.randomizer) ≠ none := by
-  exact first_present factors signed (SecurityRandomOracle.indexInput pk message signature.randomizer) _
-    exposed cache initial result member (SecurityGraphState.canonical_index _ _ pk message signature.randomizer)
+    result.2.2 (SecurityRandomOracle.indexInput message signature.randomizer) ≠ none := by
+  exact first_present factors signed (SecurityRandomOracle.indexInput message signature.randomizer) _
+    exposed cache initial result member (SecurityGraphState.canonical_index _ _ message signature.randomizer)
 
 #print axioms verifier_index_present
 end SigGolfCandidate.Hypertree.SecurityMonitorResidual

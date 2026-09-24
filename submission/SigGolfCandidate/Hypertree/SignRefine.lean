@@ -71,17 +71,17 @@ theorem entry_randomizer_refines (hash : Hash) (s : MachineState) (secretKey : S
 #print axioms entry_randomizer_refines
 
 /-- The exact typed signer loader followed by real bytecode emits the reference
-randomizer, for every secret key, public key, untrusted cache, message and oracle. -/
-theorem loaded_randomizer_refines (hash : Hash) (secretKey : SecretKey) (pk : PublicKey)
+randomizer, for every secret key, untrusted cache, message and oracle. -/
+theorem loaded_randomizer_refines (hash : Hash) (secretKey : SecretKey)
     (cache : Cache) (message : Message) :
     ∃ initial final,
-      initialState submission .sign (secretKey, pk, cache, message) = some initial ∧
+      initialState submission .sign (secretKey, cache, message) = some initial ∧
       Trace hash sign initial 117 132 1 2 final ∧ final.pc = 0x10fc ∧
       readBuffer final 0x20060 32 = Reference.randomizer hash secretKey message := by
-  obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .sign (secretKey, pk, cache, message)
+  obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .sign (secretKey, cache, message)
   obtain ⟨final, trace, finalpc, words⟩ := entry_randomizer_refines hash initial secretKey message pc
-    (Loader.sign_secretKey submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded)
-    (Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded)
+    (Loader.sign_secretKey submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
+    (Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
   refine ⟨initial, final, loaded, trace, finalpc, ?_⟩
   apply Memory.readBuffer_of_bytes
   exact bytes_of_answer_words final 0x20060 (Reference.randomizer hash secretKey message)

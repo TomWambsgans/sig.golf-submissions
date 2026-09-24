@@ -100,7 +100,7 @@ def indexInputByte (s : MachineState) (i : Fin 112) : Byte :=
 theorem indexInputByte_spec (s : MachineState) (i : Fin 112) :
     indexInputByte s i =
       if i.val = 0 then 5 else if i.val < 32 then 0 else
-        if i.val < 48 then s.getByte (BitVec.ofNat 64 (0x40 + (i.val - 32)))
+        if i.val < 48 then s.getByte (BitVec.ofNat 64 (0x50 + (i.val - 32)))
         else if i.val < 80 then s.getByte (BitVec.ofNat 64 (i.val - 48))
         else s.getByte (BitVec.ofNat 64 (0x3d3b0 + (i.val - 80))) := by
   fin_cases i <;> first | rfl | simp [indexInputByte, indexInputWord, extractByte]
@@ -113,52 +113,52 @@ theorem prepared_index_bytes (original ready : MachineState)
   exact congrArg (fun word => extractByte word (i.val % 8))
     (words ⟨i.val / 8, by have := i.isLt; omega⟩)
 
-theorem index_query (original ready : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
-    (hpk : ∀ i, i < 16 → original.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+theorem index_query (original ready : MachineState) (message : Message) (r : Bytes 32)
+    (hzero : ∀ i, i < 16 → original.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
     (words : ∀ i : Fin 14, ready.getMem (wordAddress 0x80000 i.val) = indexInputWord original i) :
-    hashInput (indexHashState ready) = Reference.packed (indexPayload pk message r) := by
-  apply Serialization.hashInput_of_list (indexHashState ready) 0x80000 (indexPayload pk message r)
+    hashInput (indexHashState ready) = Reference.packed (indexPayload message r) := by
+  apply Serialization.hashInput_of_list (indexHashState ready) 0x80000 (indexPayload message r)
   · exact (indexHashState_regs ready).2.1
   · rw [(indexHashState_regs ready).2.2.1, indexPayload_length]; rfl
   · intro i hi
     have bound : i < 112 := by simpa using hi
     rw [indexHashState_byte, prepared_index_bytes original ready words ⟨i, bound⟩,
-      indexInputByte_spec, indexPayload_byte pk message r ⟨i, bound⟩]
+      indexInputByte_spec, indexPayload_byte message r ⟨i, bound⟩]
     dsimp only
     split_ifs with h0 h32 h48 h80
     · rfl
     · rfl
-    · exact hpk (i - 32) (by omega)
+    · rw [hzero (i - 32) (by omega)]; simp
     · exact hmessage (i - 48) (by omega)
     · exact hr (i - 80) (by omega)
 
-theorem index_refines (hash : Hash) (s : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
+theorem index_refines (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x1024)
-    (hpk : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+    (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
     ∃ final, Trace hash verify s 121 136 1 2 final ∧ final.pc = 0x1148 ∧
-      readBuffer final 0x80408 20 = Reference.indexOf hash pk message r := by
+      readBuffer final 0x80408 20 = Reference.indexOf hash message r := by
   obtain ⟨ready, prepare, readypc, words, _⟩ := index_prepare s pc
   obtain ⟨final, trace, finalpc, low, high⟩ := index_trace hash ready readypc
-  have query := index_query s ready pk message r hpk hmessage hr words
+  have query := index_query s ready message r hzero hmessage hr words
   refine ⟨final, prepare.trace.trans trace, finalpc, ?_⟩
   rw [read_index_words final _ low high, query]
   rfl
 
 /-- Exact verifier entry through randomized-index recovery, for arbitrary witness bytes. -/
-theorem entry_index_refines (hash : Hash) (s : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
+theorem entry_index_refines (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x1000)
-    (hpk : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+    (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
     ∃ final, Trace hash verify s 130 145 1 2 final ∧ final.pc = 0x1148 ∧
-      readBuffer final 0x80408 20 = Reference.indexOf hash pk message r := by
+      readBuffer final 0x80408 20 = Reference.indexOf hash message r := by
   have initpc : (initializeState s).pc = 0x1024 := by simp [initializeState_pc, pc]
-  obtain ⟨final, trace, finalpc, value⟩ := index_refines hash (initializeState s) pk message r initpc
-    (fun i hi => (initializeState_byte s 0x40 i (by decide) (by omega)).trans (hpk i hi))
+  obtain ⟨final, trace, finalpc, value⟩ := index_refines hash (initializeState s) message r initpc
+    (fun i hi => (initializeState_byte s 0x50 i (by decide) (by omega)).trans (hzero i hi))
     (fun i hi => (by simpa only [Nat.zero_add] using initializeState_byte s 0 i (by decide) (by omega) :
       (initializeState s).getByte (BitVec.ofNat 64 i) = s.getByte (BitVec.ofNat 64 i)).trans (hmessage i hi))
     (fun i hi => (initializeState_byte s 0x3d3b0 i (by decide) (by omega)).trans (hr i hi))

@@ -18,7 +18,7 @@ cutoff. Ordinary budget exhaustion remains `none` with its retained trace. -/
 theorem traced_program (factors : Factors) (publicCache : SigGolf.Cache)
     (adversary : Adversary submission.sizes) (rounds budget : Nat) :
     𝒮[traced factors (SecurityExperiment.program publicCache adversary rounds) budget ∅] =
-      𝒮[project <$> SecurityMonitorGraphCoupling.start factors (truncate (factors.2.2 (.node 159 0)))
+      𝒮[project <$> SecurityMonitorGraphCoupling.start factors
         (ofInteract adversary (truncate (factors.2.2 (.node 159 0))) rounds
           (adversary.initial (truncate (factors.2.2 (.node 159 0))) publicCache) {}) budget] := by
   have safe := lift_clean SecuritySecretKeyHonest.keygen
@@ -26,7 +26,7 @@ theorem traced_program (factors : Factors) (publicCache : SigGolf.Cache)
   rw [traced, SecurityMonitorView.program_eq, SecurityMonitorGraphCoupling.start]
   by_cases enough : 739 ≤ budget
   · rw [if_pos enough, trace_enough safe fixed _ budget enough, run_bind, keygen_run, pure_bind]
-    have same := traced_view factors (truncate (factors.2.2 (.node 159 0)))
+    have same := traced_view factors
       (ofInteract adversary (truncate (factors.2.2 (.node 159 0))) rounds
         (adversary.initial (truncate (factors.2.2 (.node 159 0))) publicCache) {})
       (budget - 739) (SecurityGraphMonitorSetup.cache factors.1 factors.2.2) ∅ (recordKeygen {})
@@ -45,7 +45,7 @@ theorem routed_traced_program (factors : Factors) (publicCache : SigGolf.Cache)
     𝒮[(simulateQ (SecurityGraphOracle.implementation (privateTable factors) (labels factors))
       (SecurityGraphIdeal.fixPrivate (privateTable factors)
         (tracePublic (cutoff (SecurityExperiment.program publicCache adversary rounds) budget)))).run' ∅] =
-      𝒮[project <$> SecurityMonitorGraphCoupling.start factors (truncate (factors.2.2 (.node 159 0)))
+      𝒮[project <$> SecurityMonitorGraphCoupling.start factors
         (ofInteract adversary (truncate (factors.2.2 (.node 159 0))) rounds
           (adversary.initial (truncate (factors.2.2 (.node 159 0))) publicCache) {}) budget] := by
   rw [←routing]

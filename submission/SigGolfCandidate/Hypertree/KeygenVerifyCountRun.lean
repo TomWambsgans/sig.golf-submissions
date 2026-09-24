@@ -13,11 +13,11 @@ theorem loaded_recovery_exact (hash : Hash) (pk : PublicKey) (message : Message)
       steps ≤ 5506530 ∧ cycles ≤ 5883505 ∧ calls ≤ 51841 ∧ blocks ≤ 53602 ∧
       recovered.pc = 0x1220 ∧
       (RootMatches recovered ↔ Reference.verify hash pk message (SignatureEncoding.decode witness).toReference) ∧
-      calls = SecurityVerifyCost.verifyCalls hash pk message (SignatureEncoding.decode witness) := by
+      calls = SecurityVerifyCost.verifyCalls hash message (SignatureEncoding.decode witness) := by
   obtain ⟨initial, ready, loaded, pre, pc, data, preFrame⟩ := loaded_loop_data hash pk message witness
-  let index := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).toNat
+  let index := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).toNat
   have indexSmall : index < 2^192 := by
-    have h := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).isLt
+    have h := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).isLt
     dsimp [index]
     omega
   obtain ⟨recovered, steps, cycles, calls, blocks, lastIndex, run, hsteps, hcycles, hcalls, hblocks, finalPC, finalData, frame, countEq⟩ :=
@@ -47,7 +47,7 @@ theorem run_refines_exact (hash : Hash) (pk : PublicKey) (message : Message) (wi
       submission.runWith hash .verify (message, pk, witness) =
         ⟨if Reference.verify hash pk message (SignatureEncoding.decode witness).toReference then some () else none,
           true, cycles, calls, blocks⟩ ∧
-      calls = SecurityVerifyCost.verifyCalls hash pk message (SignatureEncoding.decode witness) := by
+      calls = SecurityVerifyCost.verifyCalls hash message (SignatureEncoding.decode witness) := by
   classical
   obtain ⟨initial, recovered, steps, cycles, calls, blocks, loaded, run, hsteps, hcycles, hcalls, hblocks, pc, accepted, countEq⟩ :=
     loaded_recovery_exact hash pk message witness
@@ -69,7 +69,7 @@ theorem run_refines_exact (hash : Hash) (pk : PublicKey) (message : Message) (wi
 /-- The protected typed verifier's HASH calls exactly match the reference cost. -/
 theorem run_calls (hash : Hash) (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes) :
     (submission.runWith hash .verify (message,pk,witness)).hashCalls =
-      SecurityVerifyCost.verifyCalls hash pk message (SignatureEncoding.decode witness) := by
+      SecurityVerifyCost.verifyCalls hash message (SignatureEncoding.decode witness) := by
   obtain ⟨cycles,calls,blocks,_,_,_,run,count⟩ := run_refines_exact hash pk message witness
   rw [run]
   exact count

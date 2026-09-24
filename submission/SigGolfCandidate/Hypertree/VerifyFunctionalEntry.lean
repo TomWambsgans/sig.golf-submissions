@@ -24,7 +24,7 @@ theorem loaded_publicKey_word (pk : PublicKey) (message : Message) (witness : By
 theorem loaded_loop_data (hash : Hash) (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes) :
     ∃ initial ready, initialState submission .verify (message, pk, witness) = some initial ∧
       Trace hash verify initial 130 145 1 2 ready ∧ ready.pc = 0x1148 ∧
-      LoopData ready 0 (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).toNat 0 witness ∧
+      LoopData ready 0 (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).toNat 0 witness ∧
       LowFrame initial ready := by
   obtain ⟨initial, ready, loaded, run, pc, index, sp, level, _, pointer, current0, current1, frame⟩ :=
     loaded_loop_entry hash pk message witness

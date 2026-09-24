@@ -50,31 +50,31 @@ theorem aligned_ofGraph {α β : Type} (table : PointTable) (cache : QueryCache 
   obtain ⟨value, _, member⟩ := member
   exact aligned value.value result member
 
-theorem public_trace_none (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
-    (absent : (SecurityIndexQuery.parse pk query).isSome = false) :
-    (recordPublic pk history query cached answer).indexTrace = history.indexTrace := by
-  have empty : SecurityIndexQuery.parse pk query = none := by
-    cases found : SecurityIndexQuery.parse pk query with
+theorem public_trace_none (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
+    (absent : (SecurityIndexQuery.parse query).isSome = false) :
+    (recordPublic history query cached answer).indexTrace = history.indexTrace := by
+  have empty : SecurityIndexQuery.parse query = none := by
+    cases found : SecurityIndexQuery.parse query with
     | none => rfl
     | some pair => simp only [found, Option.isSome_some, Bool.true_eq_false] at absent
   change (recordParsed history query _ _ cached answer).indexTrace = _
   rw [empty]
   cases decide (SecuritySeparation.SecretKeyEligible query) <;> rfl
 
-theorem public_trace_some (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
-    (present : (SecurityIndexQuery.parse pk query).isSome = true) :
-    (recordPublic pk history query cached answer).indexTrace =
+theorem public_trace_some (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
+    (present : (SecurityIndexQuery.parse query).isSome = true) :
+    (recordPublic history query cached answer).indexTrace =
       if cached then history.indexTrace else history.indexTrace ++ [(false,answer.extractLsb' 0 160)] := by
   change (recordParsed history query _ _ cached answer).indexTrace = _
-  cases parsed : SecurityIndexQuery.parse pk query with
+  cases parsed : SecurityIndexQuery.parse query with
   | none => simp only [parsed, Option.isSome_none, Bool.false_eq_true] at present
   | some pair => cases pair; rfl
 
 /-- Every concrete compiler path records precisely the trace monitored by the
 index probability theorem, including cached probes and repeated signing. -/
-theorem compile_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (metadata : MetadataTable) (pk : PublicKey)
+theorem compile_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (metadata : MetadataTable)
     (view : View α) (remaining : Nat) (exposed : QueryCache PointSpec) (residual : QueryCache HashSpec) (history : History) :
-    Aligned (SecurityMonitorIndexView.compile table nonces metadata pk view remaining exposed residual history)
+    Aligned (SecurityMonitorIndexView.compile table nonces metadata view remaining exposed residual history)
       (fun result => result.history.indexTrace) history.indexTrace := by
   induction view generalizing remaining exposed residual history with
   | done value => exact aligned_pure _ _
@@ -89,7 +89,7 @@ theorem compile_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (
         cases found : residual input with
         | some answer =>
           rw [drawCached, found]
-          have trace := public_trace_some pk history input (residual input).isSome answer parsed
+          have trace := public_trace_some history input (residual input).isSome answer parsed
           simp only [found, Option.isSome_some, if_true] at trace
           rw [← trace]
           exact ih answer _ _ _ _
@@ -97,22 +97,22 @@ theorem compile_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (
           rw [drawCached, found]
           apply aligned_draw
           intro answer
-          have trace := public_trace_some pk history input (residual input).isSome answer parsed
+          have trace := public_trace_some history input (residual input).isSome answer parsed
           simp only [found, Option.isSome_none, Bool.false_eq_true, if_false] at trace
           rw [← trace]
           exact ih answer _ _ _ _
       next absent =>
         apply aligned_ofGraph
         intro result
-        have missing : (SecurityIndexQuery.parse pk input).isSome = false := Bool.eq_false_iff.mpr absent
-        rw [← public_trace_none pk history input (residual input).isSome result.1 missing]
+        have missing : (SecurityIndexQuery.parse input).isSome = false := Bool.eq_false_iff.mpr absent
+        rw [← public_trace_none history input (residual input).isSome result.1 missing]
         exact ih result.1 _ _ _ _
-  | sign signPk message next ih =>
+  | sign message next ih =>
     rw [SecurityMonitorIndexView.compile]
     split
     next enough =>
       dsimp only
-      cases found : residual (SecurityRandomOracle.indexInput signPk message (nonces message)) with
+      cases found : residual (SecurityRandomOracle.indexInput message (nonces message)) with
       | some answer =>
         rw [drawCached, found]
         have trace : (recordSign history message true answer).indexTrace = history.indexTrace := rfl
@@ -128,12 +128,12 @@ theorem compile_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (
     next insufficient => exact aligned_pure _ _
 
 theorem start_aligned {α : Type} (table : PointTable) (nonces : NonceTable) (metadata : MetadataTable)
-    (pk : PublicKey) (view : View α) (budget : Nat) :
-    Aligned (SecurityMonitorIndexView.start table nonces metadata pk view budget)
+    (view : View α) (budget : Nat) :
+    Aligned (SecurityMonitorIndexView.start table nonces metadata view budget)
       (fun result => result.history.indexTrace) [] := by
   rw [SecurityMonitorIndexView.start]
   split
-  · exact compile_aligned _ _ _ _ _ _ _ _ _
+  · exact compile_aligned _ _ _ _ _ _ _ _
   · exact aligned_pure _ _
 
 #print axioms start_aligned

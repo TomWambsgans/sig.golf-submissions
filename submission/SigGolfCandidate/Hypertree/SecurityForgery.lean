@@ -7,29 +7,29 @@ open SigGolf Reference SignatureEncoding SecurityPath SecurityRandomOracle Secur
 abbrev History := List (Message × Compact)
 
 def HonestHistory (hash : Hash) (secretKey : SecretKey) (history : History) : Prop :=
-  ∀ entry ∈ history, entry.2 = SignatureEncoding.signCompact hash secretKey (Reference.keygen hash secretKey) entry.1
+  ∀ entry ∈ history, entry.2 = SignatureEncoding.signCompact hash secretKey entry.1
 
-def index (hash : Hash) (secretKey : SecretKey) (message : Message) (signature : Compact) : BitVec 160 :=
-  indexOf hash (Reference.keygen hash secretKey) message signature.randomizer
+def index (hash : Hash) (message : Message) (signature : Compact) : BitVec 160 :=
+  indexOf hash message signature.randomizer
 
 /-- A different message/randomizer pair reuses an index of an actual signing response. -/
-def IndexReuse (hash : Hash) (secretKey : SecretKey) (history : History) (message : Message) (signature : Compact) : Prop :=
-  ∃ entry ∈ history, index hash secretKey entry.1 entry.2 = index hash secretKey message signature ∧
+def IndexReuse (hash : Hash) (history : History) (message : Message) (signature : Compact) : Prop :=
+  ∃ entry ∈ history, index hash entry.1 entry.2 = index hash message signature ∧
     (entry.1 ≠ message ∨ entry.2.randomizer ≠ signature.randomizer)
 
 /-- The verifier supplies a canonical bottom secret for an index never signed. -/
 def NewBottomExposure (hash : Hash) (secretKey : SecretKey) (history : History)
     (message : Message) (signature : Compact) : Prop :=
-  (∀ entry ∈ history, index hash secretKey entry.1 entry.2 ≠ index hash secretKey message signature) ∧
-    signature.bottom = secret hash secretKey 0 ((index hash secretKey message signature).toNat / 2)
-      ((index hash secretKey message signature).toNat % 2 == 1) 0
+  (∀ entry ∈ history, index hash entry.1 entry.2 ≠ index hash message signature) ∧
+    signature.bottom = secret hash secretKey 0 ((index hash message signature).toNat / 2)
+      ((index hash message signature).toNat % 2 == 1) 0
 
 def ForgeryPathFault (hash : Hash) (secretKey : SecretKey) (message : Message) (signature : Compact) : Prop :=
-  PathFault hash secretKey 0 (index hash secretKey message signature).toNat 0 signature.toReference.layers
+  PathFault hash secretKey 0 (index hash message signature).toNat 0 signature.toReference.layers
 
 /-- The exact H5 serialization binds both the message and supplied randomizer. -/
-theorem indexInput_pair_injective (pk : PublicKey) :
-    Function.Injective (fun pair : Message × Bytes 32 => indexInput pk pair.1 pair.2) := by
+theorem indexInput_pair_injective :
+    Function.Injective (fun pair : Message × Bytes 32 => indexInput pair.1 pair.2) := by
   intro first second same
   have payload := packed_injective same
   have tails : bytes first.1 ++ bytes first.2 = bytes second.1 ++ bytes second.2 := by
@@ -39,16 +39,16 @@ theorem indexInput_pair_injective (pk : PublicKey) :
     (bytes_injective 32 (List.append_inj_right tails (by simp)))
 
 /-- Reused indices in the extraction are collisions of distinct actual H5 inputs. -/
-theorem indexReuse_distinct_inputs (hash : Hash) (secretKey : SecretKey) (history : History)
-    (message : Message) (signature : Compact) (reuse : IndexReuse hash secretKey history message signature) :
+theorem indexReuse_distinct_inputs (hash : Hash) (history : History)
+    (message : Message) (signature : Compact) (reuse : IndexReuse hash history message signature) :
     ∃ entry ∈ history,
-      indexInput (Reference.keygen hash secretKey) entry.1 entry.2.randomizer ≠
-        indexInput (Reference.keygen hash secretKey) message signature.randomizer ∧
-      index hash secretKey entry.1 entry.2 = index hash secretKey message signature := by
+      indexInput entry.1 entry.2.randomizer ≠
+        indexInput message signature.randomizer ∧
+      index hash entry.1 entry.2 = index hash message signature := by
   obtain ⟨entry, member, same, different⟩ := reuse
   refine ⟨entry, member, ?_, same⟩
   intro equal
-  have pair := @indexInput_pair_injective (Reference.keygen hash secretKey)
+  have pair := @indexInput_pair_injective
     (entry.1, entry.2.randomizer) (message, signature.randomizer) equal
   rcases different with h | h
   · exact h (congrArg Prod.fst pair)
@@ -61,14 +61,14 @@ theorem strong_forgery_extraction (hash : Hash) (secretKey : SecretKey) (history
     (honest : HonestHistory hash secretKey history) (message : Message) (signature : Compact)
     (accepted : Reference.verify hash (Reference.keygen hash secretKey) message signature.toReference)
     (fresh : (message, signature) ∉ history) :
-    ForgeryPathFault hash secretKey message signature ∨ IndexReuse hash secretKey history message signature ∨
+    ForgeryPathFault hash secretKey message signature ∨ IndexReuse hash history message signature ∨
       NewBottomExposure hash secretKey history message signature := by
   classical
   by_cases fault : ForgeryPathFault hash secretKey message signature
   · exact Or.inl fault
   · right
     have canonical := compact_canonical_of_no_fault hash secretKey message signature accepted fault
-    by_cases reused : ∃ entry ∈ history, index hash secretKey entry.1 entry.2 = index hash secretKey message signature
+    by_cases reused : ∃ entry ∈ history, index hash entry.1 entry.2 = index hash message signature
     · obtain ⟨entry, member, same⟩ := reused
       left
       refine ⟨entry, member, same, ?_⟩
@@ -96,7 +96,7 @@ theorem witness_forgery_extraction (hash : Hash) (secretKey : SecretKey) (histor
     (honest : HonestHistory hash secretKey history) (message : Message) (signature : Compact)
     (accepted : Reference.verify hash (Reference.keygen hash secretKey) message signature.toReference)
     (fresh : ∀ entry ∈ history, entry.1 ≠ message) :
-    ForgeryPathFault hash secretKey message signature ∨ IndexReuse hash secretKey history message signature ∨
+    ForgeryPathFault hash secretKey message signature ∨ IndexReuse hash history message signature ∨
       NewBottomExposure hash secretKey history message signature := by
   apply strong_forgery_extraction hash secretKey history honest message signature accepted
   intro member

@@ -92,11 +92,11 @@ theorem calls_recoverLayers (hash : Hash) (level index : Nat) (message : Digest)
     simp only [SecurityVerify.recoverLayers, calls_bind, calls_recoverLayer,
       SecurityVerify.eval_recoverLayer, ih, layersCalls]
 
-def verifyCalls (hash : Hash) (pk : PublicKey) (message : Message) (signature : Compact) : Nat :=
-  1 + layersCalls hash 0 (Reference.indexOf hash pk message signature.randomizer).toNat 0 signature.toReference.layers
+def verifyCalls (hash : Hash) (message : Message) (signature : Compact) : Nat :=
+  1 + layersCalls hash 0 (Reference.indexOf hash message signature.randomizer).toNat 0 signature.toReference.layers
 
 theorem calls_verifyCompact (hash : Hash) (pk : PublicKey) (message : Message) (signature : Compact) :
-    calls hash (SecurityVerify.verifyCompact pk message signature) = verifyCalls hash pk message signature := by
+    calls hash (SecurityVerify.verifyCompact pk message signature) = verifyCalls hash message signature := by
   simp [SecurityVerify.verifyCompact, calls_bind, calls_recoverLayers, verifyCalls, Reference.indexOf]
 
 /-- The fixed-H count above is exactly the security experiment's charged count
@@ -126,7 +126,7 @@ theorem counted_verifyCompact (hash : Hash) (gameAnswers : QueryImpl GameWorld I
     (pk : PublicKey) (message : Message) (signature : Compact) :
     (evalWithAnswerFn gameAnswers
       (SecurityBudget.counted ((SecurityVerify.verifyCompact pk message signature).liftComp GameWorld))).2 =
-        verifyCalls hash pk message signature := by
+        verifyCalls hash message signature := by
   rw [counted_lift hash gameAnswers publicAgree, calls_verifyCompact]
 
 

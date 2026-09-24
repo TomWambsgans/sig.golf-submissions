@@ -52,7 +52,7 @@ theorem loaded_loop_entry (hash : Hash) (pk : PublicKey) (message : Message) (wi
     ∃ initial final,
       initialState submission .verify (message, pk, witness) = some initial ∧
       Trace hash verify initial 130 145 1 2 final ∧ final.pc = 0x1148 ∧
-      StoredIndex final ((Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).zeroExtend 192) ∧
+      StoredIndex final ((Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).zeroExtend 192) ∧
       final.getReg .x2 = 0x1000000 ∧ final.getMem 0x80400 = 0 ∧
       final.getMem 0x80440 = 0 ∧ final.getMem 0x80448 = 0x3d3d0 ∧
       final.getMem 0x80500 = 0 ∧ final.getMem 0x80508 = 0 ∧
@@ -64,8 +64,8 @@ theorem loaded_loop_entry (hash : Hash) (pk : PublicKey) (message : Message) (wi
     rw [loaded_witness pk message witness initial loaded i (by change i < 119632; omega)]
     dsimp only [SignatureEncoding.decode, SignatureEncoding.slice]
     rw [BitVec.extractLsb'_extractLsb'_of_le (by omega)]
-  obtain ⟨final, trace, finalpc, index, mode, pointer, frame⟩ := entry_index_frame hash initial pk message
-    (SignatureEncoding.decode witness).randomizer pc (loaded_publicKey pk message witness initial loaded)
+  obtain ⟨final, trace, finalpc, index, mode, pointer, frame⟩ := entry_index_frame hash initial message
+    (SignatureEncoding.decode witness).randomizer pc (loaded_zeroSlot pk message witness initial loaded)
     (loaded_message pk message witness initial loaded) randomizer
   refine ⟨initial, final, loaded, trace, finalpc, index, ?_, ?_, mode, pointer, ?_, ?_, ?_⟩
   · exact (entry_stack hash initial final pc trace).trans (loaded_stack pk message witness initial loaded)

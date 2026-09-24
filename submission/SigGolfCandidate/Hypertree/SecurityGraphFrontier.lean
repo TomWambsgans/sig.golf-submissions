@@ -149,15 +149,15 @@ theorem signature_congr (privateFirst privateSecond : PrivateTable) (first secon
 /-- Noninterference stated directly for the actual monadic signer, including its
 secret deterministic randomizer and its actual residual-oracle message index. -/
 theorem signer_congr (privateFirst privateSecond : PrivateTable) (first second : Labels)
-    (metadata : MetadataAgree first second) (residual : Hash) (pk : PublicKey) (message : Message)
+    (metadata : MetadataAgree first second) (residual : Hash) (message : Message)
     (nonce : privateFirst (.randomizer message) = privateSecond (.randomizer message))
     (revealed : ∀ point ∈ signaturePoints first
-        ((residual (SecurityRandomOracle.indexInput pk message (privateFirst (.randomizer message)))).extractLsb' 0 160),
+        ((residual (SecurityRandomOracle.indexInput message (privateFirst (.randomizer message)))).extractLsb' 0 160),
       chainPoint privateFirst first point.1 point.2 = chainPoint privateSecond second point.1 point.2) :
     evalWithAnswerFn (answers privateFirst (programmed privateFirst first residual))
-      (SecurityIdealSign.signCompact pk message) =
+      (SecurityIdealSign.signCompact message) =
     evalWithAnswerFn (answers privateSecond (programmed privateSecond second residual))
-      (SecurityIdealSign.signCompact pk message) := by
+      (SecurityIdealSign.signCompact message) := by
   rw [eval_signCompact, eval_signCompact, ← nonce]
   exact signature_congr privateFirst privateSecond first second metadata _ _ revealed
 

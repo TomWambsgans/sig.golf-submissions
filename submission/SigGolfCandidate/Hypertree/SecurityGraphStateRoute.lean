@@ -42,29 +42,29 @@ theorem routed_keygen_run (privateAnswers : PrivateTable) (labels : Labels) (cac
 
 /-- Honest signing through the original game interface has exactly one residual operation. -/
 theorem routed_signCompact_run (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) (cache : QueryCache HashSpec) :
+    (message : Message) (cache : QueryCache HashSpec) :
     (simulateQ (implementation privateAnswers labels)
-      (fixPrivate privateAnswers ((SecurityIdealSign.signCompact pk message).liftComp GameWorld))).run cache =
+      (fixPrivate privateAnswers ((SecurityIdealSign.signCompact message).liftComp GameWorld))).run cache =
       (fun result => (signature privateAnswers labels (privateAnswers (.randomizer message))
         (result.1.extractLsb' 0 160), result.2)) <$>
       (randomOracle (spec := HashSpec)
-        (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))).run cache := by
+        (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))).run cache := by
   rw [execute_routing, signCompact_run]
 
 /-- The actual wire-returning signing interface preserves the same exact residual state. -/
 theorem routed_signWire_run (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) (cache : QueryCache HashSpec) :
+    (message : Message) (cache : QueryCache HashSpec) :
     (simulateQ (implementation privateAnswers labels)
-      (fixPrivate privateAnswers ((SecurityExperiment.signWire pk message).liftComp GameWorld))).run cache =
+      (fixPrivate privateAnswers ((SecurityExperiment.signWire message).liftComp GameWorld))).run cache =
       (fun result => (SecurityExperiment.serialize
         (signature privateAnswers labels (privateAnswers (.randomizer message))
           (result.1.extractLsb' 0 160)), result.2)) <$>
       (randomOracle (spec := HashSpec)
-        (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))).run cache := by
+        (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))).run cache := by
   rw [execute_routing]
   simp only [SecurityExperiment.signWire, execute, simulateQ_map]
   change (SecurityExperiment.serialize <$>
-    execute privateAnswers labels (SecurityIdealSign.signCompact pk message)).run cache = _
+    execute privateAnswers labels (SecurityIdealSign.signCompact message)).run cache = _
   simp only [StateT.run_map, signCompact_run, Functor.map_map]
 
 end SigGolfCandidate.Hypertree.SecurityGraphState

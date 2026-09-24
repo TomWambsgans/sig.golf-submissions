@@ -14,7 +14,7 @@ noncomputable def secretKeyStopView {α : Type} (secretKey : SecretKey) : View �
   | .hash input next =>
       if publicSecretKeyHit secretKey (.inr input) then .done none
       else .hash input (fun answer => secretKeyStopView secretKey (next answer))
-  | .sign pk message next => .sign pk message (fun response => secretKeyStopView secretKey (next response))
+  | .sign message next => .sign message (fun response => secretKeyStopView secretKey (next response))
   | .coin n next => .coin n (fun answer => secretKeyStopView secretKey (next answer))
 
 /-- Exact semantic boundary: the real oracle's secret key stop is the same stop in
@@ -30,7 +30,7 @@ theorem realize_secretKeyStopView {α : Type} (secretKey : SecretKey) (view : Vi
     · rfl
     · simp only [realize]
       exact bind_congr ih
-  | sign pk message next ih =>
+  | sign message next ih =>
     rw [realize, SecuritySecretKeyHonest.stop_signWire_bind]
     change (_ >>= _) = (_ >>= _)
     exact bind_congr ih

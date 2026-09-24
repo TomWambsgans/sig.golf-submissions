@@ -85,7 +85,7 @@ theorem joint_eligible (publicCache : SigGolf.Cache) (adversary : Adversary subm
     Set.mem_singleton_iff] at member
   obtain ⟨nonces, _, metadata, _, points, _, outcome, member, equal⟩ := member
   cases equal
-  exact SecurityMonitorSecretKeyInputs.start_eligible _ _ _ _ outcome member
+  exact SecurityMonitorSecretKeyInputs.start_eligible _ _ _ outcome member
 
 attribute [local irreducible] SecurityMonitorGraphMixture.joint SecurityMonitorCombined.experiment
   SecurityMonitorNonceView.joint

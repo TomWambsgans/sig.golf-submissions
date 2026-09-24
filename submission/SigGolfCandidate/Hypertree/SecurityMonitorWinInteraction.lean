@@ -13,15 +13,15 @@ the actual preceding interaction rather than postulated for its transcript. -/
 def AtChecker (factors : Factors) (result : Result SecurityExperiment.Result) : Prop :=
   ∃ transcript forgery remaining exposed cache history,
     Ready factors history exposed cache ∧ Coherent factors cache history transcript ∧
-    Tracked factors.2.1 (publicKey factors) cache history ∧
-    some result ∈ support (execute factors (publicKey factors)
+    Tracked factors.2.1 cache history ∧
+    some result ∈ support (execute factors
       (ofCheck (publicKey factors) transcript forgery) remaining exposed cache history)
 
- theorem done_loses (factors : Factors) (pk : PublicKey) (value : SecurityExperiment.Result)
+ theorem done_loses (factors : Factors) (value : SecurityExperiment.Result)
     (lost : value.won = false) (remaining : Nat) (exposed : QueryCache PointSpec)
     (cache : QueryCache HashSpec) (history : History) (result : Result SecurityExperiment.Result)
     (outcome : SecurityExperiment.Result) (output : result.value = some outcome) (won : outcome.won = true)
-    (member : some result ∈ support (execute factors pk (.done value) remaining exposed cache history)) : False := by
+    (member : some result ∈ support (execute factors (.done value) remaining exposed cache history)) : False := by
   simp only [execute, support_pure, Set.mem_singleton_iff, Option.some.injEq] at member
   cases member
   have same := Option.some.inj output
@@ -34,14 +34,14 @@ theorem interact_atChecker (factors : Factors) (adversary : Adversary submission
     (rounds : Nat) (state : adversary.State) (transcript : Transcript submission.sizes)
     (remaining : Nat) (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec) (history : History)
     (ready : Ready factors history exposed cache) (coherent : Coherent factors cache history transcript)
-    (tracked : Tracked factors.2.1 (publicKey factors) cache history)
+    (tracked : Tracked factors.2.1 cache history)
     (result : Result SecurityExperiment.Result) (outcome : SecurityExperiment.Result)
     (output : result.value = some outcome) (won : outcome.won = true)
-    (member : some result ∈ support (execute factors (publicKey factors)
+    (member : some result ∈ support (execute factors
       (ofInteract adversary (publicKey factors) rounds state transcript) remaining exposed cache history)) :
     AtChecker factors result := by
   induction rounds generalizing state transcript remaining exposed cache history with
-  | zero => exact False.elim (done_loses factors _ _ rfl remaining exposed cache history result outcome output won member)
+  | zero => exact False.elim (done_loses factors _ rfl remaining exposed cache history result outcome output won member)
   | succ rounds ih =>
     rw [ofInteract] at member
     cases action : adversary.step state with
@@ -73,7 +73,7 @@ theorem interact_atChecker (factors : Factors) (adversary : Adversary submission
           · rw [if_neg second] at member
             have read := read_supported factors history exposed cache ready query answer queried first second
             exact ih (resume answer.1) transcript remaining _ answer.2 _
-              (public_ready factors _ history exposed cache ready query _ read)
+              (public_ready factors history exposed cache ready query _ read)
               (coherent.public query answer.1 answer.2 queried)
               (tracked.public_oracle _ _ query answer.1 answer.2 queried) member
     | sign request resume =>
@@ -85,13 +85,13 @@ theorem interact_atChecker (factors : Factors) (adversary : Adversary submission
         · rw [if_pos enough, mem_support_bind_iff] at member
           obtain ⟨answer, queried, member⟩ := member
           exact ih (resume _) _ (remaining - 117508) _ answer.2 _
-            (sign_ready factors history exposed cache ready _ request.message answer.1 answer.2 queried)
+            (sign_ready factors history exposed cache ready request.message answer.1 answer.2 queried)
             (coherent.sign request.message answer.1 answer.2 queried)
             (tracked.sign_random request.message answer.1 answer.2 queried) member
         · simp only [if_neg enough, support_pure, Set.mem_singleton_iff, Option.some.injEq] at member
           cases member
           cases output
       · rw [if_neg allowed] at member
-        exact False.elim (done_loses factors _ _ rfl remaining exposed cache history result outcome output won member)
+        exact False.elim (done_loses factors _ rfl remaining exposed cache history result outcome output won member)
 
 end SigGolfCandidate.Hypertree.SecurityMonitorWin

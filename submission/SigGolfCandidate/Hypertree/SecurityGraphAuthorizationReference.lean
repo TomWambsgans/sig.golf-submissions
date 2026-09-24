@@ -51,15 +51,15 @@ theorem programmed_earlier_point (residual : Hash) (secretKey : SecretKey) (grap
   exact same.trans (programmed_path_walk residual secretKey graph level index chain (digit message chain) bound)
 
 /-- Only indices occurring in actual signing responses open bottom sources. -/
-def signedIndices (hash : Hash) (secretKey : SecretKey) (history : SecurityForgery.History) :
+def signedIndices (hash : Hash) (history : SecurityForgery.History) :
     Finset (BitVec 160) :=
-  (history.map fun entry => SecurityForgery.index hash secretKey entry.1 entry.2).toFinset
+  (history.map fun entry => SecurityForgery.index hash entry.1 entry.2).toFinset
 
-theorem fresh_index_not_signed (hash : Hash) (secretKey : SecretKey) (history : SecurityForgery.History)
+theorem fresh_index_not_signed (hash : Hash) (history : SecurityForgery.History)
     (message : Message) (signature : SignatureEncoding.Compact)
-    (fresh : ∀ entry ∈ history, SecurityForgery.index hash secretKey entry.1 entry.2 ≠
-      SecurityForgery.index hash secretKey message signature) :
-    SecurityForgery.index hash secretKey message signature ∉ signedIndices hash secretKey history := by
+    (fresh : ∀ entry ∈ history, SecurityForgery.index hash entry.1 entry.2 ≠
+      SecurityForgery.index hash message signature) :
+    SecurityForgery.index hash message signature ∉ signedIndices hash history := by
   simp only [signedIndices, List.mem_toFinset, List.mem_map]
   rintro ⟨entry, member, same⟩
   exact fresh entry member same
@@ -71,18 +71,18 @@ theorem programmed_new_bottom (residual : Hash) (secretKey : SecretKey) (graph :
     (exposure : SecurityForgery.NewBottomExposure
       (programmed (derived residual secretKey) graph residual) secretKey history message signature) :
     let hash := programmed (derived residual secretKey) graph residual
-    let index := SecurityForgery.index hash secretKey message signature
-    ¬Authorized (factor (derived residual secretKey, graph)).2.2 (signedIndices hash secretKey history)
+    let index := SecurityForgery.index hash message signature
+    ¬Authorized (factor (derived residual secretKey, graph)).2.2 (signedIndices hash history)
       (pathAddress 0 index.toNat 0, 0) ∧
     signature.bottom = truncate ((factor (derived residual secretKey, graph)).1
       (pathAddress 0 index.toNat 0, 0)) := by
   dsimp only
   let hash := programmed (derived residual secretKey) graph residual
-  let index := SecurityForgery.index hash secretKey message signature
+  let index := SecurityForgery.index hash message signature
   have bound : index.toNat < 2 ^ 192 := lt_of_lt_of_le index.isLt
     (Nat.pow_le_pow_right (by decide) (by decide))
   refine ⟨bottom_source_unauthorized _ _ _
-    (fresh_index_not_signed hash secretKey history message signature exposure.1), ?_⟩
+    (fresh_index_not_signed hash history message signature exposure.1), ?_⟩
   exact exposure.2.trans (programmed_path_walk residual secretKey graph 0 index.toNat 0 0 bound)
 
 /-- info: 'SigGolfCandidate.Hypertree.SecurityGraphAuthorization.programmed_earlier_point' depends on axioms: [propext,

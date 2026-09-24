@@ -67,17 +67,17 @@ entire state computation is pure, including the sibling tree computation. -/
     simp only [SecurityIdealSign.signUpper, execute_bind, execute_pure, execute_signLayer,
       pure_bind, ih, upperLayers]
 
-/-- H5 is outside the canonical graph for every public key, message and nonce. -/
+/-- H5 is outside the canonical graph for every message and nonce. -/
 theorem canonical_index (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    canonical privateAnswers labels (SecurityRandomOracle.indexInput pk message r) = none := by
+    (message : Message) (r : Bytes 32) :
+    canonical privateAnswers labels (SecurityRandomOracle.indexInput message r) = none := by
   rw [canonical_eq_cache]
   have outside : ∀ position ∈ SecurityGraphOrder.positions,
-      SecurityRandomOracle.indexInput pk message r ≠ position.input privateAnswers labels := by
+      SecurityRandomOracle.indexInput message r ≠ position.input privateAnswers labels := by
     intro position _ same
     have equal := same.symm
     change position.address.input (position.payload privateAnswers labels) =
-      (⟨5, 0, 0, 0, 0, 0⟩ : Address).input (bytes pk ++ bytes message ++ bytes r) at equal
+      (⟨5, 0, 0, 0, 0, 0⟩ : Address).input (bytes (0 : Bytes 16) ++ bytes message ++ bytes r) at equal
     have tag := congrArg Address.tag (Address.eq_of_input_eq equal)
     cases position <;> cases tag
   rw [SecurityGraphQuery.graphCache_outside privateAnswers SecurityGraphOrder.positions labels ∅ _ outside]
@@ -90,26 +90,26 @@ theorem canonical_index (privateAnswers : PrivateTable) (labels : Labels)
     QueryImpl.simulateQ_add_liftM_query_left]
 
 @[simp] theorem publicExecute_index (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    publicExecute privateAnswers labels (liftM (HashSpec.query (SecurityRandomOracle.indexInput pk message r))) =
-      randomOracle (SecurityRandomOracle.indexInput pk message r) := by
+    (message : Message) (r : Bytes 32) :
+    publicExecute privateAnswers labels (liftM (HashSpec.query (SecurityRandomOracle.indexInput message r))) =
+      randomOracle (SecurityRandomOracle.indexInput message r) := by
   simp only [publicExecute, simulateQ_query, OracleQuery.input_query, OracleQuery.cont_query,
     id_map, publicOracle, canonical_index]
 
 /-- The nonce is a private-table read; only the H5 message-index query touches the residual oracle. -/
 theorem execute_randomizedIndex (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) :
-    execute privateAnswers labels (SecurityIdealSign.randomizedIndex pk message) = (do
-      let answer ← randomOracle (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))
+    (message : Message) :
+    execute privateAnswers labels (SecurityIdealSign.randomizedIndex message) = (do
+      let answer ← randomOracle (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))
       pure (privateAnswers (.randomizer message), answer.extractLsb' 0 160)) := by
   simp only [SecurityIdealSign.randomizedIndex, execute_bind, execute_randomizer, pure_bind,
     execute_public, publicExecute_index, execute_pure]
 
 /-- Full signing reduces to one residual H5 query followed by direct graph-coordinate serialization. -/
 theorem execute_signCompact (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) :
-    execute privateAnswers labels (SecurityIdealSign.signCompact pk message) = (do
-      let answer ← randomOracle (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))
+    (message : Message) :
+    execute privateAnswers labels (SecurityIdealSign.signCompact message) = (do
+      let answer ← randomOracle (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))
       pure (signature privateAnswers labels (privateAnswers (.randomizer message)) (answer.extractLsb' 0 160))) := by
   simp only [SecurityIdealSign.signCompact, execute_bind, execute_randomizedIndex, bind_assoc,
     pure_bind, execute_signLayer, execute_signUpper, execute_pure]
@@ -117,12 +117,12 @@ theorem execute_signCompact (privateAnswers : PrivateTable) (labels : Labels)
 
 /-- Exact resulting residual cache: it is precisely the cache after the single H5 call. -/
 theorem signCompact_run (privateAnswers : PrivateTable) (labels : Labels)
-    (pk : PublicKey) (message : Message) (cache : QueryCache HashSpec) :
-    (execute privateAnswers labels (SecurityIdealSign.signCompact pk message)).run cache =
+    (message : Message) (cache : QueryCache HashSpec) :
+    (execute privateAnswers labels (SecurityIdealSign.signCompact message)).run cache =
       (fun result => (signature privateAnswers labels (privateAnswers (.randomizer message))
         (result.1.extractLsb' 0 160), result.2)) <$>
       (randomOracle (spec := HashSpec)
-        (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))).run cache := by
+        (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))).run cache := by
   rw [execute_signCompact]
   simp only [StateT.run_bind, StateT.run_pure, map_eq_pure_bind]
 

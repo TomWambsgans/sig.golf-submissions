@@ -22,13 +22,13 @@ private theorem parsed_secretKeyInputs (history : History) (query : Query) (pars
 
 /-- Parsed index inputs cannot be secret key inputs. Consequently this recorded
 history contains exactly the eligible public-query trace, in reverse order. -/
-theorem public_secretKeyInputs (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    (recordPublic pk history query cached answer).secretKeyInputs =
+theorem public_secretKeyInputs (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    (recordPublic history query cached answer).secretKeyInputs =
       if SecretKeyEligible query then query :: history.secretKeyInputs else history.secretKeyInputs := by
   rw [recordPublic, parsed_secretKeyInputs]
-  cases parsed : SecurityIndexQuery.parse pk query with
+  cases parsed : SecurityIndexQuery.parse query with
   | none => simp only [decide_eq_true_eq]
-  | some pair => rw [if_neg (SecurityIndexQuery.parsed_not_secretKeyEligible pk query pair parsed)]
+  | some pair => rw [if_neg (SecurityIndexQuery.parsed_not_secretKeyEligible query pair parsed)]
 
 /-- Add an existing history to a chronological trace. -/
 def extend {α : Type} (history : History) (result : Option α × List Query) : Option α × List Query :=
@@ -37,10 +37,10 @@ def extend {α : Type} (history : History) (result : Option α × List Query) : 
 def project {α : Type} (result : SecurityMonitorGraphView.Result α) : Option α × List Query :=
   (result.value, result.history.secretKeyInputs.reverse)
 
-theorem extend_public {α : Type} (pk : PublicKey) (history : History) (query : Query)
+theorem extend_public {α : Type} (history : History) (query : Query)
     (cached : Bool) (answer : BitVec 256) (result : Option α × List Query) :
     extend history (result.1, prependPublic (.inr (.inr query)) result.2) =
-      extend (recordPublic pk history query cached answer) result := by
+      extend (recordPublic history query cached answer) result := by
   simp only [extend, public_secretKeyInputs, prependPublic]
   split <;> simp [List.reverse_cons, List.append_assoc]
 

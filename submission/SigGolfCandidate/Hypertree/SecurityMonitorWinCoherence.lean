@@ -32,14 +32,14 @@ theorem Coherent.public {factors : Factors} {cache : QueryCache HashSpec} {histo
     (query : Query) (answer : BitVec 256) (residual : QueryCache HashSpec)
     (member : (answer,residual) ∈ support ((SecurityGraphOracle.publicOracle
       (privateTable factors) (labels factors) query).run cache)) :
-    Coherent factors residual (recordPublic (publicKey factors) history query (cache query).isSome answer) transcript := by
+    Coherent factors residual (recordPublic history query (cache query).isSome answer) transcript := by
   constructor
   · intro entry present
     rw [public_messages]
     exact coherent.1 entry present
   · intro base agree
     have old := coherent.2 base (query_support_agrees factors query cache (answer,residual) member base agree).1
-    exact ⟨old.1, (SecurityMonitorGraphState.public_indices _ _ _ _ _).trans old.2⟩
+    exact ⟨old.1, (SecurityMonitorGraphState.public_indices _ _ _ _).trans old.2⟩
 
  theorem random_support_agrees (query : Query) (cache : QueryCache HashSpec)
     (answer : BitVec 256) (residual : QueryCache HashSpec)
@@ -73,9 +73,9 @@ theorem Coherent.public {factors : Factors} {cache : QueryCache HashSpec} {histo
     {transcript : Transcript submission.sizes} (coherent : Coherent factors cache history transcript)
     (message : Message) (answer : BitVec 256) (residual : QueryCache HashSpec)
     (member : (answer,residual) ∈ support ((randomOracle (spec := HashSpec)
-      (SecurityRandomOracle.indexInput (publicKey factors) message (factors.2.1 message))).run cache)) :
+      (SecurityRandomOracle.indexInput message (factors.2.1 message))).run cache)) :
     Coherent factors residual
-      (recordSign history message (cache (SecurityRandomOracle.indexInput (publicKey factors) message (factors.2.1 message))).isSome answer)
+      (recordSign history message (cache (SecurityRandomOracle.indexInput message (factors.2.1 message))).isSome answer)
       (SecurityExperimentAtomic.afterSign transcript message (SecurityExperiment.serialize
         (signature (privateTable factors) (labels factors) (factors.2.1 message) (answer.extractLsb' 0 160)))) := by
   rw [Coherent, responses_after_valid _ _ _ (signature_valid _ _ _ _)]
@@ -88,8 +88,7 @@ theorem Coherent.public {factors : Factors} {cache : QueryCache HashSpec} {histo
     have replay := random_support_agrees _ cache answer residual member base agree
     have old := coherent.2 base replay.1
     have nonce : privateTable factors (.randomizer message) = factors.2.1 message := rfl
-    have indexEq : indexOf (programmed (privateTable factors) (labels factors) base)
-        (publicKey factors) message (factors.2.1 message) = answer.extractLsb' 0 160 := by
+    have indexEq : indexOf (programmed (privateTable factors) (labels factors) base) message (factors.2.1 message) = answer.extractLsb' 0 160 := by
       rw [index_residual, replay.2]
     constructor
     · intro entry present
@@ -101,7 +100,7 @@ theorem Coherent.public {factors : Factors} {cache : QueryCache HashSpec} {histo
       rw [old.2]
       simp only [Signed, List.map_cons, List.toFinset_cons]
       congr 1
-      change answer.extractLsb' 0 160 = indexOf _ _ message (factors.2.1 message)
+      change answer.extractLsb' 0 160 = indexOf _ message (factors.2.1 message)
       exact indexEq.symm
 
 end SigGolfCandidate.Hypertree.SecurityMonitorWin

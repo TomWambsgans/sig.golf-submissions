@@ -79,9 +79,9 @@ theorem node_public (privateAnswers : PrivateTable) (graph : Labels) (base : Has
   rw [query_public _ _ _ _ _ _ _ _ _ _ (by decide) (by decide)]
 
 theorem index_public (privateAnswers : PrivateTable) (graph : Labels) (base : Hash)
-    (pk : PublicKey) (message : Message) (nonce : Bytes 32) :
-    indexOf (hash privateAnswers graph base) pk message nonce =
-      indexOf (programmed privateAnswers graph base) pk message nonce := by
+    (message : Message) (nonce : Bytes 32) :
+    indexOf (hash privateAnswers graph base) message nonce =
+      indexOf (programmed privateAnswers graph base) message nonce := by
   unfold indexOf
   rw [query_public _ _ _ _ _ _ _ _ _ _ (by decide) (by decide)]
 

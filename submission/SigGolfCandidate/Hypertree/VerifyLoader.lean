@@ -21,6 +21,27 @@ theorem loaded_publicKey (pk : PublicKey) (message : Message) (witness : Bytes s
     (by rw [Memory.bytes_length (n := signatureBytes)]; decide) (by omega) (by left; omega)]
   exact Memory.write_value_byte _ 0x40 16 pk i (by decide) (by decide) hi
 
+/-- The 16 bytes between the public-key and cache buffers are never loaded, so they are zero. -/
+theorem loaded_zeroSlot (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
+    (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
+    (i : Nat) (hi : i < 16) :
+    s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0 := by
+  unfold initialState at loaded
+  rw [if_pos (admitted.2 .verify)] at loaded
+  cases Option.some.inj loaded
+  dsimp only [submission]
+  dsimp only [inputBuffers, Riscv.standardLayout, Layout.message, Layout.secretKey, Layout.publicKey, Layout.cache, Layout.signature, Layout.witness, List.foldl_cons, List.foldl_nil]
+  rw [Memory.getByte_setReg]
+  rw [show witnessBase ⟨signatureBytes, signatureBytes⟩ = 0x3d3b0 by decide]
+  rw [Memory.write_preserves_byte _ 0x3d3b0 (bytes witness) 0x50 i (by decide)
+    (by rw [Memory.bytes_length (n := signatureBytes)]; decide) (by omega) (by left; omega)]
+  rw [Memory.write_preserves_byte _ 0x40 (bytes pk) 0x50 i (by decide)
+    (by rw [Memory.bytes_length]; decide) (by omega) (by right; simp)]
+  rw [Memory.write_preserves_byte _ 0 (bytes message) 0x50 i (by decide)
+    (by rw [Memory.bytes_length]; decide) (by omega) (by right; simp)]
+  rw [show verify.data = [] by rfl, MachineState.writeBytesAsWords_nil]
+  simp [MachineState.getByte, MachineState.getMem, extractByte]
+
 theorem loaded_message (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
     (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
     (i : Nat) (hi : i < 32) :
@@ -61,7 +82,7 @@ theorem loaded_index_refines (hash : Hash) (pk : PublicKey) (message : Message) 
       initialState submission .verify (message, pk, witness) = some initial ∧
       Trace hash verify initial 130 145 1 2 final ∧ final.pc = 0x1148 ∧
       readBuffer final 0x80408 20 =
-        Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer := by
+        Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer := by
   obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .verify (message, pk, witness)
   have randomizer : ∀ i, i < 32 → initial.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) =
       (SignatureEncoding.decode witness).randomizer.extractLsb' (8 * i) 8 := by
@@ -69,8 +90,8 @@ theorem loaded_index_refines (hash : Hash) (pk : PublicKey) (message : Message) 
     rw [loaded_witness pk message witness initial loaded i (by change i < 119632; omega)]
     dsimp only [SignatureEncoding.decode, SignatureEncoding.slice]
     rw [BitVec.extractLsb'_extractLsb'_of_le (by omega)]
-  obtain ⟨final, trace, finalpc, index⟩ := entry_index_refines hash initial pk message
-    (SignatureEncoding.decode witness).randomizer pc (loaded_publicKey pk message witness initial loaded)
+  obtain ⟨final, trace, finalpc, index⟩ := entry_index_refines hash initial message
+    (SignatureEncoding.decode witness).randomizer pc (loaded_zeroSlot pk message witness initial loaded)
     (loaded_message pk message witness initial loaded) randomizer
   exact ⟨initial, final, loaded, trace, finalpc, index⟩
 

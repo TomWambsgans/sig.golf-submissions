@@ -52,7 +52,7 @@ def recoverLayers : Nat → Nat → Digest → List LayerSignature → OracleCom
 /-- Verification makes only public H queries. In particular it does not recompute
 or validate the signer-secret randomizer; any supplied 256-bit randomizer is handled. -/
 def verifyCompact (pk : PublicKey) (message : Message) (signature : Compact) : OracleComp HashSpec Bool := do
-  let answer ← ask 5 0 0 0 0 0 (bytes pk ++ bytes message ++ bytes signature.randomizer)
+  let answer ← ask 5 0 0 0 0 0 (bytes (0 : Bytes 16) ++ bytes message ++ bytes signature.randomizer)
   let index := answer.extractLsb' 0 160
   let root ← recoverLayers 0 index.toNat 0 signature.toReference.layers
   return decide (signature.toReference.layers.length = 160 ∧ root = pk)
@@ -67,11 +67,11 @@ theorem eval_verifyCompact_iff (hash : Hash) (pk : PublicKey) (message : Message
 theorem correct (hash : Hash) (secretKey : SecretKey) (message : Message) :
     evalWithAnswerFn hash (do
       let pk ← SecurityReference.keygen secretKey
-      let signature ← SecurityReference.signCompact secretKey pk message
+      let signature ← SecurityReference.signCompact secretKey message
       verifyCompact pk message signature) = true := by
   simp only [evalWithAnswerFn_bind, eval_keygen, eval_signCompact]
   exact (eval_verifyCompact_iff hash (Reference.keygen hash secretKey) message
-    (SignatureEncoding.signCompact hash secretKey (Reference.keygen hash secretKey) message)).mpr
+    (SignatureEncoding.signCompact hash secretKey message)).mpr
       (signCompact_correct hash secretKey message)
 
 end SigGolfCandidate.Hypertree.SecurityVerify

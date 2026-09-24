@@ -31,9 +31,9 @@ theorem countHash_query_bind {α : Type} (input : Query) (next : BitVec 256 → 
     simp only [countHash_query_bind,evalWithAnswerFn_bind,evalWithAnswerFn_pure,ih,calls_query_bind]
     rfl
 
-def referenceSign (secretKey : SecretKey) (pk : PublicKey) (request : SigningRequest) :
+def referenceSign (secretKey : SecretKey) (request : SigningRequest) :
     OracleComp HashSpec (Option (Bytes submission.sizes.signature)×Nat) :=
-  countHash (SecurityExperiment.serialize <$> SecurityReference.signCompact secretKey pk request.message)
+  countHash (SecurityExperiment.serialize <$> SecurityReference.signCompact secretKey request.message)
 
 def referenceKeygen (secretKey : SecretKey) : OracleComp HashSpec (Option (PublicKey×Cache)×Nat) := do
   let result ← countHash (SecurityReference.keygen secretKey)
@@ -61,16 +61,15 @@ theorem keygen_equivalent (hash : Hash) (secretKey : SecretKey) :
   rw [KeygenFunctional.run_exact]
   rfl
 
-theorem sign_equivalent (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (request : SigningRequest)
-    (validKey : Reference.keygen hash secretKey=pk) :
-    evalWithAnswerFn hash (actualInterface.sign secretKey pk request)=
-      evalWithAnswerFn hash (referenceInterface.sign secretKey pk request) := by
-  obtain ⟨cycles,_,run⟩ := Signing.sign_run_refines hash secretKey pk request.cache request.message
+theorem sign_equivalent (hash : Hash) (secretKey : SecretKey) (request : SigningRequest) :
+    evalWithAnswerFn hash (actualInterface.sign secretKey request)=
+      evalWithAnswerFn hash (referenceInterface.sign secretKey request) := by
+  obtain ⟨cycles,_,run⟩ := Signing.sign_run_refines hash secretKey request.cache request.message
   simp only [actualInterface,referenceInterface,referenceSign,eval_countHash,evalWithAnswerFn_map,
-    SecurityReference.eval_signCompact,SecurityExperiment.serialize_valid _ (signCompact_valid _ _ _ _),
+    SecurityReference.eval_signCompact,SecurityExperiment.serialize_valid _ (signCompact_valid _ _ _),
     calls_map,SecurityBytecodeCounts.calls_signCompact]
-  change view (submission.runWith hash .sign (secretKey,pk,request.cache,request.message))=_
-  rw [run,if_pos validKey]
+  change view (submission.runWith hash .sign (secretKey,request.cache,request.message))=_
+  rw [run]
   rfl
 
 theorem check_equivalent (hash : Hash) (pk : PublicKey) (transcript : Transcript submission.sizes)

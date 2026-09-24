@@ -8,12 +8,12 @@ set_option maxRecDepth 4096
 
 private theorem prepare_stack (s : MachineState) (pc : s.pc = 0x1024) :
     ∃ final, OrdinarySteps verify s 89 final ∧ final.getReg .x2 = s.getReg .x2 := by
-  obtain ⟨pk, pkLoop, pkInv, _, _, _, pkSP⟩ := copy_all_frame verify 0x1034 (by decide)
-    0x40 0x80020 2 (pkCopyState s) (pkCopyState_invariant s pc)
+  obtain ⟨slot, slotLoop, slotInv, _, _, _, slotSP⟩ := copy_all_frame verify 0x1034 (by decide)
+    0x50 0x80020 2 (slotCopyState s) (slotCopyState_invariant s pc)
     (by decide) (by decide) (by decide) (by decide) (by decide)
-  have pkpc : pk.pc = 0x104c := by simpa [CopyInvariant] using pkInv.2.2.1
+  have slotpc : slot.pc = 0x104c := by simpa [CopyInvariant] using slotInv.2.2.1
   obtain ⟨msg, msgLoop, msgInv, _, _, _, msgSP⟩ := copy_all_frame verify 0x105c (by decide)
-    0 0x80030 4 (indexMessageCopyState pk) (indexMessageCopyState_invariant pk pkpc)
+    0 0x80030 4 (indexMessageCopyState slot) (indexMessageCopyState_invariant slot slotpc)
     (by decide) (by decide) (by decide) (by decide) (by decide)
   have msgpc : msg.pc = 0x1074 := by simpa [CopyInvariant] using msgInv.2.2.1
   obtain ⟨rand, randLoop, randInv, _, _, _, randSP⟩ := copy_all_frame verify 0x1088 (by decide)
@@ -22,9 +22,9 @@ private theorem prepare_stack (s : MachineState) (pc : s.pc = 0x1024) :
   have randpc : rand.pc = 0x10a0 := by simpa [CopyInvariant] using randInv.2.2.1
   refine ⟨indexHeaderState rand, ?_, ?_⟩
   · exact ordinary_trans verify s _ _ 16 73
-      (ordinary_trans verify s _ _ 4 12 (pkCopyState_block s pc) pkLoop)
-      (ordinary_trans verify pk _ _ 28 45
-        (ordinary_trans verify pk _ _ 4 24 (indexMessageCopyState_block pk pkpc) msgLoop)
+      (ordinary_trans verify s _ _ 4 12 (slotCopyState_block s pc) slotLoop)
+      (ordinary_trans verify slot _ _ 28 45
+        (ordinary_trans verify slot _ _ 4 24 (indexMessageCopyState_block slot slotpc) msgLoop)
         (ordinary_trans verify msg _ _ 29 16
           (ordinary_trans verify msg _ _ 5 24 (inputRandomizerCopyState_block msg msgpc) randLoop)
           (indexHeaderState_block rand randpc)))
@@ -32,11 +32,11 @@ private theorem prepare_stack (s : MachineState) (pc : s.pc = 0x1024) :
       simp [indexHeaderState, execInstrBr, MachineState.getReg_setReg_ne]
     have rprep : (inputRandomizerCopyState msg).getReg .x2 = msg.getReg .x2 := by
       simp [inputRandomizerCopyState, execInstrBr, MachineState.getReg_setReg_ne]
-    have mprep : (indexMessageCopyState pk).getReg .x2 = pk.getReg .x2 := by
+    have mprep : (indexMessageCopyState slot).getReg .x2 = slot.getReg .x2 := by
       simp [indexMessageCopyState, execInstrBr, MachineState.getReg_setReg_ne]
-    have pprep : (pkCopyState s).getReg .x2 = s.getReg .x2 := by
-      simp [pkCopyState, execInstrBr, MachineState.getReg_setReg_ne]
-    exact header.trans (randSP.trans (rprep.trans (msgSP.trans (mprep.trans (pkSP.trans pprep)))))
+    have pprep : (slotCopyState s).getReg .x2 = s.getReg .x2 := by
+      simp [slotCopyState, execInstrBr, MachineState.getReg_setReg_ne]
+    exact header.trans (randSP.trans (rprep.trans (msgSP.trans (mprep.trans (slotSP.trans pprep)))))
 
 private theorem hash_index_stack (hash : Hash) (s : MachineState) (pc : s.pc = 0x10e0) :
     ∃ final, Trace hash verify s 32 47 1 2 final ∧ final.getReg .x2 = s.getReg .x2 := by

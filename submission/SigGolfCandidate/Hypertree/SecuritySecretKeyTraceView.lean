@@ -28,21 +28,21 @@ private theorem coin_run (factors : Factors) (n : Nat) (cache : QueryCache HashS
   rw [handler, routing]
   rfl
 
-private theorem sign_run (factors : Factors) (pk : PublicKey) (message : Message) (cache : QueryCache HashSpec) :
-    (simulateQ (handler factors) ((SecurityExperiment.signWire pk message).liftComp GameWorld)).run cache =
+private theorem sign_run (factors : Factors) (message : Message) (cache : QueryCache HashSpec) :
+    (simulateQ (handler factors) ((SecurityExperiment.signWire message).liftComp GameWorld)).run cache =
       (fun result => (SecurityExperiment.serialize (SecurityGraphSigner.signature (privateTable factors)
         (labels factors) (factors.2.1 message) (result.1.extractLsb' 0 160)), result.2)) <$>
-        (randomOracle (spec := HashSpec) (SecurityRandomOracle.indexInput pk message (factors.2.1 message))).run cache := by
+        (randomOracle (spec := HashSpec) (SecurityRandomOracle.indexInput message (factors.2.1 message))).run cache := by
   rw [handler, routing, routed_signWire_run]
   rfl
 
 /-- Exact traced cutoff semantics in the true graph world, preserving ordinary
 budget failures and the complete secret key log. The log is chronological; the public
 history records those same entries in reverse order. -/
-theorem traced_view {α : Type} (factors : Factors) (pk : PublicKey) (view : View α) (budget : Nat)
+theorem traced_view {α : Type} (factors : Factors) (view : View α) (budget : Nat)
     (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec) (history : History) :
     𝒮[extend history <$> traced factors (realize view) budget cache] =
-      𝒮[project <$> SecurityMonitorGraphCoupling.execute factors pk view budget exposed cache history] := by
+      𝒮[project <$> SecurityMonitorGraphCoupling.execute factors view budget exposed cache history] := by
   induction view generalizing budget exposed cache history with
   | done value =>
     simp [traced, realize, tracePublic_pure, SecurityMonitorGraphCoupling.execute, project, extend]
@@ -58,7 +58,7 @@ theorem traced_view {α : Type} (factors : Factors) (pk : PublicKey) (view : Vie
         public_run, bind_pure_comp, run_map, map_bind, Functor.map_map]
       apply evalSPMF_bind_congr
       intro result _
-      simp only [extend_public pk history input (cache input).isSome result.1]
+      simp only [extend_public history input (cache input).isSome result.1]
       exact ih result.1 budget _ result.2 _
   | coin n next ih =>
     rw [traced, realize, cutoff_query_bind]
@@ -70,9 +70,9 @@ theorem traced_view {α : Type} (factors : Factors) (pk : PublicKey) (view : Vie
     apply evalSPMF_bind_congr
     intro answer _
     exact ih answer budget exposed cache history
-  | sign signPk message next ih =>
-    have safe := lift_clean (SecuritySecretKeyHonest.signWire signPk message)
-    have fixed := SecurityAtomicCounts.signWire signPk message
+  | sign message next ih =>
+    have safe := lift_clean (SecuritySecretKeyHonest.signWire message)
+    have fixed := SecurityAtomicCounts.signWire message
     rw [SecurityMonitorGraphCoupling.execute]
     by_cases enough : 117508 ≤ budget
     · rw [if_pos enough]
@@ -88,7 +88,7 @@ theorem traced_view {α : Type} (factors : Factors) (pk : PublicKey) (view : Vie
         (SecurityGraphDisclosure.revealCache factors.1
           (SecurityGraphMonitorSign.needed factors.2.2 exposed (result.1.extractLsb' 0 160)) exposed)
         result.2 (recordSign history message
-          (cache (SecurityRandomOracle.indexInput signPk message (factors.2.1 message))).isSome result.1)
+          (cache (SecurityRandomOracle.indexInput message (factors.2.1 message))).isSome result.1)
     · rw [if_neg enough]
       simp only [traced, realize, evalSPMF_map]
       rw [trace_insufficient safe fixed (handler factors) _ budget cache (by omega)]

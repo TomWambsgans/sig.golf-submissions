@@ -6,17 +6,17 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 set_option maxRecDepth 4096
 set_option linter.unusedSimpArgs false
 
-def indexPayload (pk : PublicKey) (message : Message) (r : Bytes 32) : List Byte :=
+def indexPayload (message : Message) (r : Bytes 32) : List Byte :=
   bytes (n := 8) (5 : BitVec 64) ++ bytes (n := 24) (0 : BitVec 192) ++
-    (bytes pk ++ bytes message ++ bytes r)
+    (bytes (0 : Bytes 16) ++ bytes message ++ bytes r)
 
-@[simp] theorem indexPayload_length (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    (indexPayload pk message r).length = 112 := by simp [indexPayload, bytes]
+@[simp] theorem indexPayload_length (message : Message) (r : Bytes 32) :
+    (indexPayload message r).length = 112 := by simp [indexPayload, bytes]
 
-theorem indexPayload_byte (pk : PublicKey) (message : Message) (r : Bytes 32) (i : Fin 112) :
-    (indexPayload pk message r)[i.val]'(by simp) =
+theorem indexPayload_byte (message : Message) (r : Bytes 32) (i : Fin 112) :
+    (indexPayload message r)[i.val]'(by simp) =
       if i.val = 0 then 5 else if i.val < 32 then 0 else
-        if i.val < 48 then pk.extractLsb' (8 * (i.val - 32)) 8
+        if i.val < 48 then (0 : Bytes 16).extractLsb' (8 * (i.val - 32)) 8
         else if i.val < 80 then message.extractLsb' (8 * (i.val - 48)) 8
         else r.extractLsb' (8 * (i.val - 80)) 8 := by
   fin_cases i <;> simp [indexPayload, bytes, List.getElem_append]
@@ -27,7 +27,7 @@ def indexInputByte (s : MachineState) (i : Fin 112) : Byte :=
 theorem indexInputByte_spec (s : MachineState) (i : Fin 112) :
     indexInputByte s i =
       if i.val = 0 then 5 else if i.val < 32 then 0 else
-        if i.val < 48 then s.getByte (BitVec.ofNat 64 (0x40 + (i.val - 32)))
+        if i.val < 48 then s.getByte (BitVec.ofNat 64 (0x50 + (i.val - 32)))
         else if i.val < 80 then s.getByte (BitVec.ofNat 64 (i.val - 48))
         else s.getByte (BitVec.ofNat 64 (0x20060 + (i.val - 80))) := by
   fin_cases i <;> first | rfl | simp [indexInputByte, indexInputWord, extractByte]
@@ -48,24 +48,24 @@ theorem indexHashState_byte (s : MachineState) (a : Word) :
   simp only [MachineState.getByte, indexHashState_mem]
 
 /-- The bytecode's index oracle input is exactly the reference tag5 query. -/
-theorem index_query (original ready : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
-    (hpk : ∀ i, i < 16 → original.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+theorem index_query (original ready : MachineState) (message : Message) (r : Bytes 32)
+    (hzero : ∀ i, i < 16 → original.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 (0x20060 + i)) = r.extractLsb' (8 * i) 8)
     (words : ∀ i : Fin 14, ready.getMem (wordAddress 0x80000 i.val) = indexInputWord original i) :
-    hashInput (indexHashState ready) = Reference.packed (indexPayload pk message r) := by
-  apply Serialization.hashInput_of_list (indexHashState ready) 0x80000 (indexPayload pk message r)
+    hashInput (indexHashState ready) = Reference.packed (indexPayload message r) := by
+  apply Serialization.hashInput_of_list (indexHashState ready) 0x80000 (indexPayload message r)
   · exact (indexHashState_regs ready).2.1
   · rw [(indexHashState_regs ready).2.2.1, indexPayload_length]; rfl
   · intro i hi
     have bound : i < 112 := by simpa using hi
     rw [indexHashState_byte, prepared_index_bytes original ready words ⟨i, bound⟩,
-      indexInputByte_spec, indexPayload_byte pk message r ⟨i, bound⟩]
+      indexInputByte_spec, indexPayload_byte message r ⟨i, bound⟩]
     dsimp only
     split_ifs with h0 h32 h48 h80
     · rfl
     · rfl
-    · exact hpk (i - 32) (by omega)
+    · rw [hzero (i - 32) (by omega)]; simp
     · exact hmessage (i - 48) (by omega)
     · exact hr (i - 80) (by omega)
 
@@ -102,16 +102,16 @@ theorem read_index_words (s : MachineState) (answer : BitVec 256)
 
 /-- Exact execution refinement of the whole tag5 preparation, HASH and index
 extraction, for arbitrary memory containing the three required input buffers. -/
-theorem index_refines (hash : Hash) (s : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
+theorem index_refines (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x10fc)
-    (hpk : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+    (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x20060 + i)) = r.extractLsb' (8 * i) 8) :
     ∃ final, Trace hash sign s 121 136 1 2 final ∧ final.pc = 0x1220 ∧
-      readBuffer final 0x80408 20 = Reference.indexOf hash pk message r := by
+      readBuffer final 0x80408 20 = Reference.indexOf hash message r := by
   obtain ⟨ready, prepare, readypc, words, _⟩ := index_prepare s pc
   obtain ⟨final, trace, finalpc, low, high⟩ := index_trace hash ready readypc
-  have query := index_query s ready pk message r hpk hmessage hr words
+  have query := index_query s ready message r hzero hmessage hr words
   refine ⟨final, prepare.trace.trans trace, finalpc, ?_⟩
   rw [read_index_words final _ low high, query]
   rfl
@@ -122,31 +122,31 @@ theorem index_refines (hash : Hash) (s : MachineState) (pk : PublicKey) (message
 
 /-- The organizer's typed sign input executes both reference oracle computations and
 reaches the main hypertree loop with the exact reference 160-bit index. -/
-theorem loaded_index_refines (hash : Hash) (secretKey : SecretKey) (pk : PublicKey)
+theorem loaded_index_refines (hash : Hash) (secretKey : SecretKey)
     (cache : Cache) (message : Message) :
     ∃ initial final,
-      initialState submission .sign (secretKey, pk, cache, message) = some initial ∧
+      initialState submission .sign (secretKey, cache, message) = some initial ∧
       Trace hash sign initial 238 268 2 4 final ∧ final.pc = 0x1220 ∧
       readBuffer final 0x80408 20 =
-        Reference.indexOf hash pk message (Reference.randomizer hash secretKey message) := by
-  obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .sign (secretKey, pk, cache, message)
+        Reference.indexOf hash message (Reference.randomizer hash secretKey message) := by
+  obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .sign (secretKey, cache, message)
   obtain ⟨randomized, randomTrace, randomPC, randomWords, frame⟩ := entry_randomizer_refines_frame hash initial secretKey message pc
-    (Loader.sign_secretKey submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded)
-    (Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded)
-  have pkBytes : ∀ i, i < 16 → randomized.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8 := by
+    (Loader.sign_secretKey submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
+    (Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
+  have zeroBytes : ∀ i, i < 16 → randomized.getByte (BitVec.ofNat 64 (0x50 + i)) = 0 := by
     intro i hi
-    rw [low_words_byte initial randomized frame 0x40 i (by decide) (by omega)]
-    exact Loader.sign_publicKey submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded i hi
+    rw [low_words_byte initial randomized frame 0x50 i (by decide) (by omega)]
+    exact Loader.sign_zeroSlot submission (admitted.2 .sign) (by rfl) (by rfl) secretKey cache message initial loaded i hi
   have msgBytes : ∀ i, i < 32 → randomized.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8 := by
     intro i hi
     have unchanged := low_words_byte initial randomized frame 0 i (by decide) (by omega)
     simp only [Nat.zero_add] at unchanged
     rw [unchanged]
-    exact Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey pk cache message initial loaded i hi
+    exact Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded i hi
   have randBytes := bytes_of_answer_words randomized 0x20060 (Reference.randomizer hash secretKey message)
     (by decide) (by decide) randomWords
-  obtain ⟨final, indexTrace, finalPC, index⟩ := index_refines hash randomized pk message
-    (Reference.randomizer hash secretKey message) randomPC pkBytes msgBytes randBytes
+  obtain ⟨final, indexTrace, finalPC, index⟩ := index_refines hash randomized message
+    (Reference.randomizer hash secretKey message) randomPC zeroBytes msgBytes randBytes
   exact ⟨initial, final, loaded, randomTrace.trans indexTrace, finalPC, index⟩
 
 /-- info: 'SigGolfCandidate.Hypertree.Signing.loaded_index_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/

@@ -17,7 +17,7 @@ noncomputable def joint (publicCache : SigGolf.Cache) (adversary : Adversary sub
   let points ← $ᵗ PointTable
   let pk := truncate (metadata (.node 159 0))
   let outcome ← SecurityGraphMonitorProgram.run points ∅
-    (SecurityMonitorGraphView.start nonces metadata pk
+    (SecurityMonitorGraphView.start nonces metadata
       (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget)
   pure (nonces, outcome)
 
@@ -42,7 +42,7 @@ noncomputable def nonceExperiment (publicCache : SigGolf.Cache) (adversary : Adv
   let points ← $ᵗ PointTable
   let pk := truncate (metadata (.node 159 0))
   SecurityNonceProgram.execute
-    (start points metadata pk (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget) ∅
+    (start points metadata (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget) ∅
 
 private theorem nonce_swap {α : Type} (next : NonceTable → MetadataTable → PointTable → ProbComp α) :
     𝒮[(do let nonces ← $ᵗ NonceTable; let metadata ← $ᵗ MetadataTable; let points ← $ᵗ PointTable
@@ -68,7 +68,6 @@ theorem joint_annotation (publicCache : SigGolf.Cache) (adversary : Adversary su
   exact nonce_swap (fun nonces metadata points =>
     (jointAnnotation ∘ (fun outcome => (nonces, outcome))) <$>
       SecurityGraphMonitorProgram.run points ∅ (SecurityMonitorGraphView.start nonces metadata
-        (truncate (metadata (.node 159 0)))
         (ofInteract adversary (truncate (metadata (.node 159 0))) rounds
           (adversary.initial (truncate (metadata (.node 159 0))) publicCache) {}) budget))
 
@@ -80,7 +79,7 @@ theorem nonceExperiment_bound (publicCache : SigGolf.Cache) (adversary : Adversa
   have bound := SecurityNonceProgram.mixed_prob_bad_le_expected
     (do let metadata ← $ᵗ MetadataTable; let points ← $ᵗ PointTable; pure (metadata, points))
     (fun pair => let pk := truncate (pair.1 (.node 159 0))
-      start pair.2 pair.1 pk (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget)
+      start pair.2 pair.1 (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget)
     (fun _ => ∅)
   simpa only [nonceExperiment, bind_assoc, pure_bind] using bound
 

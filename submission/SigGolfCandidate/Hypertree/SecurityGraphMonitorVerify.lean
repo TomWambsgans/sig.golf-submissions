@@ -80,7 +80,7 @@ theorem accepted_fresh_index_reuse (factors : Factors) (base : Hash)
     (honest : ∀ entry ∈ history, entry.2 = evalWithAnswerFn
       (SecurityGraphSigner.answers (privateTable factors)
         (programmed (privateTable factors) (labels factors) base))
-      (SecurityIdealSign.signCompact (SecurityGraphExtraction.publicKey factors) entry.1))
+      (SecurityIdealSign.signCompact entry.1))
     (message : Message) (signature : SignatureEncoding.Compact)
     (fresh : (message, signature) ∉ history)
     (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec)

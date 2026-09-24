@@ -18,7 +18,7 @@ noncomputable def joint (publicCache : Cache) (adversary : Adversary submission.
   let metadata ← $ᵗ MetadataTable
   let points ← $ᵗ PointTable
   let pk := truncate (metadata (.node 159 0))
-  let result ← SecurityMonitorGraphCoupling.start (points, (nonces, metadata)) pk
+  let result ← SecurityMonitorGraphCoupling.start (points, (nonces, metadata))
     (ofInteract adversary pk rounds (adversary.initial pk publicCache) {}) budget
   pure (nonces, result)
 
@@ -40,7 +40,7 @@ theorem joint_le_union (publicCache : Cache) (adversary : Adversary submission.s
   apply ENNReal.tsum_le_tsum
   intro points
   apply mul_le_mul' le_rfl
-  exact SecurityMonitorGraphCoupling.start_le_union (points, (nonces, metadata)) _ _ budget
+  exact SecurityMonitorGraphCoupling.start_le_union (points, (nonces, metadata)) _ budget
     (fun result => event (nonces, result))
 
 noncomputable def experiment (publicCache : Cache) (adversary : Adversary submission.sizes)

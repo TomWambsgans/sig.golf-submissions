@@ -147,28 +147,28 @@ theorem compact_canonical_of_no_fault (hash : Hash) (secretKey : SecretKey) (mes
     (signature : SignatureEncoding.Compact)
     (accepted : Reference.verify hash (Reference.keygen hash secretKey) message signature.toReference)
     (clean : ¬PathFault hash secretKey 0
-      (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat 0 signature.toReference.layers) :
+      (indexOf hash message signature.randomizer).toNat 0 signature.toReference.layers) :
     signature = canonicalCompact hash secretKey signature.randomizer
-      (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat := by
+      (indexOf hash message signature.randomizer).toNat := by
   have target : terminalRoot hash secretKey signature.toReference.layers.length 0
-      (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat = Reference.keygen hash secretKey := by
+      (indexOf hash message signature.randomizer).toNat = Reference.keygen hash secretKey := by
     rw [accepted.1]
     simp only [terminalRoot, Nat.zero_add, Nat.div_eq_of_lt
-      (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).isLt]
+      (indexOf hash message signature.randomizer).isLt]
     rfl
   have bound := (path_binding_no_fault hash secretKey 0
-    (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat 0 signature.toReference.layers
+    (indexOf hash message signature.randomizer).toNat 0 signature.toReference.layers
     (accepted.2.trans target.symm) clean).2
   rw [accepted.1] at bound
   change LayerAgrees 0
     ⟨fun i => if i = 0 then signature.bottom else 0, signature.sibling⟩
     (signLayer hash secretKey 0
-      ((indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat / 2)
-      ((indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat % 2 == 1) 0) ∧
+      ((indexOf hash message signature.randomizer).toNat / 2)
+      ((indexOf hash message signature.randomizer).toNat % 2 == 1) 0) ∧
     LayersAgree 1 signature.upper
       (signLayers hash secretKey 159 1
-        ((indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat / 2)
-        (treeRoot hash secretKey 0 ((indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat / 2))) at bound
+        ((indexOf hash message signature.randomizer).toNat / 2)
+        (treeRoot hash secretKey 0 ((indexOf hash message signature.randomizer).toNat / 2))) at bound
   have bottom := bound.1.2 0 (Or.inr rfl)
   have sibling := bound.1.1
   have upper := layersAgree_eq_of_positive (by decide : 0 < 1) bound.2
@@ -185,8 +185,8 @@ theorem compact_unique_honest_randomizer (hash : Hash) (secretKey : SecretKey) (
     (accepted : Reference.verify hash (Reference.keygen hash secretKey) message signature.toReference)
     (randomizerEqual : signature.randomizer = randomizer hash secretKey message)
     (clean : ¬PathFault hash secretKey 0
-      (indexOf hash (Reference.keygen hash secretKey) message signature.randomizer).toNat 0 signature.toReference.layers) :
-    signature = SignatureEncoding.signCompact hash secretKey (Reference.keygen hash secretKey) message := by
+      (indexOf hash message signature.randomizer).toNat 0 signature.toReference.layers) :
+    signature = SignatureEncoding.signCompact hash secretKey message := by
   rw [compact_canonical_of_no_fault hash secretKey message signature accepted clean, randomizerEqual]
   rfl
 

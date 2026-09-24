@@ -29,11 +29,11 @@ theorem indexStep_returns {α : Type} (property : α → Prop) (cache : QueryCac
 
 /-- Exact conservation on every passive path. The equality also holds after
 contacts: monitors never feed their flags back into public control flow. -/
-theorem compile_conserved {α : Type} (nonces : NonceTable) (metadata : MetadataTable) (pk : PublicKey)
+theorem compile_conserved {α : Type} (nonces : NonceTable) (metadata : MetadataTable)
     (view : View α) (remaining : Nat) (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec)
     (history : History) :
     AllReturns (fun result : Result α => result.history.counts.total + result.remaining =
-      history.counts.total + remaining) (compile nonces metadata pk view remaining exposed cache history) := by
+      history.counts.total + remaining) (compile nonces metadata view remaining exposed cache history) := by
   induction view generalizing remaining exposed cache history with
   | done value => exact rfl
   | coin n next ih => exact fun answer => ih answer remaining exposed cache history
@@ -43,11 +43,11 @@ theorem compile_conserved {α : Type} (nonces : NonceTable) (metadata : Metadata
     | succ remaining =>
       apply publicStep_returns
       intro answer opened residual
-      apply returns_mono _ _ _ _ (ih answer remaining opened residual (recordPublic pk history query (cache query).isSome answer))
+      apply returns_mono _ _ _ _ (ih answer remaining opened residual (recordPublic history query (cache query).isSome answer))
       intro result conserved
       rw [public_total] at conserved
       omega
-  | sign signPk message next ih =>
+  | sign message next ih =>
     unfold compile
     split
     next enough =>
@@ -56,23 +56,23 @@ theorem compile_conserved {α : Type} (nonces : NonceTable) (metadata : Metadata
       apply disclose_returns
       intro opened
       apply returns_mono _ _ _ _ (ih _ (remaining - 117508) opened residual
-        (recordSign history message (cache (SecurityRandomOracle.indexInput signPk message (nonces message))).isSome answer))
+        (recordSign history message (cache (SecurityRandomOracle.indexInput message (nonces message))).isSome answer))
       intro result conserved
       rw [sign_total] at conserved
       omega
     next short => exact rfl
 
 /-- Setup's 739 calls share the same conserved budget as the full adversary view. -/
-theorem start_conserved {α : Type} (nonces : NonceTable) (metadata : MetadataTable) (pk : PublicKey)
+theorem start_conserved {α : Type} (nonces : NonceTable) (metadata : MetadataTable)
     (view : View α) (budget : Nat) :
     AllReturns (fun result : Result α => result.history.counts.total + result.remaining = budget)
-      (start nonces metadata pk view budget) := by
+      (start nonces metadata view budget) := by
   unfold start
   split
   next enough =>
     apply disclose_returns
     intro exposed
-    apply returns_mono _ _ _ _ (compile_conserved nonces metadata pk view (budget - 739) exposed ∅ (recordKeygen {}))
+    apply returns_mono _ _ _ _ (compile_conserved nonces metadata view (budget - 739) exposed ∅ (recordKeygen {}))
     intro result conserved
     rw [keygen_total] at conserved
     change result.history.counts.total + result.remaining = (0 + 739) + (budget - 739) at conserved
@@ -83,13 +83,13 @@ theorem start_conserved {α : Type} (nonces : NonceTable) (metadata : MetadataTa
 
 /-- Support-wise charged-call bound in the same uniform point-table experiment
 used by the graph hazard bound. No expectation changes worlds here. -/
-theorem start_count_le {α : Type} (nonces : NonceTable) (metadata : MetadataTable) (pk : PublicKey)
+theorem start_count_le {α : Type} (nonces : NonceTable) (metadata : MetadataTable)
     (view : View α) (budget : Nat) (result : Outcome (Result α))
-    (member : result ∈ support (SecurityGraphMonitorProgram.experiment (start nonces metadata pk view budget) ∅)) :
+    (member : result ∈ support (SecurityGraphMonitorProgram.experiment (start nonces metadata view budget) ∅)) :
     result.value.history.counts.total ≤ budget := by
   rw [SecurityGraphMonitorProgram.experiment, mem_support_bind_iff] at member
   obtain ⟨table, _, member⟩ := member
-  have conserved := run_returns _ _ (start_conserved nonces metadata pk view budget) _ _ result member
+  have conserved := run_returns _ _ (start_conserved nonces metadata view budget) _ _ result member
   omega
 
 /-- The actual common passive experiment satisfies the organizer's shared total
@@ -103,6 +103,6 @@ theorem experiment_count_le (publicCache : Cache) (adversary : Adversary submiss
   obtain ⟨nonces, _, member⟩ := member
   rw [mem_support_bind_iff] at member
   obtain ⟨metadata, _, member⟩ := member
-  exact start_count_le nonces metadata _ _ budget result member
+  exact start_count_le nonces metadata _ budget result member
 
 end SigGolfCandidate.Hypertree.SecurityMonitorGraphBudget

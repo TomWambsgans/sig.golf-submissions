@@ -71,20 +71,20 @@ theorem randomizer (message : Message) : Queries (SecurityIdealSign.randomizer m
   change Queries (liftM (SplitWorld.query (.inl (.randomizer message)))) 1
   exact Queries.ask (spec := SplitWorld) _
 
-theorem randomizedIndex (pk : PublicKey) (message : Message) :
-    Queries (SecurityIdealSign.randomizedIndex pk message) 2 := by
+theorem randomizedIndex (message : Message) :
+    Queries (SecurityIdealSign.randomizedIndex message) 2 := by
   unfold SecurityIdealSign.randomizedIndex
   simpa only [map_eq_pure_bind] using
     (randomizer message).bind _ (fun nonce =>
-      (publicCall (Queries.ask (spec := HashSpec) (SecurityRandomOracle.indexInput pk message nonce))).map
+      (publicCall (Queries.ask (spec := HashSpec) (SecurityRandomOracle.indexInput message nonce))).map
         (fun answer => (nonce, answer.extractLsb' 0 160)))
 
 /-- Full ideal signer query shape is constant for every possible oracle history,
 not only answers induced by a consistent function or secretKeyed oracle. -/
-theorem signCompact_queries (pk : PublicKey) (message : Message) :
-    Queries (SecurityIdealSign.signCompact pk message) 117508 := by
+theorem signCompact_queries (message : Message) :
+    Queries (SecurityIdealSign.signCompact message) 117508 := by
   unfold SecurityIdealSign.signCompact
-  refine Queries.bind (nextCost := 117506) (randomizedIndex pk message) _ ?_
+  refine Queries.bind (nextCost := 117506) (randomizedIndex message) _ ?_
   intro ri
   refine Queries.bind (cost := 5) (nextCost := 117501) ?_ _ ?_
   · exact signLayerWithRoot ⟨0, by decide⟩ _ _ _
@@ -95,14 +95,14 @@ theorem signCompact_queries (pk : PublicKey) (message : Message) :
       exact Queries.pure _
 
 /-- Organizer-charge instance used by the atomic cutoff macro. -/
-theorem signCompact (pk : PublicKey) (message : Message) :
-    FixedCost ((SecurityIdealSign.signCompact pk message).liftComp GameWorld) 117508 :=
-  (signCompact_queries pk message).fixedCost
+theorem signCompact (message : Message) :
+    FixedCost ((SecurityIdealSign.signCompact message).liftComp GameWorld) 117508 :=
+  (signCompact_queries message).fixedCost
 
 /-- Serialization is pure and therefore the actual wire-signing interface has
 the same fixed structural charge. -/
-theorem signWire (pk : PublicKey) (message : Message) :
-    FixedCost ((SecurityExperiment.signWire pk message).liftComp GameWorld) 117508 :=
-  ((signCompact_queries pk message).map SecurityExperiment.serialize).fixedCost
+theorem signWire (message : Message) :
+    FixedCost ((SecurityExperiment.signWire message).liftComp GameWorld) 117508 :=
+  ((signCompact_queries message).map SecurityExperiment.serialize).fixedCost
 
 end SigGolfCandidate.Hypertree.SecurityAtomicCounts

@@ -15,17 +15,17 @@ def NonceHit (nonces : Message → Bytes 32) (history : History) : Prop :=
 
 /-- Ghost provenance retains the input of each fresh H5 draw. It does not add
 queries or impose independence on the answers. -/
-structure Provenance (nonces : Message → Bytes 32) (pk : PublicKey)
+structure Provenance (nonces : Message → Bytes 32)
     (cache : QueryCache HashSpec) (history : History) (draws : List Draw) : Prop where
   trace : draws.map Prod.snd = history.indexTrace
-  cached : ∀ message nonce answer, cache (indexInput pk message nonce) = some answer →
-    ∃ marked, (indexInput pk message nonce, (marked, answer.extractLsb' 0 160)) ∈ draws
+  cached : ∀ message nonce answer, cache (indexInput message nonce) = some answer →
+    ∃ marked, (indexInput message nonce, (marked, answer.extractLsb' 0 160)) ∈ draws
   signed : ∀ message ∈ history.signedMessages, NonceHit nonces history ∨
-    ∃ answer, cache (indexInput pk message (nonces message)) = some answer ∧
-      (indexInput pk message (nonces message), (true, answer.extractLsb' 0 160)) ∈ draws
+    ∃ answer, cache (indexInput message (nonces message)) = some answer ∧
+      (indexInput message (nonces message), (true, answer.extractLsb' 0 160)) ∈ draws
 
- theorem provenance_empty (nonces : Message → Bytes 32) (pk : PublicKey) :
-    Provenance nonces pk ∅ {} [] := by
+ theorem provenance_empty (nonces : Message → Bytes 32) :
+    Provenance nonces ∅ {} [] := by
   constructor
   · rfl
   · intro message nonce answer present; cases present
@@ -50,16 +50,16 @@ theorem conflict_of_draws (draws : List Draw) (first second : Draw)
         exact Or.inl ⟨first.2, List.mem_map.mpr ⟨first, one, rfl⟩, same.symm, marked.symm⟩
       · exact Or.inr (ih one two)
 
- theorem index_reuse_contact {nonces : Message → Bytes 32} {pk : PublicKey}
+ theorem index_reuse_contact {nonces : Message → Bytes 32}
     {cache : QueryCache HashSpec} {history : History} {draws : List Draw}
-    (provenance : Provenance nonces pk cache history draws)
+    (provenance : Provenance nonces cache history draws)
     (hash : Hash) (agree : cache.AgreesWithFn hash)
     (signedMessage message : Message) (nonce : Bytes 32)
     (signed : signedMessage ∈ history.signedMessages)
-    (present : cache (indexInput pk message nonce) ≠ none)
-    (distinct : indexInput pk signedMessage (nonces signedMessage) ≠ indexInput pk message nonce)
-    (same : (hash (indexInput pk signedMessage (nonces signedMessage))).extractLsb' 0 160 =
-      (hash (indexInput pk message nonce)).extractLsb' 0 160) :
+    (present : cache (indexInput message nonce) ≠ none)
+    (distinct : indexInput signedMessage (nonces signedMessage) ≠ indexInput message nonce)
+    (same : (hash (indexInput signedMessage (nonces signedMessage))).extractLsb' 0 160 =
+      (hash (indexInput message nonce)).extractLsb' 0 160) :
     Conflict history.indexTrace ∨ NonceHit nonces history := by
   rcases provenance.signed signedMessage signed with hit | ⟨answer, cached, marked⟩
   · exact Or.inr hit
@@ -75,13 +75,13 @@ theorem extraction_contact (factors : SecurityGraphFactor.Factors) (base : Hash)
     (responses : SecurityForgery.History) (history : History) (cache : QueryCache HashSpec)
     (draws : List Draw)
     (provenance : Provenance (fun m => SecurityGraphFactor.privateTable factors (.randomizer m))
-      (SecurityGraphExtraction.publicKey factors) cache history draws)
+      cache history draws)
     (honest : SecurityGraphExtraction.HonestHistory factors base responses)
     (signed : ∀ entry ∈ responses, entry.1 ∈ history.signedMessages)
     (agree : cache.AgreesWithFn (SecurityGraphReference.programmed
       (SecurityGraphFactor.privateTable factors) (SecurityGraphFactor.labels factors) base))
     (message : Message) (signature : SignatureEncoding.Compact)
-    (present : cache (indexInput (SecurityGraphExtraction.publicKey factors) message signature.randomizer) ≠ none)
+    (present : cache (indexInput message signature.randomizer) ≠ none)
     (reuse : SecurityGraphExtraction.IndexReuse factors base responses message signature) :
     Conflict history.indexTrace ∨
       NonceHit (fun m => SecurityGraphFactor.privateTable factors (.randomizer m)) history := by

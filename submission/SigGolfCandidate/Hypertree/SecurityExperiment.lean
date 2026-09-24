@@ -13,17 +13,17 @@ def serialize (signature : Compact) : Option (Bytes signatureBytes) :=
 @[simp] theorem serialize_valid (signature : Compact) (valid : signature.Valid) :
     serialize signature = some (signature.wire valid) := by simp [serialize, show signature.upper.length = 159 from valid]
 
-def signWire (pk : PublicKey) (message : Message) : OracleComp SplitWorld (Option (Bytes signatureBytes)) :=
-  serialize <$> SecurityIdealSign.signCompact pk message
+def signWire (message : Message) : OracleComp SplitWorld (Option (Bytes signatureBytes)) :=
+  serialize <$> SecurityIdealSign.signCompact message
 
-@[simp] theorem simulate_signWire (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    simulateQ (realImplementation secretKey) (signWire pk message) =
-      serialize <$> SecurityReference.signCompact secretKey pk message := by
+@[simp] theorem simulate_signWire (secretKey : SecretKey) (message : Message) :
+    simulateQ (realImplementation secretKey) (signWire message) =
+      serialize <$> SecurityReference.signCompact secretKey message := by
   simp [signWire, SecurityIdealSign.simulate_signCompact]
 
-@[simp] theorem eval_signWire (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    evalWithAnswerFn hash (simulateQ (realImplementation secretKey) (signWire pk message)) =
-      some ((SignatureEncoding.signCompact hash secretKey pk message).wire (signCompact_valid hash secretKey pk message)) := by
+@[simp] theorem eval_signWire (hash : Hash) (secretKey : SecretKey) (message : Message) :
+    evalWithAnswerFn hash (simulateQ (realImplementation secretKey) (signWire message)) =
+      some ((SignatureEncoding.signCompact hash secretKey message).wire (signCompact_valid hash secretKey message)) := by
   simp [simulate_signWire, SecurityReference.eval_signCompact, signCompact_valid]
 
 /-- Keep the accepted forgery and raw organizer transcript for the deterministic
@@ -57,7 +57,7 @@ def interact (adversary : Adversary submission.sizes) (pk : PublicKey) :
           interact adversary pk rounds (resume answer) transcript
       | .sign request resume => do
           if transcript.signingRequests < LIFETIME then
-            let result ← (signWire pk request.message).liftComp GameWorld
+            let result ← (signWire request.message).liftComp GameWorld
             let next : Transcript submission.sizes :=
               { transcript with
                 signed := match result with

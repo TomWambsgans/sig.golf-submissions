@@ -67,7 +67,7 @@ theorem interact_sign (adversary : Adversary submission.sizes) (pk : PublicKey) 
     (action : adversary.step state = .sign request resume)
     (allowed : transcript.signingRequests < LIFETIME) :
     interact adversary pk (rounds + 1) state transcript =
-      ((signWire pk request.message).liftComp GameWorld >>=
+      ((signWire request.message).liftComp GameWorld >>=
         signContinuation adversary pk rounds transcript request resume) := by
   simp only [interact, action, if_pos allowed]
   rfl
@@ -80,10 +80,10 @@ theorem interact_sign_cutoff_enough (adversary : Adversary submission.sizes) (pk
     (action : adversary.step state = .sign request resume)
     (allowed : transcript.signingRequests < LIFETIME) (enough : 117508 ≤ budget) :
     cutoff (interact adversary pk (rounds + 1) state transcript) budget = (do
-      let response ← (signWire pk request.message).liftComp GameWorld
+      let response ← (signWire request.message).liftComp GameWorld
       cutoff (signContinuation adversary pk rounds transcript request resume response) (budget - 117508)) := by
   rw [interact_sign adversary pk rounds state transcript request resume action allowed]
-  exact (SecurityAtomicCounts.signWire pk request.message).bind_enough _ budget enough
+  exact (SecurityAtomicCounts.signWire request.message).bind_enough _ budget enough
 
 /-- Stateful signing-block decomposition under the actual ideal oracle. -/
 theorem interact_sign_run_enough (adversary : Adversary submission.sizes) (pk : PublicKey)
@@ -92,11 +92,11 @@ theorem interact_sign_run_enough (adversary : Adversary submission.sizes) (pk : 
     (cache : SplitCache) (action : adversary.step state = .sign request resume)
     (allowed : transcript.signingRequests < LIFETIME) (enough : 117508 ≤ budget) :
     (simulateQ idealGameOracle (cutoff (interact adversary pk (rounds + 1) state transcript) budget)).run cache =
-      ((simulateQ idealGameOracle ((signWire pk request.message).liftComp GameWorld)).run cache >>= fun first =>
+      ((simulateQ idealGameOracle ((signWire request.message).liftComp GameWorld)).run cache >>= fun first =>
         (simulateQ idealGameOracle (cutoff
           (signContinuation adversary pk rounds transcript request resume first.1) (budget - 117508))).run first.2) := by
   rw [interact_sign adversary pk rounds state transcript request resume action allowed]
-  exact (SecurityAtomicCounts.signWire pk request.message).run_bind_enough idealGameOracle _ cache budget enough
+  exact (SecurityAtomicCounts.signWire request.message).run_bind_enough idealGameOracle _ cache budget enough
 
 /-- Signing at the lifetime limit returns the reference failure result without
 entering the signing block, for every remaining query budget. -/
@@ -119,13 +119,13 @@ theorem interact_sign_atomic_run (adversary : Adversary submission.sizes) (pk : 
       if transcript.signingRequests < LIFETIME then
         if 117508 ≤ budget then
           𝒮[(simulateQ idealGameOracle (do
-            let response ← (signWire pk request.message).liftComp GameWorld
+            let response ← (signWire request.message).liftComp GameWorld
             cutoff (signContinuation adversary pk rounds transcript request resume response) (budget - 117508))).run' cache]
         else 𝒮[(pure (none : Option Result) : ProbComp (Option Result))]
       else 𝒮[(pure (some (⟨false, none, transcript⟩ : Result)) : ProbComp (Option Result))] := by
   by_cases allowed : transcript.signingRequests < LIFETIME
   · rw [if_pos allowed, interact_sign adversary pk rounds state transcript request resume action allowed]
-    exact (SecurityAtomicCounts.signWire pk request.message).ideal_atomic_run _ cache budget
+    exact (SecurityAtomicCounts.signWire request.message).ideal_atomic_run _ cache budget
   · rw [if_neg allowed, interact_sign_lifetime adversary pk rounds budget state transcript request resume action (by omega)]
     simp only [simulateQ_pure, StateT.run'_eq, StateT.run_pure, map_pure]
 

@@ -168,15 +168,15 @@ theorem Compact.ofReference_verify (hash : Hash) (pk : PublicKey) (message : Mes
     simp only [Compact.ofReference, Compact.toReference, List.getElem_cons_zero,
       List.drop_succ_cons, List.drop_zero, Reference.verify, recoverLayers, recover_bottom, List.length_cons]
 
-def signCompact (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) : Compact :=
-  Compact.ofReference (Reference.sign hash secretKey pk message) (sign_layers_length _ _ _ _ _ _)
+def signCompact (hash : Hash) (secretKey : SecretKey) (message : Message) : Compact :=
+  Compact.ofReference (Reference.sign hash secretKey message) (sign_layers_length _ _ _ _ _ _)
 
-theorem signCompact_valid (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    (signCompact hash secretKey pk message).Valid := Compact.ofReference_valid _ _
+theorem signCompact_valid (hash : Hash) (secretKey : SecretKey) (message : Message) :
+    (signCompact hash secretKey message).Valid := Compact.ofReference_valid _ _
 
 /-- The canonical wire-format signature retains the reference scheme's all-oracle correctness. -/
 theorem signCompact_correct (hash : Hash) (secretKey : SecretKey) (message : Message) :
-    Reference.verify hash (Reference.keygen hash secretKey) message (signCompact hash secretKey (Reference.keygen hash secretKey) message).toReference := by
+    Reference.verify hash (Reference.keygen hash secretKey) message (signCompact hash secretKey message).toReference := by
   apply (Compact.ofReference_verify _ _ _ _ _).mpr
   exact Reference.correct hash secretKey message
 

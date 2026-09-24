@@ -74,7 +74,7 @@
 <rect x="776" y="269" width="336" height="129" rx="10" fill="#eaf4fc" stroke="#a9cde8" />
 <text x="798" y="300" font-family="Arial, sans-serif" font-size="19" fill="#234c6c" font-weight="700">One bit per level</text>
 <text x="798" y="329" font-family="Arial, sans-serif" font-size="15" fill="#35546b">The low 160 bits of</text>
-<text x="798" y="352" font-family="Arial, sans-serif" font-size="14" fill="#245f99" font-weight="700">H(5, PK, message, randomizer)</text>
+<text x="798" y="352" font-family="Arial, sans-serif" font-size="14" fill="#245f99" font-weight="700">H(5, zeros, message, randomizer)</text>
 <text x="798" y="377" font-family="Arial, sans-serif" font-size="15" fill="#35546b">choose the left or right leaf.</text>
 <path d="M776 423H1112" stroke="#d2dfeb" />
 <text x="776" y="453" font-family="Arial, sans-serif" font-size="19" fill="#234c6c" font-weight="700">159 upper trees</text>

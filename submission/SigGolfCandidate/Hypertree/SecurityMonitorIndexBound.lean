@@ -36,32 +36,32 @@ theorem aligned_conflict_le {α : Type} (program : SecurityIndexProgram.Program 
 /-- A fixed table, nonce function, and metadata leave fresh H5 draws uniform.
 The probability and expected trace length refer to the same retained execution. -/
 theorem start_bad_le {α : Type} (table : PointTable) (nonces : NonceTable) (metadata : MetadataTable)
-    (pk : PublicKey) (view : View α) (budget : Nat) :
+    (view : View α) (budget : Nat) :
     Pr[fun result => Bad result.value.history |
-      SecurityGraphMonitorProgram.run table ∅ (SecurityMonitorGraphView.start nonces metadata pk view budget)] ≤
-      expectedValue (SecurityGraphMonitorProgram.run table ∅ (SecurityMonitorGraphView.start nonces metadata pk view budget))
+      SecurityGraphMonitorProgram.run table ∅ (SecurityMonitorGraphView.start nonces metadata view budget)] ≤
+      expectedValue (SecurityGraphMonitorProgram.run table ∅ (SecurityMonitorGraphView.start nonces metadata view budget))
         (fun result => (result.value.history.indexTrace.length : ENNReal))/2^128 := by
-  have bound := aligned_conflict_le (SecurityMonitorIndexView.start table nonces metadata pk view budget)
-    (fun result => result.history.indexTrace) (start_aligned table nonces metadata pk view budget)
+  have bound := aligned_conflict_le (SecurityMonitorIndexView.start table nonces metadata view budget)
+    (fun result => result.history.indexTrace) (start_aligned table nonces metadata view budget)
   rw [SecurityMonitorIndexView.observe_start] at bound
   simpa only [SecurityGraphMonitorObserve.observe, probEvent_map, expectedValue_map, Function.comp_def, Bad] using bound
 
 theorem setup_bad_le {α : Type} (nonces : NonceTable) (metadata : MetadataTable)
-    (pk : PublicKey) (view : View α) (budget : Nat) :
+    (view : View α) (budget : Nat) :
     Pr[fun result => Bad result.value.history |
-      SecurityGraphMonitorProgram.experiment (SecurityMonitorGraphView.start nonces metadata pk view budget) ∅] ≤
-      expectedValue (SecurityGraphMonitorProgram.experiment (SecurityMonitorGraphView.start nonces metadata pk view budget) ∅)
+      SecurityGraphMonitorProgram.experiment (SecurityMonitorGraphView.start nonces metadata view budget) ∅] ≤
+      expectedValue (SecurityGraphMonitorProgram.experiment (SecurityMonitorGraphView.start nonces metadata view budget) ∅)
         (fun result => (result.value.history.indexTrace.length : ENNReal))/2^128 := by
   unfold SecurityGraphMonitorProgram.experiment
   simp only [probEvent_bind_eq_expectedValue, expectedValue_bind]
   calc
     _ ≤ expectedValue ($ᵗ PointTable) (fun table =>
       expectedValue (SecurityGraphMonitorProgram.run (complete ∅ table) ∅
-        (SecurityMonitorGraphView.start nonces metadata pk view budget))
+        (SecurityMonitorGraphView.start nonces metadata view budget))
         (fun result => (result.value.history.indexTrace.length : ENNReal))/2^128) := by
       apply expectedValue_mono
       intro table
-      exact start_bad_le _ _ _ _ _ _
+      exact start_bad_le _ _ _ _ _
     _ = _ := by simp only [div_eq_mul_inv, expectedValue_mul_const]
 
 /-- Concrete actual-adversary bound in the common passive distribution. -/
@@ -74,7 +74,7 @@ theorem experiment_bad_le (publicCache : Cache) (adversary : Adversary submissio
   calc
     _ ≤ expectedValue ($ᵗ NonceTable) (fun nonces => expectedValue ($ᵗ MetadataTable) (fun metadata =>
       expectedValue (SecurityGraphMonitorProgram.experiment
-        (SecurityMonitorGraphView.start nonces metadata (truncate (metadata (.node 159 0)))
+        (SecurityMonitorGraphView.start nonces metadata
           (ofInteract adversary (truncate (metadata (.node 159 0))) rounds
             (adversary.initial (truncate (metadata (.node 159 0))) publicCache) {}) budget) ∅)
         (fun result => (result.value.history.indexTrace.length : ENNReal))/2^128)) := by
@@ -82,7 +82,7 @@ theorem experiment_bad_le (publicCache : Cache) (adversary : Adversary submissio
       intro nonces
       apply expectedValue_mono
       intro metadata
-      exact setup_bad_le nonces metadata _ _ budget
+      exact setup_bad_le nonces metadata _ budget
     _ = _ := by simp only [div_eq_mul_inv, expectedValue_mul_const]
 
 #print axioms experiment_bad_le

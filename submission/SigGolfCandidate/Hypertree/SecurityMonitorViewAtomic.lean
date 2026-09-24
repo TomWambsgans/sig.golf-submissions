@@ -81,10 +81,10 @@ noncomputable def execute {α : Type} (privateAnswers : PrivateTable) (labels : 
         let answer ← (publicOracle privateAnswers labels input).run cache
         execute privateAnswers labels (next answer.1) (budget - 1) answer.2
       else pure none
-  | .sign pk message next, budget, cache =>
+  | .sign message next, budget, cache =>
       if 117508 ≤ budget then do
         let answer ← (randomOracle (spec := HashSpec)
-          (SecurityRandomOracle.indexInput pk message (privateAnswers (.randomizer message)))).run cache
+          (SecurityRandomOracle.indexInput message (privateAnswers (.randomizer message)))).run cache
         let response := SecurityExperiment.serialize
           (SecurityGraphSigner.signature privateAnswers labels (privateAnswers (.randomizer message))
             (answer.1.extractLsb' 0 160))
@@ -131,18 +131,18 @@ theorem realize_execute {α : Type} (privateAnswers : PrivateTable) (labels : La
       intro result _
       exact ih result.1 _ _
     next short => exact actual_bind_insufficient _ _ fixed _ _ _ (by omega)
-  | sign pk message next ih =>
+  | sign message next ih =>
     change 𝒮[actual privateAnswers labels
-      ((SecurityExperiment.signWire pk message).liftComp GameWorld >>= fun answer => realize (next answer)) budget cache] = _
+      ((SecurityExperiment.signWire message).liftComp GameWorld >>= fun answer => realize (next answer)) budget cache] = _
     unfold execute
     split
     next enough =>
-      rw [actual_bind_enough _ _ (SecurityAtomicCounts.signWire pk message) _ _ _ enough,
+      rw [actual_bind_enough _ _ (SecurityAtomicCounts.signWire message) _ _ _ enough,
         routing, routed_signWire_run, bind_map_left]
       apply evalSPMF_bind_congr
       intro result _
       exact ih _ _ _
-    next short => exact actual_bind_insufficient _ _ (SecurityAtomicCounts.signWire pk message) _ _ _ (by omega)
+    next short => exact actual_bind_insufficient _ _ (SecurityAtomicCounts.signWire message) _ _ _ (by omega)
   | coin n next ih =>
     have fixed : FixedCost (liftM (GameWorld.query (.inl n))) 0 := by
       simpa only [bind_pure, charge, Nat.add_zero] using

@@ -42,20 +42,20 @@ theorem parsed_indices (history : History) (query : Query) (parsed : Option (Mes
 
 attribute [local irreducible] recordParsed
 
-theorem public_indices (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    (recordPublic pk history query cached answer).signedIndices = history.signedIndices :=
-  parsed_indices history query (SecurityIndexQuery.parse pk query)
+theorem public_indices (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    (recordPublic history query cached answer).signedIndices = history.signedIndices :=
+  parsed_indices history query (SecurityIndexQuery.parse query)
     (decide (SecuritySeparation.SecretKeyEligible query)) cached answer
 
 /-- The concrete public step preserves everything required to execute future
 honest signing macros, including the public endpoint disclosures. -/
-theorem public_ready (factors : Factors) (pk : PublicKey) (history : History)
+theorem public_ready (factors : Factors) (history : History)
     (exposed : QueryCache PointSpec) (cache : QueryCache HashSpec) (initial : Ready factors history exposed cache)
     (query : Query) (result : Answer)
     (member : some result ∈ support (stopped factors.1 exposed
       (SecurityGraphMonitorOracle.publicStep factors.2.2 exposed cache query
         (fun answer opened residual => .done (answer, opened, residual))))) :
-    Ready factors (recordPublic pk history query (cache query).isSome result.1) result.2.1 result.2.2 := by
+    Ready factors (recordPublic history query (cache query).isSome result.1) result.2.1 result.2.2 := by
   have safe := public_read_safe factors history.signedIndices exposed cache initial.1 query result member
   have spec := read_spec factors history.signedIndices exposed cache initial.1 query result member
   refine ⟨?_, ?_⟩
@@ -80,15 +80,15 @@ theorem needed_authorized (factors : Factors) (history : History) (exposed : Que
 The raw H5 answer, and therefore the exact signed index, are retained. -/
 theorem sign_ready (factors : Factors) (history : History) (exposed : QueryCache PointSpec)
     (cache : QueryCache HashSpec) (initial : Ready factors history exposed cache)
-    (pk : PublicKey) (message : Message) (answer : BitVec 256) (residual : QueryCache HashSpec)
+    (message : Message) (answer : BitVec 256) (residual : QueryCache HashSpec)
     (member : (answer, residual) ∈ support ((randomOracle (spec := HashSpec)
-      (SecurityRandomOracle.indexInput pk message (factors.2.1 message))).run cache)) :
+      (SecurityRandomOracle.indexInput message (factors.2.1 message))).run cache)) :
     Ready factors (recordSign history message
-      (cache (SecurityRandomOracle.indexInput pk message (factors.2.1 message))).isSome answer)
+      (cache (SecurityRandomOracle.indexInput message (factors.2.1 message))).isSome answer)
       (revealCache factors.1 (needed factors.2.2 exposed (answer.extractLsb' 0 160)) exposed) residual := by
   have safeResidual : ResidualSafe factors residual := by
-    let query := SecurityRandomOracle.indexInput pk message (factors.2.1 message)
-    have outside := SecurityIndexQuery.locate_index pk message (factors.2.1 message)
+    let query := SecurityRandomOracle.indexInput message (factors.2.1 message)
+    have outside := SecurityIndexQuery.locate_index message (factors.2.1 message)
     change (answer, residual) ∈ support ((randomOracle (spec := HashSpec) query).run cache) at member
     cases present : cache query with
     | some value =>

@@ -22,7 +22,7 @@ theorem completion_agrees (cache : QueryCache HashSpec) : cache.AgreesWithFn (co
     (honest : HonestHistory factors base responses) :
     ∀ entry ∈ responses, entry.2 = evalWithAnswerFn
       (answers (privateTable factors) (programmed (privateTable factors) (labels factors) base))
-      (SecurityIdealSign.signCompact (publicKey factors) entry.1) := by
+      (SecurityIdealSign.signCompact entry.1) := by
   intro entry member
   rw [eval_signCompact, honest entry member, index_residual]
 
@@ -34,7 +34,7 @@ theorem check_reuse (factors : Factors) (transcript : Transcript submission.size
     (ready : Ready factors history exposed cache) (coherent : Coherent factors cache history transcript)
     (result : SecurityMonitorGraphView.Result SecurityExperiment.Result)
     (outcome : SecurityExperiment.Result) (output : result.value = some outcome) (won : outcome.won = true)
-    (member : some result ∈ support (execute factors (publicKey factors)
+    (member : some result ∈ support (execute factors
       (ofCheck (publicKey factors) transcript forgery) remaining exposed cache history))
     (base : Hash) (agree : result.residual.AgreesWithFn base) :
     IndexReuse factors base (responses transcript) (candidate forgery).1 (candidate forgery).2 ∧
@@ -45,7 +45,7 @@ theorem check_reuse (factors : Factors) (transcript : Transcript submission.size
           (SecurityVerify.verifyCompact (publicKey factors) (candidate forgery).1 (candidate forgery).2) exposed cache)) := by
   rw [ofCheck_eq] at member
   obtain ⟨accepted, resultEq, raw, messages, indices⟩ := SecurityMonitorVerifyBudget.completed
-    factors (publicKey factors) _ _ remaining exposed cache history ready result member
+    factors _ _ remaining exposed cache history ready result member
     (by rw [output]; exact Option.some_ne_none _)
   have outcomeEq := Option.some.inj (output.symm.trans resultEq)
   have win : (accepted && fresh transcript forgery) = true := by simpa only [outcomeEq] using won

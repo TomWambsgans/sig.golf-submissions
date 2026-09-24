@@ -12,7 +12,7 @@ charged its already-proved 117508 calls by every monitor interpretation. -/
 inductive View (α : Type) where
   | done (value : α)
   | hash (query : Query) (next : BitVec 256 → View α)
-  | sign (pk : PublicKey) (message : Message) (next : Option (Bytes signatureBytes) → View α)
+  | sign (message : Message) (next : Option (Bytes signatureBytes) → View α)
   | coin (n : Nat) (next : Fin (n + 1) → View α)
 
 def realize {α : Type} : View α → OracleComp GameWorld α
@@ -20,8 +20,8 @@ def realize {α : Type} : View α → OracleComp GameWorld α
   | .hash input next => do
       let answer ← liftM (GameWorld.query (.inr (.inr input)))
       realize (next answer)
-  | .sign pk message next => do
-      let answer ← (signWire pk message).liftComp GameWorld
+  | .sign message next => do
+      let answer ← (signWire message).liftComp GameWorld
       realize (next answer)
   | .coin n next => do
       let answer ← liftM (GameWorld.query (.inl n))
@@ -80,7 +80,7 @@ def ofInteract (adversary : Adversary submission.sizes) (pk : PublicKey) :
       | .hash input resume => .hash input (fun answer => ofInteract adversary pk rounds (resume answer) transcript)
       | .sign request resume =>
           if transcript.signingRequests < LIFETIME then
-            .sign pk request.message (fun result =>
+            .sign request.message (fun result =>
               let next : Transcript submission.sizes :=
                 { transcript with
                   signed := match result with
@@ -110,7 +110,7 @@ theorem realize_ofInteract (adversary : Adversary submission.sizes) (pk : Public
       dsimp only
       by_cases allowed : transcript.signingRequests < LIFETIME
       · rw [if_pos allowed, if_pos allowed]
-        change ((signWire pk request.message).liftComp GameWorld >>= _) = _
+        change ((signWire request.message).liftComp GameWorld >>= _) = _
         exact bind_congr (fun result => ih (resume result) _)
       · rw [if_neg allowed, if_neg allowed]
         rfl

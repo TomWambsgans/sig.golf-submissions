@@ -136,8 +136,9 @@ theorem roots_after_succ (hash : Hash) (secretKey : SecretKey) (count level inde
 def randomizer (hash : Hash) (secretKey : SecretKey) (message : Message) : Bytes 32 :=
   query hash 6 0 0 0 0 0 (bytes secretKey ++ bytes message)
 
-def indexOf (hash : Hash) (pk : PublicKey) (message : Message) (r : Bytes 32) : BitVec 160 :=
-  (query hash 5 0 0 0 0 0 (bytes pk ++ bytes message ++ bytes r)).extractLsb' 0 160
+/-- Signing never receives the public key, so the index input keeps a 16-byte zero slot before the message. -/
+def indexOf (hash : Hash) (message : Message) (r : Bytes 32) : BitVec 160 :=
+  (query hash 5 0 0 0 0 0 (bytes (0 : Bytes 16) ++ bytes message ++ bytes r)).extractLsb' 0 160
 
 def keygen (hash : Hash) (secretKey : SecretKey) : PublicKey := treeRoot hash secretKey 159 0
 
@@ -145,13 +146,13 @@ structure Signature where
   randomizer : Bytes 32
   layers : List LayerSignature
 
-def sign (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) : Signature :=
+def sign (hash : Hash) (secretKey : SecretKey) (message : Message) : Signature :=
   let r := randomizer hash secretKey message
-  ⟨r, signLayers hash secretKey 160 0 (indexOf hash pk message r).toNat 0⟩
+  ⟨r, signLayers hash secretKey 160 0 (indexOf hash message r).toNat 0⟩
 
 def verify (hash : Hash) (pk : PublicKey) (message : Message) (signature : Signature) : Prop :=
   signature.layers.length = 160 ∧
-    recoverLayers hash 0 (indexOf hash pk message signature.randomizer).toNat 0 signature.layers = pk
+    recoverLayers hash 0 (indexOf hash message signature.randomizer).toNat 0 signature.layers = pk
 
 theorem sign_layers_length (hash : Hash) (secretKey : SecretKey) (count level index : Nat) (message : Digest) :
     (signLayers hash secretKey count level index message).length = count := by
@@ -161,13 +162,13 @@ theorem sign_layers_length (hash : Hash) (secretKey : SecretKey) (count level in
 
 /-- Functional correctness for every secret key, message, and fixed oracle. No probabilistic or collision-resistance assumption is used. This does not yet establish bytecode refinement. -/
 theorem correct (hash : Hash) (secretKey : SecretKey) (message : Message) :
-    verify hash (keygen hash secretKey) message (sign hash secretKey (keygen hash secretKey) message) := by
+    verify hash (keygen hash secretKey) message (sign hash secretKey message) := by
   constructor
   · exact sign_layers_length _ _ _ _ _ _
-  · change recoverLayers hash 0 (indexOf hash (keygen hash secretKey) message (randomizer hash secretKey message)).toNat 0
-      (signLayers hash secretKey 160 0 (indexOf hash (keygen hash secretKey) message (randomizer hash secretKey message)).toNat 0) = _
+  · change recoverLayers hash 0 (indexOf hash message (randomizer hash secretKey message)).toNat 0
+      (signLayers hash secretKey 160 0 (indexOf hash message (randomizer hash secretKey message)).toNat 0) = _
     rw [recover_sign_layers, roots_after_succ hash secretKey 159 0]
-    have hidx := (indexOf hash (keygen hash secretKey) message (randomizer hash secretKey message)).isLt
+    have hidx := (indexOf hash message (randomizer hash secretKey message)).isLt
     simp only [Nat.zero_add, Nat.div_eq_of_lt hidx]
     rfl
 

@@ -86,9 +86,9 @@ def SignResult := SignatureEncoding.Compact × QueryCache PointSpec × QueryCach
 
 /-- Honest signing reveals exactly its needed canonical points after one H5 call. -/
 noncomputable def sign (nonces : NonceTable) (metadata : MetadataTable) (exposed : QueryCache PointSpec)
-    (cache : QueryCache HashSpec) (pk : PublicKey) (message : Message) : Program SignResult :=
+    (cache : QueryCache HashSpec) (message : Message) : Program SignResult :=
   let r := nonces message
-  indexStep cache (SecurityRandomOracle.indexInput pk message r) (fun answer residual =>
+  indexStep cache (SecurityRandomOracle.indexInput message r) (fun answer residual =>
     let index := answer.extractLsb' 0 160
     SecurityGraphMonitorOracle.disclose (needed metadata exposed index) exposed (fun opened =>
       .done (signature (privateTable (viewFactors opened metadata)) (labels (viewFactors opened metadata)) r index,
@@ -96,12 +96,12 @@ noncomputable def sign (nonces : NonceTable) (metadata : MetadataTable) (exposed
 
 theorem run_sign (table : PointTable) (nonces : NonceTable) (metadata : MetadataTable)
     (exposed : QueryCache PointSpec) (ready : PublicReady table exposed)
-    (cache : QueryCache HashSpec) (pk : PublicKey) (message : Message) :
-    run table exposed (sign nonces metadata exposed cache pk message) =
+    (cache : QueryCache HashSpec) (message : Message) :
+    run table exposed (sign nonces metadata exposed cache message) =
       (fun result => (⟨(signature (privateTable (table,(nonces,metadata))) (labels (table,(nonces,metadata)))
         (nonces message) (result.1.extractLsb' 0 160),
           revealCache table (needed metadata exposed (result.1.extractLsb' 0 160)) exposed,result.2),false,0⟩ : Outcome SignResult)) <$>
-        (randomOracle (spec := HashSpec) (SecurityRandomOracle.indexInput pk message (nonces message))).run cache := by
+        (randomOracle (spec := HashSpec) (SecurityRandomOracle.indexInput message (nonces message))).run cache := by
   simp only [sign, run_indexStep, run_disclose, run, opened_signature table nonces metadata exposed ready,
     ← map_eq_pure_bind]
 

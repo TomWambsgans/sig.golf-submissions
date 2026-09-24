@@ -191,15 +191,15 @@ theorem eval_signUpper (hash : Hash) (secretKey : SecretKey) (count level index 
     rw [ih _ _ _ (by omega)]
 
 /-- Actual compact signing. Bottom values absent from the wire are never queried. -/
-def signCompact (secretKey : SecretKey) (pk : PublicKey) (message : Message) : OracleComp HashSpec Compact := do
-  let ri ← SecurityRandomOracle.randomizedIndex secretKey pk message
+def signCompact (secretKey : SecretKey) (message : Message) : OracleComp HashSpec Compact := do
+  let ri ← SecurityRandomOracle.randomizedIndex secretKey message
   let bottom ← signLayerWithRoot secretKey 0 (ri.2.toNat / 2) (ri.2.toNat % 2 == 1) 0
   let upper ← signUpper secretKey 159 1 (ri.2.toNat / 2) bottom.2
   return ⟨ri.1, bottom.1.values 0, bottom.1.sibling, upper⟩
 
-@[simp] theorem eval_signCompact (hash : Hash) (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    evalWithAnswerFn hash (signCompact secretKey pk message) =
-      SignatureEncoding.signCompact hash secretKey pk message := by
+@[simp] theorem eval_signCompact (hash : Hash) (secretKey : SecretKey) (message : Message) :
+    evalWithAnswerFn hash (signCompact secretKey message) =
+      SignatureEncoding.signCompact hash secretKey message := by
   simp only [signCompact, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
     SecurityRandomOracle.eval_randomizedIndex, eval_signLayerWithRoot,
     eval_signUpper hash secretKey 159 1 _ _ (by decide), canonicalLayer, ↓reduceIte,

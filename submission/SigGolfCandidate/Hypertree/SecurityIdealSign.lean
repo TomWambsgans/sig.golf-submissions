@@ -14,15 +14,15 @@ def randomizer (message : Message) : OracleComp SplitWorld (Bytes 32) :=
   simp only [randomizer, realImplementation, QueryImpl.simulateQ_add_liftM_query_left]
   rfl
 
-def randomizedIndex (pk : PublicKey) (message : Message) :
+def randomizedIndex (message : Message) :
     OracleComp SplitWorld (Bytes 32 × BitVec 160) := do
   let r ← randomizer message
-  let answer ← publicCall (liftM (HashSpec.query (SecurityRandomOracle.indexInput pk message r)))
+  let answer ← publicCall (liftM (HashSpec.query (SecurityRandomOracle.indexInput message r)))
   return (r, answer.extractLsb' 0 160)
 
-@[simp] theorem simulate_randomizedIndex (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    simulateQ (realImplementation secretKey) (randomizedIndex pk message) =
-      SecurityRandomOracle.randomizedIndex secretKey pk message := by
+@[simp] theorem simulate_randomizedIndex (secretKey : SecretKey) (message : Message) :
+    simulateQ (realImplementation secretKey) (randomizedIndex message) =
+      SecurityRandomOracle.randomizedIndex secretKey message := by
   simp [randomizedIndex, SecurityRandomOracle.randomizedIndex]
 
 def signChain (address : ChainAddress) (message : Digest) :
@@ -94,8 +94,8 @@ private theorem index_bound (index : BitVec 160) : index.toNat / 2 < 2 ^ 192 := 
   exact lt_of_le_of_lt (Nat.div_le_self ..) (lt_of_lt_of_le h hpow)
 
 /-- SecretKeyless signing program using independent private derivation slots. -/
-def signCompact (pk : PublicKey) (message : Message) : OracleComp SplitWorld Compact := do
-  let ri ← randomizedIndex pk message
+def signCompact (message : Message) : OracleComp SplitWorld Compact := do
+  let ri ← randomizedIndex message
   let bottom ← signLayerWithRoot ⟨0, by decide⟩ (BitVec.ofNat 192 (ri.2.toNat / 2))
     (ri.2.toNat % 2 == 1) 0
   let upper ← signUpper 159 1 (ri.2.toNat / 2) (by decide) (index_bound ri.2) bottom.2
@@ -103,9 +103,9 @@ def signCompact (pk : PublicKey) (message : Message) : OracleComp SplitWorld Com
 
 /-- Exact equality of oracle computations, including repeated queries and their
 order, connects full signing to the real/ideal cache separation theorem. -/
-theorem simulate_signCompact (secretKey : SecretKey) (pk : PublicKey) (message : Message) :
-    simulateQ (realImplementation secretKey) (signCompact pk message) =
-      SecurityReference.signCompact secretKey pk message := by
+theorem simulate_signCompact (secretKey : SecretKey) (message : Message) :
+    simulateQ (realImplementation secretKey) (signCompact message) =
+      SecurityReference.signCompact secretKey message := by
   simp only [signCompact, SecurityReference.signCompact, simulateQ_bind, simulateQ_pure,
     simulate_randomizedIndex, simulate_signLayerWithRoot, simulate_signUpper,
     BitVec.toNat_ofNat, Nat.mod_eq_of_lt (index_bound _)]
@@ -121,8 +121,8 @@ theorem eval_signUpper_length (answers : QueryImpl SplitWorld Id) (count level i
     simp only [signUpper, evalWithAnswerFn_bind, evalWithAnswerFn_pure, List.length_cons, ih]
 
 /-- Every fixed independent-oracle interpretation produces a valid compact object. -/
-theorem eval_signCompact_valid (answers : QueryImpl SplitWorld Id) (pk : PublicKey) (message : Message) :
-    (evalWithAnswerFn answers (signCompact pk message)).Valid := by
+theorem eval_signCompact_valid (answers : QueryImpl SplitWorld Id) (message : Message) :
+    (evalWithAnswerFn answers (signCompact message)).Valid := by
   simp only [signCompact, evalWithAnswerFn_bind, evalWithAnswerFn_pure, Compact.Valid,
     eval_signUpper_length]
 

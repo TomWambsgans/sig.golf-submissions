@@ -6,12 +6,12 @@ open SigGolf OracleComp OracleSpec Reference SecurityRandomOracle SecurityGraph 
 open scoped Classical
 set_option backward.isDefEq.respectTransparency false
 
-/-- Parse only exact index inputs for the original public key. Malformed inputs return none. -/
-noncomputable def parse (pk : PublicKey) (query : Query) : Option (Message × Bytes 32) :=
-  if found : ∃ pair : Message × Bytes 32, indexInput pk pair.1 pair.2 = query then some found.choose else none
+/-- Parse only exact index inputs. Malformed inputs return none. -/
+noncomputable def parse (query : Query) : Option (Message × Bytes 32) :=
+  if found : ∃ pair : Message × Bytes 32, indexInput pair.1 pair.2 = query then some found.choose else none
 
-theorem parse_some_iff (pk : PublicKey) (query : Query) (pair : Message × Bytes 32) :
-    parse pk query = some pair ↔ indexInput pk pair.1 pair.2 = query := by
+theorem parse_some_iff (query : Query) (pair : Message × Bytes 32) :
+    parse query = some pair ↔ indexInput pair.1 pair.2 = query := by
   unfold parse
   split
   next found =>
@@ -19,18 +19,18 @@ theorem parse_some_iff (pk : PublicKey) (query : Query) (pair : Message × Bytes
     · intro same
       exact (Option.some.inj same) ▸ found.choose_spec
     · intro same
-      exact congrArg some (SecurityForgery.indexInput_pair_injective pk (found.choose_spec.trans same.symm))
+      exact congrArg some (SecurityForgery.indexInput_pair_injective (found.choose_spec.trans same.symm))
   next absent =>
     constructor
     · intro impossible; cases impossible
     · intro same; exact False.elim (absent ⟨pair,same⟩)
 
-@[simp] theorem parse_index (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    parse pk (indexInput pk message r) = some (message,r) :=
-  (parse_some_iff pk _ _).2 rfl
+@[simp] theorem parse_index (message : Message) (r : Bytes 32) :
+    parse (indexInput message r) = some (message,r) :=
+  (parse_some_iff _ _).2 rfl
 
-theorem parse_none_iff (pk : PublicKey) (query : Query) :
-    parse pk query = none ↔ ∀ message r, indexInput pk message r ≠ query := by
+theorem parse_none_iff (query : Query) :
+    parse query = none ↔ ∀ message r, indexInput message r ≠ query := by
   simp only [parse]
   split
   next found =>
@@ -42,8 +42,8 @@ theorem parse_none_iff (pk : PublicKey) (query : Query) :
     intro message r same
     exact absent ⟨(message,r),same⟩
 
-theorem locate_index (pk : PublicKey) (message : Message) (r : Bytes 32) :
-    locate (indexInput pk message r) = none := by
+theorem locate_index (message : Message) (r : Bytes 32) :
+    locate (indexInput message r) = none := by
   unfold locate
   split
   next found =>
@@ -55,30 +55,30 @@ theorem locate_index (pk : PublicKey) (message : Message) (r : Bytes 32) :
     exact False.elim (impossible found.choose tag)
   next absent => rfl
 
-theorem parse_graph (pk : PublicKey) (position : Position) (payload : List Byte) :
-    parse pk (position.address.input payload) = none := by
+theorem parse_graph (position : Position) (payload : List Byte) :
+    parse (position.address.input payload) = none := by
   rw [parse_none_iff]
   intro message r same
   have located := congrArg locate same
   rw [locate_index, locate_address] at located
   cases located
 
-theorem parsed_not_secretKeyEligible (pk : PublicKey) (query : Query) (pair : Message × Bytes 32)
-    (parsed : parse pk query = some pair) : ¬SecuritySeparation.SecretKeyEligible query := by
-  rw [← (parse_some_iff pk query pair).1 parsed]
+theorem parsed_not_secretKeyEligible (query : Query) (pair : Message × Bytes 32)
+    (parsed : parse query = some pair) : ¬SecuritySeparation.SecretKeyEligible query := by
+  rw [← (parse_some_iff query pair).1 parsed]
   exact SecurityDomains.not_secretKeyEligible_addressedInput 5 0 0 0 0 0 _ (by decide) (by decide)
 
-noncomputable def parsedInputs (pk : PublicKey) (inputs : List Query) : List (Message × Bytes 32) :=
-  inputs.filterMap (parse pk)
+noncomputable def parsedInputs (inputs : List Query) : List (Message × Bytes 32) :=
+  inputs.filterMap parse
 
-theorem mem_parsedInputs (pk : PublicKey) (inputs : List Query) (message : Message) (r : Bytes 32) :
-    (message,r) ∈ parsedInputs pk inputs ↔ indexInput pk message r ∈ inputs := by
+theorem mem_parsedInputs (inputs : List Query) (message : Message) (r : Bytes 32) :
+    (message,r) ∈ parsedInputs inputs ↔ indexInput message r ∈ inputs := by
   simp only [parsedInputs, List.mem_filterMap, parse_some_iff]
   constructor
   · rintro ⟨query,member,same⟩
     exact same ▸ member
   · intro member
-    exact ⟨indexInput pk message r,member,rfl⟩
+    exact ⟨indexInput message r,member,rfl⟩
 
 /-- Every populated residual cell has an earlier recorded public query. -/
 def Covered (cache : QueryCache HashSpec) (inputs : List Query) : Prop :=
@@ -99,10 +99,10 @@ theorem Covered.cacheQuery {cache : QueryCache HashSpec} {inputs : List Query}
     simpa only [QueryCache.cacheQuery_of_ne _ _ same] using present
 
 /-- A cached first-signing index input necessarily appeared earlier with that exact nonce. -/
-theorem cached_nonce_was_queried (pk : PublicKey) (cache : QueryCache HashSpec) (inputs : List Query)
+theorem cached_nonce_was_queried (cache : QueryCache HashSpec) (inputs : List Query)
     (covered : Covered cache inputs) (message : Message) (r : Bytes 32)
-    (cached : cache (indexInput pk message r) ≠ none) : (message,r) ∈ parsedInputs pk inputs :=
-  (mem_parsedInputs pk inputs message r).2 (covered _ cached)
+    (cached : cache (indexInput message r) ≠ none) : (message,r) ∈ parsedInputs inputs :=
+  (mem_parsedInputs inputs message r).2 (covered _ cached)
 
 /-- info: 'SigGolfCandidate.Hypertree.SecurityIndexQuery.cached_nonce_was_queried' depends on axioms: [propext,
  Classical.choice,

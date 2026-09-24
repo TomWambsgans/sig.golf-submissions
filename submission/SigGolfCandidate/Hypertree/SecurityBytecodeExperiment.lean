@@ -38,7 +38,7 @@ theorem secretKeyed_equivalent_generic (left right : Interface) (adversary : Adv
     (keyKnown : ∀ result ∈ support (runHash (right.keygen secretKey) ∅),
       ∀ pk cache, result.1.1=some (pk,cache) → Knows result.2 (fact pk))
     (signEq : ∀ pk hash, fact pk hash → ∀ request,
-      evalWithAnswerFn hash (left.sign secretKey pk request)=evalWithAnswerFn hash (right.sign secretKey pk request))
+      evalWithAnswerFn hash (left.sign secretKey request)=evalWithAnswerFn hash (right.sign secretKey request))
     (checkEq : ∀ pk hash transcript candidate,
       evalWithAnswerFn hash (left.check pk transcript candidate)=evalWithAnswerFn hash (right.check pk transcript candidate)) :
     𝒮[observe (secretKeyedWith left adversary rounds secretKey) ∅]=𝒮[observe (secretKeyedWith right adversary rounds secretKey) ∅] := by
@@ -73,7 +73,7 @@ theorem secretKeyed_equivalent (adversary : Adversary submission.sizes) (rounds 
     simp only [referenceInterface,referenceKeygen,evalWithAnswerFn_bind,evalWithAnswerFn_pure,
       eval_countHash,SecurityReference.eval_keygen,value,Option.map_some] at publicEq
     exact Option.some.inj publicEq
-  · intro pk hash valid request; exact sign_equivalent hash secretKey pk request valid
+  · intro _ hash _ request; exact sign_equivalent hash secretKey request
   · intro pk hash transcript candidate; exact check_equivalent hash pk transcript candidate
 
 /-- Exact shared-random-oracle security distribution. This includes private coins,

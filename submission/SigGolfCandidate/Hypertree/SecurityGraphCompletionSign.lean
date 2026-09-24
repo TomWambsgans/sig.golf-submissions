@@ -68,11 +68,11 @@ theorem nonce_private (privateAnswers : PrivateTable) (graph : Labels) (base : H
 /-- The deterministic completion reproduces the actual graph signature for every
 private table; its dummy secret key is merely a proof device, never sampled or guessed. -/
 theorem signCompact_graph (privateAnswers : PrivateTable) (graph : Labels) (base : Hash)
-    (pk : PublicKey) (message : Message) :
-    signCompact (hash privateAnswers graph base) 0 pk message =
+    (message : Message) :
+    signCompact (hash privateAnswers graph base) 0 message =
       signature privateAnswers graph (privateAnswers (.randomizer message))
-        (indexOf (programmed privateAnswers graph base) pk message (privateAnswers (.randomizer message))) := by
-  let index := indexOf (programmed privateAnswers graph base) pk message (privateAnswers (.randomizer message))
+        (indexOf (programmed privateAnswers graph base) message (privateAnswers (.randomizer message))) := by
+  let index := indexOf (programmed privateAnswers graph base) message (privateAnswers (.randomizer message))
   have bound : index.toNat / 2 < 2 ^ 192 := lt_of_le_of_lt (Nat.div_le_self ..)
     (lt_of_lt_of_le index.isLt (Nat.pow_le_pow_right (by decide) (by decide)))
   have source := secret_point privateAnswers graph base
@@ -83,15 +83,15 @@ theorem signCompact_graph (privateAnswers : PrivateTable) (graph : Labels) (base
   simp only [Fin.val_zero, BitVec.toNat_ofNat, Nat.mod_eq_of_lt bound] at source sibling root
   change (⟨randomizer (hash privateAnswers graph base) 0 message,
     secret (hash privateAnswers graph base) 0 0
-      ((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
-      ((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat % 2 == 1) 0,
+      ((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
+      ((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat % 2 == 1) 0,
     leafRoot (hash privateAnswers graph base) 0 0
-      ((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
-      (!((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat % 2 == 1)),
+      ((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
+      (!((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat % 2 == 1)),
     signLayers (hash privateAnswers graph base) 0 159 1
-      ((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
+      ((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2)
       (treeRoot (hash privateAnswers graph base) 0 0
-        ((indexOf (hash privateAnswers graph base) pk message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2))⟩ : Compact) = _
+        ((indexOf (hash privateAnswers graph base) message (randomizer (hash privateAnswers graph base) 0 message)).toNat / 2))⟩ : Compact) = _
   simp only [nonce_private, index_public]
   change (⟨_, secret (hash privateAnswers graph base) 0 0 (index.toNat / 2) (index.toNat % 2 == 1) 0,
     leafRoot (hash privateAnswers graph base) 0 0 (index.toNat / 2) (!(index.toNat % 2 == 1)),

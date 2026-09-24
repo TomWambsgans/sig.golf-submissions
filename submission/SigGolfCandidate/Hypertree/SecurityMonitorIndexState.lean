@@ -31,9 +31,9 @@ noncomputable def recordParsed (history : History) (query : Query) (parsed : Opt
       counts := {history.counts with secretKey := history.counts.secretKey+1} }
     else {history with counts := {history.counts with graph := history.counts.graph+1}}
 
-noncomputable def recordPublic (pk : PublicKey) (history : History) (query : Query)
+noncomputable def recordPublic (history : History) (query : Query)
     (cached : Bool) (answer : BitVec 256) : History :=
-  recordParsed history query (parse pk query) (decide (SecretKeyEligible query)) cached answer
+  recordParsed history query (parse query) (decide (SecretKeyEligible query)) cached answer
 
 /-- Honest signing uses one H5 call; its other 117507 calls are charged too. -/
 noncomputable def recordSign (history : History) (message : Message) (cached : Bool) (answer : BitVec 256) : History :=
@@ -54,9 +54,9 @@ theorem parsed_total (history : History) (query : Query) (parsed : Option (Messa
   | none => cases secretKeyEligible <;> simp only [recordParsed, Bool.false_eq_true, if_false, if_true, Counts.total] <;> omega
   | some pair => rcases pair with ⟨message, nonce⟩; simp only [recordParsed, Counts.total]; omega
 
-theorem public_total (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    (recordPublic pk history query cached answer).counts.total = history.counts.total+1 :=
-  parsed_total history query (parse pk query) (decide (SecretKeyEligible query)) cached answer
+theorem public_total (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    (recordPublic history query cached answer).counts.total = history.counts.total+1 :=
+  parsed_total history query (parse query) (decide (SecretKeyEligible query)) cached answer
 
 theorem sign_total (history : History) (message : Message) (cached : Bool) (answer : BitVec 256) :
     (recordSign history message cached answer).counts.total = history.counts.total+117508 := by
@@ -74,9 +74,9 @@ theorem parsed_messages (history : History) (query : Query) (parsed : Option (Me
   | none => cases secretKeyEligible <;> rfl
   | some pair => cases pair; rfl
 
-@[simp] theorem public_messages (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    (recordPublic pk history query cached answer).signedMessages = history.signedMessages :=
-  parsed_messages history query (parse pk query) (decide (SecretKeyEligible query)) cached answer
+@[simp] theorem public_messages (history : History) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    (recordPublic history query cached answer).signedMessages = history.signedMessages :=
+  parsed_messages history query (parse query) (decide (SecretKeyEligible query)) cached answer
 
 theorem parsed_guesses_preserved (history : History) (query : Query) (parsed : Option (Message × Bytes 32))
     (secretKeyEligible cached : Bool) (answer : BitVec 256)
@@ -91,38 +91,38 @@ theorem parsed_guesses_preserved (history : History) (query : Query) (parsed : O
     · exact member
     · exact List.mem_cons_of_mem _ member
 
-theorem public_guesses_preserved (pk : PublicKey) (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
+theorem public_guesses_preserved (history : History) (query : Query) (cached : Bool) (answer : BitVec 256)
     (pair : Message × Bytes 32) (member : pair ∈ history.nonceGuesses) :
-    pair ∈ (recordPublic pk history query cached answer).nonceGuesses :=
-  parsed_guesses_preserved history query (parse pk query) (decide (SecretKeyEligible query)) cached answer pair member
+    pair ∈ (recordPublic history query cached answer).nonceGuesses :=
+  parsed_guesses_preserved history query (parse query) (decide (SecretKeyEligible query)) cached answer pair member
 
 /-- Every cached H5 input for an unsigned message is already a logged nonce guess. -/
-def NonceCovered (pk : PublicKey) (cache : QueryCache HashSpec) (history : History) : Prop :=
-  ∀ message r, cache (indexInput pk message r) ≠ none →
+def NonceCovered (cache : QueryCache HashSpec) (history : History) : Prop :=
+  ∀ message r, cache (indexInput message r) ≠ none →
     message ∈ history.signedMessages ∨ (message,r) ∈ history.nonceGuesses
 
-@[simp] theorem nonceCovered_empty (pk : PublicKey) : NonceCovered pk ∅ {} := by
+@[simp] theorem nonceCovered_empty : NonceCovered ∅ {} := by
   intro message r present
   exact False.elim (present rfl)
 
-theorem NonceCovered.public_preserved {pk : PublicKey} {cache : QueryCache HashSpec} {history : History}
-    (covered : NonceCovered pk cache history) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    NonceCovered pk cache (recordPublic pk history query cached answer) := by
+theorem NonceCovered.public_preserved {cache : QueryCache HashSpec} {history : History}
+    (covered : NonceCovered cache history) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    NonceCovered cache (recordPublic history query cached answer) := by
   intro message r present
   rcases covered message r present with known | guessed
   · exact Or.inl (by simpa only [public_messages] using known)
-  · exact Or.inr (public_guesses_preserved pk history query cached answer _ guessed)
+  · exact Or.inr (public_guesses_preserved history query cached answer _ guessed)
 
-theorem NonceCovered.public_fill {pk : PublicKey} {cache : QueryCache HashSpec} {history : History}
-    (covered : NonceCovered pk cache history) (query : Query) (cached : Bool) (answer : BitVec 256) :
-    NonceCovered pk (cache.cacheQuery query answer) (recordPublic pk history query cached answer) := by
+theorem NonceCovered.public_fill {cache : QueryCache HashSpec} {history : History}
+    (covered : NonceCovered cache history) (query : Query) (cached : Bool) (answer : BitVec 256) :
+    NonceCovered (cache.cacheQuery query answer) (recordPublic history query cached answer) := by
   intro message r present
-  by_cases same : indexInput pk message r = query
+  by_cases same : indexInput message r = query
   · subst query
     rw [public_messages]
     change message ∈ history.signedMessages ∨ (message,r) ∈
-      (recordParsed history (indexInput pk message r) (parse pk (indexInput pk message r))
-        (decide (SecretKeyEligible (indexInput pk message r))) cached answer).nonceGuesses
+      (recordParsed history (indexInput message r) (parse (indexInput message r))
+        (decide (SecretKeyEligible (indexInput message r))) cached answer).nonceGuesses
     rw [parse_index]
     by_cases known : message ∈ history.signedMessages
     · exact Or.inl known
@@ -131,29 +131,29 @@ theorem NonceCovered.public_fill {pk : PublicKey} {cache : QueryCache HashSpec} 
   · apply covered.public_preserved query cached answer message r
     simpa only [QueryCache.cacheQuery_of_ne _ _ same] using present
 
-theorem NonceCovered.sign_preserved {pk : PublicKey} {cache : QueryCache HashSpec} {history : History}
-    (covered : NonceCovered pk cache history) (message : Message) (cached : Bool) (answer : BitVec 256) :
-    NonceCovered pk cache (recordSign history message cached answer) := by
+theorem NonceCovered.sign_preserved {cache : QueryCache HashSpec} {history : History}
+    (covered : NonceCovered cache history) (message : Message) (cached : Bool) (answer : BitVec 256) :
+    NonceCovered cache (recordSign history message cached answer) := by
   intro other r present
   rcases covered other r present with known | guessed
   · exact Or.inl (Finset.mem_insert_of_mem known)
   · exact Or.inr guessed
 
-theorem NonceCovered.sign_fill {pk : PublicKey} {cache : QueryCache HashSpec} {history : History}
-    (covered : NonceCovered pk cache history) (message : Message) (r : Bytes 32) (cached : Bool) (answer : BitVec 256) :
-    NonceCovered pk (cache.cacheQuery (indexInput pk message r) answer) (recordSign history message cached answer) := by
+theorem NonceCovered.sign_fill {cache : QueryCache HashSpec} {history : History}
+    (covered : NonceCovered cache history) (message : Message) (r : Bytes 32) (cached : Bool) (answer : BitVec 256) :
+    NonceCovered (cache.cacheQuery (indexInput message r) answer) (recordSign history message cached answer) := by
   intro other nonce present
-  by_cases same : indexInput pk other nonce = indexInput pk message r
-  · have pairs := @SecurityForgery.indexInput_pair_injective pk (other, nonce) (message, r) same
+  by_cases same : indexInput other nonce = indexInput message r
+  · have pairs := @SecurityForgery.indexInput_pair_injective (other, nonce) (message, r) same
     have messages : other = message := congrArg Prod.fst pairs
     exact Or.inl (Finset.mem_insert.mpr (Or.inl messages))
   · apply covered.sign_preserved message cached answer other nonce
     simpa only [QueryCache.cacheQuery_of_ne _ _ same] using present
 
 /-- A first signing cache hit is an exact earlier prereveal nonce prediction. -/
-theorem first_sign_hit {pk : PublicKey} {cache : QueryCache HashSpec} {history : History}
-    (covered : NonceCovered pk cache history) (message : Message) (r : Bytes 32)
-    (fresh : message ∉ history.signedMessages) (present : cache (indexInput pk message r) ≠ none) :
+theorem first_sign_hit {cache : QueryCache HashSpec} {history : History}
+    (covered : NonceCovered cache history) (message : Message) (r : Bytes 32)
+    (fresh : message ∉ history.signedMessages) (present : cache (indexInput message r) ≠ none) :
     (message,r) ∈ history.nonceGuesses := (covered message r present).resolve_left fresh
 
 #print axioms first_sign_hit

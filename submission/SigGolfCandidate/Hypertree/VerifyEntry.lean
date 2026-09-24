@@ -11,17 +11,17 @@ def OutsideIndexPrefix (a : Word) : Prop :=
   (∀ i : Fin 3, a ≠ wordAddress 0x80408 i.val)
 
 /-- The index prefix also preserves the rest of memory, including the witness and loop bookkeeping. -/
-theorem index_refines_frame (hash : Hash) (s : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
+theorem index_refines_frame (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x1024)
-    (hpk : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+    (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
     ∃ final, Trace hash verify s 121 136 1 2 final ∧ final.pc = 0x1148 ∧
-      StoredIndex final ((Reference.indexOf hash pk message r).zeroExtend 192) ∧
+      StoredIndex final ((Reference.indexOf hash message r).zeroExtend 192) ∧
       (∀ a, OutsideIndexPrefix a → final.getMem a = s.getMem a) := by
   obtain ⟨ready, prepare, readypc, words, prepareFrame⟩ := index_prepare s pc
   obtain ⟨final, trace, finalpc, low, high, traceFrame⟩ := index_trace_frame hash ready readypc
-  have query := index_query s ready pk message r hpk hmessage hr words
+  have query := index_query s ready message r hzero hmessage hr words
   refine ⟨final, prepare.trace.trans trace, finalpc, ?_, ?_⟩
   · have stored := stored_index_of_answer final _ low high
     rw [query] at stored
@@ -30,18 +30,18 @@ theorem index_refines_frame (hash : Hash) (s : MachineState) (pk : PublicKey) (m
     exact (traceFrame a outside.2.1 outside.2.2).trans (prepareFrame a outside.1)
 
 /-- The real verifier enters its loop with the decoded index, correct witness cursor, and read-only input memory intact. -/
-theorem entry_index_frame (hash : Hash) (s : MachineState) (pk : PublicKey) (message : Message) (r : Bytes 32)
+theorem entry_index_frame (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x1000)
-    (hpk : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x40 + i)) = pk.extractLsb' (8 * i) 8)
+    (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
     ∃ final, Trace hash verify s 130 145 1 2 final ∧ final.pc = 0x1148 ∧
-      StoredIndex final ((Reference.indexOf hash pk message r).zeroExtend 192) ∧
+      StoredIndex final ((Reference.indexOf hash message r).zeroExtend 192) ∧
       final.getMem 0x80440 = 0 ∧ final.getMem 0x80448 = 0x3d3d0 ∧
       (∀ a, OutsideIndexPrefix a → a ≠ 0x80440 → a ≠ 0x80448 → final.getMem a = s.getMem a) := by
   have initpc : (initializeState s).pc = 0x1024 := by simp [initializeState_pc, pc]
-  obtain ⟨final, trace, finalpc, index, frame⟩ := index_refines_frame hash (initializeState s) pk message r initpc
-    (fun i hi => (initializeState_byte s 0x40 i (by decide) (by omega)).trans (hpk i hi))
+  obtain ⟨final, trace, finalpc, index, frame⟩ := index_refines_frame hash (initializeState s) message r initpc
+    (fun i hi => (initializeState_byte s 0x50 i (by decide) (by omega)).trans (hzero i hi))
     (fun i hi => (by simpa only [Nat.zero_add] using initializeState_byte s 0 i (by decide) (by omega) :
       (initializeState s).getByte (BitVec.ofNat 64 i) = s.getByte (BitVec.ofNat 64 i)).trans (hmessage i hi))
     (fun i hi => (initializeState_byte s 0x3d3b0 i (by decide) (by omega)).trans (hr i hi))

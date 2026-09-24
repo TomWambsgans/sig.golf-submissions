@@ -14,9 +14,9 @@ theorem loaded_recovery (hash : Hash) (pk : PublicKey) (message : Message) (witn
       recovered.pc = 0x1220 ∧
       (RootMatches recovered ↔ Reference.verify hash pk message (SignatureEncoding.decode witness).toReference) := by
   obtain ⟨initial, ready, loaded, pre, pc, data, preFrame⟩ := loaded_loop_data hash pk message witness
-  let index := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).toNat
+  let index := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).toNat
   have indexSmall : index < 2^192 := by
-    have h := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).isLt
+    have h := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).isLt
     dsimp [index]
     omega
   obtain ⟨recovered, steps, cycles, calls, blocks, lastIndex, run, hsteps, hcycles, hcalls, hblocks, finalPC, finalData, frame⟩ :=

@@ -9,7 +9,7 @@
     },
     {
       "label": "Path selection",
-      "value": "Low 160 bits of H(5, public key, message, randomizer); one bit per level"
+      "value": "Low 160 bits of H(5, 16 zero bytes, message, randomizer); one bit per level. Signing never reads the public key"
     },
     {
       "label": "WOTS encoding",
@@ -25,31 +25,31 @@
     },
     {
       "label": "Verification sample",
-      "value": "10-run mean: 3,280,058.7 cycles; certified maximum C = 5,617,758"
+      "value": "10-run mean: 3,280,130.8 cycles; certified maximum C = 5,617,758"
     }
   ],
   "profile": {
     "hashes": {
-      "384": 262769,
+      "384": 262776,
       "512": 1600,
       "6144": 1590,
       "896": 10
     },
     "instructions": {
-      "ADD": 1350046,
-      "ADDI": 12074641,
+      "ADD": 1350074,
+      "ADDI": 12074914,
       "ANDI": 74740,
-      "BEQ": 342299,
-      "BNE": 1350186,
+      "BEQ": 342306,
+      "BNE": 1350214,
       "HALT": 10,
-      "JAL": 270729,
+      "JAL": 270736,
       "JALR": 4790,
       "LBU": 73140,
-      "LD": 4205077,
-      "LUI": 6222660,
+      "LD": 4205168,
+      "LUI": 6222800,
       "SB": 73140,
-      "SD": 2998171,
-      "SLLI": 1276916,
+      "SD": 2998234,
+      "SLLI": 1276944,
       "SRLI": 146320,
       "SUB": 68370,
       "XORI": 1600

@@ -5,19 +5,19 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp Keygen
 set_option maxRecDepth 4096
 set_option linter.unusedSimpArgs false
 
-def pkCopyState (s : MachineState) : MachineState :=
-  let s := execInstrBr s (.ADDI .x6 .x0 0x40)
+def slotCopyState (s : MachineState) : MachineState :=
+  let s := execInstrBr s (.ADDI .x6 .x0 0x50)
   let s := execInstrBr s (.LUI .x7 0x80)
   let s := execInstrBr s (.ADDI .x7 .x7 0x20)
   execInstrBr s (.ADDI .x10 .x0 2)
 
-theorem pkCopyState_block (s : MachineState) (pc : s.pc = 0x10fc) :
-    OrdinarySteps sign s 4 (pkCopyState s) := by
-  let s1 := execInstrBr s (.ADDI .x6 .x0 0x40)
+theorem slotCopyState_block (s : MachineState) (pc : s.pc = 0x10fc) :
+    OrdinarySteps sign s 4 (slotCopyState s) := by
+  let s1 := execInstrBr s (.ADDI .x6 .x0 0x50)
   let s2 := execInstrBr s1 (.LUI .x7 0x80)
   let s3 := execInstrBr s2 (.ADDI .x7 .x7 0x20)
   let s4 := execInstrBr s3 (.ADDI .x10 .x0 2)
-  apply OrdinarySteps.step s s1 _ (.base (.ADDI .x6 .x0 0x40)) 3
+  apply OrdinarySteps.step s s1 _ (.base (.ADDI .x6 .x0 0x50)) 3
   · have hp : s.pc = 0x10fc := by simp [execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
@@ -203,12 +203,12 @@ theorem indexHeaderState_block (s : MachineState) (pc : s.pc = 0x1178) :
   · simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12, accessValid, rangeValid, MEMORY_BYTES, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
   exact OrdinarySteps.refl _
 
-theorem pkCopyState_mem (s : MachineState) (a : Word) :
-    (pkCopyState s).getMem a = s.getMem a := by simp [pkCopyState, execInstrBr]
+theorem slotCopyState_mem (s : MachineState) (a : Word) :
+    (slotCopyState s).getMem a = s.getMem a := by simp [slotCopyState, execInstrBr]
 
-theorem pkCopyState_invariant (s : MachineState) (pc : s.pc = 0x10fc) :
-    CopyInvariant 0x110c 0x40 0x80020 2 2 (pkCopyState s) := by
-  simp [CopyInvariant, pkCopyState, execInstrBr, signExtend12, pc,
+theorem slotCopyState_invariant (s : MachineState) (pc : s.pc = 0x10fc) :
+    CopyInvariant 0x110c 0x50 0x80020 2 2 (slotCopyState s) := by
+  simp [CopyInvariant, slotCopyState, execInstrBr, signExtend12, pc,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
 theorem indexMessageCopyState_mem (s : MachineState) (a : Word) :
@@ -239,31 +239,31 @@ theorem indexHeaderState_mem (s : MachineState) (a : Word) :
 
 def indexInputWord (s : MachineState) (i : Fin 14) : Word :=
   if i.val = 0 then 5 else if i.val < 4 then 0 else
-    if i.val < 6 then s.getMem (wordAddress 0x40 (i.val - 4))
+    if i.val < 6 then s.getMem (wordAddress 0x50 (i.val - 4))
     else if i.val < 10 then s.getMem (wordAddress 0 (i.val - 6))
     else s.getMem (wordAddress 0x20060 (i.val - 10))
 
-/-- Preparation of the complete tag5/public-key/message/randomizer input. -/
+/-- Preparation of the complete tag5/zero-slot/message/randomizer input. -/
 theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
     ∃ ready, OrdinarySteps sign s 89 ready ∧ ready.pc = 0x11b8 ∧
       (∀ i : Fin 14, ready.getMem (wordAddress 0x80000 i.val) = indexInputWord s i) ∧
       (∀ a, (∀ i : Fin 14, a ≠ wordAddress 0x80000 i.val) → ready.getMem a = s.getMem a) := by
-  obtain ⟨pk, pkLoop, pkInv, pkOutput, pkFrame⟩ := copy_all sign 0x110c (by decide)
-    0x40 0x80020 2 (pkCopyState s) (pkCopyState_invariant s pc)
+  obtain ⟨slot, slotLoop, slotInv, slotOutput, slotFrame⟩ := copy_all sign 0x110c (by decide)
+    0x50 0x80020 2 (slotCopyState s) (slotCopyState_invariant s pc)
     (by decide) (by decide) (by decide) (by decide) (by decide)
-  have pkpc : pk.pc = 0x1124 := by simpa [CopyInvariant] using pkInv.2.2.1
+  have slotpc : slot.pc = 0x1124 := by simpa [CopyInvariant] using slotInv.2.2.1
   obtain ⟨msg, msgLoop, msgInv, msgOutput, msgFrame⟩ := copy_all sign 0x1134 (by decide)
-    0 0x80030 4 (indexMessageCopyState pk) (indexMessageCopyState_invariant pk pkpc)
+    0 0x80030 4 (indexMessageCopyState slot) (indexMessageCopyState_invariant slot slotpc)
     (by decide) (by decide) (by decide) (by decide) (by decide)
   have msgpc : msg.pc = 0x114c := by simpa [CopyInvariant] using msgInv.2.2.1
   obtain ⟨rand, randLoop, randInv, randOutput, randFrame⟩ := copy_all sign 0x1160 (by decide)
     0x20060 0x80050 4 (inputRandomizerCopyState msg) (inputRandomizerCopyState_invariant msg msgpc)
     (by decide) (by decide) (by decide) (by decide) (by decide)
   have randpc : rand.pc = 0x1178 := by simpa [CopyInvariant] using randInv.2.2.1
-  have pkPreserved (i : Fin 2) :
-      rand.getMem (wordAddress 0x80020 i.val) = s.getMem (wordAddress 0x40 i.val) := by
+  have slotPreserved (i : Fin 2) :
+      rand.getMem (wordAddress 0x80020 i.val) = s.getMem (wordAddress 0x50 i.val) := by
     rw [randFrame, inputRandomizerCopyState_mem, msgFrame, indexMessageCopyState_mem,
-      pkOutput i.val i.isLt, pkCopyState_mem]
+      slotOutput i.val i.isLt, slotCopyState_mem]
     · intro j hj
       apply outside_copy_word (0x80020 + 8 * i.val) 0x80030 4 j
       · have := i.isLt; omega
@@ -279,7 +279,7 @@ theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
   have messagePreserved (i : Fin 4) :
       rand.getMem (wordAddress 0x80030 i.val) = s.getMem (wordAddress 0 i.val) := by
     rw [randFrame, inputRandomizerCopyState_mem, msgOutput i.val i.isLt,
-      indexMessageCopyState_mem, pkFrame, pkCopyState_mem]
+      indexMessageCopyState_mem, slotFrame, slotCopyState_mem]
     · intro j hj
       apply outside_copy_word (0 + 8 * i.val) 0x80020 2 j
       · have := i.isLt; omega
@@ -295,7 +295,7 @@ theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
   have randomizerCopied (i : Fin 4) :
       rand.getMem (wordAddress 0x80050 i.val) = s.getMem (wordAddress 0x20060 i.val) := by
     rw [randOutput i.val i.isLt, inputRandomizerCopyState_mem, msgFrame,
-      indexMessageCopyState_mem, pkFrame, pkCopyState_mem]
+      indexMessageCopyState_mem, slotFrame, slotCopyState_mem]
     · intro j hj
       apply outside_copy_word (0x20060 + 8 * i.val) 0x80020 2 j
       · have := i.isLt; omega
@@ -310,9 +310,9 @@ theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
       · have := i.isLt; left; omega
   refine ⟨indexHeaderState rand, ?_, ?_, ?_, ?_⟩
   · exact ordinary_trans sign s _ _ 16 73
-      (ordinary_trans sign s _ _ 4 12 (pkCopyState_block s pc) pkLoop)
-      (ordinary_trans sign pk _ _ 28 45
-        (ordinary_trans sign pk _ _ 4 24 (indexMessageCopyState_block pk pkpc) msgLoop)
+      (ordinary_trans sign s _ _ 4 12 (slotCopyState_block s pc) slotLoop)
+      (ordinary_trans sign slot _ _ 28 45
+        (ordinary_trans sign slot _ _ 4 24 (indexMessageCopyState_block slot slotpc) msgLoop)
         (ordinary_trans sign msg _ _ 29 16
           (ordinary_trans sign msg _ _ 5 24 (inputRandomizerCopyState_block msg msgpc) randLoop)
           (indexHeaderState_block rand randpc)))
@@ -322,7 +322,7 @@ theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
     all_goals simp only [wordAddress, indexInputWord, Fin.val_zero, Fin.val_one, Nat.mul_zero,
       Nat.add_zero, Nat.reduceMul, Nat.reduceAdd, Nat.reduceSub, Nat.reduceLT, Nat.reduceEqDiff,
       ↓reduceIte]
-    all_goals first | rfl | simpa [wordAddress] using pkPreserved 0 | simpa [wordAddress] using pkPreserved 1 |
+    all_goals first | rfl | simpa [wordAddress] using slotPreserved 0 | simpa [wordAddress] using slotPreserved 1 |
       simpa [wordAddress] using messagePreserved 0 | simpa [wordAddress] using messagePreserved 1 |
       simpa [wordAddress] using messagePreserved 2 | simpa [wordAddress] using messagePreserved 3 |
       simpa [wordAddress] using randomizerCopied 0 | simpa [wordAddress] using randomizerCopied 1 |
@@ -333,7 +333,7 @@ theorem index_prepare (s : MachineState) (pc : s.pc = 0x10fc) :
     have h2 : a ≠ 0x80010 := by simpa [wordAddress] using outside 2
     have h3 : a ≠ 0x80018 := by simpa [wordAddress] using outside 3
     rw [indexHeaderState_mem, if_neg h3, if_neg h2, if_neg h1, if_neg h0,
-      randFrame, inputRandomizerCopyState_mem, msgFrame, indexMessageCopyState_mem, pkFrame, pkCopyState_mem]
+      randFrame, inputRandomizerCopyState_mem, msgFrame, indexMessageCopyState_mem, slotFrame, slotCopyState_mem]
     · intro j hj
       have eq : wordAddress 0x80020 j = wordAddress 0x80000 (j + 4) := by
         unfold wordAddress; congr 1; omega

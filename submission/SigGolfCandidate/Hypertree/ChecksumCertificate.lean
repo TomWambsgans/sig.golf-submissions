@@ -323,9 +323,9 @@ theorem loaded_recovery (hash : Hash) (pk : PublicKey) (message : Message) (witn
       recovered.pc = 0x1220 ∧
       (RootMatches recovered ↔ Reference.verify hash pk message (SignatureEncoding.decode witness).toReference) := by
   obtain ⟨initial, ready, loaded, pre, pc, data, preFrame⟩ := loaded_loop_data hash pk message witness
-  let index := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).toNat
+  let index := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).toNat
   have indexSmall : index < 2^192 := by
-    have h := (Reference.indexOf hash pk message (SignatureEncoding.decode witness).randomizer).isLt
+    have h := (Reference.indexOf hash message (SignatureEncoding.decode witness).randomizer).isLt
     dsimp [index]
     omega
   obtain ⟨recovered, steps, cycles, calls, blocks, lastIndex, run, hsteps, hcycles, hcalls, hblocks, finalPC, finalData, frame⟩ :=
@@ -381,8 +381,8 @@ theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
       evalWithAnswerFn hash (submission.honest secretKey message)=
         ⟨true,fun phase => match phase with | .keygen => 761 | .sign => 121008 | .expand => 0 | .verify => blocks,cycles⟩ := by
   let pk := Reference.keygen hash secretKey
-  let signature := (signCompact hash secretKey pk message).wire (signCompact_valid hash secretKey pk message)
-  obtain ⟨signCycles,_,signRun⟩ := Signing.sign_run_honest hash secretKey KeygenFunctional.zeroCache message
+  let signature := (signCompact hash secretKey message).wire (signCompact_valid hash secretKey message)
+  obtain ⟨signCycles,_,signRun⟩ := Signing.sign_run_refines hash secretKey KeygenFunctional.zeroCache message
   obtain ⟨cycles,calls,blocks,cycleBound,callBound,blockBound,verifyRun⟩ := ChecksumVerifying.run_refines hash pk message signature
   have correct : Reference.verify hash pk message (decode signature).toReference := by
     rw [wire_decode]
@@ -391,7 +391,7 @@ theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
   refine ⟨cycles,calls,blocks,cycleBound,callBound,blockBound,?_⟩
   rw [honest_eq_pipeline]
   exact pipeline_success hash (submission.run .keygen secretKey)
-    (fun p c => submission.run .sign (secretKey,p,c,message))
+    (fun _ c => submission.run .sign (secretKey,c,message))
     (fun p sig => submission.run .expand (message,p,sig))
     (fun p wit => submission.run .verify (message,p,wit)) pk KeygenFunctional.zeroCache signature signature
     82446 739 761 signCycles 117508 121008 89733 0 0 cycles calls blocks

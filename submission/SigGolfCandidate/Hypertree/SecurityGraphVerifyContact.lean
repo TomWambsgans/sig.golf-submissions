@@ -25,13 +25,13 @@ theorem mem_layers_tail (hash : Hash) (level index : Nat) (message : Digest)
 
 theorem mem_verify_layers (hash : Hash) (pk : PublicKey) (message : Message) (signature : Compact) (query : Query)
     (member : query ∈ queries hash (SecurityVerify.recoverLayers 0
-      (indexOf hash pk message signature.randomizer).toNat 0 signature.toReference.layers)) :
+      (indexOf hash message signature.randomizer).toNat 0 signature.toReference.layers)) :
     query ∈ queries hash (SecurityVerify.verifyCompact pk message signature) := by
   simp only [SecurityVerify.verifyCompact, queries_bind, queries_pure, List.append_nil, SecurityReference.eval_ask]
   exact List.mem_append_right _ member
 
 theorem mem_verify_index (hash : Hash) (pk : PublicKey) (message : Message) (signature : Compact) :
-    indexInput pk message signature.randomizer ∈ queries hash (SecurityVerify.verifyCompact pk message signature) := by
+    indexInput message signature.randomizer ∈ queries hash (SecurityVerify.verifyCompact pk message signature) := by
   rw [SecurityVerify.verifyCompact, queries_bind]
   exact List.mem_append_left _ (by simp [indexInput])
 
@@ -102,7 +102,7 @@ theorem ideal_forgery_logged (factors : Factors) (base : Hash) (history : Securi
     (honest : ∀ entry ∈ history, entry.2 = evalWithAnswerFn
       (SecurityGraphSigner.answers (privateTable factors)
         (programmed (privateTable factors) (labels factors) base))
-      (SecurityIdealSign.signCompact (publicKey factors) entry.1))
+      (SecurityIdealSign.signCompact entry.1))
     (message : Message) (signature : Compact)
     (accepted : evalWithAnswerFn (programmed (privateTable factors) (labels factors) base)
       (SecurityVerify.verifyCompact (publicKey factors) message signature) = true)
