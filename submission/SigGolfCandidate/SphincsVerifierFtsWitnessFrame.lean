@@ -231,11 +231,64 @@ theorem messageReady_firstFts_query_from_state (state : MachineState)
     (firstFtsPointers_prefix state pk answer ready.destination prefixBytes)
     secret (firstFtsPointers_secret state answer secret ready.destination secretBytes)
 
+theorem messageReady_firstFts_hashStep_from_state (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (message : SphincsSecurity.Message)
+    (randomness : SphincsSecurity.Randomness)
+    (ready : MessageReady state pk message randomness)
+    (pc : state.pc = 0x12a0) (answer : BitVec 256)
+    (admissible : SphincsSecurity.Concrete.Admissible
+      (SphincsSecurity.truncateMessageDigest answer))
+    (prefixBytes : WitnessPrefix state pk)
+    (secret : SphincsSecurity.Digest)
+    (secretBytes : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x22cdc + i)) =
+        secret.extractLsb' (8 * i) 8)
+    (steps : Nat) (result : Execution)
+    (tail : Executes hash SphincsImages.verify
+      (writeHash
+        (SphincsVerifierFtsSetup.ftsHashReadyState
+          (SphincsVerifierFtsAdvance.ftsAdvanceState
+            (SphincsVerifierCopy.copyRootState
+              (firstFtsPointers state answer))))
+        (hash (SphincsBridge.toQuery
+          (firstFtsInput pk
+            (SphincsSecurity.Concrete.digestIndex
+              (SphincsSecurity.truncateMessageDigest answer))
+            (SphincsSecurity.Concrete.digestLeaves
+              (SphincsSecurity.truncateMessageDigest answer)
+              ⟨0, by decide⟩) secret)))) steps result) :
+    Executes hash SphincsImages.verify
+      (SphincsVerifierFtsSetup.ftsHashReadyState
+        (SphincsVerifierFtsAdvance.ftsAdvanceState
+          (SphincsVerifierCopy.copyRootState
+            (firstFtsPointers state answer))))
+      (steps + 1) (result.charge 8 1 1) := by
+  let pointers := firstFtsPointers state answer
+  let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState
+    (SphincsVerifierCopy.copyRootState pointers)
+  let final := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+  have facts := messageReady_firstFts_query_from_state state pk message
+    randomness ready pc answer admissible prefixBytes secret secretBytes
+  have regs := SphincsVerifierFtsSetup.ftsHashReady_regs advanced
+  have tail' : Executes hash SphincsImages.verify
+      (writeHash final (hash (hashInput final))) steps result := by
+    rw [facts.2.2]
+    exact tail
+  exact SphincsVerifierFtsHash.hash_step hash final facts.2.1
+    regs.1 regs.2.1 regs.2.2.1 regs.2.2.2 steps result tail'
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsWitnessFrame.messageReady_firstFts_query_from_state' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms messageReady_firstFts_query_from_state
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsWitnessFrame.messageReady_firstFts_hashStep_from_state' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms messageReady_firstFts_hashStep_from_state
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsWitnessFrame.leafStates_witnessByte_frame' depends on axioms: [propext,
  Classical.choice,
