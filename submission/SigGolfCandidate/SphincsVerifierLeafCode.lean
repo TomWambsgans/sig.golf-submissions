@@ -187,7 +187,7 @@ theorem leaf_byte (tree : Fin 24) (state : MachineState) :
       Memory.getByte_setReg, getByte_setPC,
       MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
-private theorem selector_byte_nat (a b : BitVec 8) :
+theorem selector_byte_nat (a b : BitVec 8) :
     (((((a.zeroExtend 64) >>> 2) + ((b.zeroExtend 64) <<< 6)) &&&
       255#64).truncate 8).toNat = (a.toNat / 4 + b.toNat * 64) % 256 := by
   simp only [BitVec.truncate_eq_setWidth, BitVec.toNat_and,
