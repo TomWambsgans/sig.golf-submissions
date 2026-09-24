@@ -10,7 +10,7 @@ instruction words are checked against the submitted verifier image.
 namespace SigGolfCandidate.SphincsVerifierLeafCode
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierMessageCopy
-open SigGolfCandidate.Hypertree.Signing
+open SigGolfCandidate.SphincsVerifierLeaf0
 set_option maxRecDepth 16384
 
 private theorem getByte_setPC (s : MachineState) (pc a : Word) :

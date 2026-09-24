@@ -24,7 +24,7 @@ private theorem getByte_setPC (s : MachineState) (pc a : Word) :
     (s.setMem a v).getMem b = if b = a then v else s.getMem b := by
   simp [MachineState.setMem, MachineState.getMem]
 
-private theorem getByte_setByte (s : MachineState) (address : Word)
+theorem getByte_setByte (s : MachineState) (address : Word)
     (b : Byte) (a : Word) :
     (s.setByte address b).getByte a =
       if a = address then b else s.getByte a := by

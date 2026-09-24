@@ -11,7 +11,6 @@ open SigGolfCandidate.SphincsVerifierIndexPrefix
 open SigGolfCandidate.SphincsVerifierLeaf0
 open SigGolfCandidate.SphincsVerifierMessageHash
 open SigGolfCandidate.SphincsVerifierMessageAnswer
-open SigGolfCandidate.Hypertree.Signing
 
 private theorem getByte_setPC (s : MachineState) (pc a : Word) :
     (s.setPC pc).getByte a = s.getByte a := by
