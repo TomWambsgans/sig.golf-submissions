@@ -69,6 +69,10 @@ theorem parity_mem (state : MachineState) (address : Word) :
     (parityState state).getMem address = state.getMem address := by
   simp [parityState, execInstrBr]
 
+theorem parity_word (state : MachineState) (address : Word) :
+    (parityState state).getWord32 address = state.getWord32 address := by
+  simp [parityState, execInstrBr]
+
 theorem selection_scratch_after_advance (selection : MachineState) :
     let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
     let copied := SphincsVerifierCopy.copyRootState pointers
@@ -134,6 +138,10 @@ def branchState (state : MachineState) : MachineState :=
 theorem branch_mem (state : MachineState) (address : Word) :
     (branchState state).getMem address = state.getMem address := by
   simp [branchState, execInstrBr]
+
+theorem branch_word (state : MachineState) (address : Word) :
+    (branchState state).getWord32 address = state.getWord32 address := by
+  simp [branchState, execInstrBr, MachineState.getWord32]
 
 theorem branch_block (state : MachineState) (pc : state.pc = 0x1924) :
     OrdinarySteps SphincsImages.verify state 1 (branchState state) := by
