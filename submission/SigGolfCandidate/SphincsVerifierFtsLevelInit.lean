@@ -146,6 +146,171 @@ theorem firstFtsLevelStart (state : MachineState)
     levelInit_preserve_FtsWitness copied signature copiedWitness,
     fun i hi => (levelInit_current copied i hi).trans (copiedBytes i hi)⟩
 
+theorem hashReady_mem_frame (state : MachineState) (address : Word)
+    (notTag : address ≠ alignToDword (0x40000#64))
+    (notPosition : address ≠ alignToDword (0x40004#64))
+    (notTree : address ≠ 0x40008)
+    (notIndex : address ≠ alignToDword (0x40010#64))
+    (notCopy : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40014 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState state).getMem address =
+      state.getMem address := by
+  let tagged := SphincsVerifierFtsHeader.tagState state
+  let positioned := SphincsVerifierHeader.positionState tagged
+  let treed := SphincsVerifierHeader.treeState positioned
+  let header := SphincsVerifierFtsHeader.headerState state
+  let pointers := SphincsVerifierFtsParameter.parameterPointers header
+  have tagPointer : tagged.getReg .x7 = 0x40000 :=
+    SphincsVerifierFtsHeader.tag_hash_pointer state
+  have positionPointer : positioned.getReg .x7 = 0x40000 :=
+    (SphincsVerifierHeader.position_hash_pointer tagged).trans tagPointer
+  have treePointer : treed.getReg .x7 = 0x40000 :=
+    (SphincsVerifierHeader.tree_hash_pointer positioned).trans positionPointer
+  have tagFrame : tagged.getMem address = state.getMem address := by
+    simp [tagged, SphincsVerifierFtsHeader.tagState,
+      SphincsVerifierFtsHeader.tagBeforeStore, execInstrBr,
+      signExtend12, setWord32_eq,
+      MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, notTag]
+  have positionFrame : positioned.getMem address = tagged.getMem address := by
+    simp [positioned, SphincsVerifierHeader.positionState,
+      SphincsVerifierHeader.positionBeforeStore, execInstrBr,
+      signExtend12, setWord32_eq, tagPointer, notPosition,
+      MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+  have treeFrame : treed.getMem address = positioned.getMem address := by
+    simp [treed, SphincsVerifierHeader.treeState,
+      SphincsVerifierHeader.treeBeforeStore, execInstrBr,
+      signExtend12, positionPointer, notTree,
+      MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+    intro h
+    exact (notTree h).elim
+  have indexFrame : header.getMem address = treed.getMem address := by
+    change (SphincsVerifierHeader.indexState treed).getMem address = _
+    simp [SphincsVerifierHeader.indexState,
+      SphincsVerifierHeader.indexBeforeStore, execInstrBr,
+      signExtend12, setWord32_eq, treePointer, notIndex,
+      MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+  have copiedFrame : (SphincsVerifierCopy.copyRootState pointers).getMem
+      address = pointers.getMem address := by
+    apply SphincsVerifierCopyMemory.copyRoot_mem_frame
+    intro offset
+    rw [(SphincsVerifierFtsParameter.parameterPointers_regs header).2]
+    exact notCopy offset
+  change (SphincsVerifierFtsSetup.hashRegistersState
+    (SphincsVerifierCopy.copyRootState pointers)).getMem address = _
+  rw [SphincsVerifierFtsWitnessFrame.firstFtsHashRegisters_mem_frame,
+    copiedFrame,
+    SphincsVerifierFtsWitnessFrame.firstFtsParameterPointers_mem_frame,
+    indexFrame, treeFrame, positionFrame, tagFrame]
+
+theorem hashReady_pointer_frame (state : MachineState) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState state).getMem 0x43028 =
+      state.getMem 0x43028 := by
+  apply hashReady_mem_frame
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem hashReady_selector_frame (state : MachineState) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState state).getMem 0x43070 =
+      state.getMem 0x43070 := by
+  apply hashReady_mem_frame
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem hashReady_counter_frame (state : MachineState) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState state).getMem 0x43040 =
+      state.getMem 0x43040 := by
+  apply hashReady_mem_frame
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem writeHash_mem_frame (state : MachineState) (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000) (address : Word)
+    (not0 : address ≠ 0x42000) (not8 : address ≠ 0x42008)
+    (not16 : address ≠ 0x42010) (not24 : address ≠ 0x42018) :
+    (writeHash state answer).getMem address = state.getMem address := by
+  change address ≠ (270336#64) at not0
+  change address ≠ (270344#64) at not8
+  change address ≠ (270352#64) at not16
+  change address ≠ (270360#64) at not24
+  simp [writeHash, MachineState.writeWords, destination,
+    MachineState.getMem_setMem_ne, not0, not8, not16, not24]
+
+theorem result_mem_frame (state : MachineState) (address : Word)
+    (outside : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x44a00 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (resultState state).getMem address = state.getMem address := by
+  change (SphincsVerifierCopy.copyRootState
+    (resultPointers state)).getMem address = _
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame]
+  · exact resultPointers_mem state address
+  · intro offset
+    rw [(resultPointers_regs state).2]
+    exact outside offset
+
+theorem levelStart_mem_frame (state : MachineState) (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000) (address : Word)
+    (notLevel : address ≠ 0x43048)
+    (not0 : address ≠ 0x42000) (not8 : address ≠ 0x42008)
+    (not16 : address ≠ 0x42010) (not24 : address ≠ 0x42018)
+    (notCopy : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x44a00 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (levelInitState (resultState (writeHash state answer))).getMem address =
+      state.getMem address := by
+  rw [levelInit_mem, if_neg notLevel,
+    result_mem_frame _ address notCopy,
+    writeHash_mem_frame state answer destination address not0 not8 not16 not24]
+
+theorem levelStart_pointer_frame (state : MachineState) (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000) :
+    (levelInitState (resultState (writeHash state answer))).getMem 0x43028 =
+      state.getMem 0x43028 := by
+  apply levelStart_mem_frame state answer destination
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem levelStart_selector_frame (state : MachineState) (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000) :
+    (levelInitState (resultState (writeHash state answer))).getMem 0x43070 =
+      state.getMem 0x43070 := by
+  apply levelStart_mem_frame state answer destination
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem levelStart_counter_frame (state : MachineState) (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000) :
+    (levelInitState (resultState (writeHash state answer))).getMem 0x43040 =
+      state.getMem 0x43040 := by
+  apply levelStart_mem_frame state answer destination
+  all_goals try { intro offset; fin_cases offset <;> decide }
+  all_goals decide
+
+theorem firstFts_levelStart_scratch (advanced : MachineState)
+    (answer : BitVec 256) :
+    let ready := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+    let start := levelInitState (resultState (writeHash ready answer))
+    start.getMem 0x43028 = advanced.getMem 0x43028 ∧
+      start.getMem 0x43070 = advanced.getMem 0x43070 ∧
+      start.getMem 0x43040 = advanced.getMem 0x43040 := by
+  let ready := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+  have destination : ready.getReg .x12 = 0x42000 :=
+    (SphincsVerifierFtsSetup.ftsHashReady_regs advanced).2.2.1
+  exact ⟨(levelStart_pointer_frame ready answer destination).trans
+      (hashReady_pointer_frame advanced),
+    (levelStart_selector_frame ready answer destination).trans
+      (hashReady_selector_frame advanced),
+    (levelStart_counter_frame ready answer destination).trans
+      (hashReady_counter_frame advanced)⟩
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsLevelInit.firstFtsLevelStart' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
