@@ -37,6 +37,21 @@ theorem leafStates_answer (initial : MachineState) (answer : BitVec 256)
       rw [leafState_answer_byte]
       exact ih (by omega) index
 
+theorem leafStates_msgIndex (initial : MachineState) :
+    ∀ n (bound : n ≤ 24),
+      (leafStates initial n bound).getMem 0x43078 = initial.getMem 0x43078 := by
+  intro n
+  induction n with
+  | zero =>
+      intro bound
+      rfl
+  | succ n ih =>
+      intro bound
+      change (leafState ⟨n, by omega⟩
+        (leafStates initial n (by omega))).getMem 0x43078 = _
+      rw [leafState_msgIndex]
+      exact ih (by omega)
+
 theorem leafStates_pc (initial : MachineState)
     (start : initial.pc = BitVec.ofNat 64 (0x1000 + 4 * 180)) :
     ∀ n (bound : n ≤ 24),

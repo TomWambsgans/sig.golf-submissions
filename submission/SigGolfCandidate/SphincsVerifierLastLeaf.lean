@@ -183,6 +183,11 @@ private theorem getByte_execBEQ (state : MachineState) (address : Word) :
   simp [execInstrBr]
   split_ifs <;> simp [getByte_setPC]
 
+private theorem getMem_execBEQ (state : MachineState) (address : Word) :
+    (execInstrBr state (.BEQ .x10 .x0 8)).getMem address =
+      state.getMem address := by
+  simp [execInstrBr]
+
 theorem lastAccept_byte (state : MachineState) (address : Word) :
     (lastAcceptState state).getByte address = state.getByte address := by
   rw [show lastAcceptState state =
@@ -190,6 +195,13 @@ theorem lastAccept_byte (state : MachineState) (address : Word) :
     getByte_execBEQ]
   simp [lastTailState, execInstrBr,
     Memory.getByte_setReg, getByte_setPC]
+
+theorem lastAccept_mem (state : MachineState) (address : Word) :
+    (lastAcceptState state).getMem address = state.getMem address := by
+  rw [show lastAcceptState state =
+    execInstrBr (lastTailState state) (.BEQ .x10 .x0 8) by rfl,
+    getMem_execBEQ]
+  simp [lastTailState, execInstrBr]
 
 theorem messageReady_admissible_leaves (state : MachineState)
     (pk : SphincsSecurity.PublicKey)

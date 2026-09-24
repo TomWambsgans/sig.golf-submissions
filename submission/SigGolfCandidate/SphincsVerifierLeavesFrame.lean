@@ -67,6 +67,15 @@ theorem leafState_other_leaf (tree other : Fin 24)
   exact different (Fin.ext this)
 
 set_option maxHeartbeats 0 in
+theorem leafState_msgIndex (tree : Fin 24) (state : MachineState) :
+    (leafState tree state).getMem 0x43078 = state.getMem 0x43078 := by
+  fin_cases tree <;>
+    simp [leafState, execInstrBr, signExtend12,
+      MachineState.setByte, MachineState.getMem_setMem_ne,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      alignToDword]
+
+set_option maxHeartbeats 0 in
 theorem indexStored_answer_byte (state : MachineState) (index : Fin 30) :
     (indexStoredState state).getByte
       (BitVec.ofNat 64 (0x42000 + index.val)) =

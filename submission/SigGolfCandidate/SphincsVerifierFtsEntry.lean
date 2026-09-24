@@ -164,6 +164,23 @@ theorem messageReady_admissible_ftsEntry (state : MachineState)
        rw [ftsEntry_selector_byte]
        exact selected tree⟩
 
+theorem messageReady_ftsEntry_msgIndex (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (message : SphincsSecurity.Message)
+    (randomness : SphincsSecurity.Randomness)
+    (ready : MessageReady state pk message randomness)
+    (pc : state.pc = 0x12a0) (answer : BitVec 256) :
+    (ftsEntryState (lastAcceptState
+      (leafStates (indexStoredState (indexValueState
+        (writeHash state answer))) 24 (by decide)))).getMem 0x43078 =
+      BitVec.ofNat 64 (SphincsSecurity.Concrete.digestIndex
+        (SphincsSecurity.truncateMessageDigest answer)).val := by
+  obtain ⟨_, _, _, stored⟩ :=
+    messageReady_indexStored state pk message randomness ready pc answer
+  rw [ftsEntry_mem_frame _ 0x43078 (by decide) (by decide),
+    lastAccept_mem, leafStates_msgIndex]
+  exact stored
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEntry.messageReady_admissible_ftsEntry' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
