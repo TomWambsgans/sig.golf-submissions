@@ -134,7 +134,7 @@ theorem parameter_bytes_of_words (ready original : MachineState)
         simpa only [Nat.add_assoc, split]
   exact hbyte.trans (encoded.parameter i hi)
 
-private theorem extractByte_extractLsb64 {n : Nat} (value : BitVec n)
+theorem extractByte_extractLsb64 {n : Nat} (value : BitVec n)
     (word : Nat) (byte : Fin 8) :
     extractByte (value.extractLsb' (64 * word) 64) byte.val =
       value.extractLsb' (8 * (8 * word + byte.val)) 8 := by
