@@ -25,6 +25,11 @@ def ParameterCells (original state : MachineState) : Prop :=
     state.getMem (parameterCell index) =
       original.getMem (parameterCell index)
 
+def ScratchCells (original state : MachineState) : Prop :=
+  ∀ slot : Fin 4,
+    state.getMem (scratchCell slot) =
+      original.getMem (scratchCell slot)
+
 theorem loopNext_parameterCell_frame (remaining : Nat)
     (state : MachineState) (inv : LoopInvariant (remaining + 1) state)
     (index : Fin 3) :
@@ -47,19 +52,43 @@ theorem parameterCells_step (original state : MachineState)
   rw [loopNext_parameterCell_frame remaining state inv index]
   exact cells index
 
+theorem loopNext_scratchCell_frame (remaining : Nat)
+    (state : MachineState) (inv : LoopInvariant (remaining + 1) state)
+    (slot : Fin 4) :
+    (loopNext state).getMem (scratchCell slot) =
+      state.getMem (scratchCell slot) := by
+  obtain ⟨bound, _, _, destination, _⟩ := inv
+  rw [loop_next_mem, destination]
+  have other : scratchCell slot ≠
+      BitVec.ofNat 64 (0x40050 + 8 * (4 - (remaining + 1))) := by
+    have small : remaining ≤ 3 := by omega
+    interval_cases remaining <;> fin_cases slot <;>
+      decide
+  rw [if_neg other]
+
+theorem scratchCells_step (original state : MachineState)
+    (remaining : Nat) (inv : LoopInvariant (remaining + 1) state)
+    (cells : ScratchCells original state) :
+    ScratchCells original (loopNext state) := by
+  intro slot
+  rw [loopNext_scratchCell_frame remaining state inv slot]
+  exact cells slot
+
 theorem loop_run_full (remaining : Nat)
     (original state : MachineState)
     (inv : LoopInvariant remaining state)
     (data : CopyData original (4 - remaining) state)
     (fields : FieldData original state)
-    (cells : ParameterCells original state) :
+    (cells : ParameterCells original state)
+    (scratch : ScratchCells original state) :
     ∃ final, OrdinarySteps SphincsImages.verify state (6 * remaining) final ∧
       LoopInvariant 0 final ∧ CopyData original 4 final ∧
-      FieldData original final ∧ ParameterCells original final := by
+      FieldData original final ∧ ParameterCells original final ∧
+      ScratchCells original final := by
   induction remaining generalizing state with
   | zero =>
     exact ⟨state, by simpa using OrdinarySteps.refl state, inv,
-      by simpa using data, fields, cells⟩
+      by simpa using data, fields, cells, scratch⟩
   | succ remaining ih =>
     have pc : state.pc = 0x11e0 := by simpa [LoopInvariant] using inv.2.1
     have access := loop_accesses remaining state inv
@@ -68,9 +97,12 @@ theorem loop_run_full (remaining : Nat)
     have nextData := copyData_step original state remaining inv data
     have nextFields := fieldData_step original state remaining inv fields
     have nextCells := parameterCells_step original state remaining inv cells
-    obtain ⟨final, rest, finalInv, finalData, finalFields, finalCells⟩ :=
-      ih (loopNext state) next nextData nextFields nextCells
-    refine ⟨final, ?_, finalInv, finalData, finalFields, finalCells⟩
+    have nextScratch := scratchCells_step original state remaining inv scratch
+    obtain ⟨final, rest, finalInv, finalData, finalFields, finalCells,
+      finalScratch⟩ :=
+      ih (loopNext state) next nextData nextFields nextCells nextScratch
+    refine ⟨final, ?_, finalInv, finalData, finalFields, finalCells,
+      finalScratch⟩
     simpa [Nat.mul_add, Nat.add_comm, Nat.add_left_comm, Nat.add_assoc]
       using first.append rest
 
@@ -78,7 +110,8 @@ theorem message32_block_full (state : MachineState)
     (pc : state.pc = 0x11d0) :
     ∃ final, OrdinarySteps SphincsImages.verify state 28 final ∧
       LoopInvariant 0 final ∧ CopyData state 4 final ∧
-      FieldData state final ∧ ParameterCells state final := by
+      FieldData state final ∧ ParameterCells state final ∧
+      ScratchCells state final := by
   have prefixTrace := prefix_block state pc
   have prefixData : CopyData state 0
       (SphincsVerifierMessage32.prefixState state) := by
@@ -95,12 +128,16 @@ theorem message32_block_full (state : MachineState)
       (SphincsVerifierMessage32.prefixState state) := by
     intro index
     exact prefix_memory state _
-  obtain ⟨final, copied, invariant, contents, fields, cells⟩ :=
+  have prefixScratch : ScratchCells state
+      (SphincsVerifierMessage32.prefixState state) := by
+    intro slot
+    exact prefix_memory state _
+  obtain ⟨final, copied, invariant, contents, fields, cells, scratch⟩ :=
     loop_run_full 4 state
       (SphincsVerifierMessage32.prefixState state)
       (prefix_invariant state pc) (by simpa using prefixData)
-      prefixFields prefixCells
-  refine ⟨final, ?_, invariant, contents, fields, cells⟩
+      prefixFields prefixCells prefixScratch
+  refine ⟨final, ?_, invariant, contents, fields, cells, scratch⟩
   simpa using prefixTrace.append copied
 
 theorem loaded_message_payload_parameter_exact
@@ -125,14 +162,15 @@ theorem loaded_message_payload_parameter_exact
             (8 * (witnessOffset pair + 4 * index.val)) 32) ∧
       (∀ index : Fin 3,
         final.getMem (parameterCell index) =
-          state.getMem (parameterCell index)) := by
+          state.getMem (parameterCell index)) ∧
+      (∀ slot : Fin 4, final.getMem (scratchCell slot) = 0) := by
   have copies := loaded_messageCopies_block publicKey message witness state
     answer loaded answerMatches
   have copiesPc := loaded_messageCopies_pc publicKey message witness state
     answer loaded answerMatches
-  obtain ⟨final, messageCopy, invariant, contents, fields, cells⟩ :=
+  obtain ⟨final, messageCopy, invariant, contents, fields, cells, scratch⟩ :=
     message32_block_full (afterMessageCopiesState state answer) copiesPc
-  refine ⟨final, ?_, invariant, ?_, ?_, ?_⟩
+  refine ⟨final, ?_, invariant, ?_, ?_, ?_, ?_⟩
   · simpa using copies.append messageCopy
   · intro index
     calc
@@ -162,6 +200,12 @@ theorem loaded_message_payload_parameter_exact
             (parameterCell index) := cells index
       _ = state.getMem (parameterCell index) :=
         afterMessageCopies_parameterCell_frame state answer index
+  · intro slot
+    calc
+      final.getMem (scratchCell slot) =
+          (afterMessageCopiesState state answer).getMem
+            (scratchCell slot) := scratch slot
+      _ = 0 := afterMessageCopies_scratch_zero state answer slot
 
 /-- info: 'SigGolfCandidate.SphincsVerifierParameterAtHash.loaded_message_payload_parameter_exact' depends on axioms: [propext,
  Classical.choice,

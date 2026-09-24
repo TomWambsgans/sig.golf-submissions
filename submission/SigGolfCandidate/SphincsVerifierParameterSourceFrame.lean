@@ -22,6 +22,9 @@ open SigGolfCandidate.SphincsVerifierCommitmentCheck
 def parameterCell (index : Fin 3) : Word :=
   BitVec.ofNat 64 (0x22cb0 + 8 * index.val)
 
+def scratchCell (slot : Fin 4) : Word :=
+  BitVec.ofNat 64 (0x43000 + 8 * slot.val)
+
 theorem setupAndBoth_parameterCell_frame (state : MachineState)
     (index : Fin 3) :
     (setupAndBothState state).getMem (parameterCell index) =
@@ -129,6 +132,54 @@ theorem afterMessageCopies_parameterCell_frame (state : MachineState)
   rw [bothCopies_parameterCell_frame, compareSuccess_memory,
     writeHash_parameterCell_frame _ _ index destination,
     firstHash_parameterCell_frame]
+
+theorem bothCopies_scratch_frame (state : MachineState) (slot : Fin 4) :
+    (bothCopiesState state).getMem (scratchCell slot) =
+      state.getMem (scratchCell slot) := by
+  let read := scratchCell slot
+  let first := firstPointers state
+  let copied := firstCopyState state
+  let second := secondPointers copied
+  have firstDestination := (firstPointers_regs state).2
+  have secondDestination := (secondPointers_regs copied).2
+  have firstOutside : ∀ offset : Fin 5, read ≠ alignToDword
+      (first.getReg .x7 + signExtend12
+        (4#12 * BitVec.ofNat 12 offset.val)) := by
+    intro offset
+    rw [firstDestination]
+    fin_cases slot <;> fin_cases offset <;> decide
+  have secondOutside : ∀ offset : Fin 5, read ≠ alignToDword
+      (second.getReg .x7 + signExtend12
+        (4#12 * BitVec.ofNat 12 offset.val)) := by
+    intro offset
+    rw [secondDestination]
+    fin_cases slot <;> fin_cases offset <;> decide
+  change (copyRootState second).getMem read = state.getMem read
+  rw [copyRoot_mem_frame second read secondOutside,
+    secondPointers_memory]
+  change (copyRootState first).getMem read = state.getMem read
+  rw [copyRoot_mem_frame first read firstOutside,
+    firstPointers_memory]
+
+theorem writeHash_scratch_frame (state : MachineState)
+    (answer : BitVec 256) (slot : Fin 4)
+    (destination : state.getReg .x12 = 0x42000) :
+    (writeHash state answer).getMem (scratchCell slot) =
+      state.getMem (scratchCell slot) := by
+  fin_cases slot <;>
+    simp [scratchCell, writeHash, MachineState.writeWords_cons,
+      destination, MachineState.getMem_setMem_ne]
+
+theorem afterMessageCopies_scratch_zero (state : MachineState)
+    (answer : BitVec 256) (slot : Fin 4) :
+    (afterMessageCopiesState state answer).getMem (scratchCell slot) = 0 := by
+  have destination := (firstHash_registers state).2.2.1
+  change (bothCopiesState
+    (compareSuccessState (writeHash (firstHashState state) answer))).getMem
+      (scratchCell slot) = 0
+  rw [bothCopies_scratch_frame, compareSuccess_memory,
+    writeHash_scratch_frame _ _ slot destination]
+  simpa [scratchCell] using firstHash_scratch state slot
 
 /-- info: 'SigGolfCandidate.SphincsVerifierParameterSourceFrame.afterMessageCopies_parameterCell_frame' depends on axioms: [propext,
  Classical.choice,

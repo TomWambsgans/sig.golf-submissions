@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsVerifierMessageHash
 import SigGolfCandidate.SphincsVerifierParameterAtHash
+import SigGolfCandidate.SphincsVerifierSecondHashHeader
 
 /-!
 # Submitted payload at the second verifier HASH call
@@ -19,6 +20,7 @@ open SigGolfCandidate.SphincsVerifierParameterSourceFrame
 open SigGolfCandidate.SphincsVerifierParameterAtHash
 open SigGolfCandidate.SphincsVerifierSecondHashSetup
 open SigGolfCandidate.SphincsVerifierSecondHashFrame
+open SigGolfCandidate.SphincsVerifierSecondHashHeader
 open SigGolfCandidate.SphincsSubmission
 
 theorem parameter_word_of_cells (original final : MachineState)
@@ -65,10 +67,21 @@ theorem loaded_secondHash_payload (publicKey : SigGolf.PublicKey)
             (8 * (witnessOffset pair + 4 * index.val)) 32) ∧
       (∀ index : Fin 5,
         ready.getWord32 (BitVec.ofNat 64 (0x40014 + 4 * index.val)) =
-          state.getWord32 (BitVec.ofNat 64 (0x22cb4 + 4 * index.val))) := by
-  obtain ⟨copied, trace, inv, messageWords, fieldWords, parameterCells⟩ :=
+          state.getWord32 (BitVec.ofNat 64 (0x22cb4 + 4 * index.val))) ∧
+      (∀ index : Fin 20,
+        ready.getByte (BitVec.ofNat 64 (0x40000 + index.val)) =
+          ((SphincsSecurity.fieldBytes
+            (SphincsSecurity.tweakFields 12 0 0 0 0)).map UInt8.toBitVec)[index.val]'(by
+              simp [SphincsSecurity.fieldBytes,
+                SphincsSecurity.tweakFields,
+                SphincsSecurity.bytesLE])) := by
+  obtain ⟨copied, trace, inv, messageWords, fieldWords, parameterCells,
+    scratch⟩ :=
     loaded_message_payload_parameter_exact publicKey message witness state
       answer loaded answerMatches
+  have zero : ScratchZero copied := by
+    intro slot
+    simpa [ScratchZero, scratchCell] using scratch slot
   have copiedPc : copied.pc = 0x11f8 := by
     simpa [SphincsVerifierMessage32.LoopInvariant] using inv.2.1
   let ready := secondHashReadyState copied
@@ -76,7 +89,7 @@ theorem loaded_secondHash_payload (publicKey : SigGolf.PublicKey)
   have regs := secondHashReady_regs copied
   refine ⟨ready, ?_, secondHashReady_pc copied copiedPc,
     regs.1, regs.2.1, regs.2.2.1, regs.2.2.2,
-    ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_⟩
   · simpa [ready] using trace.append next
   · intro index
     exact (secondHashReady_message_frame copied index).trans
@@ -87,6 +100,8 @@ theorem loaded_secondHash_payload (publicKey : SigGolf.PublicKey)
   · intro index
     exact (secondHashReady_data copied index).trans
       (parameter_word_of_cells state copied parameterCells index)
+  · intro index
+    exact ready_header_byte copied zero index
 
 /-- info: 'SigGolfCandidate.SphincsVerifierSecondHashPayload.loaded_secondHash_payload' depends on axioms: [propext,
  Classical.choice,

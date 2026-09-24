@@ -1,4 +1,4 @@
-import SigGolfCandidate.SphincsVerifierSecondHashPayload
+import SigGolfCandidate.SphincsVerifierMessageHash
 
 /-!
 # The second HASH domain header
