@@ -38,8 +38,10 @@ theorem copy20_word_block (image : Image) (start : Nat)
     (code : Copy20Code image start) (offset : Fin 5)
     (state : MachineState)
     (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * (start + 2 * offset.val)))
-    (source : state.getReg .x6 = 0x22cc8 ∨ state.getReg .x6 = 0x22ca0)
-    (destination : state.getReg .x7 = 0x40028 ∨ state.getReg .x7 = 0x4003c)
+    (source : state.getReg .x6 = 0x22cc8 ∨ state.getReg .x6 = 0x22ca0 ∨
+      state.getReg .x6 = 0x22cb4)
+    (destination : state.getReg .x7 = 0x40028 ∨ state.getReg .x7 = 0x4003c ∨
+      state.getReg .x7 = 0x40014)
     (small : 0x1000 + 4 * (start + 2 * offset.val + 1) < 2 ^ 64) :
     OrdinarySteps image state 2 (copyWordState offset state) := by
   let loaded := execInstrBr state (.LWU .x13 .x6 (4 * offset.val))
@@ -56,7 +58,7 @@ theorem copy20_word_block (image : Image) (start : Nat)
     (.base (.LWU .x13 .x6 (4 * offset.val))) 1
   · rw [fetch_index image state _ small0 pc]
     exact code.load offset
-  · rcases source with source | source <;>
+  · rcases source with source | source | source <;>
       fin_cases offset <;>
       simp [loaded, ordinaryStep, memoryArgumentsValid, accessValid,
         rangeValid, signExtend12, source, MEMORY_BYTES]
@@ -66,7 +68,7 @@ theorem copy20_word_block (image : Image) (start : Nat)
     exact code.store offset
   · have preserved : loaded.getReg .x7 = state.getReg .x7 := by
       simp [loaded, execInstrBr, MachineState.getReg_setReg_ne]
-    rcases destination with destination | destination <;>
+    rcases destination with destination | destination | destination <;>
       fin_cases offset <;>
       simp [copied, ordinaryStep, memoryArgumentsValid, accessValid,
         rangeValid, signExtend12, preserved, destination, MEMORY_BYTES]
@@ -97,8 +99,10 @@ set_option maxHeartbeats 0 in
 theorem copy20_block (image : Image) (start : Nat)
     (code : Copy20Code image start) (state : MachineState)
     (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * start))
-    (source : state.getReg .x6 = 0x22cc8 ∨ state.getReg .x6 = 0x22ca0)
-    (destination : state.getReg .x7 = 0x40028 ∨ state.getReg .x7 = 0x4003c)
+    (source : state.getReg .x6 = 0x22cc8 ∨ state.getReg .x6 = 0x22ca0 ∨
+      state.getReg .x6 = 0x22cb4)
+    (destination : state.getReg .x7 = 0x40028 ∨ state.getReg .x7 = 0x4003c ∨
+      state.getReg .x7 = 0x40014)
     (small : 0x1000 + 4 * (start + 10) < 2 ^ 64) :
     OrdinarySteps image state 10 (copyRootState state) := by
   let s1 := copyWordState 0 state
@@ -116,28 +120,36 @@ theorem copy20_block (image : Image) (start : Nat)
     simpa using copy20_word_pc 2 s2 start p2
   have p4 : s4.pc = BitVec.ofNat 64 (0x1000 + 4 * (start + 2 * (4 : Fin 5).val)) := by
     simpa using copy20_word_pc 3 s3 start p3
-  have source1 : s1.getReg .x6 = 0x22cc8 ∨ s1.getReg .x6 = 0x22ca0 := by
+  have source1 : s1.getReg .x6 = 0x22cc8 ∨ s1.getReg .x6 = 0x22ca0 ∨
+      s1.getReg .x6 = 0x22cb4 := by
     rw [(copyWord_pointers 0 state).1]
     exact source
-  have source2 : s2.getReg .x6 = 0x22cc8 ∨ s2.getReg .x6 = 0x22ca0 := by
+  have source2 : s2.getReg .x6 = 0x22cc8 ∨ s2.getReg .x6 = 0x22ca0 ∨
+      s2.getReg .x6 = 0x22cb4 := by
     rw [(copyWord_pointers 1 s1).1]
     exact source1
-  have source3 : s3.getReg .x6 = 0x22cc8 ∨ s3.getReg .x6 = 0x22ca0 := by
+  have source3 : s3.getReg .x6 = 0x22cc8 ∨ s3.getReg .x6 = 0x22ca0 ∨
+      s3.getReg .x6 = 0x22cb4 := by
     rw [(copyWord_pointers 2 s2).1]
     exact source2
-  have source4 : s4.getReg .x6 = 0x22cc8 ∨ s4.getReg .x6 = 0x22ca0 := by
+  have source4 : s4.getReg .x6 = 0x22cc8 ∨ s4.getReg .x6 = 0x22ca0 ∨
+      s4.getReg .x6 = 0x22cb4 := by
     rw [(copyWord_pointers 3 s3).1]
     exact source3
-  have destination1 : s1.getReg .x7 = 0x40028 ∨ s1.getReg .x7 = 0x4003c := by
+  have destination1 : s1.getReg .x7 = 0x40028 ∨ s1.getReg .x7 = 0x4003c ∨
+      s1.getReg .x7 = 0x40014 := by
     rw [(copyWord_pointers 0 state).2]
     exact destination
-  have destination2 : s2.getReg .x7 = 0x40028 ∨ s2.getReg .x7 = 0x4003c := by
+  have destination2 : s2.getReg .x7 = 0x40028 ∨ s2.getReg .x7 = 0x4003c ∨
+      s2.getReg .x7 = 0x40014 := by
     rw [(copyWord_pointers 1 s1).2]
     exact destination1
-  have destination3 : s3.getReg .x7 = 0x40028 ∨ s3.getReg .x7 = 0x4003c := by
+  have destination3 : s3.getReg .x7 = 0x40028 ∨ s3.getReg .x7 = 0x4003c ∨
+      s3.getReg .x7 = 0x40014 := by
     rw [(copyWord_pointers 2 s2).2]
     exact destination2
-  have destination4 : s4.getReg .x7 = 0x40028 ∨ s4.getReg .x7 = 0x4003c := by
+  have destination4 : s4.getReg .x7 = 0x40028 ∨ s4.getReg .x7 = 0x4003c ∨
+      s4.getReg .x7 = 0x40014 := by
     rw [(copyWord_pointers 3 s3).2]
     exact destination3
   have b0 := copy20_word_block image start code 0 state p0 source destination
@@ -286,8 +298,8 @@ theorem bothCopies_block (state : MachineState) (pc : state.pc = 0x1160) :
   have copy := copy20_block SphincsImages.verify 106 second_copy_code
     (secondPointers (firstCopyState state))
     (by simpa using afterSecondPointersPc)
-    (Or.inr (secondPointers_regs (firstCopyState state)).1)
-    (Or.inr (secondPointers_regs (firstCopyState state)).2) (by decide)
+    (Or.inr (Or.inl (secondPointers_regs (firstCopyState state)).1))
+    (Or.inr (Or.inl (secondPointers_regs (firstCopyState state)).2)) (by decide)
   simpa [bothCopiesState] using (first.append pointers).append copy
 
 theorem bothCopies_pc (state : MachineState) (pc : state.pc = 0x1160) :
