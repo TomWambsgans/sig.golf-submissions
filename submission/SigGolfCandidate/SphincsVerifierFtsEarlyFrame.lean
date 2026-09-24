@@ -19,14 +19,17 @@ open SigGolfCandidate.SphincsVerifierSecondHashFrame
 open SigGolfCandidate.SphincsVerifierSecondHashSetup
 open SigGolfCandidate.Sphincs.Expansion
 
-def witnessPrefixCell (slot : Fin 10) : Word :=
-  BitVec.ofNat 64 (0x22ca0 + 8 * slot.val)
+private theorem low_ne_high (read address : Word)
+    (low : read.toNat < 0x40000)
+    (high : 0x40000 ≤ address.toNat) : read ≠ address := by
+  intro equal
+  have values := congrArg BitVec.toNat equal
+  omega
 
-theorem setupAndBoth_witnessPrefix_frame (state : MachineState)
-    (slot : Fin 10) :
-    (setupAndBothState state).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
-  let read := witnessPrefixCell slot
+/-- Commitment setup only writes to HASH and scratch memory. -/
+theorem setupAndBoth_low_frame (state : MachineState) (read : Word)
+    (low : read.toNat < 0x40000) :
+    (setupAndBothState state).getMem read = state.getMem read := by
   let jumped := execInstrBr state (.JAL .x0 16)
   let scratch := SphincsVerifierSlots.headerState jumped
   let firstPointers := addressSetupState scratch
@@ -38,14 +41,16 @@ theorem setupAndBoth_witnessPrefix_frame (state : MachineState)
       (firstPointers.getReg .x7 + signExtend12
         (4#12 * BitVec.ofNat 12 offset.val)) := by
     intro offset
+    apply low_ne_high read _ low
     rw [firstDestination]
-    fin_cases slot <;> fin_cases offset <;> decide
+    fin_cases offset <;> decide
   have secondOutside : ∀ offset : Fin 5, read ≠ alignToDword
       (secondPointers.getReg .x7 + signExtend12
         (4#12 * BitVec.ofNat 12 offset.val)) := by
     intro offset
+    apply low_ne_high read _ low
     rw [secondDestination]
-    fin_cases slot <;> fin_cases offset <;> decide
+    fin_cases offset <;> decide
   change (copyRootState secondPointers).getMem read = state.getMem read
   rw [copyRoot_mem_frame secondPointers read secondOutside,
     SphincsVerifierCopyParameter.parameterPointers_memory,
@@ -54,9 +59,10 @@ theorem setupAndBoth_witnessPrefix_frame (state : MachineState)
   change (SphincsVerifierSlots.headerState jumped).getMem read =
     state.getMem read
   simp only [SphincsVerifierSlots.headerState]
-  have slotOutside (other : Fin 4) :
-      read ≠ BitVec.ofNat 64 (0x43000 + 8 * other.val) := by
-    fin_cases slot <;> fin_cases other <;> decide
+  have slotOutside (slot : Fin 4) :
+      read ≠ BitVec.ofNat 64 (0x43000 + 8 * slot.val) := by
+    apply low_ne_high read _ low
+    fin_cases slot <;> decide
   rw [SphincsVerifierSlots.slot_memory 3,
     if_neg (slotOutside 3), SphincsVerifierSlots.slot_memory 2,
     if_neg (slotOutside 2), SphincsVerifierSlots.slot_memory 1,
@@ -64,35 +70,41 @@ theorem setupAndBoth_witnessPrefix_frame (state : MachineState)
     if_neg (slotOutside 0)]
   simp [jumped, execInstrBr]
 
-theorem firstHash_witnessPrefix_frame (state : MachineState)
-    (slot : Fin 10) :
-    (firstHashState state).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
-  let read := witnessPrefixCell slot
+theorem firstHash_low_frame (state : MachineState) (read : Word)
+    (low : read.toNat < 0x40000) :
+    (firstHashState state).getMem read = state.getMem read := by
   change (SphincsVerifierHashSetup.hashRegistersState
     (SphincsVerifierHeader.headerState (setupAndBothState state))).getMem
       read = state.getMem read
   rw [SphincsVerifierHashSetup.hashRegisters_memory]
-  have outside0 : read ≠ 0x40000 := by fin_cases slot <;> decide
-  have outside8 : read ≠ 0x40008 := by fin_cases slot <;> decide
-  have outside16 : read ≠ 0x40010 := by fin_cases slot <;> decide
+  have outside0 : read ≠ 0x40000 :=
+    low_ne_high read 0x40000 low (by decide)
+  have outside8 : read ≠ 0x40008 :=
+    low_ne_high read 0x40008 low (by decide)
+  have outside16 : read ≠ 0x40010 :=
+    low_ne_high read 0x40010 low (by decide)
   rw [SphincsVerifierHashMemory.header_mem_frame _ _
-    outside0 outside8 outside16, setupAndBoth_witnessPrefix_frame]
+    outside0 outside8 outside16, setupAndBoth_low_frame _ _ low]
 
-theorem writeHash_witnessPrefix_frame (state : MachineState)
-    (answer : BitVec 256) (slot : Fin 10)
+theorem writeHash_low_frame (state : MachineState)
+    (answer : BitVec 256) (read : Word)
+    (low : read.toNat < 0x40000)
     (destination : state.getReg .x12 = 0x42000) :
-    (writeHash state answer).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
-  fin_cases slot <;>
-    simp [witnessPrefixCell, writeHash, MachineState.writeWords_cons,
-      destination, MachineState.getMem_setMem_ne]
+    (writeHash state answer).getMem read = state.getMem read := by
+  have ne0 : read ≠ 0x42000 := low_ne_high read _ low (by decide)
+  have ne8 : read ≠ 0x42008 := low_ne_high read _ low (by decide)
+  have ne16 : read ≠ 0x42010 := low_ne_high read _ low (by decide)
+  have ne24 : read ≠ 0x42018 := low_ne_high read _ low (by decide)
+  change read ≠ (270336#64) at ne0
+  change read ≠ (270344#64) at ne8
+  change read ≠ (270352#64) at ne16
+  change read ≠ (270360#64) at ne24
+  simp [writeHash, MachineState.writeWords_cons, destination,
+    ne0, ne8, ne16, ne24]
 
-theorem bothCopies_witnessPrefix_frame (state : MachineState)
-    (slot : Fin 10) :
-    (bothCopiesState state).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
-  let read := witnessPrefixCell slot
+theorem bothCopies_low_frame (state : MachineState) (read : Word)
+    (low : read.toNat < 0x40000) :
+    (bothCopiesState state).getMem read = state.getMem read := by
   let first := firstPointers state
   let copied := firstCopyState state
   let second := secondPointers copied
@@ -102,14 +114,16 @@ theorem bothCopies_witnessPrefix_frame (state : MachineState)
       (first.getReg .x7 + signExtend12
         (4#12 * BitVec.ofNat 12 offset.val)) := by
     intro offset
+    apply low_ne_high read _ low
     rw [firstDestination]
-    fin_cases slot <;> fin_cases offset <;> decide
+    fin_cases offset <;> decide
   have secondOutside : ∀ offset : Fin 5, read ≠ alignToDword
       (second.getReg .x7 + signExtend12
         (4#12 * BitVec.ofNat 12 offset.val)) := by
     intro offset
+    apply low_ne_high read _ low
     rw [secondDestination]
-    fin_cases slot <;> fin_cases offset <;> decide
+    fin_cases offset <;> decide
   change (copyRootState second).getMem read = state.getMem read
   rw [copyRoot_mem_frame second read secondOutside,
     secondPointers_memory]
@@ -117,36 +131,37 @@ theorem bothCopies_witnessPrefix_frame (state : MachineState)
   rw [copyRoot_mem_frame first read firstOutside,
     firstPointers_memory]
 
-theorem afterMessageCopies_witnessPrefix_frame (state : MachineState)
-    (answer : BitVec 256) (slot : Fin 10) :
-    (afterMessageCopiesState state answer).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
+theorem afterMessageCopies_low_frame (state : MachineState)
+    (answer : BitVec 256) (read : Word)
+    (low : read.toNat < 0x40000) :
+    (afterMessageCopiesState state answer).getMem read =
+      state.getMem read := by
   have destination := (firstHash_registers state).2.2.1
   change (bothCopiesState
     (compareSuccessState (writeHash (firstHashState state) answer))).getMem
-      (witnessPrefixCell slot) = state.getMem (witnessPrefixCell slot)
-  rw [bothCopies_witnessPrefix_frame, compareSuccess_memory,
-    writeHash_witnessPrefix_frame _ _ slot destination,
-    firstHash_witnessPrefix_frame]
+      read = state.getMem read
+  rw [bothCopies_low_frame _ _ low, compareSuccess_memory,
+    writeHash_low_frame _ _ _ low destination,
+    firstHash_low_frame _ _ low]
 
-theorem loopNext_witnessPrefix_frame (remaining : Nat) (state : MachineState)
-    (slot : Fin 10) (inv : LoopInvariant (remaining + 1) state) :
-    (loopNext state).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
+theorem loopNext_low_frame (remaining : Nat) (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (inv : LoopInvariant (remaining + 1) state) :
+    (loopNext state).getMem read = state.getMem read := by
   obtain ⟨bound, _, _, destination, _⟩ := inv
   rw [loop_next_mem, destination]
-  have outside : witnessPrefixCell slot ≠
+  have outside : read ≠
       BitVec.ofNat 64 (0x40050 + 8 * (4 - (remaining + 1))) := by
+    apply low_ne_high read _ low
     have small : remaining ≤ 3 := by omega
-    interval_cases remaining <;> fin_cases slot <;> decide
+    interval_cases remaining <;> decide
   rw [if_neg outside]
 
-theorem loop_run_witnessPrefix_frame (remaining : Nat) (state : MachineState)
-    (slot : Fin 10) (inv : LoopInvariant remaining state) :
+theorem loop_run_low_frame (remaining : Nat) (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (inv : LoopInvariant remaining state) :
     ∃ final, OrdinarySteps SphincsImages.verify state (6 * remaining) final ∧
-      LoopInvariant 0 final ∧
-      final.getMem (witnessPrefixCell slot) =
-        state.getMem (witnessPrefixCell slot) := by
+      LoopInvariant 0 final ∧ final.getMem read = state.getMem read := by
   induction remaining generalizing state with
   | zero =>
       exact ⟨state, by simpa using OrdinarySteps.refl state, inv, rfl⟩
@@ -161,34 +176,31 @@ theorem loop_run_witnessPrefix_frame (remaining : Nat) (state : MachineState)
       refine ⟨final, ?_, finalInv, ?_⟩
       · simpa [Nat.mul_add, Nat.add_comm, Nat.add_left_comm, Nat.add_assoc]
           using first.append rest
-      · exact frame.trans (loopNext_witnessPrefix_frame remaining state slot inv)
+      · exact frame.trans (loopNext_low_frame remaining state read low inv)
 
-theorem message32_witnessPrefix_frame (state : MachineState)
-    (slot : Fin 10) (pc : state.pc = 0x11d0) :
+theorem message32_low_frame (state : MachineState) (read : Word)
+    (low : read.toNat < 0x40000) (pc : state.pc = 0x11d0) :
     ∃ final, OrdinarySteps SphincsImages.verify state 28 final ∧
-      LoopInvariant 0 final ∧
-      final.getMem (witnessPrefixCell slot) =
-        state.getMem (witnessPrefixCell slot) := by
+      LoopInvariant 0 final ∧ final.getMem read = state.getMem read := by
   have first := SphincsVerifierMessage32.prefix_block state pc
   obtain ⟨final, rest, inv, frame⟩ :=
-    loop_run_witnessPrefix_frame 4
-      (SphincsVerifierMessage32.prefixState state) slot
-      (SphincsVerifierMessage32.prefix_invariant state pc)
+    loop_run_low_frame 4 (SphincsVerifierMessage32.prefixState state)
+      read low (SphincsVerifierMessage32.prefix_invariant state pc)
   refine ⟨final, ?_, inv, ?_⟩
   · simpa using first.append rest
   · rw [frame]
-    exact SphincsVerifierMessage32Data.prefix_memory state _
+    exact SphincsVerifierMessage32Data.prefix_memory state read
 
-theorem secondHashReady_witnessPrefix_frame (state : MachineState)
-    (slot : Fin 10) :
-    (secondHashReadyState state).getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
+theorem secondHashReady_low_frame (state : MachineState) (read : Word)
+    (low : read.toNat < 0x40000) :
+    (secondHashReadyState state).getMem read = state.getMem read := by
   apply secondHashReady_mem_frame
-  · fin_cases slot <;> decide
-  · fin_cases slot <;> decide
-  · fin_cases slot <;> decide
+  · exact low_ne_high read 0x40000 low (by decide)
+  · exact low_ne_high read 0x40008 low (by decide)
+  · exact low_ne_high read 0x40010 low (by decide)
   · intro offset
-    fin_cases slot <;> fin_cases offset <;> decide
+    apply low_ne_high read _ low
+    fin_cases offset <;> decide
 
 private theorem ordinary_deterministic {image : Image}
     {initial left right : MachineState} {n : Nat}
@@ -205,7 +217,7 @@ private theorem ordinary_deterministic {image : Image}
           subst other
           exact ih tail'
 
-theorem loaded_secondHash_witnessPrefix_frame
+theorem loaded_secondHash_low_frame
     (publicKey : SigGolf.PublicKey) (message : Message)
     (witness : Bytes SphincsWire.signatureBytes)
     (state : MachineState) (answer : BitVec 256)
@@ -217,16 +229,15 @@ theorem loaded_secondHash_witnessPrefix_frame
     (ready : MachineState)
     (trace : OrdinarySteps SphincsImages.verify
       (writeHash (firstHashState state) answer) 107 ready)
-    (slot : Fin 10) :
-    ready.getMem (witnessPrefixCell slot) =
-      state.getMem (witnessPrefixCell slot) := by
+    (read : Word) (low : read.toNat < 0x40000) :
+    ready.getMem read = state.getMem read := by
   have copies := loaded_messageCopies_block publicKey message witness state
     answer loaded answerMatches
   have copiesPc := loaded_messageCopies_pc publicKey message witness state
     answer loaded answerMatches
   obtain ⟨copied, messageTrace, invariant, frame⟩ :=
-    message32_witnessPrefix_frame (afterMessageCopiesState state answer)
-      slot copiesPc
+    message32_low_frame (afterMessageCopiesState state answer)
+      read low copiesPc
   have copiedPc : copied.pc = 0x11f8 := by
     simpa [LoopInvariant] using invariant.2.1
   have next := secondHashReady_block copied copiedPc
@@ -235,10 +246,10 @@ theorem loaded_secondHash_witnessPrefix_frame
       (secondHashReadyState copied) := by
     simpa using (copies.append messageTrace).append next
   have same := ordinary_deterministic trace alternate
-  rw [same, secondHashReady_witnessPrefix_frame, frame,
-    afterMessageCopies_witnessPrefix_frame]
+  rw [same, secondHashReady_low_frame _ _ low, frame,
+    afterMessageCopies_low_frame _ _ _ low]
 
-theorem loaded_secondHash_witnessPrefix_byte_frame
+theorem loaded_secondHash_witnessByte_frame
     (publicKey : SigGolf.PublicKey) (message : Message)
     (witness : Bytes SphincsWire.signatureBytes)
     (state : MachineState) (answer : BitVec 256)
@@ -250,18 +261,84 @@ theorem loaded_secondHash_witnessPrefix_byte_frame
     (ready : MachineState)
     (trace : OrdinarySteps SphincsImages.verify
       (writeHash (firstHashState state) answer) 107 ready)
-    (i : Nat) (hi : i < 80) :
+    (i : Nat) (hi : i < SphincsWire.signatureBytes) :
     ready.getByte (BitVec.ofNat 64 (0x22ca0 + i)) =
       state.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := by
-  let slot : Fin 10 := ⟨i / 8, by omega⟩
-  have align : alignToDword (BitVec.ofNat 64 (0x22ca0 + i)) =
-      witnessPrefixCell slot := by
-    have bound : i ≤ 79 := by omega
-    dsimp [slot, witnessPrefixCell]
-    interval_cases i <;> decide
-  simp only [MachineState.getByte, align]
-  rw [loaded_secondHash_witnessPrefix_frame publicKey message witness state
-    answer loaded answerMatches ready trace slot]
+  let address : Word := BitVec.ofNat 64 (0x22ca0 + i)
+  have small : 0x22ca0 + i < 2 ^ 64 := by
+    have length := SphincsWire.signatureBytes_eq
+    omega
+  have range : 0x22ca0 + i < 0x40000 := by
+    have length := SphincsWire.signatureBytes_eq
+    omega
+  have alignedLow : (alignToDword address).toNat < 0x40000 := by
+    have hle : (alignToDword address).toNat ≤ address.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have haddr : address.toNat = 0x22ca0 + i := by
+      simp only [address, BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt small
+    omega
+  simp only [MachineState.getByte]
+  rw [loaded_secondHash_low_frame publicKey message witness state answer
+    loaded answerMatches ready trace (alignToDword address) alignedLow]
+
+/-- Every honest FORS opening survives the verifier's message-hash prefix. -/
+theorem loaded_honest_allFts_at_secondHash
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (inner : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (state : MachineState) (answer : BitVec 256)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire inner signature) =
+        some state)
+    (answerMatches : ∀ index : Fin 2,
+      answer.extractLsb' (64 * index.val) 64 =
+        publicKey.extractLsb' (64 * index.val) 64)
+    (ready : MachineState)
+    (trace : OrdinarySteps SphincsImages.verify
+      (writeHash (firstHashState state) answer) 107 ready) :
+    (∀ tree : SphincsSecurity.FtsTree, ∀ i, (hi : i < 20) →
+      ready.getByte (BitVec.ofNat 64
+        (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes + i))) =
+        (signature.ftsSecret tree).extractLsb' (8 * i) 8) ∧
+    (∀ tree : SphincsSecurity.FtsTree,
+      ∀ level : Fin SphincsSecurity.ftsTreeHeight,
+      ∀ i, (hi : i < SphincsWire.digestBytes) →
+      ready.getByte (BitVec.ofNat 64
+        (0x22ca0 + (60 + tree.val * SphincsWire.ftsOpeningBytes +
+          (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i)))) =
+        (signature.ftsPath tree level).extractLsb' (8 * i) 8) := by
+  constructor
+  · intro tree i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
+        SphincsWire.signatureBytes := by
+      have h := tree.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (loaded_secondHash_witnessByte_frame publicKey message
+      (SphincsWireEncoding.wire inner signature) state answer loaded
+      answerMatches ready trace _ bound).trans
+        (SphincsWireEncoding.loaded_honest_ftsSecret publicKey message
+          inner signature state loaded tree i hi)
+  · intro tree level i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
+        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
+        SphincsWire.signatureBytes := by
+      have htree := tree.isLt
+      have hlevel := level.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (loaded_secondHash_witnessByte_frame publicKey message
+      (SphincsWireEncoding.wire inner signature) state answer loaded
+      answerMatches ready trace _ bound).trans
+        (SphincsWireEncoding.loaded_honest_ftsPath publicKey message
+          inner signature state loaded tree level i hi)
 
 theorem loaded_honest_message_ready_with_witness
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
@@ -293,29 +370,30 @@ theorem loaded_honest_message_ready_with_witness
   have prefixReady : SphincsVerifierHashBytes.WitnessPrefix ready inner := by
     constructor
     · intro i hi
-      exact (loaded_secondHash_witnessPrefix_byte_frame publicKey message
+      exact (loaded_secondHash_witnessByte_frame publicKey message
         (SphincsWireEncoding.wire inner signature) state answer loaded
-        answerMatches ready trace i (by omega)).trans
+        answerMatches ready trace i (by
+          rw [SphincsWire.signatureBytes_eq]
+          omega)).trans
         (prefixState.root i hi)
     · intro i hi
-      have frame := loaded_secondHash_witnessPrefix_byte_frame publicKey
+      have frame := loaded_secondHash_witnessByte_frame publicKey
         message (SphincsWireEncoding.wire inner signature) state answer
-        loaded answerMatches ready trace (20 + i) (by omega)
+        loaded answerMatches ready trace (20 + i) (by
+          rw [SphincsWire.signatureBytes_eq]
+          omega)
       have address : 0x22ca0 + (20 + i) = 0x22cb4 + i := by omega
       rw [address] at frame
       exact frame.trans (prefixState.parameter i hi)
   refine ⟨ready, trace, pc, messageReady, prefixReady, ?_⟩
   intro i hi
-  have frame := loaded_secondHash_witnessPrefix_byte_frame publicKey
-    message (SphincsWireEncoding.wire inner signature) state answer loaded
-    answerMatches ready trace (60 + i) (by omega)
+  have opening := (loaded_honest_allFts_at_secondHash publicKey message
+    inner signature state answer loaded answerMatches ready trace).1
+      (⟨0, by decide⟩ : SphincsSecurity.FtsTree) i hi
   have address : 0x22ca0 + (60 + i) = 0x22cdc + i := by omega
-  rw [address] at frame
-  have secret :=
-    SphincsWireEncoding.loaded_honest_firstFtsSecret publicKey message
-      inner signature state loaded i hi
-  rw [address] at secret
-  exact frame.trans secret
+  simp only [Nat.zero_mul] at opening
+  rw [address] at opening
+  exact opening
 
 /-- The first FORS HASH query of an honest wire signature is the abstract query. -/
 theorem loaded_honest_firstFts_query
@@ -358,16 +436,22 @@ theorem loaded_honest_firstFts_query
   let final := SphincsVerifierFtsSetup.ftsHashReadyState advanced
   exact ⟨ready, final, trace, query.1, query.2.1, query.2.2⟩
 
-/-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_secondHash_witnessPrefix_frame' depends on axioms: [propext,
- Classical.choice,
- Quot.sound] -/
-#guard_msgs in
-#print axioms loaded_secondHash_witnessPrefix_frame
-
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_honest_firstFts_query' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms loaded_honest_firstFts_query
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_secondHash_witnessByte_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_secondHash_witnessByte_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_honest_allFts_at_secondHash' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_allFts_at_secondHash
 
 end SigGolfCandidate.SphincsVerifierFtsEarlyFrame
