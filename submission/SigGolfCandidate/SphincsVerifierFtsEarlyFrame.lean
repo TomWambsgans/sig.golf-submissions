@@ -375,6 +375,45 @@ theorem firstFtsPointers_preserve_FtsWitness (state : MachineState)
     exact (SphincsVerifierFtsWitnessFrame.firstFtsPointers_allWitness_frame
       state answer _ bound destination).trans (witness.path tree level i hi)
 
+theorem firstFtsHashReady_preserve_FtsWitness (state : MachineState)
+    (answer : BitVec 256) (signature : SphincsSecurity.Signature)
+    (destination : state.getReg .x12 = 0x42000)
+    (witness : FtsWitness state signature) :
+    FtsWitness (SphincsVerifierFtsSetup.ftsHashReadyState
+      (SphincsVerifierFtsAdvance.ftsAdvanceState
+        (SphincsVerifierCopy.copyRootState
+          (SphincsVerifierFtsQuery.firstFtsPointers state answer))))
+      signature := by
+  constructor
+  · intro tree i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes + i <
+        SphincsWire.signatureBytes := by
+      have h := tree.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame
+      state answer _ bound destination).trans (witness.secret tree i hi)
+  · intro tree level i hi
+    have bound : 60 + tree.val * SphincsWire.ftsOpeningBytes +
+        (SphincsWire.digestBytes + level.val * SphincsWire.digestBytes + i) <
+        SphincsWire.signatureBytes := by
+      have htree := tree.isLt
+      have hlevel := level.isLt
+      rw [SphincsWire.signatureBytes_eq]
+      norm_num [SphincsSecurity.ftsTrees, SphincsWire.ftsOpeningBytes,
+        SphincsSecurity.ftsTreeHeight, SphincsWire.digestBytes] at *
+      omega
+    exact (SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame
+      state answer _ bound destination).trans (witness.path tree level i hi)
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.firstFtsHashReady_preserve_FtsWitness' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstFtsHashReady_preserve_FtsWitness
+
 theorem loaded_honest_message_ready_with_witness
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
     (inner : SphincsSecurity.PublicKey)
@@ -457,7 +496,8 @@ theorem loaded_honest_firstFts_query
           (SphincsSecurity.Concrete.digestLeaves
             (SphincsSecurity.truncateMessageDigest digestAnswer)
             ⟨0, by decide⟩)
-          (signature.ftsSecret ⟨0, by decide⟩)) := by
+          (signature.ftsSecret ⟨0, by decide⟩)) ∧
+      FtsWitness final signature := by
   obtain ⟨ready, trace, pc, messageReady, prefixWitness, secret⟩ :=
     loaded_honest_message_ready_with_witness publicKey message inner
       signature state commitmentAnswer loaded answerMatches
@@ -469,7 +509,13 @@ theorem loaded_honest_firstFts_query
   let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState
     (SphincsVerifierCopy.copyRootState pointers)
   let final := SphincsVerifierFtsSetup.ftsHashReadyState advanced
-  exact ⟨ready, final, trace, query.1, query.2.1, query.2.2⟩
+  have witnessReady := loaded_honest_allFts_at_secondHash publicKey
+    message inner signature state commitmentAnswer loaded answerMatches
+    ready trace
+  have witnessFinal := firstFtsHashReady_preserve_FtsWitness ready
+    digestAnswer signature messageReady.destination witnessReady
+  exact ⟨ready, final, trace, query.1, query.2.1, query.2.2,
+    by simpa only [final, advanced, pointers] using witnessFinal⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsEarlyFrame.loaded_honest_firstFts_query' depends on axioms: [propext,
  Classical.choice,

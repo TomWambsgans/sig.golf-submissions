@@ -226,6 +226,177 @@ theorem firstFtsAdvanced_allWitness_frame (state : MachineState)
 #guard_msgs in
 #print axioms firstFtsAdvanced_allWitness_frame
 
+theorem firstFtsTag_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (SphincsVerifierFtsHeader.tagState state).getMem read =
+      state.getMem read := by
+  have not0 : read ≠ 0x40000 :=
+    low_ne_high read _ low (by decide)
+  have notCell : read ≠ alignToDword (0x40000#64) := by
+    have aligned : alignToDword (0x40000#64) = (0x40000 : Word) := by decide
+    simpa only [aligned] using not0
+  simp [SphincsVerifierFtsHeader.tagState,
+    SphincsVerifierFtsHeader.tagBeforeStore,
+    execInstrBr, signExtend12, setWord32_eq,
+    MachineState.getMem_setMem_ne,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, notCell]
+
+theorem firstFtsPosition_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (destination : state.getReg .x7 = 0x40000) :
+    (SphincsVerifierHeader.positionState state).getMem read =
+      state.getMem read := by
+  have not0 : read ≠ 0x40000 :=
+    low_ne_high read _ low (by decide)
+  have notCell : read ≠ alignToDword (0x40004#64) := by
+    have aligned : alignToDword (0x40004#64) = (0x40000 : Word) := by decide
+    simpa only [aligned] using not0
+  simp [SphincsVerifierHeader.positionState,
+    SphincsVerifierHeader.positionBeforeStore,
+    execInstrBr, signExtend12, setWord32_eq, destination,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, notCell]
+
+theorem firstFtsTree_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (destination : state.getReg .x7 = 0x40000) :
+    (SphincsVerifierHeader.treeState state).getMem read =
+      state.getMem read := by
+  have notCell : read ≠ 0x40008 :=
+    low_ne_high read _ low (by decide)
+  change read ≠ (262152#64) at notCell
+  simp [SphincsVerifierHeader.treeState,
+    SphincsVerifierHeader.treeBeforeStore,
+    execInstrBr, signExtend12, destination,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, notCell]
+
+theorem firstFtsIndex_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (destination : state.getReg .x7 = 0x40000) :
+    (SphincsVerifierHeader.indexState state).getMem read =
+      state.getMem read := by
+  have notCell : read ≠ alignToDword (0x40010#64) := by
+    have not16 : read ≠ 0x40010 :=
+      low_ne_high read _ low (by decide)
+    have aligned : alignToDword (0x40010#64) = (0x40010 : Word) := by decide
+    simpa only [aligned] using not16
+  simp [SphincsVerifierHeader.indexState,
+    SphincsVerifierHeader.indexBeforeStore,
+    execInstrBr, signExtend12, setWord32_eq, destination,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, notCell]
+
+theorem firstFtsHeader_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (SphincsVerifierFtsHeader.headerState state).getMem read =
+      state.getMem read := by
+  let tagged := SphincsVerifierFtsHeader.tagState state
+  let positioned := SphincsVerifierHeader.positionState tagged
+  let treed := SphincsVerifierHeader.treeState positioned
+  have tagPointer : tagged.getReg .x7 = 0x40000 :=
+    SphincsVerifierFtsHeader.tag_hash_pointer state
+  have positionPointer : positioned.getReg .x7 = 0x40000 :=
+    (SphincsVerifierHeader.position_hash_pointer tagged).trans tagPointer
+  have treePointer : treed.getReg .x7 = 0x40000 :=
+    (SphincsVerifierHeader.tree_hash_pointer positioned).trans positionPointer
+  change (SphincsVerifierHeader.indexState treed).getMem read = _
+  rw [firstFtsIndex_lowMem_frame treed read low treePointer,
+    firstFtsTree_lowMem_frame positioned read low positionPointer,
+    firstFtsPosition_lowMem_frame tagged read low tagPointer,
+    firstFtsTag_lowMem_frame state read low]
+
+theorem firstFtsHeader_lowByte_frame (state : MachineState)
+    (address : Word) (low : (alignToDword address).toNat < 0x40000) :
+    (SphincsVerifierFtsHeader.headerState state).getByte address =
+      state.getByte address := by
+  simpa only [MachineState.getByte] using
+    congrArg (fun value : Word => extractByte value (byteOffset address))
+      (firstFtsHeader_lowMem_frame state (alignToDword address) low)
+
+theorem firstFtsParameterPointers_mem_frame (state : MachineState)
+    (read : Word) :
+    (SphincsVerifierFtsParameter.parameterPointers state).getMem read =
+      state.getMem read := by
+  simp [SphincsVerifierFtsParameter.parameterPointers, execInstrBr]
+
+theorem firstFtsParameterCopy_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000)
+    (destination : state.getReg .x7 = 0x40014) :
+    (SphincsVerifierCopy.copyRootState state).getMem read =
+      state.getMem read := by
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame state read (by
+    intro offset
+    have high : 0x40000 ≤
+        (alignToDword
+          (state.getReg .x7 + signExtend12
+            (4#12 * BitVec.ofNat 12 offset.val))).toNat := by
+      rw [destination]
+      fin_cases offset <;> decide
+    exact low_ne_high read _ low high)]
+
+theorem firstFtsParameter_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (SphincsVerifierFtsParameter.parameterState state).getMem read =
+      state.getMem read := by
+  change (SphincsVerifierCopy.copyRootState
+    (SphincsVerifierFtsParameter.parameterPointers state)).getMem read = _
+  rw [firstFtsParameterCopy_lowMem_frame _ read low
+      (SphincsVerifierFtsParameter.parameterPointers_regs state).2,
+    firstFtsParameterPointers_mem_frame]
+
+theorem firstFtsHashRegisters_mem_frame (state : MachineState)
+    (read : Word) :
+    (SphincsVerifierFtsSetup.hashRegistersState state).getMem read =
+      state.getMem read := by
+  simp [SphincsVerifierFtsSetup.hashRegistersState, execInstrBr]
+
+theorem firstFtsHashReady_lowMem_frame (state : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState state).getMem read =
+      state.getMem read := by
+  change (SphincsVerifierFtsSetup.hashRegistersState
+    (SphincsVerifierFtsParameter.parameterState
+      (SphincsVerifierFtsHeader.headerState state))).getMem read = _
+  rw [firstFtsHashRegisters_mem_frame,
+    firstFtsParameter_lowMem_frame _ read low,
+    firstFtsHeader_lowMem_frame _ read low]
+
+theorem firstFtsHashReady_allWitness_frame (state : MachineState)
+    (answer : BitVec 256) (i : Nat)
+    (hi : i < SphincsWire.signatureBytes)
+    (destination : state.getReg .x12 = 0x42000) :
+    (SphincsVerifierFtsSetup.ftsHashReadyState
+      (SphincsVerifierFtsAdvance.ftsAdvanceState
+        (SphincsVerifierCopy.copyRootState
+          (firstFtsPointers state answer)))).getByte
+      (BitVec.ofNat 64 (0x22ca0 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := by
+  let address : Word := BitVec.ofNat 64 (0x22ca0 + i)
+  have low : (alignToDword address).toNat < 0x40000 := by
+    have length := SphincsWire.signatureBytes_eq
+    have small : 0x22ca0 + i < 2 ^ 64 := by omega
+    have range : 0x22ca0 + i < 0x40000 := by omega
+    have aligned : (alignToDword address).toNat ≤ address.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have exactAddress : address.toNat = 0x22ca0 + i := by
+      simp only [address, BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt small
+    omega
+  simp only [MachineState.getByte]
+  rw [firstFtsHashReady_lowMem_frame _ (alignToDword address) low]
+  exact firstFtsAdvanced_allWitness_frame state answer i hi destination
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsWitnessFrame.firstFtsHashReady_allWitness_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstFtsHashReady_allWitness_frame
+
+
 theorem firstFtsPointers_prefix (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (answer : BitVec 256)
     (destination : state.getReg .x12 = 0x42000)
