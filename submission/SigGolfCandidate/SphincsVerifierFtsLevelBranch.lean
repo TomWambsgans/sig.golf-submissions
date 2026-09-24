@@ -7,6 +7,14 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierMessageCopy
 open SigGolfCandidate.SphincsVerifierFtsLevelInit
 open SigGolfCandidate.SphincsVerifierFtsResult
+open SigGolfCandidate.SphincsVerifierFtsSelect
+open SigGolfCandidate.SphincsVerifierFtsTreeHeader
+open SigGolfCandidate.SphincsVerifierFtsEntry
+open SigGolfCandidate.SphincsVerifierLastLeaf
+open SigGolfCandidate.SphincsVerifierLeavesTrace
+open SigGolfCandidate.SphincsVerifierIndexStore
+open SigGolfCandidate.SphincsVerifierIndexPrefix
+open SigGolfCandidate.SphincsVerifierMessageHash
 set_option maxRecDepth 16384
 
 def parityState (state : MachineState) : MachineState :=
@@ -111,6 +119,47 @@ theorem selection_firstPath_parity (selection : MachineState)
   have selected := selection_scratch_after_advance selection
   exact ⟨by rw [parity_reg, scratch.2.1, selected.1],
     by rw [scratch.2.2, selected.2]⟩
+
+set_option maxHeartbeats 0 in
+theorem messageReady_admissible_firstPathParity (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (message : SphincsSecurity.Message)
+    (randomness : SphincsSecurity.Randomness)
+    (ready : MessageReady state pk message randomness)
+    (pc : state.pc = 0x12a0) (answer : BitVec 256)
+    (admissible : SphincsSecurity.Concrete.Admissible
+      (SphincsSecurity.truncateMessageDigest answer))
+    (leafAnswer : BitVec 256) :
+    let initial := indexStoredState (indexValueState (writeHash state answer))
+    let selected := leafStates initial 24 (by decide)
+    let accepted := lastAcceptState selected
+    let entered := ftsEntryState accepted
+    let header := ftsTreeHeaderState entered
+    let selection := ftsSelectState header
+    let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selection
+    let copied := SphincsVerifierCopy.copyRootState pointers
+    let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState copied
+    let hashReady := SphincsVerifierFtsSetup.ftsHashReadyState advanced
+    let start := levelInitState (resultState (writeHash hashReady leafAnswer))
+    (parityState start).getReg .x6 = selection.getMem 0x43070 &&& 1 ∧
+      (selection.getMem 0x43070).toNat =
+        abstractLeaf answer (0 : Fin 24) := by
+  let initial := indexStoredState (indexValueState (writeHash state answer))
+  let selected := leafStates initial 24 (by decide)
+  let accepted := lastAcceptState selected
+  let entered := ftsEntryState accepted
+  let header := ftsTreeHeaderState entered
+  let selection := ftsSelectState header
+  have path := selection_firstPath_parity selection leafAnswer
+  obtain ⟨_, _, _, _, _, leaf, bit, leafNat, _⟩ :=
+    messageReady_admissible_ftsSelect state pk message randomness
+      ready pc answer admissible
+  have selectorNat : (selection.getMem 0x43070).toNat =
+      abstractLeaf answer (0 : Fin 24) := by
+    rw [bit]
+    rw [leaf] at leafNat
+    exact leafNat
+  exact ⟨path.1, selectorNat⟩
 theorem parity_preserve_witness (state : MachineState)
     (signature : SphincsSecurity.Signature)
     (witness : SphincsVerifierFtsEarlyFrame.FtsWitness state signature) :
