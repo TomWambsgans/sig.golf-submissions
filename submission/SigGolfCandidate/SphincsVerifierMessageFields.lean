@@ -247,6 +247,14 @@ theorem bothCopies_root_word (state : MachineState) (index : Fin 5) :
   rw [pointersFrame]
   exact firstCopy_root_source_frame state index
 
+theorem bothCopies_pair_word (pair : CopyPair) (state : MachineState)
+    (index : Fin 5) :
+    (bothCopiesState state).getWord32 (destinationWord pair index) =
+      state.getWord32 (sourceWord pair index) := by
+  cases pair
+  · exact bothCopies_randomizer_word state index
+  · exact bothCopies_root_word state index
+
 /-- info: 'SigGolfCandidate.SphincsVerifierMessageFields.copyRoot_pair_data' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
