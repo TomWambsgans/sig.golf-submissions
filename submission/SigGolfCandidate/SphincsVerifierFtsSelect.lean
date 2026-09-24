@@ -228,6 +228,7 @@ theorem messageReady_admissible_ftsSelect (state : MachineState)
         (header.getByte (BitVec.ofNat 64 0x44800)).zeroExtend 64 ∧
       final.getMem 0x43070 =
         (header.getByte (BitVec.ofNat 64 0x44800)).zeroExtend 64 ∧
+      (final.getMem 0x43020).toNat = abstractLeaf answer (0 : Fin 24) ∧
       ∀ tree : Fin 24,
         (final.getByte (BitVec.ofNat 64 (0x44800 + tree.val))).toNat =
           abstractLeaf answer tree := by
@@ -245,6 +246,7 @@ theorem messageReady_admissible_ftsSelect (state : MachineState)
   have back := ftsSelect_block header 0 headerPc counter
   have finalPc := ftsSelect_pc header headerPc
   have leaf := ftsSelect_leaf header 0 counter
+  have selectedZero := selectors (0 : Fin 24)
   exact ⟨by simpa [initial, selected, accepted, entered, header] using
       front.append back,
     finalPc,
@@ -256,6 +258,11 @@ theorem messageReady_admissible_ftsSelect (state : MachineState)
        exact pointer,
     by simpa using leaf.1,
     by simpa using leaf.2,
+    by
+      rw [leaf.1]
+      change ((header.getByte (BitVec.ofNat 64 0x44800)).setWidth 64).toNat = _
+      rw [BitVec.toNat_setWidth_of_le (show 8 ≤ 64 by decide)]
+      simpa using selectedZero,
     by intro tree
        rw [ftsSelect_selector_byte]
        exact selectors tree⟩
