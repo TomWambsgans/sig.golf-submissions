@@ -115,8 +115,66 @@ theorem counted_twoEdge_budget_le_cap
         simp [hp, htwo, observed]
       · simp [hp]
 
+omit hcharge hreal in
+theorem counted_twoEdge_budget_le_cap_counted_cost
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (budget : Nat) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ result.2.1.2 ≤ budget |
+      realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)] ≤
+      (((3 / 2 : ENNReal) + 4 * ((budget : ENNReal) / Fintype.card State) +
+        2 * ((budget : ENNReal) / Fintype.card State)^2) / Fintype.card State) *
+          ∑' result, idealRun auxiliary
+            (fun endpoint => QueryCap.counted IsPrefixQuery
+              (QueryCap.run IsPrefixQuery (computation endpoint) budget))
+            (fun _ _ => none) result * (result.2.1.2 : ENNReal) := by
+  exact (counted_twoEdge_budget_le_cap auxiliary computation budget).trans
+    (realRun_twoEdge_le auxiliary
+      (fun endpoint => QueryCap.run IsPrefixQuery (computation endpoint) budget) budget
+      (fun endpoint => QueryCap.run_queryBound IsPrefixQuery (computation endpoint) budget))
+
+omit hcharge hreal in
+theorem realRun_twoEdge_cost_budget_le_counted
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hchargeRun : ∀ result ∈
+      (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)).support, result.2.1.2 ≤ cost result.2.1.1) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ result.2.1.2 ≤ budget |
+      realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)] := by
+  rw [← realRun_counted_forget auxiliary computation (fun _ _ => none)]
+  simp only [← PMF.monad_map_eq_map]
+  rw [probEvent_map]
+  simp only [Function.comp_def, probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  by_cases hr : result ∈ (realRun auxiliary
+      (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+      (fun _ _ => none)).support
+  · by_cases hevent : TwoEdge result.2.2 result.1 ∧ cost result.2.1.1 ≤ budget
+    · have hcount : result.2.1.2 ≤ budget := (hchargeRun result hr).trans hevent.2
+      simp [hevent, hcount]
+    · simp [hevent]
+  · have hz : (realRun auxiliary
+      (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+      (fun _ _ => none)) result = 0 := not_not.mp hr
+    simp [hz]
+
 end SphincsSecurity.Concrete.PartialChainEndpoint
 
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap_counted_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap_counted_cost
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_counted
