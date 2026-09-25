@@ -56,6 +56,29 @@ theorem referenceContactGame_twoEdge_le_sum (inputs : Finset HashInput)
   rintro result _ ⟨address, ha⟩
   exact ⟨address, Finset.mem_univ address, ha⟩
 
+theorem referenceContactGame_twoEdge_budget_le_sum (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun result =>
+      result.2.2.TwoEdge result.1 (referenceFamilyWords result.2.1 dummy) ∧
+        result.2.2.output.2.hashCalls ≤ q |
+      referenceContactGame inputs hencoding dummy adversary] ≤
+      ∑ address : OtsPrefix.ChainAddress,
+        Pr[fun result =>
+          result.2.2.TwoEdgeAt result.1 (referenceFamilyWords result.2.1 dummy) address ∧
+            result.2.2.output.2.hashCalls ≤ q |
+          referenceContactGame inputs hencoding dummy adversary] := by
+  let law := referenceContactGame inputs hencoding dummy adversary
+  let event := fun address : OtsPrefix.ChainAddress =>
+    fun result : InstrumentedResult ContactResult =>
+      result.2.2.TwoEdgeAt result.1 (referenceFamilyWords result.2.1 dummy) address ∧
+        result.2.2.output.2.hashCalls ≤ q
+  refine (_root_.probEvent_mono (mx := law)
+    (q := fun result => ∃ address ∈ (Finset.univ : Finset OtsPrefix.ChainAddress), event address result) ?_).trans
+    (probEvent_exists_finset_le_sum Finset.univ law event)
+  rintro result _ ⟨⟨address, ha⟩, hcost⟩
+  exact ⟨address, Finset.mem_univ address, ha, hcost⟩
+
 theorem referenceContactGame_twoEdge_sum_cost_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
     (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
     (1 - (q : ENNReal) / Fintype.card Digest) *
@@ -105,3 +128,7 @@ theorem referenceContactGame_twoEdge_le (dummy : OtsReferenceWords) (adversary :
   simpa only [mul_comm] using referenceContactGame_twoEdge_cost_le dummy adversary q hbound hsmall
 
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceContactGame_twoEdge_budget_le_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceContactGame_twoEdge_budget_le_sum
