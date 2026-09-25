@@ -1605,3 +1605,60 @@ theorem whole_wots_segment (hash : Hash) (state : MachineState)
 #print axioms whole_wots_segment
 
 end SigGolfCandidate.SphincsVerifierWotsLeafInterior
+
+
+namespace SigGolfCandidate.SphincsVerifierWotsLeafInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+open SigGolfCandidate.SphincsVerifierWotsRelocation
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem whole_wots_segment_shifted (target : Fin 5) (hash : Hash)
+    (state : MachineState) (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (pc : state.pc = BitVec.ofNat 64 (chainPc target))
+    (counter : state.getMem 0x43050 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (valid : SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid state) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (_run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc = SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) ∧
+      steps ≤ 728 * 52 + 856 ∧
+      cycles ≤ 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧
+      blocks ≤ 7 * 52 + 17 := by
+  let base := shift (-delta target) state
+  have basePc : base.pc = 0x2710 := by
+    fin_cases target <;> simp [base, pc, chainPc, delta, shift]
+  have baseCounter : base.getMem 0x43050 = 0 := by simpa [base] using counter
+  have basePointer : base.getMem 0x43028 = BitVec.ofNat 64 sourceBase := by
+    simpa [base] using pointer
+  have baseValid : SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid base := by
+    simpa [SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid, base] using valid
+  obtain ⟨finished, steps, cycles, calls, blocks, trace, done,
+      hsteps, hcycles, hcalls, hblocks, inside⟩ :=
+    whole_wots_segment hash base sourceBase baseBound baseAligned
+      basePc baseCounter basePointer baseValid
+  have shiftedStart : shift (delta target) base = state := by
+    simp [base, shift, MachineState.setPC]
+  let final := shift (delta target) finished
+  have finalPc : final.pc =
+      SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) := by
+    simp [final, done, delta, SigGolfCandidate.SphincsVerifierXmssParity.nodePc,
+      SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer]
+    fin_cases target <;> decide
+  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc,
+    hsteps, hcycles, hcalls, hblocks⟩
+  simpa [shiftedStart, final] using trace_shift target hash trace inside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.whole_wots_segment_shifted' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms whole_wots_segment_shifted
+end SigGolfCandidate.SphincsVerifierWotsLeafInterior
