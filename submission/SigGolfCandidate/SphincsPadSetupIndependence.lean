@@ -197,8 +197,129 @@ theorem plaintextSetup_stable (inputs : Finset SigGolf.Query)
         (SphincsMaskedKeygenRefinement.parameter second seed)
         parameter seed seed hagree level node).symm
 
+/-- The MAC address may be chosen from the ciphertext after the pad transform.
+Its answer is retained because the address has a distinct tag from every pad. -/
+theorem joint_setup_cipher_mac_table {State : Type} {n : Nat}
+    {inputs : Finset SigGolf.Query} (addresses : Fin n → inputs)
+    (hinj : Function.Injective addresses)
+    (setup : (inputs → BitVec 256) → State)
+    (nodes : State → Fin n → Digest)
+    (hstable : ∀ table,
+      setup (SphincsFiniteTableMasking.setupMaskTransform addresses setup nodes table) = setup table)
+    (macAddress : (Fin n → Digest) → inputs)
+    (hmac : ∀ cipher i, addresses i ≠ macAddress cipher) :
+    (PMF.uniformOfFintype (inputs → BitVec 256)).map
+      (fun table =>
+        let cipher := fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i
+        (setup table, cipher, table (macAddress cipher), table)) =
+    (PMF.uniformOfFintype (inputs → BitVec 256)).map
+      (fun table =>
+        let cipher := fun i => truncateHash (table (addresses i))
+        (setup table, cipher, table (macAddress cipher),
+          SphincsFiniteTableMasking.setupMaskTransform addresses setup nodes table)) := by
+  let transform := SphincsFiniteTableMasking.setupMaskTransform addresses setup nodes
+  let target := fun table : inputs → BitVec 256 =>
+    let cipher := fun i => truncateHash (table (addresses i))
+    (setup table, cipher, table (macAddress cipher), transform table)
+  have hpoint : ∀ table : inputs → BitVec 256,
+      (let cipher := fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i
+       (setup table, cipher, table (macAddress cipher), table)) =
+      target (transform table) := by
+    intro table
+    have hcipher : (fun i => truncateHash (transform table (addresses i))) =
+        (fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i) := by
+      funext i
+      exact SphincsFiniteTableMasking.truncated_xorTable_at
+        addresses (nodes (setup table)) hinj table i
+    have hmacValue : transform table
+        (macAddress (fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i)) =
+        table (macAddress (fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i)) := by
+      exact SphincsFiniteTableMasking.xorTable_away
+        addresses (nodes (setup table)) table _
+        (hmac _)
+    dsimp only [target, transform]
+    apply Prod.ext
+    · exact (hstable table).symm
+    · apply Prod.ext
+      · exact hcipher.symm
+      · apply Prod.ext
+        · rw [hcipher]
+          exact hmacValue.symm
+        · exact (SphincsFiniteTableMasking.setupMaskTransform_involutive
+            addresses setup nodes hstable table).symm
+  calc
+    _ = (PMF.uniformOfFintype (inputs → BitVec 256)).map
+        (fun table => target (transform table)) := by
+          congr 1
+          funext table
+          exact hpoint table
+    _ = ((PMF.uniformOfFintype (inputs → BitVec 256)).map transform).map target := by
+          rw [PMF.map_comp]
+          rfl
+    _ = _ := by
+          rw [SphincsFiniteTableMasking.uniform_setupMaskTransform
+            addresses setup nodes hstable]
+
+def plaintextNodes (coordinates : Fin 4095 → Nat × Nat)
+    (state : Digest × SigGolf.PublicKey × (Nat → Nat → Digest)) :
+    Fin 4095 → Digest :=
+  fun i => state.2.2 (coordinates i).1 (coordinates i).2
+
+/-- Exact finite-table joint distribution for all 4095 encrypted tree nodes,
+the dynamically selected tag-15 MAC answer, and the entire oracle table.
+`encode` is the cache-prefix serialization; its exact machine encoding is a
+separate refinement obligation. -/
+theorem plaintext_cipher_mac_joint (inputs : Finset SigGolf.Query)
+    (parameter : PublicParameter) (seed : MasterSeed)
+    (hpad : ∀ i : Fin 4095,
+      SphincsBridge.toQuery (padInput parameter seed (BitVec.ofNat 32 i.val)) ∈ inputs)
+    (coordinates : Fin 4095 → Nat × Nat)
+    (encode : (Fin 4095 → Digest) → HashInput)
+    (hmac : ∀ cipher : Fin 4095 → Digest,
+      SphincsBridge.toQuery (macInput parameter seed (encode cipher)) ∈ inputs) :
+    let addresses := SphincsFiniteTableMasking.padAddresses inputs parameter seed hpad
+    let setup := plaintextSetup inputs seed
+    let nodes := plaintextNodes coordinates
+    let macAddress := fun cipher : Fin 4095 → Digest =>
+      (⟨SphincsBridge.toQuery (macInput parameter seed (encode cipher)), hmac cipher⟩ : inputs)
+    (PMF.uniformOfFintype (inputs → BitVec 256)).map
+      (fun table =>
+        let cipher := fun i => truncateHash (table (addresses i)) ^^^ nodes (setup table) i
+        (setup table, cipher, table (macAddress cipher), table)) =
+    (PMF.uniformOfFintype (inputs → BitVec 256)).map
+      (fun table =>
+        let cipher := fun i => truncateHash (table (addresses i))
+        (setup table, cipher, table (macAddress cipher),
+          SphincsFiniteTableMasking.setupMaskTransform addresses setup nodes table)) := by
+  let addresses := SphincsFiniteTableMasking.padAddresses inputs parameter seed hpad
+  let setup := plaintextSetup inputs seed
+  let nodes := plaintextNodes coordinates
+  let macAddress := fun cipher : Fin 4095 → Digest =>
+    (⟨SphincsBridge.toQuery (macInput parameter seed (encode cipher)), hmac cipher⟩ : inputs)
+  have hinj : Function.Injective addresses :=
+    SphincsFiniteTableMasking.padAddresses_injective inputs parameter seed hpad
+  have hstable : ∀ table,
+      setup (SphincsFiniteTableMasking.setupMaskTransform addresses setup nodes table) =
+        setup table := by
+    intro table
+    exact plaintextSetup_stable inputs parameter seed hpad
+      (nodes (setup table)) table
+  have hdisjoint : ∀ cipher i, addresses i ≠ macAddress cipher := by
+    intro cipher i
+    exact SphincsFiniteTableMasking.padAddresses_ne_mac
+      inputs parameter parameter seed seed (encode cipher) hpad (hmac cipher) i
+  exact joint_setup_cipher_mac_table addresses hinj setup nodes hstable macAddress hdisjoint
+
 end SigGolfCandidate.SphincsPadSetupIndependence
 
 /-- info: 'SigGolfCandidate.SphincsPadSetupIndependence.eval_eq_of_avoids_pads' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsPadSetupIndependence.eval_eq_of_avoids_pads
+
+/-- info: 'SigGolfCandidate.SphincsPadSetupIndependence.plaintextSetup_stable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsPadSetupIndependence.plaintextSetup_stable
+
+/-- info: 'SigGolfCandidate.SphincsPadSetupIndependence.plaintext_cipher_mac_joint' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsPadSetupIndependence.plaintext_cipher_mac_joint
