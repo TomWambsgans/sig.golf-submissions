@@ -6,7 +6,7 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
 open SphincsMaskedSignOtsParents SphincsMaskedSignOtsTree SphincsMaskedSignOtsPath
 open SphincsMaskedSignOtsPathSetup SphincsMaskedSignOtsPathSibling SphincsMaskedSignOtsPathFinish
 open SphincsMaskedSignOtsShift SphincsMaskedKeygenPrefix
-open SphincsSecurity SphincsBridge SphincsVerifierCopy SphincsMaskedChainDomain
+open SphincsSecurity SphincsBridge SphincsVerifierCopy SphincsVerifierFtsRootCopy SphincsMaskedChainDomain
 set_option maxRecDepth 65536
 set_option maxHeartbeats 4000000
 
@@ -485,5 +485,120 @@ theorem subtree_root_path (location : Fin 5) (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.subtree_root_path' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms subtree_root_path
+
+/-- The twenty instructions after the path transfer the selected leaf into
+WOTS signing controls, reset the retry counter and position, and set INDEX. -/
+def otsPreludeCode : List (Word × Instr) := [
+  (0x1a50,.LUI .x28 67),
+  (0x1a54,.ADDI .x28 .x28 168),
+  (0x1a58,.LD .x6 .x28 0),
+  (0x1a5c,.LUI .x28 67),
+  (0x1a60,.ADDI .x28 .x28 32),
+  (0x1a64,.SD .x28 .x6 0),
+  (0x1a68,.ADDI .x6 .x0 0),
+  (0x1a6c,.LUI .x28 67),
+  (0x1a70,.ADDI .x28 .x28 184),
+  (0x1a74,.SD .x28 .x6 0),
+  (0x1a78,.ADDI .x6 .x0 0),
+  (0x1a7c,.LUI .x28 67),
+  (0x1a80,.ADDI .x28 .x28 16),
+  (0x1a84,.SD .x28 .x6 0),
+  (0x1a88,.LUI .x28 67),
+  (0x1a8c,.ADDI .x28 .x28 32),
+  (0x1a90,.LD .x6 .x28 0),
+  (0x1a94,.LUI .x28 67),
+  (0x1a98,.ADDI .x28 .x28 24),
+  (0x1a9c,.SD .x28 .x6 0)]
+
+def otsPreludeState (s : MachineState) : MachineState := runSchedule otsPreludeCode s
+
+def otsPrelude (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (otsPreludeState (s.setPC 0x1a50))
+
+theorem otsPrelude_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (660+offset location) otsPreludeCode := by
+  fin_cases location <;> rfl
+
+theorem otsPrelude_encoded (location : Fin 5) : ∀ e∈otsPreludeCode,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (660+offset location) _ _ (otsPrelude_image location)
+  · have h := SphincsMaskedSignOtsParents.offset_bound location
+    change 660+offset location+20≤11000
+    omega
+  · intro i
+    have h : ∀ i : Fin otsPreludeCode.length,
+        otsPreludeCode[i.val].1=BitVec.ofNat 64 (0x1a50+4*i.val) := by
+      intro j
+      fin_cases j <;> rfl
+    rw [h i,delta,←BitVec.ofNat_add]
+    congr 1
+    omega
+
+theorem otsPrelude_supported : ∀ e∈otsPreludeCode,Supported e.2 := by decide
+
+theorem otsPrelude_checked (s : MachineState) (pc : s.pc=0x1a50) :
+    Checked otsPreludeCode s := by
+  simp [otsPreludeCode,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem otsPrelude_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1a50+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 20 (otsPrelude location s) := by
+  have trace := block_shift SphincsMaskedImages.sign (delta location) otsPreludeCode
+    otsPrelude_supported (otsPrelude_encoded location) (s.setPC 0x1a50)
+    (otsPrelude_checked (s.setPC 0x1a50) rfl)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s pc] at trace
+  have len : otsPreludeCode.length=20 := rfl
+  simpa only [otsPrelude,otsPreludeState,len] using trace
+
+theorem otsPrelude_pc (location : Fin 5) (s : MachineState) :
+    (otsPrelude location s).pc=0x1aa0+delta location := by
+  simp [otsPrelude,otsPreludeState,otsPreludeCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+
+theorem otsPrelude_controls (location : Fin 5) (s : MachineState) (selected : Nat)
+    (hs : s.getMem 0x430a8=BitVec.ofNat 64 selected) :
+    (otsPrelude location s).getMem 0x43020=BitVec.ofNat 64 selected ∧
+    (otsPrelude location s).getMem 0x430b8=0 ∧
+    (otsPrelude location s).getMem 0x43010=0 ∧
+    (otsPrelude location s).getMem 0x43018=BitVec.ofNat 64 selected := by
+  change s.getMem 0x430a8#64 = _ at hs
+  simp [otsPrelude,otsPreludeState,otsPreludeCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,hs]
+
+
+def otsPreludeWrites : List Word :=
+  [0x43020#64,0x430b8#64,0x43010#64,0x43018#64]
+
+theorem otsPrelude_frame (location : Fin 5) (s : MachineState) (a : Word)
+    (outside : a∉otsPreludeWrites) :
+    (otsPrelude location s).getMem a=s.getMem a := by
+  simp only [otsPrelude,shift_mem]
+  simp only [otsPreludeWrites,List.mem_cons,List.not_mem_nil,
+    not_or,not_false_eq_true,and_true] at outside
+  obtain ⟨h0,h1,h2,h3⟩:=outside
+  simp [otsPreludeState,otsPreludeCode,runSchedule,execInstrBr,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,h0,h1,h2,h3]
+
+theorem otsPrelude_low_word (location : Fin 5) (s : MachineState)
+    (read : Nat) (readBound : read<0x40000) :
+    (otsPrelude location s).getWord32 (BitVec.ofNat 64 read) =
+      s.getWord32 (BitVec.ofNat 64 read) := by
+  have cell := (SphincsMaskedSignForestTail.cell_bounds read 0 0x40000
+    (by decide) (by omega) readBound (by decide)).2
+  simp only [MachineState.getWord32]
+  rw [otsPrelude_frame]
+  simp only [otsPreludeWrites,List.mem_cons,List.not_mem_nil,
+    not_or,not_false_eq_true,and_true]
+  refine ⟨?_,?_,?_,?_⟩
+  all_goals
+    intro h
+    rw [h] at cell
+    norm_num at cell
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.otsPrelude_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms otsPrelude_block
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
