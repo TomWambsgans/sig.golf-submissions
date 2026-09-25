@@ -444,6 +444,68 @@ theorem chain_segment_identical (target : Fin 5) :
 
 end SigGolfCandidate.SphincsVerifierWotsRelocation
 
+namespace SigGolfCandidate.SphincsVerifierXmssTransitionComplete
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
+open SigGolfCandidate.SphincsVerifierXmssTransition
+open SigGolfCandidate.SphincsVerifierXmssTransitionMessage
+open SigGolfCandidate.SphincsVerifierXmssPathControl
+open SigGolfCandidate.SphincsVerifierXmssPathSemantic
+open SigGolfCandidate.SphincsVerifierXmssPathComplete
+open SigGolfCandidate.SphincsVerifierXmssParity
+open SigGolfCandidate.SphincsVerifierXmssNext
+open SigGolfCandidate.SphincsVerifierHashBytes
+open SigGolfCandidate.SphincsBridge
+open SphincsSecurity.Concrete
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+/-- The complete prior XMSS path is exactly the next WOTS message. -/
+theorem complete_path_handoff (hash : Hash) (target : Fin 5)
+    (s : MachineState) (pk : SphincsSecurity.PublicKey)
+    (tree : TreeIndex) (leaf : LeafIndex)
+    (signature : SphincsSecurity.Signature) (first : Digest)
+    (pointer : Word)
+    (pc : s.pc = nodePc (previousLayer target))
+    (pointerValue : s.getMem 0x43028 = pointer)
+    (pointerBound : pointer.toNat + 20 * layerHeight (previousLayer target) ≤ 0x40000)
+    (pointerAligned : pointer.toNat % 4 = 0)
+    (layerCell : s.getMem 0x43000 = BitVec.ofNat 64 (previousLayer target).val)
+    (treeCell : s.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (levelCell : s.getMem 0x43048 = 1)
+    (bitCell : s.getMem 0x43070 = BitVec.ofNat 64 leaf.val)
+    (hprefix : WitnessPrefix s pk)
+    (current : ∀ i, (hi : i < 20) →
+      s.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+        first.extractLsb' (8 * i) 8)
+    (siblings : PathWitness s signature (previousLayer target) pointer) :
+    let doneState := pathState hash (previousLayer target)
+      (layerHeight (previousLayer target)) s
+    let nextState := handoffState target doneState
+    OrdinarySteps SphincsImages.verify doneState 43 nextState ∧
+      ∀ i, (hi : i < 20) →
+        nextState.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+          (foldValue (adaptOracle hash) pk.parameter
+            (previousLayer target) tree leaf
+            (signaturePath signature (previousLayer target)) first
+            (layerHeight (previousLayer target))).extractLsb' (8 * i) 8 := by
+  have finished := complete_path hash (previousLayer target) s pk tree leaf
+    signature first pointer pc pointerValue pointerBound pointerAligned
+    layerCell treeCell levelCell bitCell hprefix current siblings
+  dsimp at finished ⊢
+  constructor
+  · exact handoff_block target _ finished.1
+  · intro i hi
+    rw [handoff_byte target _ i hi]
+    exact finished.2.1 i hi
+
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssTransitionComplete.complete_path_handoff' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms complete_path_handoff
+
+end SigGolfCandidate.SphincsVerifierXmssTransitionComplete
+
 
 namespace SigGolfCandidate.SphincsVerifierXmssTransitionIndex
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity

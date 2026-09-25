@@ -274,4 +274,55 @@ theorem paths_execution_data (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms paths_execution_data
 
+/-- Every emitted path digest refines the seeded Merkle authentication path. -/
+theorem paths_abstract (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (selected : LeafIndex) (pointer : Nat)
+    (pc : s.pc=0x1938+delta location)
+    (ctrl : PathControls location s 0 selected.val pointer)
+    (selectedBound : selected.val<Levels.width location 0)
+    (pointerBound : pointer+20*Levels.height location≤0x40000)
+    (aligned : pointer%4=0)
+    (cache : ∀ l,l ≤ Levels.height location → ∀ node,node<Levels.width location l →
+      Words20 s (Levels.cacheBase location l+20*node)
+        (treeValue hash parameter seed (signerLayer location) treeIdx l node))
+    (n : Nat) (bound : n≤Levels.height location) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s (70*n) t ∧
+      PathControls location t n (selected.val/2^n) (pointer+20*n) ∧
+      t.pc=(if n=Levels.height location then 0x1a50+delta location
+        else 0x1938+delta location) ∧
+      ∀ j : Fin n,
+        let pathLevel : Fin (layerHeight (signerLayer location)) :=
+          ⟨j.val,by rw [←signerLayer_height]; exact lt_of_lt_of_le j.isLt bound⟩
+        Words20 t (pointer+20*j.val)
+          (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+            (Seeded.treePath parameter (signerLayer location) treeIdx seed selected :
+              OracleComp SphincsSecurity.HashSpec
+                (Fin (layerHeight (signerLayer location)) → Digest)) pathLevel) := by
+  obtain ⟨t,trace,controls,endPc,_,data⟩ := paths_execution_data location s selected.val pointer
+    pc ctrl selectedBound pointerBound aligned n bound
+  refine ⟨t,trace,controls,endPc,?_⟩
+  intro j
+  dsimp only
+  let level : Fin (Levels.height location) := ⟨j.val,by omega⟩
+  let pathLevel : Fin (layerHeight (signerLayer location)) :=
+    ⟨j.val,by rw [←signerLayer_height]; omega⟩
+  have bitBound := divided_selector_bound location selected.val selectedBound level
+  have sibling := sibling_in_width location level (selected.val/2^level.val) bitBound
+  have abstract : treeValue hash parameter seed (signerLayer location) treeIdx level.val
+      ((selected.val/2^level.val) ^^^ 1) =
+      evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+        (Seeded.treePath parameter (signerLayer location) treeIdx seed selected :
+          OracleComp SphincsSecurity.HashSpec (Fin (layerHeight (signerLayer location)) → Digest)) pathLevel := by
+    have ev := SphincsSecurity.Completeness.eval_treePath (adaptOracle hash)
+      parameter (signerLayer location) treeIdx seed selected pathLevel
+    simpa [treeValue,SphincsSecurity.Completeness.node,pathLevel,level] using ev.symm
+  intro i
+  have emitted := data j i
+  have stored := cache level.val (by omega) ((selected.val/2^level.val) ^^^ 1) sibling i
+  exact emitted.trans (by simpa only [abstract,level,pathLevel] using stored)
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.paths_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms paths_abstract
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
