@@ -41,6 +41,12 @@ theorem forestTag_mem_frame (state : MachineState) (address : Word)
     MachineState.getReg_setReg_eq,
     MachineState.getReg_setReg_ne]
 
+theorem forestTag_word_frame (state : MachineState) (address : Word)
+    (outside : alignToDword address ≠ alignToDword (0x40000#64)) :
+    (forestTagState state).getWord32 address = state.getWord32 address := by
+  simp only [MachineState.getWord32]
+  rw [forestTag_mem_frame state (alignToDword address) outside]
+
 theorem forestTag_value (state : MachineState)
     (layerZero : state.getMem 0x43000 = 0) :
     (forestTagState state).getWord32 0x40000 = 0xb01 := by
