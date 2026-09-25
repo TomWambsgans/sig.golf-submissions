@@ -550,6 +550,40 @@ theorem certificateCountedContextGame_mass_le_allCalls (adversary : Adversary)
       generated.1.2.hashCalls))) (by rfl) output houtput
   exact hmass.trans (Nat.cast_le.mpr hspent)
 
+def CertificateCountedContextResult.originalCost (result : CertificateCountedContextResult) :
+    OriginalCertificateResult × Nat :=
+  ((result.1, result.2.1, result.2.2.2.1), result.2.2.2.2.2)
+
+noncomputable def originalCertificateCountedSource (adversary : Adversary) :
+    ProbComp (OriginalCertificateResult × Nat) := do
+  let generated ← boundaryRun 0 scheme.keygen ∅
+  let key := generated.1.1.2
+  let result ← (simulateQ romImpl (countHashQueries
+    (simulateQ (expandedAdversaryImpl key)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)))).run generated.2
+  pure ((key, result.1.1, result.2), generated.1.2.hashCalls + result.1.2)
+
+theorem certificateCountedContextGame_originalCost (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) :
+    CertificateCountedContextResult.originalCost <$>
+      certificateCountedContextGame adversary budget required stopAfter stopped =
+    (liftM (originalCertificateCountedSource adversary) : PMF _) := by
+  simp only [certificateCountedContextGame, originalCertificateCountedSource,
+    map_bind, map_pure]
+  rw [liftM_bind (m := ProbComp) (n := PMF)]
+  apply bind_congr
+  intro generated
+  have h := congrArg (Functor.map (fun result : (RetainedRestResult × Nat) × QueryCache HashSpec =>
+    ((generated.1.1.2, result.1.1, result.2), result.1.2)))
+    (simulateQ_certificateCountedProposalImpl_count generated.1.1.2 budget required
+      (stopAfter generated.1.1.2)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+      ([], (generated.2, ((initialCertificateMonitor generated.1.2.hashCalls stopped, false),
+        generated.1.2.hashCalls))))
+  simpa only [Functor.map_map, Function.comp_def, bind_pure_comp, Nat.add_assoc,
+    liftM_map, CertificateCountedContextResult.originalCost] using h
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -583,3 +617,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_mass_le_allCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedContextGame_mass_le_allCalls
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_originalCost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedContextGame_originalCost
