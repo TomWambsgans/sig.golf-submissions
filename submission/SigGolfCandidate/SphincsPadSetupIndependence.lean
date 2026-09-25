@@ -310,6 +310,162 @@ theorem plaintext_cipher_mac_joint (inputs : Finset SigGolf.Query)
       inputs parameter parameter seed seed (encode cipher) hpad (hmac cipher) i
   exact joint_setup_cipher_mac_table addresses hinj setup nodes hstable macAddress hdisjoint
 
+def MacAgree (first second : SigGolf.Hash)
+    (parameter : PublicParameter) (seed : MasterSeed)
+    (ciphertext : HashInput) : Prop :=
+  ∀ input : HashInput, input ≠ macInput parameter seed ciphertext →
+    first (SphincsBridge.toQuery input) = second (SphincsBridge.toQuery input)
+
+theorem eval_eq_of_avoids_mac {α : Type}
+    (computation : OracleComp SphincsSecurity.HashSpec α)
+    (first second : SigGolf.Hash) (parameter : PublicParameter)
+    (seed : MasterSeed) (ciphertext : HashInput)
+    (hagree : MacAgree first second parameter seed ciphertext)
+    (havoid : SphincsSecurity.Completeness.Avoids
+      (SphincsBridge.adaptOracle first) (macInput parameter seed ciphertext) computation) :
+    evalWithAnswerFn (SphincsBridge.adaptOracle first) computation =
+      evalWithAnswerFn (SphincsBridge.adaptOracle second) computation := by
+  apply eval_eq_of_agree_on_path
+  intro input hquery
+  exact hagree input (fun heq => havoid (heq ▸ hquery))
+
+theorem treeNode_avoids_mac (hash : SigGolf.Hash)
+    (actualParameter macParameter : PublicParameter)
+    (actualSeed macSeed : MasterSeed) (ciphertext : HashInput)
+    (level node : Nat) :
+    SphincsSecurity.Completeness.Avoids (SphincsBridge.adaptOracle hash)
+      (macInput macParameter macSeed ciphertext)
+      (Seeded.treeNode actualParameter topLayer Concrete.rootTree actualSeed level node) := by
+  apply SphincsSecurity.Completeness.Avoids.treeNode
+  · intro leaf chain step payload
+    exact (macInput_ne_tweakableHashInput macParameter actualParameter macSeed
+      ciphertext (.chain topLayer Concrete.rootTree leaf chain step) payload).symm
+  · intro leaf payload
+    exact (macInput_ne_tweakableHashInput macParameter actualParameter macSeed
+      ciphertext (.leaf topLayer Concrete.rootTree leaf) payload).symm
+  · intro level node payload
+    exact (macInput_ne_tweakableHashInput macParameter actualParameter macSeed
+      ciphertext (.node topLayer Concrete.rootTree level node) payload).symm
+  · intro leaf chain
+    exact (macInput_ne_keygenHashInput macParameter actualParameter macSeed actualSeed
+      ciphertext (.ots topLayer Concrete.rootTree leaf chain)).symm
+
+theorem treeValue_eq_of_macAgree (first second : SigGolf.Hash)
+    (actualParameter macParameter : PublicParameter)
+    (actualSeed macSeed : MasterSeed) (ciphertext : HashInput)
+    (hagree : MacAgree first second macParameter macSeed ciphertext)
+    (level node : Nat) :
+    SphincsMaskedParentLevels.treeValue first actualParameter actualSeed level node =
+      SphincsMaskedParentLevels.treeValue second actualParameter actualSeed level node := by
+  unfold SphincsMaskedParentLevels.treeValue
+  apply eval_eq_of_avoids_mac _ first second macParameter macSeed ciphertext hagree
+  exact treeNode_avoids_mac first actualParameter macParameter actualSeed macSeed ciphertext level node
+
+theorem parameter_eq_of_macAgree (first second : SigGolf.Hash)
+    (macParameter : PublicParameter) (seed macSeed : MasterSeed)
+    (ciphertext : HashInput)
+    (hagree : MacAgree first second macParameter macSeed ciphertext) :
+    SphincsMaskedKeygenRefinement.parameter first seed =
+      SphincsMaskedKeygenRefinement.parameter second seed := by
+  unfold SphincsMaskedKeygenRefinement.parameter
+  congr 1
+  apply hagree
+  intro heq
+  exact macInput_ne_keygenHashInput macParameter 0 macSeed seed
+    ciphertext .parameter heq.symm
+
+theorem root_eq_of_macAgree (first second : SigGolf.Hash)
+    (macParameter : PublicParameter) (seed macSeed : MasterSeed)
+    (ciphertext : HashInput)
+    (hagree : MacAgree first second macParameter macSeed ciphertext) :
+    SphincsMaskedKeygenRefinement.root first seed =
+      SphincsMaskedKeygenRefinement.root second seed := by
+  have hparameter := parameter_eq_of_macAgree first second macParameter seed macSeed ciphertext hagree
+  calc
+    SphincsMaskedKeygenRefinement.root first seed =
+        SphincsMaskedParentLevels.treeValue first
+          (SphincsMaskedKeygenRefinement.parameter first seed) seed
+          (layerHeight topLayer) 0 := rfl
+    _ = SphincsMaskedParentLevels.treeValue second
+          (SphincsMaskedKeygenRefinement.parameter first seed) seed
+          (layerHeight topLayer) 0 :=
+      treeValue_eq_of_macAgree first second _ macParameter seed macSeed ciphertext hagree _ _
+    _ = SphincsMaskedKeygenRefinement.root second seed := by rw [hparameter]; rfl
+
+theorem publicKey_eq_of_macAgree (first second : SigGolf.Hash)
+    (macParameter : PublicParameter) (seed macSeed : MasterSeed)
+    (ciphertext : HashInput)
+    (hagree : MacAgree first second macParameter macSeed ciphertext) :
+    SphincsMaskedKeygenRefinement.publicKey first seed =
+      SphincsMaskedKeygenRefinement.publicKey second seed := by
+  have hparameter := parameter_eq_of_macAgree first second macParameter seed macSeed ciphertext hagree
+  have hroot := root_eq_of_macAgree first second macParameter seed macSeed ciphertext hagree
+  unfold SphincsMaskedKeygenRefinement.publicKey
+  rw [hroot, hparameter]
+  have hhash : first (SphincsBridge.toQuery (SphincsWire.commitmentInput
+        ⟨SphincsMaskedKeygenRefinement.root second seed,
+          SphincsMaskedKeygenRefinement.parameter second seed⟩)) =
+      second (SphincsBridge.toQuery (SphincsWire.commitmentInput
+        ⟨SphincsMaskedKeygenRefinement.root second seed,
+          SphincsMaskedKeygenRefinement.parameter second seed⟩)) := by
+    apply hagree
+    intro heq
+    exact macInput_ne_commitmentInput macParameter macSeed ciphertext
+      ⟨SphincsMaskedKeygenRefinement.root second seed,
+        SphincsMaskedKeygenRefinement.parameter second seed⟩ heq.symm
+  exact congrArg (fun output : BitVec 256 => output.extractLsb' 0 128) hhash
+
+theorem finiteHashAnswer_macAgree (inputs : Finset SigGolf.Query)
+    (parameter : PublicParameter) (seed : MasterSeed)
+    (ciphertext : HashInput)
+    (hmac : SphincsBridge.toQuery (macInput parameter seed ciphertext) ∈ inputs)
+    (table : inputs → BitVec 256) (answer : BitVec 256) :
+    MacAgree
+      (SphincsOrganizerFiniteHash.finiteHashAnswer ∅ inputs table)
+      (SphincsOrganizerFiniteHash.finiteHashAnswer ∅ inputs
+        (Function.update table
+          (⟨SphincsBridge.toQuery (macInput parameter seed ciphertext), hmac⟩ : inputs)
+          answer)) parameter seed ciphertext := by
+  intro input hneq
+  by_cases hin : SphincsBridge.toQuery input ∈ inputs
+  · rw [SphincsOrganizerFiniteHash.finiteHashAnswer_none ∅ inputs table _ hin (by rfl)]
+    rw [SphincsOrganizerFiniteHash.finiteHashAnswer_none ∅ inputs _ _ hin (by rfl)]
+    have hsub : (⟨SphincsBridge.toQuery input, hin⟩ : inputs) ≠
+        ⟨SphincsBridge.toQuery (macInput parameter seed ciphertext), hmac⟩ := by
+      intro heq
+      exact hneq (SphincsBridge.toQuery_injective (congrArg Subtype.val heq))
+    simp [hsub]
+  · simp [SphincsOrganizerFiniteHash.finiteHashAnswer, hin]
+
+theorem plaintextSetup_stable_mac_update (inputs : Finset SigGolf.Query)
+    (parameter : PublicParameter) (seed : MasterSeed)
+    (ciphertext : HashInput)
+    (hmac : SphincsBridge.toQuery (macInput parameter seed ciphertext) ∈ inputs)
+    (table : inputs → BitVec 256) (answer : BitVec 256) :
+    plaintextSetup inputs seed
+      (Function.update table
+        (⟨SphincsBridge.toQuery (macInput parameter seed ciphertext), hmac⟩ : inputs)
+        answer) = plaintextSetup inputs seed table := by
+  let first := SphincsOrganizerFiniteHash.finiteHashAnswer ∅ inputs table
+  let second := SphincsOrganizerFiniteHash.finiteHashAnswer ∅ inputs
+    (Function.update table
+      (⟨SphincsBridge.toQuery (macInput parameter seed ciphertext), hmac⟩ : inputs)
+      answer)
+  have hagree : MacAgree first second parameter seed ciphertext :=
+    finiteHashAnswer_macAgree inputs parameter seed ciphertext hmac table answer
+  have hparameter := parameter_eq_of_macAgree first second parameter seed seed ciphertext hagree
+  have hpublic := publicKey_eq_of_macAgree first second parameter seed seed ciphertext hagree
+  dsimp only [plaintextSetup]
+  apply Prod.ext
+  · exact hparameter.symm
+  · apply Prod.ext
+    · exact hpublic.symm
+    · funext level node
+      rw [hparameter]
+      exact (treeValue_eq_of_macAgree first second
+        (SphincsMaskedKeygenRefinement.parameter second seed)
+        parameter seed seed ciphertext hagree level node).symm
+
 end SigGolfCandidate.SphincsPadSetupIndependence
 
 /-- info: 'SigGolfCandidate.SphincsPadSetupIndependence.eval_eq_of_avoids_pads' depends on axioms: [propext, Quot.sound] -/
