@@ -318,8 +318,49 @@ theorem seeded_sign_avoids_mac (f : QueryImpl HashSpec Id)
     · exact AvoidsMac.pure f _
   · exact AvoidsMac.pure f _
 
+/-- Honest seeded signing preserves freshness of every cache-MAC input in a lazy-RO run. -/
+theorem seeded_sign_preserves_mac_freshness
+    (secretKey : Seeded.SecretKey) (message : Message)
+    (before : QueryCache HashSpec) (result : Option Signature)
+    (after : QueryCache HashSpec)
+    (hrun : (result, after) ∈ support
+      ((simulateQ (randomOracle : QueryImpl HashSpec _)
+        (Seeded.sign secretKey message)).run before))
+    (parameter : PublicParameter) (seed : MasterSeed) (candidateBytes : List UInt8)
+    (hfresh : before (macInput parameter seed candidateBytes) = none) :
+    after (macInput parameter seed candidateBytes) = none := by
+  obtain ⟨f, hf⟩ := QueryCache.exists_agreesWithFn (spec := HashSpec) after
+  exact cache_eq_none_of_not_mem_queriedInputs
+    (Seeded.sign secretKey message) before result after hrun f hf
+    (macInput parameter seed candidateBytes) hfresh
+    (seeded_sign_avoids_mac f secretKey message parameter seed candidateBytes)
+
+/-- The canonical signing service, kept opaque to the attacker-direct query monitor. -/
+noncomputable def canonicalSigner (secretKey : Seeded.SecretKey) :
+    QueryImpl SigningSpec (StateT (QueryCache HashSpec) ProbComp) :=
+  fun message => simulateQ randomOracle (Seeded.sign secretKey message)
+
+theorem canonicalSigner_preserves_mac_freshness
+    (secretKey : Seeded.SecretKey) (parameter : PublicParameter)
+    (seed : MasterSeed) (candidateBytes : List UInt8)
+    (message : Message) (before : QueryCache HashSpec)
+    (hfresh : before (macInput parameter seed candidateBytes) = none)
+    (result : Option Signature × QueryCache HashSpec)
+    (hrun : result ∈ support ((canonicalSigner secretKey message).run before)) :
+    result.2 (macInput parameter seed candidateBytes) = none := by
+  exact seeded_sign_preserves_mac_freshness secretKey message before
+    result.1 result.2 hrun parameter seed candidateBytes hfresh
+
 end SigGolfCandidate.SphincsSeededNoMacQueries
 
 /-- info: 'SigGolfCandidate.SphincsSeededNoMacQueries.seeded_sign_avoids_mac' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSeededNoMacQueries.seeded_sign_avoids_mac
+
+/-- info: 'SigGolfCandidate.SphincsSeededNoMacQueries.seeded_sign_preserves_mac_freshness' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSeededNoMacQueries.seeded_sign_preserves_mac_freshness
+
+/-- info: 'SigGolfCandidate.SphincsSeededNoMacQueries.canonicalSigner_preserves_mac_freshness' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSeededNoMacQueries.canonicalSigner_preserves_mac_freshness
