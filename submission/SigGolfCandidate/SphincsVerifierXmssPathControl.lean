@@ -224,4 +224,153 @@ theorem path_executes (hash : Hash) (lay : Layer) (n : Nat) :
 #print axioms pathInstructions_eq
 #print axioms pathRights_le
 
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
+open SigGolfCandidate.SphincsVerifierXmssPathControl
+open SigGolfCandidate.SphincsVerifierXmssRound
+open SigGolfCandidate.SphincsVerifierXmssRoundFrame
+open SigGolfCandidate.SphincsVerifierHashBytes
+
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem path_low_mem (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (read : Word) (low : read.toNat < 0x40000) :
+    (pathState hash lay n s).getMem read = s.getMem read := by
+  induction n generalizing s with
+  | zero => rfl
+  | succ n ih =>
+      rw [pathState_succ, ih, round_low_mem hash lay s read low]
+
+theorem path_low_byte (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (address : Word)
+    (low : (alignToDword address).toNat < 0x40000) :
+    (pathState hash lay n s).getByte address = s.getByte address := by
+  simp only [MachineState.getByte]
+  rw [path_low_mem hash lay n s _ low]
+
+theorem path_layer_cell (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) :
+    (pathState hash lay n s).getMem 0x43000 = s.getMem 0x43000 := by
+  induction n generalizing s with
+  | zero => rfl
+  | succ n ih =>
+      rw [pathState_succ, ih, round_layer_cell]
+
+theorem path_tree_cell (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) :
+    (pathState hash lay n s).getMem 0x43008 = s.getMem 0x43008 := by
+  induction n generalizing s with
+  | zero => rfl
+  | succ n ih =>
+      rw [pathState_succ, ih, round_tree_cell]
+
+theorem path_pointer_cell (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) :
+    (pathState hash lay n s).getMem 0x43028 =
+      s.getMem 0x43028 + BitVec.ofNat 64 (20 * n) := by
+  induction n generalizing s with
+  | zero => simp [pathState]
+  | succ n ih =>
+      rw [pathState_succ, ih, round_pointer_cell]
+      simp only [Nat.mul_succ, BitVec.ofNat_add]
+      bv_omega
+
+theorem path_level_cell (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) :
+    (pathState hash lay n s).getMem 0x43048 =
+      s.getMem 0x43048 + BitVec.ofNat 64 n := by
+  induction n generalizing s with
+  | zero => simp [pathState]
+  | succ n ih =>
+      rw [pathState_succ, ih, round_level_cell]
+      simp only [BitVec.ofNat_add]
+      bv_omega
+
+theorem path_pointer_nat (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (pointer : Word)
+    (initial : s.getMem 0x43028 = pointer)
+    (bound : pointer.toNat + 20 * n ≤ 0x40000) :
+    ((pathState hash lay n s).getMem 0x43028).toNat =
+      pointer.toNat + 20 * n := by
+  rw [path_pointer_cell, initial, BitVec.toNat_add]
+  have h20 : 20 * n < 2 ^ 64 := by omega
+  simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h20]
+  have htotal : pointer.toNat + 20 * n < 2 ^ 64 := by omega
+  exact Nat.mod_eq_of_lt htotal
+
+theorem path_sibling_byte (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (pointer : Word)
+    (initial : s.getMem 0x43028 = pointer)
+    (bound : pointer.toNat + 20 * (n + 1) ≤ 0x40000)
+    (i : Nat) (hi : i < 20) :
+    (pathState hash lay n s).getByte
+        (BitVec.ofNat 64
+          (((pathState hash lay n s).getMem 0x43028).toNat + i)) =
+      s.getByte (BitVec.ofNat 64 (pointer.toNat + 20 * n + i)) := by
+  have pn := path_pointer_nat hash lay n s pointer initial (by omega)
+  rw [pn]
+  have low : (alignToDword
+      (BitVec.ofNat 64 (pointer.toNat + 20 * n + i))).toNat < 0x40000 := by
+    have small : pointer.toNat + 20 * n + i < 0x40000 := by omega
+    have noWrap : pointer.toNat + 20 * n + i < 2 ^ 64 := by omega
+    have aligned : (alignToDword
+        (BitVec.ofNat 64 (pointer.toNat + 20 * n + i))).toNat ≤
+        (BitVec.ofNat 64 (pointer.toNat + 20 * n + i)).toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt noWrap] at aligned
+    omega
+  exact path_low_byte hash lay n s _ low
+
+/-- The authentication siblings at the initial pointer, in increasing level order. -/
+structure PathWitness (s : MachineState) (signature : SphincsSecurity.Signature)
+    (lay : Layer) (pointer : Word) : Prop where
+  bytes : ∀ level, level < layerHeight lay → ∀ i, (hi : i < 20) →
+    s.getByte (BitVec.ofNat 64 (pointer.toNat + 20 * level + i)) =
+      (SphincsSecurity.Concrete.signaturePath signature lay level).extractLsb' (8 * i) 8
+
+theorem path_signature_sibling_byte (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (pointer : Word)
+    (signature : SphincsSecurity.Signature)
+    (initial : s.getMem 0x43028 = pointer)
+    (bound : pointer.toNat + 20 * (n + 1) ≤ 0x40000)
+    (height : n < layerHeight lay)
+    (witness : PathWitness s signature lay pointer)
+    (i : Nat) (hi : i < 20) :
+    (pathState hash lay n s).getByte
+        (BitVec.ofNat 64
+          (((pathState hash lay n s).getMem 0x43028).toNat + i)) =
+      (SphincsSecurity.Concrete.signaturePath signature lay n).extractLsb' (8 * i) 8 := by
+  exact (path_sibling_byte hash lay n s pointer initial bound i hi).trans
+    (witness.bytes n height i hi)
+
+theorem path_prefix (hash : Hash) (lay : Layer) (n : Nat)
+    (s : MachineState) (pk : SphincsSecurity.PublicKey)
+    (hprefix : WitnessPrefix s pk) :
+    WitnessPrefix (pathState hash lay n s) pk := by
+  constructor
+  · intro i hi
+    have addr : (alignToDword (BitVec.ofNat 64 (0x22ca0 + i))).toNat < 0x40000 := by
+      interval_cases i <;> decide
+    exact (path_low_byte hash lay n s _ addr).trans (hprefix.root i hi)
+  · intro i hi
+    have addr : (alignToDword (BitVec.ofNat 64 (0x22cb4 + i))).toNat < 0x40000 := by
+      interval_cases i <;> decide
+    exact (path_low_byte hash lay n s _ addr).trans (hprefix.parameter i hi)
+
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.path_signature_sibling_byte' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms path_signature_sibling_byte
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.path_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms path_prefix
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.path_pointer_nat' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms path_pointer_nat
+
 end SigGolfCandidate.SphincsVerifierXmssPathControl
