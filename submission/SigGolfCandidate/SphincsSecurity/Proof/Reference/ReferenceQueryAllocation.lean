@@ -68,8 +68,40 @@ theorem referenceRecordedGame_joint_budget (dummy : OtsReferenceWords) (adversar
   referenceRecordedGame_joint_budget_of_result_cost dummy adversary q result hresult
     (referenceRecordedGame_hashCalls_le dummy adversary q hbound result hresult)
 
+theorem referenceRecordedGame_budgeted_expected_calls_le
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    (∑' result : ReferenceRecordedResult,
+      Pr[= result | referenceRecordedGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] *
+        ((if result.2.2.1.2.hashCalls ≤ q then
+            result.prefixCalls dummy + result.remainingCalls dummy else 0 : Nat) : ENNReal)) ≤ q := by
+  classical
+  let law := referenceRecordedGame (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
+  calc
+    _ ≤ ∑' result : ReferenceRecordedResult, Pr[= result | law] * (q : ENNReal) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hcost : result.2.2.1.2.hashCalls ≤ q
+      · by_cases hresult : result ∈ support law
+        · simpa only [if_pos hcost] using
+            (mul_le_mul' (le_refl (Pr[= result | law]))
+              (Nat.cast_le.mpr (referenceRecordedGame_joint_budget_of_result_cost
+                dummy adversary q result hresult hcost)))
+        · have hzero : Pr[= result | law] = 0 := probOutput_eq_zero_of_not_mem_support hresult
+          rw [hzero]
+          simp only [zero_mul, le_refl]
+      · simp only [if_neg hcost, Nat.cast_zero, mul_zero, zero_le]
+    _ ≤ q := by
+      rw [ENNReal.tsum_mul_right]
+      exact mul_le_of_le_one_left' tsum_probOutput_le_one
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.referenceRecordedGame_joint_budget_of_result_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceRecordedGame_joint_budget_of_result_cost
+
+/-- info: 'SphincsSecurity.Concrete.referenceRecordedGame_budgeted_expected_calls_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceRecordedGame_budgeted_expected_calls_le
