@@ -17,14 +17,14 @@
 <circle cx="405" cy="319" r="13" fill="#1e69b1" stroke="#fff" stroke-width="2" />
 <circle cx="318" cy="378" r="11" fill="#2b78bd" stroke="#fff" stroke-width="2" />
 <circle cx="492" cy="378" r="11" fill="#d69a40" stroke="#fff" stroke-width="2" />
-<text x="113" y="326" font-family="Arial, sans-serif" font-size="18" fill="#2a5e8d" font-weight="700">159</text>
+<text x="113" y="326" font-family="Arial, sans-serif" font-size="18" fill="#2a5e8d" font-weight="700">151</text>
 <path d="M405 455L492 514" fill="none" stroke="#2b78bd" stroke-width="5" opacity="1" stroke-linecap="round" />
 <path d="M405 455L318 514" fill="none" stroke="#a8bac9" stroke-width="3" opacity="1" stroke-linecap="round" />
 <path d="M405 455L492 514" fill="none" stroke="#61bff0" stroke-width="11" opacity="0.18" stroke-linecap="round" />
 <circle cx="405" cy="455" r="13" fill="#1e69b1" stroke="#fff" stroke-width="2" />
 <circle cx="492" cy="514" r="11" fill="#2b78bd" stroke="#fff" stroke-width="2" />
 <circle cx="318" cy="514" r="11" fill="#d69a40" stroke="#fff" stroke-width="2" />
-<text x="113" y="462" font-family="Arial, sans-serif" font-size="18" fill="#2a5e8d" font-weight="700">158</text>
+<text x="113" y="462" font-family="Arial, sans-serif" font-size="18" fill="#2a5e8d" font-weight="700">150</text>
 <path d="M405 650L318 709" fill="none" stroke="#2b78bd" stroke-width="5" opacity="1" stroke-linecap="round" />
 <path d="M405 650L492 709" fill="none" stroke="#a8bac9" stroke-width="3" opacity="1" stroke-linecap="round" />
 <path d="M405 650L318 709" fill="none" stroke="#61bff0" stroke-width="11" opacity="0.18" stroke-linecap="round" />
