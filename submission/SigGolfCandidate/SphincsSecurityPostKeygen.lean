@@ -7,7 +7,7 @@ namespace SigGolfCandidate.SphincsSecurityPostKeygen
 set_option maxHeartbeats 2000000
 set_option maxRecDepth 8192
 set_option backward.isDefEq.respectTransparency false
-open SigGolf SphincsSecurity
+open SigGolf SphincsSecurity OracleComp OracleSpec
 open SigGolfCandidate.SphincsSecurityJointSetup
 open SigGolfCandidate.SphincsOrganizerFiniteHash
 open SigGolfCandidate.SphincsPadSetupIndependence
@@ -909,6 +909,101 @@ theorem organizer_event_large_budget
       apply ENNReal.div_le_div_right
       exact_mod_cast hlarge
 
+/-- Select exactly the hash calls charged by the reference experiment;
+private sampling does not spend the hash budget. -/
+abbrev referenceHashCall (input : SphincsSecurity.OracleWorld.Domain) : Prop :=
+  input matches .inr _
+
+theorem referenceStop_queryBound (program : OracleComp SphincsSecurity.OracleWorld Bool)
+    (Q : Nat) :
+    (SphincsSecurity.QueryCap.run referenceHashCall program Q).IsQueryBoundP
+      referenceHashCall Q :=
+  SphincsSecurity.QueryCap.run_queryBound referenceHashCall program Q
+
+theorem referenceStop_fixed_law (program : OracleComp SphincsSecurity.OracleWorld Bool)
+    (Q : Nat) (impl : QueryImpl SphincsSecurity.OracleWorld PMF) :
+    simulateQ impl (SphincsSecurity.QueryCap.run referenceHashCall program Q) =
+      (SphincsSecurity.QueryCap.finish Q) <$>
+        simulateQ impl (SphincsSecurity.QueryCap.counted referenceHashCall program) :=
+  SphincsSecurity.QueryCap.run_eq_counted referenceHashCall impl program Q
+
+attribute [local irreducible] SphincsSecurity.Seeded.scheme SphincsSecurity.gameCore
+
+/-- A global cutoff around the complete reference game. It intercepts hash
+queries from key generation, attacker actions, signing, and final verification. -/
+noncomputable def stoppedReferenceGame
+    (adversary : SphincsSecurity.Adversary) (Q : Nat) :
+    OracleComp SphincsSecurity.OracleWorld (Option (Bool × Nat)) :=
+  SphincsSecurity.QueryCap.run referenceHashCall
+    (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary) Q
+
+/-- Every execution of the stopped complete game makes at most Q hash calls;
+this structural bound is independent of the oracle implementation. -/
+theorem stoppedReferenceGame_queryBound
+    (adversary : SphincsSecurity.Adversary) (Q : Nat) :
+    (stoppedReferenceGame adversary Q).IsQueryBoundP referenceHashCall Q := by
+  change (SphincsSecurity.QueryCap.run referenceHashCall
+    (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary) Q).IsQueryBoundP
+      referenceHashCall Q
+  exact referenceStop_queryBound
+    (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary) Q
+
+/-- Under any stateless reference oracle, the stopped game is exactly the
+original complete game, including all costs, filtered at Q calls. -/
+theorem stoppedReferenceGame_fixed_law
+    (adversary : SphincsSecurity.Adversary) (Q : Nat)
+    (impl : QueryImpl SphincsSecurity.OracleWorld PMF) :
+    simulateQ impl (stoppedReferenceGame adversary Q) =
+      (SphincsSecurity.QueryCap.finish Q) <$>
+        simulateQ impl
+          (SphincsSecurity.countHashQueries
+            (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary)) := by
+  unfold stoppedReferenceGame SphincsSecurity.countHashQueries
+  change simulateQ impl (SphincsSecurity.QueryCap.run referenceHashCall
+    (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary) Q) =
+    (SphincsSecurity.QueryCap.finish Q) <$> simulateQ impl
+      (SphincsSecurity.QueryCap.counted referenceHashCall
+        (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary))
+  exact referenceStop_fixed_law
+    (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary) Q impl
+
+/-- At a fixed oracle, a successful capped run is exactly an original
+success with at most Q hash calls, including verifier calls. -/
+theorem stoppedReferenceGame_fixed_budget_event
+    (adversary : SphincsSecurity.Adversary) (Q : Nat)
+    (impl : QueryImpl SphincsSecurity.OracleWorld PMF) :
+    Pr[fun result => ∃ remaining, result = some (true, remaining) |
+      simulateQ impl (stoppedReferenceGame adversary Q)] =
+    Pr[fun result => result.1 = true ∧ result.2 ≤ Q |
+      simulateQ impl
+        (SphincsSecurity.countHashQueries
+          (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary))] := by
+  rw [stoppedReferenceGame_fixed_law, probEvent_map]
+  have hpred :
+      ((fun result => ∃ remaining, result = some (true, remaining)) ∘
+        SphincsSecurity.QueryCap.finish Q) =
+      (fun result : Bool × Nat => result.1 = true ∧ result.2 ≤ Q) := by
+    funext result
+    apply propext
+    simp only [Function.comp_def, SphincsSecurity.QueryCap.finish]
+    split_ifs with hbudget
+    · simp [hbudget]
+    · simp [hbudget]
+  rw [hpred]
+
+/-- The entire stopped reference game, including signing and final verification,
+issues at most `Q` hash calls on every oracle path. -/
+theorem stoppedReferenceGame_hashQueryBound
+    (adversary : SphincsSecurity.Adversary) (Q : Nat) :
+    SphincsSecurity.HashQueryBound (stoppedReferenceGame adversary Q) ∅ Q := by
+  intro result hresult
+  exact SphincsSecurity.QueryCap.counted_le_of_queryBound referenceHashCall
+    (stoppedReferenceGame adversary Q) Q
+    (stoppedReferenceGame_queryBound adversary Q) result
+    (OracleComp.support_simulateQ_run'_subset SphincsSecurity.romImpl
+      (SphincsSecurity.countHashQueries (stoppedReferenceGame adversary Q)) ∅ hresult)
+
+
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.bind_fresh_setup' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -990,3 +1085,15 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.organizer_event_large_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.organizer_event_large_budget
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_fixed_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_fixed_law
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_fixed_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_fixed_budget_event
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_hashQueryBound
