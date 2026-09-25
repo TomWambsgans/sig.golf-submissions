@@ -25,12 +25,12 @@ theorem sizes_valid : sizes.Valid := by
   simp [Sizes.Valid, sizes, SphincsWire.signatureBytes_eq, MAX_WITNESS_BYTES]
 theorem score_eq : submission.score cycleBound = 1940922276 := by decide
 
-theorem keygen_byteSize : SphincsMaskedImages.keygen.byteSize = 3584 := by
+theorem keygen_byteSize : SphincsMaskedImages.keygen.byteSize = 3604 := by
   unfold Riscv.Image.byteSize
   rw [SphincsMaskedImages.keygen_code_length]
   rfl
 
-theorem sign_byteSize : SphincsMaskedImages.sign.byteSize = 43808 := by
+theorem sign_byteSize : SphincsMaskedImages.sign.byteSize = 43828 := by
   unfold Riscv.Image.byteSize
   rw [SphincsMaskedImages.sign_code_length]
   rfl
