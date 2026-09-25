@@ -1,9 +1,12 @@
 import SigGolfCandidate.SphincsSecurityJointSetup
 import SigGolfCandidate.SphincsTypedInteractionPlan
+import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.Security
 
 /-! Transport exact setup laws through a probabilistic adaptive continuation. -/
 namespace SigGolfCandidate.SphincsSecurityPostKeygen
 set_option maxHeartbeats 2000000
+set_option maxRecDepth 8192
+set_option backward.isDefEq.respectTransparency false
 open SigGolf SphincsSecurity
 open SigGolfCandidate.SphincsSecurityJointSetup
 open SigGolfCandidate.SphincsOrganizerFiniteHash
@@ -733,6 +736,179 @@ theorem coupled_good_event_plan_le
     adversary canonical nonalignedAnswer wire secretKey material seed pads
     macAnswer Q rounds state)
 
+/-- The concrete SPHINCS 128-bit reference bound leaves room for the
+256-bit seed-programming loss and the 160-bit cache-MAC first-hit loss. -/
+theorem seeded_reference_margin_with_seed_hit
+    (Q : Nat) (hQ : 1 ≤ Q) (hsmall : Q < 2 ^ 127)
+    (adversary : SphincsSecurity.Adversary)
+    (hbound : SphincsSecurity.HasHashQueryBound
+      SphincsSecurity.Seeded.scheme adversary Q) :
+    SphincsSecurity.forgeAdvantage SphincsSecurity.Seeded.scheme adversary +
+      (Q : ENNReal) / 2 ^ 160 +
+      (Q : ENNReal) / 2 ^ 256 ≤ (Q : ENNReal) / 2 ^ 127 := by
+  have hsmall256 : Q < 2 ^ 256 := hsmall.trans (by norm_num)
+  have htable := SphincsSecurity.Seeded.tableBudget_from_deterministic
+    adversary Q hsmall256 hbound
+  have hindependent : SphincsSecurity.HasHashQueryBound
+      SphincsSecurity.Concrete.scheme
+      (SphincsSecurity.Seeded.memoAdversary adversary) (Q - 1) :=
+    SphincsSecurity.Seeded.referenceBudget_from_table adversary (Q - 1)
+      (SphincsSecurity.Seeded.tableBudget_memo adversary (Q - 1) htable)
+  have hcomparison := SphincsSecurity.Seeded.forgeAdvantage_deterministic_le_reference
+    adversary (Q - 1) htable
+  have hcomparison' : SphincsSecurity.forgeAdvantage
+      SphincsSecurity.Seeded.scheme adversary ≤
+      SphincsSecurity.forgeAdvantage SphincsSecurity.Concrete.scheme
+        (SphincsSecurity.Seeded.memoAdversary adversary) +
+        ((Q - 1 : Nat) : ENNReal) / 2 ^ 256 := by
+    simpa only [Nat.cast_pow, Nat.cast_ofNat] using hcomparison
+  have hconcrete : SphincsSecurity.HasHashQueryBound
+      SphincsSecurity.Concrete.scheme
+      (SphincsSecurity.Seeded.memoAdversary adversary) Q := by
+    rw [SphincsSecurity.hasHashQueryBound_iff] at hindependent ⊢
+    exact hindependent.mono (Nat.sub_le Q 1)
+  have href := SphincsSecurity.Concrete.security128_below_trivial_budget
+    Q hQ hsmall.le (SphincsSecurity.Seeded.memoAdversary adversary) hconcrete
+  have hseed : ((Q - 1 : Nat) : ENNReal) / 2 ^ 256 ≤
+      (Q : ENNReal) / 2 ^ 256 := by
+    apply ENNReal.div_le_div_right
+    exact_mod_cast Nat.sub_le Q 1
+  have hrate : (Q : ENNReal) / 2 ^ 128 +
+      (Q : ENNReal) / 2 ^ 256 +
+      (Q : ENNReal) / 2 ^ 160 +
+      (Q : ENNReal) / 2 ^ 256 ≤
+        (Q : ENNReal) / 2 ^ 127 := by
+    simp only [div_eq_mul_inv]
+    rw [← mul_add, ← mul_add, ← mul_add]
+    gcongr
+    have hnn : ((2 ^ 128 : NNReal)⁻¹ +
+      (2 ^ 256 : NNReal)⁻¹ + (2 ^ 160 : NNReal)⁻¹ +
+      (2 ^ 256 : NNReal)⁻¹) ≤
+      (2 ^ 127 : NNReal)⁻¹ := by
+      apply NNReal.coe_le_coe.mpr
+      norm_num [div_le_div_iff₀]
+    have henn := ENNReal.coe_le_coe.mpr hnn
+    have hcast (n : Nat) : (↑((2 ^ n : NNReal)⁻¹) : ENNReal) =
+        (2 ^ n : ENNReal)⁻¹ := by
+      rw [ENNReal.coe_inv (by positivity), ENNReal.coe_pow]
+      norm_num
+    simpa only [ENNReal.coe_add, hcast] using henn
+  calc
+    _ ≤ ((SphincsSecurity.forgeAdvantage
+        SphincsSecurity.Concrete.scheme
+          (SphincsSecurity.Seeded.memoAdversary adversary) +
+          ((Q - 1 : Nat) : ENNReal) / 2 ^ 256) +
+            (Q : ENNReal) / 2 ^ 160) +
+            (Q : ENNReal) / 2 ^ 256 :=
+          add_le_add (add_le_add hcomparison' le_rfl) le_rfl
+    _ ≤ ((Q : ENNReal) / 2 ^ 128 +
+          (Q : ENNReal) / 2 ^ 256 +
+            (Q : ENNReal) / 2 ^ 160) +
+            (Q : ENNReal) / 2 ^ 256 := by
+          apply add_le_add
+          · apply add_le_add
+            · exact add_le_add href hseed
+            · exact le_rfl
+          · exact le_rfl
+    _ ≤ _ := hrate
+
+/-- The 160-bit cache-MAC term alone also fits in the same margin. -/
+theorem seeded_reference_margin
+    (Q : Nat) (hQ : 1 ≤ Q) (hsmall : Q < 2 ^ 127)
+    (adversary : SphincsSecurity.Adversary)
+    (hbound : SphincsSecurity.HasHashQueryBound
+      SphincsSecurity.Seeded.scheme adversary Q) :
+    SphincsSecurity.forgeAdvantage SphincsSecurity.Seeded.scheme adversary +
+      (Q : ENNReal) / 2 ^ 160 ≤ (Q : ENNReal) / 2 ^ 127 := by
+  exact (le_add_right le_rfl).trans
+    (seeded_reference_margin_with_seed_hit Q hQ hsmall adversary hbound)
+
+/-- A complete trace with separate cache-MAC and direct-seed-hit flags
+transfers the full win-and-cost event. Both bad events are charged once. -/
+theorem coupled_two_bad_events_le
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool × Bool))
+    (actual reference : SPMF SigGolf.AttackResult)
+    (event : SigGolf.AttackResult → Prop)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hgood : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false → z.1 = z.2.1) :
+    Pr[event | actual] ≤ Pr[event | reference] +
+      Pr[fun z => z.2.2.1 = true | joint] +
+      Pr[fun z => z.2.2.2 = true | joint] := by
+  have hstep : Pr[fun z => event z.1 | joint] ≤
+      Pr[fun z => event z.2.1 ∨ z.2.2.1 = true ∨ z.2.2.2 = true | joint] := by
+    apply probEvent_mono
+    intro z hz hevent
+    cases hm : z.2.2.1 with
+    | true => exact Or.inr (Or.inl rfl)
+    | false =>
+        cases hs : z.2.2.2 with
+        | true => exact Or.inr (Or.inr rfl)
+        | false =>
+            exact Or.inl (by simpa only [hgood z hz hm hs] using hevent)
+  calc
+    Pr[event | actual] = Pr[fun z => event z.1 | joint] := by
+      rw [← hactual, probEvent_map]
+      rfl
+    _ ≤ Pr[fun z => event z.2.1 ∨ z.2.2.1 = true ∨
+        z.2.2.2 = true | joint] := hstep
+    _ ≤ Pr[fun z => event z.2.1 | joint] +
+        Pr[fun z => z.2.2.1 = true ∨ z.2.2.2 = true | joint] :=
+          probEvent_or_le _ _ _
+    _ ≤ Pr[fun z => event z.2.1 | joint] +
+        (Pr[fun z => z.2.2.1 = true | joint] +
+          Pr[fun z => z.2.2.2 = true | joint]) :=
+          add_le_add le_rfl (probEvent_or_le _ _ _)
+    _ = _ := by rw [← hreference, probEvent_map, add_assoc]; rfl
+
+/-- Given a full-result coupling and separately charged MAC and seed-hit
+traces, the certified deterministic reference bound yields the required
+127-bit organizer event bound. The hypotheses name precisely the interfaces
+that still need to be related to the actual bytecode experiment. -/
+theorem coupled_two_bad_security127
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool × Bool))
+    (actual reference : SPMF SigGolf.AttackResult)
+    (Q : Nat) (hQ : 1 ≤ Q) (hsmall : Q < 2 ^ 127)
+    (adversary : SphincsSecurity.Adversary)
+    (hbound : SphincsSecurity.HasHashQueryBound
+      SphincsSecurity.Seeded.scheme adversary Q)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hgood : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false → z.1 = z.2.1)
+    (href : Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q |
+      reference] ≤
+      SphincsSecurity.forgeAdvantage SphincsSecurity.Seeded.scheme adversary)
+    (hmac : Pr[fun z => z.2.2.1 = true | joint] ≤
+      (Q : ENNReal) / 2 ^ 160)
+    (hseed : Pr[fun z => z.2.2.2 = true | joint] ≤
+      (Q : ENNReal) / 2 ^ 256) :
+    Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | actual] ≤
+      (Q : ENNReal) / 2 ^ 127 := by
+  exact (coupled_two_bad_events_le joint actual reference
+    (fun result => result.won = true ∧ result.hashCalls ≤ Q)
+    hactual hreference hgood).trans
+    ((add_le_add (add_le_add href hmac) hseed).trans
+      (seeded_reference_margin_with_seed_hit Q hQ hsmall adversary hbound))
+
+/-- At or above the 127-bit work scale, the organizer target is at least
+one, so every win event meets it independently of the coupling. -/
+theorem organizer_event_large_budget
+    (actual : SPMF SigGolf.AttackResult) (Q : Nat)
+    (hlarge : 2 ^ 127 ≤ Q) :
+    Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | actual] ≤
+      (Q : ENNReal) / 2 ^ 127 := by
+  calc
+    _ ≤ 1 := probEvent_le_one
+    _ = ((2 ^ 127 : Nat) : ENNReal) / 2 ^ 127 := by
+      simpa only [Nat.cast_pow, Nat.cast_ofNat] using
+        (ENNReal.div_self (by norm_num : (2 ^ 127 : ENNReal) ≠ 0)
+          (by norm_num : (2 ^ 127 : ENNReal) ≠ ⊤)).symm
+    _ ≤ _ := by
+      apply ENNReal.div_le_div_right
+      exact_mod_cast hlarge
+
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.bind_fresh_setup' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -798,3 +974,19 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_plan_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_plan_le
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.seeded_reference_margin' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.seeded_reference_margin
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.seeded_reference_margin_with_seed_hit' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.seeded_reference_margin_with_seed_hit
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.coupled_two_bad_security127' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.coupled_two_bad_security127
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.organizer_event_large_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.organizer_event_large_budget
