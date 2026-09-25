@@ -47,7 +47,7 @@ def main() -> None:
     code = build_sign()
     costs = []
     for success in (0, 1):
-        machine = Machine(code, message, pk, bytes(SIG_BYTES))
+        machine = Machine(code, message, bytes(16), bytes(SIG_BYTES))
         machine.mem[SECRET_KEY:SECRET_KEY + 32] = seed
         machine.mem[CACHE:CACHE + CACHE_BYTES] = masked
         machine.oracle = PatternOracle(success)

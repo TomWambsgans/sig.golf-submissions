@@ -41,7 +41,7 @@ def main() -> None:
 
     expected = sign(Oracle(), seed, pk, plain, message)
     code = build_sign()
-    signer = Machine(code, message, pk, bytes(SIG_BYTES))
+    signer = Machine(code, message, bytes(16), bytes(SIG_BYTES))
     signer.mem[SECRET_KEY:SECRET_KEY + 32] = seed
     signer.mem[CACHE:CACHE + CACHE_BYTES] = masked
     signer.run(100_000_000)
@@ -63,7 +63,7 @@ def main() -> None:
 
     corrupt = bytearray(masked)
     corrupt[1000] ^= 1
-    bad = Machine(build_sign(), message, pk, bytes(SIG_BYTES))
+    bad = Machine(build_sign(), message, bytes(16), bytes(SIG_BYTES))
     bad.mem[SECRET_KEY:SECRET_KEY + 32] = seed
     bad.mem[CACHE:CACHE + CACHE_BYTES] = corrupt
     bad.run(1_000_000)

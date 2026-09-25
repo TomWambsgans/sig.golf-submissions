@@ -3,7 +3,7 @@
 from examples.sphincs.build_images import (
     ANSWER, BASE, BIT, Builder, CACHE, CHAIN, CHAINS, COUNT, CURRENT, DIGITS,
     ENDPOINTS, FTS_HEIGHT, FTS_TREES, HASH, HEIGHTS, INDEX, LAYER, LEAF,
-    LEAVES, LEVEL, MSG_INDEX, NEXT_BASE, NODE, POS, PTR, PUBLIC_KEY,
+    LEAVES, LEVEL, MSG_INDEX, NEXT_BASE, NODE, POS, PTR,
     ROOTS, SECRET_KEY, SIGNATURE, STEP, SUM, T, TREE, VALUE, layer,
     message_index, CACHE_BYTES, MAC_ANSWER, MAC_TAG, PAD_BASE, PAD_PTR, cache_mac,
     pad_hash, xor20,
@@ -28,15 +28,6 @@ def mul40(a: Builder, result: int, value: int) -> None:
     a.add(result, result, 11)
 
 
-def compare16(a: Builder, left: int, right: int) -> None:
-    a.li(6, left)
-    a.li(7, right)
-    for offset in (0, 8):
-        a.ld(10, 6, offset)
-        a.ld(12, 7, offset)
-        a.reject_if_different(10, 12)
-
-
 def prepare(a: Builder) -> None:
     a.variable_header(0, 0, 0, 0)
     a.cp(SECRET_KEY, HASH + 40, 32)
@@ -49,11 +40,6 @@ def prepare(a: Builder) -> None:
     a.li(6, CACHE)
     a.li(7, DECRYPTED_ROOT)
     xor20(a, 6, 7)
-    a.variable_header(0, 0, 0, 0)
-    a.cp20_fixed(DECRYPTED_ROOT, HASH + 20)
-    a.cp20_fixed(CACHE + 20, HASH + 40)
-    a.hash(13, 60, with_parameter=False)
-    compare16(a, ANSWER, PUBLIC_KEY)
     a.cp20_fixed(DECRYPTED_ROOT, SIGNATURE)
     a.cp20_fixed(CACHE + 20, SIGNATURE + 20)
 
