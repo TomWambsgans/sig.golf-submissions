@@ -601,4 +601,176 @@ theorem otsPrelude_low_word (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms otsPrelude_block
 
+def otsHashPrepCode : List (Word × Instr) := [
+  (0x1aa0, .LUI .x6 0x00045#20),
+  (0x1aa4, .ADDI .x6 .x6 0xa00#12),
+  (0x1aa8, .LUI .x7 0x00040#20),
+  (0x1aac, .ADDI .x7 .x7 0x028#12),
+  (0x1ab0, .LWU .x13 .x6 0x000#12),
+  (0x1ab4, .SW .x7 .x13 0x000#12),
+  (0x1ab8, .LWU .x13 .x6 0x004#12),
+  (0x1abc, .SW .x7 .x13 0x004#12),
+  (0x1ac0, .LWU .x13 .x6 0x008#12),
+  (0x1ac4, .SW .x7 .x13 0x008#12),
+  (0x1ac8, .LWU .x13 .x6 0x00c#12),
+  (0x1acc, .SW .x7 .x13 0x00c#12),
+  (0x1ad0, .LWU .x13 .x6 0x010#12),
+  (0x1ad4, .SW .x7 .x13 0x010#12),
+  (0x1ad8, .LUI .x6 0x00043#20),
+  (0x1adc, .ADDI .x6 .x6 0x0b8#12),
+  (0x1ae0, .LWU .x10 .x6 0x000#12),
+  (0x1ae4, .LUI .x7 0x00040#20),
+  (0x1ae8, .ADDI .x7 .x7 0x000#12),
+  (0x1aec, .SW .x7 .x10 0x03c#12),
+  (0x1af0, .ADDI .x6 .x0 0x401#12),
+  (0x1af4, .LUI .x28 0x00043#20),
+  (0x1af8, .ADDI .x28 .x28 0x000#12),
+  (0x1afc, .LD .x7 .x28 0x000#12),
+  (0x1b00, .SLLI .x7 .x7 0x10#6),
+  (0x1b04, .ADD .x6 .x6 .x7),
+  (0x1b08, .LUI .x7 0x00040#20),
+  (0x1b0c, .ADDI .x7 .x7 0x000#12),
+  (0x1b10, .SW .x7 .x6 0x000#12),
+  (0x1b14, .LUI .x28 0x00043#20),
+  (0x1b18, .ADDI .x28 .x28 0x010#12),
+  (0x1b1c, .LD .x6 .x28 0x000#12),
+  (0x1b20, .SW .x7 .x6 0x004#12),
+  (0x1b24, .LUI .x28 0x00043#20),
+  (0x1b28, .ADDI .x28 .x28 0x008#12),
+  (0x1b2c, .LD .x6 .x28 0x000#12),
+  (0x1b30, .SD .x7 .x6 0x008#12),
+  (0x1b34, .LUI .x28 0x00043#20),
+  (0x1b38, .ADDI .x28 .x28 0x018#12),
+  (0x1b3c, .LD .x6 .x28 0x000#12),
+  (0x1b40, .SW .x7 .x6 0x010#12),
+  (0x1b44, .ADDI .x6 .x0 0x074#12),
+  (0x1b48, .LUI .x7 0x00040#20),
+  (0x1b4c, .ADDI .x7 .x7 0x014#12),
+  (0x1b50, .LWU .x13 .x6 0x000#12),
+  (0x1b54, .SW .x7 .x13 0x000#12),
+  (0x1b58, .LWU .x13 .x6 0x004#12),
+  (0x1b5c, .SW .x7 .x13 0x004#12),
+  (0x1b60, .LWU .x13 .x6 0x008#12),
+  (0x1b64, .SW .x7 .x13 0x008#12),
+  (0x1b68, .LWU .x13 .x6 0x00c#12),
+  (0x1b6c, .SW .x7 .x13 0x00c#12),
+  (0x1b70, .LWU .x13 .x6 0x010#12),
+  (0x1b74, .SW .x7 .x13 0x010#12),
+  (0x1b78, .LUI .x10 0x00040#20),
+  (0x1b7c, .ADDI .x10 .x10 0x000#12),
+  (0x1b80, .ADDI .x11 .x0 0x200#12),
+  (0x1b84, .LUI .x12 0x00042#20),
+  (0x1b88, .ADDI .x12 .x12 0x000#12),
+  (0x1b8c, .ADDI .x5 .x0 0x001#12)]
+
+def otsHashPrepState (s : MachineState) : MachineState := runSchedule otsHashPrepCode s
+
+def otsHashPrep (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (otsHashPrepState (s.setPC 0x1aa0))
+
+theorem otsHashPrep_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (680+offset location) otsHashPrepCode := by
+  fin_cases location <;> rfl
+
+
+theorem otsHashPrep_encoded (location : Fin 5) : ∀ e∈otsHashPrepCode,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (680+offset location) _ _ (otsHashPrep_image location)
+  · have h := SphincsMaskedSignOtsParents.offset_bound location
+    change 680+offset location+60≤11000
+    omega
+  · intro i
+    have h : ∀ i : Fin otsHashPrepCode.length,
+        otsHashPrepCode[i.val].1=BitVec.ofNat 64 (0x1aa0+4*i.val) := by
+      intro j
+      fin_cases j <;> rfl
+    rw [h i,delta,←BitVec.ofNat_add]
+    congr 1
+    omega
+
+theorem otsHashPrep_supported : ∀ e∈otsHashPrepCode,Supported e.2 := by decide
+
+theorem otsHashPrep_checked (s : MachineState) (pc : s.pc=0x1aa0) :
+    Checked otsHashPrepCode s := by
+  simp [otsHashPrepCode,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem otsHashPrep_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1aa0+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 60 (otsHashPrep location s) := by
+  have trace := block_shift SphincsMaskedImages.sign (delta location) otsHashPrepCode
+    otsHashPrep_supported (otsHashPrep_encoded location) (s.setPC 0x1aa0)
+    (otsHashPrep_checked (s.setPC 0x1aa0) rfl)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s pc] at trace
+  have len : otsHashPrepCode.length=60 := rfl
+  simpa only [otsHashPrep,otsHashPrepState,len] using trace
+
+theorem otsHashPrep_pc (location : Fin 5) (s : MachineState) :
+    (otsHashPrep location s).pc=0x1b90+delta location := by
+  simp [otsHashPrep,otsHashPrepState,otsHashPrepCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.otsHashPrep_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms otsHashPrep_block
+
+
+theorem otsHashPrep_registers (location : Fin 5) (s : MachineState) :
+    (otsHashPrep location s).getReg .x10 = 0x40000 ∧
+    (otsHashPrep location s).getReg .x11 = 512 ∧
+    (otsHashPrep location s).getReg .x12 = 0x42000 ∧
+    (otsHashPrep location s).getReg .x5 = 1 := by
+  simp [otsHashPrep,otsHashPrepState,otsHashPrepCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+
+theorem otsHashPrep_hash_valid (location : Fin 5) (s : MachineState) :
+    hashArgumentsValid (otsHashPrep location s)=true := by
+  obtain ⟨src,bits,dst,_⟩:=otsHashPrep_registers location s
+  simp [hashArgumentsValid,src,bits,dst,accessValid,rangeValid,MEMORY_BYTES]
+
+theorem otsHashPrep_fetch (location : Fin 5) (s : MachineState) :
+    fetch SphincsMaskedImages.sign (otsHashPrep location s)=some (.base .ECALL) := by
+  rw [fetch_at,otsHashPrep_pc]
+  fin_cases location <;> decide
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.otsHashPrep_hash_valid' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms otsHashPrep_hash_valid
+
+
+theorem otsHashPrep_hash_step (location : Fin 5) (hash : Hash) (s : MachineState) :
+    Trace hash SphincsMaskedImages.sign (otsHashPrep location s) 1 8 1 1
+      (writeHash (otsHashPrep location s) (hash (hashInput (otsHashPrep location s)))) := by
+  have fetch := otsHashPrep_fetch location s
+  have service := (otsHashPrep_registers location s).2.2.2
+  have valid := otsHashPrep_hash_valid location s
+  have len : (hashInput (otsHashPrep location s)).1=512 := by
+    simp [hashInput,(otsHashPrep_registers location s).2.1]
+  have step := Trace.hash (hash:=hash) (image:=SphincsMaskedImages.sign)
+    (otsHashPrep location s) _ 0 0 0 0 fetch service valid (Trace.refl _)
+  simpa only [len,show compressions 512=1 from by decide,Nat.zero_add] using step
+
+/-- One WOTS encoding attempt reaches and executes its tag-4 HASH call. The trace is
+valid for any cache contents and any oracle; encoding success is a separate question. -/
+theorem ots_encoding_hash (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc=0x1a50+delta location) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s 81 88 1 1 t ∧
+      t.pc=0x1b94+delta location := by
+  let mid := otsPrelude location s
+  let prep := otsHashPrep location mid
+  let t := writeHash prep (hash (hashInput prep))
+  refine ⟨t,?_,?_⟩
+  · have prelude := (otsPrelude_block location s pc).trace (hash:=hash)
+    have setup := (otsHashPrep_block location mid (otsPrelude_pc location s)).trace (hash:=hash)
+    have hashed := otsHashPrep_hash_step location hash mid
+    have combined := prelude.trans (setup.trans hashed)
+    simpa only [mid,prep,t,Nat.reduceAdd] using combined
+  · simp [t,prep,writeHash,otsHashPrep_pc]
+    bv_omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.ots_encoding_hash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms ots_encoding_hash
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
