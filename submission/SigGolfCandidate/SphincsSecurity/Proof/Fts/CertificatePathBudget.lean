@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificateMonitor
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.OriginalProposalBudget
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificateCacheMonitor
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
@@ -142,6 +143,25 @@ theorem certificateLength_run_mass_le_spent {α : Type} (key : SecretKey) (budge
         (certificateMonitorUpdate_mass_le_spent key budget required stopAfter input state length record hpre hrecord)
         result hr
 
+theorem certificateCacheProposal_run_mass_le_spent {α : Type} (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCacheMonitorState)
+    (hpre : state.2.2.1.creationMass ≤ (state.2.2.1.spent : ENNReal))
+    (result : α × (List Index × CertificateCacheMonitorState))
+    (hr : result ∈ ((simulateQ (certificateCacheProposalImpl key budget required stopAfter)
+      computation).run state).support) :
+    result.2.2.2.1.creationMass ≤ (result.2.2.2.1.spent : ENNReal) := by
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr ⟨result, hr, rfl⟩
+  rw [← PMF.monad_map_eq_map,
+    simulateQ_certificateCacheProposalImpl_length key budget required stopAfter computation state] at hm
+  have hm' := (PMF.mem_support_map_iff (Prod.map id certificateCacheMonitorProject) _ _).mpr
+    ⟨(result.1, result.2.2), hm, rfl⟩
+  rw [← PMF.monad_map_eq_map,
+    simulateQ_certificateCacheLengthImpl_project key budget required stopAfter computation state.2] at hm'
+  exact certificateLength_run_mass_le_spent key budget required stopAfter computation
+    (certificateCacheMonitorProject state.2) hpre _ hm'
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateLength_run_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -151,3 +171,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.originalProposalRecord_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.originalProposalRecord_counted
+
+/-- info: 'SphincsSecurity.Concrete.certificateCacheProposal_run_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCacheProposal_run_mass_le_spent
