@@ -94,6 +94,29 @@ theorem parentRound_level (start : MachineState)
     shiftedLevel, levelValue]
   simp [BitVec.ofNat_add]
 
+theorem parentRound_root (start : MachineState)
+    (answer : BitVec 256) (i : Nat) (hi : i < 20) :
+    (parentRoundState start answer).getByte
+      (BitVec.ofNat 64 (0x44a00 + i)) =
+      (truncateHash answer).extractLsb' (8 * i) 8 := by
+  let ready := firstParentReadyState start
+  let copied := SphincsVerifierFtsParentResult.resultState
+    (writeHash ready answer)
+  have copiedByte : copied.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+      (truncateHash answer).extractLsb' (8 * i) 8 := by
+    exact SphincsVerifierFtsResult.result_truncated_bytes ready answer
+      (ready_destination start) i hi
+  change (SphincsVerifierFtsParentLoop.levelBranchState
+    (SphincsVerifierFtsParentLoop.levelCheckState
+      (SphincsVerifierFtsParentLevel.advanceLevelState copied))).getByte
+      (BitVec.ofNat 64 (0x44a00 + i)) = _
+  simp only [MachineState.getByte]
+  rw [SphincsVerifierFtsParentLoop.levelBranch_mem,
+    SphincsVerifierFtsParentLoop.levelCheck_mem,
+    SphincsVerifierFtsParentLevel.advanceLevel_mem_frame _ _ (by
+      interval_cases i <;> decide)]
+  exact copiedByte
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsRoundInvariant.parentRound_witness' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -111,5 +134,11 @@ theorem parentRound_level (start : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms parentRound_level
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRoundInvariant.parentRound_root' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms parentRound_root
 
 end SigGolfCandidate.SphincsVerifierFtsRoundInvariant
