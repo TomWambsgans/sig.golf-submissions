@@ -254,3 +254,85 @@ theorem chainEntry_recover (hash : Hash) (state : MachineState)
 #print axioms chainEntry_witnessPrefix
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticEntry
+
+namespace SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate
+open SigGolfCandidate.SphincsVerifierWotsChainEntry
+open SigGolfCandidate.SphincsVerifierWotsEndpointCopy
+open SigGolfCandidate.SphincsVerifierFtsGenericBytes
+open SigGolfCandidate.SphincsVerifierCopy
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+private theorem source_dest_disjoint (sourceBase : Nat)
+    (small : sourceBase + 20 ≤ 0x40000)
+    (written read : Fin 5) :
+    alignToDword (word sourceBase read) ≠
+      alignToDword (word 0x44b00 written) := by
+  have sourceNat : (alignToDword (word sourceBase read)).toNat < 0x40000 := by
+    have sourceWordNat : (word sourceBase read).toNat =
+        sourceBase + 4 * read.val := by
+      simp only [word, BitVec.toNat_ofNat]
+      have ht := read.isLt
+      omega
+    have alignedLe : (alignToDword (word sourceBase read)).toNat ≤
+        (word sourceBase read).toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have ht := read.isLt
+    omega
+  have destNat : (alignToDword (word 0x44b00 written)).toNat ≥ 0x40000 := by
+    fin_cases written <;> decide
+  intro equal
+  have same := congrArg BitVec.toNat equal
+  omega
+
+theorem chainValueCopied_word_general (state : MachineState)
+    (sourceBase : Nat) (small : sourceBase + 20 ≤ 0x40000)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (index : Fin 5) :
+    (chainValueCopied state).getWord32 (word 0x44b00 index) =
+      state.getWord32 (word sourceBase index) := by
+  have source : (chainValuePointers state).getReg .x6 =
+      BitVec.ofNat 64 sourceBase := by
+    simpa [chainValuePointers, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne] using pointer
+  have destination : (chainValuePointers state).getReg .x7 = 0x44b00 := by
+    simp [chainValuePointers, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq]
+  have separate : ∀ i j : Fin 5, i ≠ j →
+      alignToDword (word 0x44b00 i) ≠
+        alignToDword (word 0x44b00 j) ∨
+      byteOffset (word 0x44b00 i) / 4 ≠
+        byteOffset (word 0x44b00 j) / 4 := by
+    intro i j different
+    fin_cases i <;> fin_cases j <;> simp_all [word, alignToDword, byteOffset]
+  have copied := copy20_data (chainValuePointers state)
+    sourceBase 0x44b00 source destination
+    (source_dest_disjoint sourceBase small) separate index
+  have pointerFrame : (chainValuePointers state).getWord32
+      (word sourceBase index) = state.getWord32 (word sourceBase index) := by
+    simp [chainValuePointers, execInstrBr, MachineState.getWord32]
+  exact copied.trans pointerFrame
+
+theorem chainValueCopied_byte_general (state : MachineState)
+    (sourceBase : Nat) (small : sourceBase + 20 ≤ 0x40000)
+    (aligned : sourceBase % 4 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (i : Nat) (hi : i < 20) :
+    (chainValueCopied state).getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+      state.getByte (BitVec.ofNat 64 (sourceBase + i)) := by
+  apply transfer_words_to_bytes (chainValueCopied state) state
+    0x44b00 sourceBase (by decide) (by omega)
+    (by decide) aligned
+    (fun index => chainValueCopied_word_general state sourceBase small pointer index)
+    i hi
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral.chainValueCopied_byte_general' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms chainValueCopied_byte_general
+
+end SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral
