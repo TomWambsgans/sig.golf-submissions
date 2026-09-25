@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "summary": "A 152-level binary hypertree. A message-derived index selects one leaf per two-leaf tree. The bottom tree authenticates a 16-byte preimage; each of 151 upper trees uses 46 base-8 WOTS chains to sign the previous root. Verification compares the final root with the 16-byte public key. Based on Holindauer’s certified PR #12.",
+  "diagram": true,
+  "facts": [
+    {
+      "label": "Signature layout",
+      "value": "32 B randomizer + 32 B bottom proof + 151 × 752 B upper proofs = 113,616 B"
+    },
+    {
+      "label": "Path selection",
+      "value": "A 152-bit message-derived index chooses the left or right leaf at each level"
+    },
+    {
+      "label": "WOTS encoding",
+      "value": "128-bit root → 43 base-8 digits + 3 checksum digits; 46 chains of up to 7 steps"
+    },
+    {
+      "label": "Upper proof",
+      "value": "46 × 16 B WOTS values + one 16 B Merkle sibling"
+    },
+    {
+      "label": "Expansion",
+      "value": "Copies the signature into the witness; W = S = 113,616 B"
+    },
+    {
+      "label": "Source",
+      "value": "Port of Holindauer’s certified PR #12 to the current beta interface"
+    }
+  ]
+}
