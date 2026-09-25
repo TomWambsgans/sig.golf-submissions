@@ -1063,6 +1063,126 @@ theorem originalCertificateCountedSource_full_budget_le_count_add_exception
   simp only [if_pos h.2.1]
   exact_mod_cast hcount
 
+def CertificateCountedContextResult.gameResult
+    (result : CertificateCountedContextResult) : CertificateGameResult :=
+  certificateCacheGameProject result.project.2
+
+theorem certificateCountedContextGame_game (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) :
+    CertificateCountedContextResult.gameResult <$>
+      certificateCountedContextGame adversary budget required stopAfter stopped =
+    certificateGame adversary budget required stopAfter stopped := by
+  calc
+    _ = certificateCacheGameProject <$>
+        (Prod.snd <$> (CertificateCountedContextResult.project <$>
+          certificateCountedContextGame adversary budget required stopAfter stopped)) := by
+          simp only [Functor.map_map]
+          rfl
+    _ = certificateCacheGameProject <$>
+        certificateCacheGame adversary budget required stopAfter stopped := by
+          rw [certificateCountedContextGame_project,
+            certificateContextGame_project]
+    _ = _ := certificateCacheGame_project adversary budget required stopAfter stopped
+
+noncomputable def certificateCountedTerminalGame (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
+    PMF (CertificateCountedContextResult × List Index) :=
+  (certificateCountedContextGame adversary budget required stopAfter stopped).bind
+    fun result => (completeProposalWord (PMF.uniformOfFintype Index) total
+      result.gameResult.2.1).map (fun word => (result, word))
+
+theorem certificateCountedTerminalGame_game (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
+    (certificateCountedTerminalGame adversary budget required stopAfter stopped total).map
+      Prod.fst = certificateCountedContextGame adversary budget required stopAfter stopped := by
+  rw [certificateCountedTerminalGame, PMF.map_bind]
+  simp only [PMF.map_comp, Function.comp_def]
+  change (certificateCountedContextGame adversary budget required stopAfter stopped).bind
+    (fun result => (completeProposalWord (PMF.uniformOfFintype Index) total
+      result.gameResult.2.1).map (Function.const _ result)) = _
+  simp only [PMF.map_const, PMF.bind_pure]
+
+theorem certificateCountedTerminalGame_word (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
+    (certificateCountedTerminalGame adversary budget required stopAfter stopped total).map
+      Prod.snd =
+    independentProposalWord (PMF.uniformOfFintype Index) total := by
+  rw [certificateCountedTerminalGame, PMF.map_bind]
+  simp only [PMF.map_comp, Function.comp_def,
+    show (fun x : List Index => x) = id from rfl, PMF.map_id]
+  change (certificateCountedContextGame adversary budget required stopAfter stopped).bind
+    (fun result => completeProposalWord (PMF.uniformOfFintype Index) total
+      result.gameResult.2.1) = _
+  rw [← certificateGame_complete adversary budget required stopAfter stopped total]
+  rw [← certificateCountedContextGame_game adversary budget required stopAfter stopped]
+  change _ = (PMF.map CertificateCountedContextResult.gameResult
+    (certificateCountedContextGame adversary budget required stopAfter stopped)).bind
+      (fun result => completeProposalWord (PMF.uniformOfFintype Index) total result.2.1)
+  rw [PMF.bind_map]
+  rfl
+
+private theorem pmf_budget_mass_payoff_le {α ω : Type} (law : PMF (α × ω))
+    (wordLaw : PMF ω) (mass : α → ENNReal) (cost : α → Nat)
+    (payoff : ω → ENNReal) (q : Nat)
+    (hword : law.map Prod.snd = wordLaw)
+    (hmass : ∀ result ∈ law.support, cost result.1 ≤ q → mass result.1 ≤ q) :
+    (∑' result, Pr[= result | law] *
+      (if cost result.1 ≤ q then mass result.1 * payoff result.2 else 0)) ≤
+    (q : ENNReal) * ∑' word, Pr[= word | wordLaw] * payoff word := by
+  classical
+  have hwordExpected := congrArg
+    (fun distribution : PMF ω => ∑' word, Pr[= word | distribution] * payoff word) hword
+  rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul] at hwordExpected
+  calc
+    _ ≤ ∑' result, (q : ENNReal) * (Pr[= result | law] * payoff result.2) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hcost : cost result.1 ≤ q
+      · by_cases hr : result ∈ law.support
+        · have hq := hmass result hr hcost
+          simp only [if_pos hcost]
+          calc
+            _ ≤ Pr[= result | law] * ((q : ENNReal) * payoff result.2) :=
+              mul_le_mul' le_rfl (mul_le_mul' hq le_rfl)
+            _ = _ := by ring
+        · have hz : Pr[= result | law] = 0 := by
+            rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+            exact hr
+          simp only [if_pos hcost, hz, zero_mul, mul_zero]
+          exact le_rfl
+      · simp only [if_neg hcost, mul_zero]
+        exact zero_le
+    _ = _ := by rw [ENNReal.tsum_mul_left, hwordExpected]
+
+theorem expected_certificateCountedTerminalGame_budget_mass_payoff_le
+    (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
+    (payoff : List Index → ENNReal) :
+    (∑' result, Pr[= result | certificateCountedTerminalGame adversary q required
+      stopAfter stopped total] *
+      (if result.1.originalCost.2 ≤ q then
+        result.1.2.2.2.2.1.1.creationMass * payoff result.2 else 0)) ≤
+    (q : ENNReal) *
+      ∑' word, Pr[= word | independentProposalWord (PMF.uniformOfFintype Index)
+        total] * payoff word := by
+  apply pmf_budget_mass_payoff_le
+    (certificateCountedTerminalGame adversary q required stopAfter stopped total)
+    (independentProposalWord (PMF.uniformOfFintype Index) total)
+    (fun result => result.2.2.2.2.1.1.creationMass)
+    (fun result => result.originalCost.2) payoff q
+    (certificateCountedTerminalGame_word adversary q required stopAfter stopped total)
+  intro result hr hcost
+  have hcontext : result.1 ∈
+      (certificateCountedContextGame adversary q required stopAfter stopped).support := by
+    have hm := (PMF.mem_support_map_iff Prod.fst _ _).mpr ⟨result, hr, rfl⟩
+    rwa [certificateCountedTerminalGame_game] at hm
+  exact (certificateCountedContextGame_mass_le_allCalls adversary q required stopAfter
+    stopped result.1 hcontext).trans (Nat.cast_le.mpr hcost)
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1116,3 +1236,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.originalCertificateCountedSource_full_budget_le_count_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.originalCertificateCountedSource_full_budget_le_count_add_exception
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedTerminalGame_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedTerminalGame_word
+
+/-- info: 'SphincsSecurity.Concrete.expected_certificateCountedTerminalGame_budget_mass_payoff_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_certificateCountedTerminalGame_budget_mass_payoff_le
