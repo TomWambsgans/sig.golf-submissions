@@ -14,7 +14,7 @@ CACHE, SECRET_KEY, PUBLIC_KEY = 0x60, 0x20, 0x40
 CACHE_BYTES = 1 << 17
 TOP_NODES = (1 << (HEIGHTS[0] + 1)) - 1
 MAC_TAG = CACHE + CACHE_BYTES - DIGEST
-MAC_HASH, MAC_ANSWER = 0x60000, 0x84000
+MAC_HASH, MAC_ANSWER, MAC_SAVED = 0x18, 0x84000, 0x85000
 PAD_INDEX, PAD_PTR, PAD_BASE = 0x430d0, 0x430d8, 0x430e0
 HASH, ANSWER = 0x40000, 0x42000
 LAYER, TREE, POS, INDEX, LEAF, PTR = range(0x43000, 0x43030, 8)
@@ -152,14 +152,18 @@ def cache_mac(a: Builder) -> None:
     # The keyed query commits to every byte of the cache except its tag.
     a.variable_header(0, 0, 0, 0)
     a.set_header(15)
+    # The cache already occupies the tail of the query. Save the preceding
+    # bytes, place the header and secret immediately before it, then restore
+    # the message, secret, and public-key region after HASH.
+    a.cp(MAC_HASH, MAC_SAVED, 72)
     a.cp(HASH, MAC_HASH, 40)
-    a.cp(SECRET_KEY, MAC_HASH + 40, 32)
-    a.cp(CACHE, MAC_HASH + 72, CACHE_BYTES - DIGEST)
+    a.cp(MAC_SAVED + 8, MAC_HASH + 40, 32)
     a.li(10, MAC_HASH)
     a.li(11, (72 + CACHE_BYTES - DIGEST) * 8)
     a.li(12, MAC_ANSWER)
     a.li(5, 1)
     a.emit(0x73)
+    a.cp(MAC_SAVED, MAC_HASH, 72)
 
 
 def mask_top_tree(a: Builder) -> None:
