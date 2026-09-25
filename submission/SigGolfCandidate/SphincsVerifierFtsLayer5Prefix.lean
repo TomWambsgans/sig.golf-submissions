@@ -1,8 +1,11 @@
 import SigGolfCandidate.SphincsVerifierFtsForestHashTrace
+import SigGolfCandidate.SphincsVerifierFtsLeftPath
 
 namespace SigGolfCandidate.SphincsVerifierFtsLayer5Prefix
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsVerifierCopy
+open SigGolfCandidate.SphincsVerifierFtsCopyAccess
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -295,6 +298,93 @@ theorem layer5Prefix_cells (state : MachineState) :
     MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
+def layer5CurrentPointersState (state : MachineState) : MachineState :=
+  let state := execInstrBr state (.LUI .x6 0x45)
+  let state := execInstrBr state (.ADDI .x6 .x6 (-1536))
+  let state := execInstrBr state (.LUI .x7 0x40)
+  execInstrBr state (.ADDI .x7 .x7 40)
+
+theorem layer5CurrentPointers_block (state : MachineState)
+    (pc : state.pc = 0x1de8) :
+    OrdinarySteps SphincsImages.verify state 4
+      (layer5CurrentPointersState state) ∧
+    (layer5CurrentPointersState state).pc = 0x1df8 ∧
+    (layer5CurrentPointersState state).getReg .x6 = 0x44a00 ∧
+    (layer5CurrentPointersState state).getReg .x7 = 0x40028 := by
+  let s1 := execInstrBr state (.LUI .x6 0x45)
+  let s2 := execInstrBr s1 (.ADDI .x6 .x6 (-1536))
+  let s3 := execInstrBr s2 (.LUI .x7 0x40)
+  let s4 := execInstrBr s3 (.ADDI .x7 .x7 40)
+  have p1 : s1.pc = 0x1dec := by simp [s1, execInstrBr, pc]
+  have p2 : s2.pc = 0x1df0 := by simp [s2, execInstrBr, p1]
+  have p3 : s3.pc = 0x1df4 := by simp [s3, execInstrBr, p2]
+  have trace : OrdinarySteps SphincsImages.verify state 4 s4 := by
+    apply OrdinarySteps.step state s1 _ (.base (.LUI .x6 0x45)) 3
+    · rw [fetch_index SphincsImages.verify state 890 (by decide)
+        (by simpa using pc)]
+      decide
+    · rfl
+    apply OrdinarySteps.step s1 s2 _ (.base (.ADDI .x6 .x6 (-1536))) 2
+    · rw [fetch_index SphincsImages.verify s1 891 (by decide)
+        (by simpa using p1)]
+      decide
+    · rfl
+    apply OrdinarySteps.step s2 s3 _ (.base (.LUI .x7 0x40)) 1
+    · rw [fetch_index SphincsImages.verify s2 892 (by decide)
+        (by simpa using p2)]
+      decide
+    · rfl
+    apply OrdinarySteps.step s3 s4 _ (.base (.ADDI .x7 .x7 40)) 0
+    · rw [fetch_index SphincsImages.verify s3 893 (by decide)
+        (by simpa using p3)]
+      decide
+    · rfl
+    exact OrdinarySteps.refl _
+  refine ⟨by simpa only [layer5CurrentPointersState] using trace, ?_, ?_, ?_⟩
+  · simp [layer5CurrentPointersState, execInstrBr, pc]
+  · simp [layer5CurrentPointersState, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  · simp [layer5CurrentPointersState, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq]
+
+theorem layer5CurrentCopy_code : Copy20Code SphincsImages.verify 894 := by
+  constructor <;> intro offset <;> fin_cases offset <;> decide
+
+def layer5CurrentCopyState (state : MachineState) : MachineState :=
+  copyRootState (layer5CurrentPointersState state)
+
+theorem layer5CurrentCopy_block (state : MachineState)
+    (pc : state.pc = 0x1de8) :
+    OrdinarySteps SphincsImages.verify state 14
+      (layer5CurrentCopyState state) ∧
+    (layer5CurrentCopyState state).pc = 0x1e20 := by
+  obtain ⟨pointers, pointerPc, source, destination⟩ :=
+    layer5CurrentPointers_block state pc
+  have copy := copy20_block_general SphincsImages.verify 894
+    layer5CurrentCopy_code (layer5CurrentPointersState state)
+    0x44a00 0x40028 (by simpa using pointerPc)
+    (by simpa using source) (by simpa using destination)
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+  refine ⟨by simpa only [layer5CurrentCopyState] using pointers.append copy,
+    ?_⟩
+  exact copy20_final_pc (layer5CurrentPointersState state) 894
+    (by simpa using pointerPc)
+
+theorem layer5CurrentCopy_words (state : MachineState)
+    (pc : state.pc = 0x1de8) (index : Fin 5) :
+    (layer5CurrentCopyState state).getWord32
+      (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) := by
+  have h := SphincsVerifierFtsLeftPath.leftCurrentCopy_data
+    (layer5CurrentPointersState state)
+    (layer5CurrentPointers_block state pc).2.2.1
+    (layer5CurrentPointers_block state pc).2.2.2 index
+  have frame : (layer5CurrentPointersState state).getWord32
+      (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) := by
+    simp [layer5CurrentPointersState, execInstrBr, MachineState.getWord32]
+  exact h.trans frame
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsLayer5Prefix.layer5Prefix_block' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -304,5 +394,17 @@ theorem layer5Prefix_cells (state : MachineState) :
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsLayer5Prefix.layer5Prefix_cells' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms layer5Prefix_cells
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsLayer5Prefix.layer5CurrentCopy_block' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms layer5CurrentCopy_block
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsLayer5Prefix.layer5CurrentCopy_words' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms layer5CurrentCopy_words
 
 end SigGolfCandidate.SphincsVerifierFtsLayer5Prefix
