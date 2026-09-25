@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsImages
+import SigGolfCandidate.SphincsMaskedImages
 import SigGolfCandidate.SphincsWire
 
 namespace SigGolfCandidate.SphincsSubmission
@@ -12,8 +13,8 @@ def submission : Submission where
   sizes := sizes
   layout := layout
   image
-    | .keygen => SphincsImages.keygen
-    | .sign => SphincsImages.sign
+    | .keygen => SphincsMaskedImages.keygen
+    | .sign => SphincsMaskedImages.sign
     | .expand => SphincsImages.expand
     | .verify => SphincsImages.verify
 
@@ -24,14 +25,14 @@ theorem sizes_valid : sizes.Valid := by
   simp [Sizes.Valid, sizes, SphincsWire.signatureBytes_eq, MAX_WITNESS_BYTES]
 theorem score_eq : submission.score cycleBound = 1940922276 := by decide
 
-theorem keygen_byteSize : SphincsImages.keygen.byteSize = 2596 := by
+theorem keygen_byteSize : SphincsMaskedImages.keygen.byteSize = 3584 := by
   unfold Riscv.Image.byteSize
-  rw [SphincsImages.keygen_code_length]
+  rw [SphincsMaskedImages.keygen_code_length]
   rfl
 
-theorem sign_byteSize : SphincsImages.sign.byteSize = 42816 := by
+theorem sign_byteSize : SphincsMaskedImages.sign.byteSize = 43808 := by
   unfold Riscv.Image.byteSize
-  rw [SphincsImages.sign_code_length]
+  rw [SphincsMaskedImages.sign_code_length]
   rfl
 
 theorem expand_byteSize : SphincsImages.expand.byteSize = 64 := by
@@ -56,11 +57,11 @@ theorem admissible : submission.Admissible := by
   · exact sizes_valid
   · intro phase
     cases phase <;> constructor
-    · change SphincsImages.keygen.byteSize < MAX_IMAGE_BYTES
+    · change SphincsMaskedImages.keygen.byteSize < MAX_IMAGE_BYTES
       rw [keygen_byteSize]
       decide
     · exact layout_valid_of_data_empty _ rfl
-    · change SphincsImages.sign.byteSize < MAX_IMAGE_BYTES
+    · change SphincsMaskedImages.sign.byteSize < MAX_IMAGE_BYTES
       rw [sign_byteSize]
       decide
     · exact layout_valid_of_data_empty _ rfl
