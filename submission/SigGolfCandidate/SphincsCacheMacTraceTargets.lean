@@ -2,6 +2,7 @@ import SigGolfCandidate.SphincsCacheMacTargetPackage
 import SigGolfCandidate.SphincsCacheMacFiniteTrace
 import Mathlib.Data.List.Dedup
 import SigGolfCandidate.SphincsCacheBlindMacGuess
+import SigGolfCandidate.SphincsCacheMacUniformSplit
 
 /-! Enumerate the distinct MAC inputs mentioned by an all-failure comparison
 trace. This enumeration is chosen before the hidden answers are programmed. -/
@@ -146,6 +147,8 @@ namespace SigGolfCandidate.SphincsCacheMacIndexedHit
 open SphincsSecurity
 open SigGolfCandidate.SphincsCacheMacTraceTargets
 open SigGolfCandidate.SphincsCacheBlindMacGuess
+open SigGolfCandidate.SphincsCacheMacUniformSplit
+open OracleComp ENNReal
 
 noncomputable def indexedAttempts (attempts : List (HashInput × Digest)) :
     List (Fin (distinctKeys attempts).length × Digest) :=
@@ -181,8 +184,44 @@ theorem hit_indexed_iff (attempts : List (HashInput × Digest))
     subst indexed
     simpa [hkey] using (hagrees _).trans hmatch
 
+abbrev TraceTable (attempts : List (HashInput × Digest)) :=
+  Fin (distinctKeys attempts).length → Digest
+
+/-- An environment may choose a trace of varying length before hidden MAC
+answers are sampled. Repeated guesses remain separate trials. -/
+theorem adaptive_trace_indexed_bound {Env : Type}
+    (environment : PMF Env)
+    (attempts : Env → List (HashInput × Digest))
+    (q : Nat) (hbudget : ∀ env, (attempts env).length ≤ q) :
+    Pr[fun result : Sigma (fun env => TraceTable (attempts env)) =>
+      Hit (indexedAttempts (attempts result.1)) result.2 |
+      (do
+        let env ← (liftM environment : SPMF Env)
+        let table ← (liftM (PMF.uniformOfFintype (TraceTable (attempts env))) :
+          SPMF (TraceTable (attempts env)))
+        pure ⟨env, table⟩)] ≤
+      q * (Fintype.card Digest : ENNReal)⁻¹ := by
+  classical
+  apply probEvent_bind_le_of_forall_le
+  intro env _
+  simp only [bind_pure_comp, probEvent_map, Function.comp_def,
+    SPMF.probEvent_liftM]
+  have hfixed := fixed_plan_bound
+    (PMF.uniformOfFintype (TraceTable (attempts env)))
+    (fun i guess => (uniform_tail_marginal_pmf
+      (distinctKeys (attempts env)).length i guess).le)
+    (indexedAttempts (attempts env))
+  refine hfixed.trans ?_
+  rw [indexedAttempts_length]
+  gcongr
+  exact_mod_cast hbudget env
+
 end SigGolfCandidate.SphincsCacheMacIndexedHit
 
 /-- info: 'SigGolfCandidate.SphincsCacheMacIndexedHit.hit_indexed_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsCacheMacIndexedHit.hit_indexed_iff
+
+/-- info: 'SigGolfCandidate.SphincsCacheMacIndexedHit.adaptive_trace_indexed_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsCacheMacIndexedHit.adaptive_trace_indexed_bound
