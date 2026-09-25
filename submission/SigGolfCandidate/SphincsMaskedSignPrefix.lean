@@ -153,6 +153,141 @@ theorem firstHash_trace (hash : SigGolf.Hash) (s : MachineState)
     exact oneStep
   exact (prefix_block s pc).trace.trans hashStep
 
+def entryState (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) : MachineState :=
+  let blank : MachineState :=
+    { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
+  let keyed := blank.writeBytesAsWords 0x20 (SigGolf.bytes secretKey)
+  let cached := keyed.writeBytesAsWords 0x60 (SigGolf.bytes cache)
+  let messaged := cached.writeBytesAsWords 0x0 (SigGolf.bytes message)
+  messaged.setReg .x2 0x1000000
+
+theorem entry_loaded (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) :
+    initialState SphincsSubmission.submission .sign
+      (secretKey, cache, message) =
+      some (entryState secretKey cache message) := by
+  unfold initialState
+  rw [if_pos (SphincsSubmission.admissible.2 .sign)]
+  simp only [inputBuffers, List.foldl_cons, List.foldl_nil]
+  have hd : (SphincsSubmission.submission.image .sign).data = [] := rfl
+  have hb : dataBase (SphincsSubmission.submission.image .sign) =
+      0x1000000 := by decide
+  have hs : SphincsSubmission.submission.layout.secretKey = 0x20 := rfl
+  have hc : SphincsSubmission.submission.layout.cache = 0x60 := rfl
+  have hm : SphincsSubmission.submission.layout.message = 0x0 := rfl
+  simp only [hd, hb, hs, hc, hm]
+  rw [MachineState.writeBytesAsWords_nil]
+  rfl
+
+theorem entry_pc (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) :
+    (entryState secretKey cache message).pc = 0x1000 := by
+  simp only [entryState, MachineState.pc_setReg,
+    MachineState.pc_writeBytesAsWords]
+
+theorem entry_zero (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) (i : Fin 3) :
+    (entryState secretKey cache message).getMem
+      (BitVec.ofNat 64 (0x40010 + 8 * i.val)) = 0 := by
+  let blank : MachineState :=
+    { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
+  let keyed := blank.writeBytesAsWords 0x20 (SigGolf.bytes secretKey)
+  let cached := keyed.writeBytesAsWords 0x60 (SigGolf.bytes cache)
+  let messaged := cached.writeBytesAsWords 0x0 (SigGolf.bytes message)
+  change messaged.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) = 0
+  calc
+    _ = cached.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) := by
+      exact Memory.write_preserves cached 0x0 (SigGolf.bytes message) _
+        (by simp [SigGolf.bytes])
+        (by right; fin_cases i <;> simp [SigGolf.bytes])
+    _ = keyed.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) := by
+      exact Memory.write_preserves keyed 0x60 (SigGolf.bytes cache) _
+        (by simp [SigGolf.bytes, CACHE_BYTES])
+        (by right; fin_cases i <;> simp [SigGolf.bytes, CACHE_BYTES])
+    _ = blank.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) := by
+      exact Memory.write_preserves blank 0x20 (SigGolf.bytes secretKey) _
+        (by simp [SigGolf.bytes])
+        (by right; fin_cases i <;> simp [SigGolf.bytes])
+    _ = 0 := rfl
+
+theorem entry_word (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) (i : Fin 4) :
+    (entryState secretKey cache message).getMem
+      (BitVec.ofNat 64 (0x20 + 8 * i.val)) =
+        secretKey.extractLsb' (64 * i.val) 64 := by
+  let blank : MachineState :=
+    { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
+  let keyed := blank.writeBytesAsWords 0x20 (SigGolf.bytes secretKey)
+  let cached := keyed.writeBytesAsWords 0x60 (SigGolf.bytes cache)
+  let messaged := cached.writeBytesAsWords 0x0 (SigGolf.bytes message)
+  change messaged.getMem (BitVec.ofNat 64 (0x20 + 8 * i.val)) = _
+  calc
+    _ = cached.getMem (BitVec.ofNat 64 (0x20 + 8 * i.val)) := by
+      exact Memory.write_preserves cached 0x0 (SigGolf.bytes message) _
+        (by simp [SigGolf.bytes])
+        (by right; fin_cases i <;> simp [SigGolf.bytes])
+    _ = keyed.getMem (BitVec.ofNat 64 (0x20 + 8 * i.val)) := by
+      exact Memory.write_preserves keyed 0x60 (SigGolf.bytes cache) _
+        (by simp [SigGolf.bytes, CACHE_BYTES])
+        (by left; fin_cases i <;> simp [SigGolf.bytes, CACHE_BYTES])
+    _ = secretKey.extractLsb' (64 * i.val) 64 := by
+      have h := SphincsMaskedKeygenPrefix.entry_word secretKey i
+      change keyed.getMem (BitVec.ofNat 64 (0x20 + 8 * i.val)) =
+        secretKey.extractLsb' (64 * i.val) 64 at h
+      exact h
+
+def afterJumpState (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) : MachineState :=
+  execInstrBr (entryState secretKey cache message) (.JAL .x0 16)
+
+theorem entry_jump (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (entryState secretKey cache message) 1
+      (afterJumpState secretKey cache message) := by
+  apply OrdinarySteps.step _ _ _ (.base (.JAL .x0 16)) 0
+  · rw [SphincsVerifierFtsRootCopy.fetch_at, entry_pc]
+    decide
+  · rfl
+  · exact OrdinarySteps.refl _
+
+theorem afterJump_pc (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) :
+    (afterJumpState secretKey cache message).pc = 0x1010 := by
+  simp [afterJumpState, execInstrBr, entry_pc, signExtend21]
+
+theorem afterJump_zero (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) (i : Fin 3) :
+    (afterJumpState secretKey cache message).getMem
+      (BitVec.ofNat 64 (0x40010 + 8 * i.val)) = 0 := by
+  simpa [afterJumpState, execInstrBr] using
+    entry_zero secretKey cache message i
+
+theorem afterJump_word (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) (i : Fin 4) :
+    (afterJumpState secretKey cache message).getMem
+      (BitVec.ofNat 64 (0x20 + 8 * i.val)) =
+        secretKey.extractLsb' (64 * i.val) 64 := by
+  simpa [afterJumpState, execInstrBr] using
+    entry_word secretKey cache message i
+
+/-- The actual sign loader reaches the same 576-bit seed-parameter query as
+    keygen, without receiving a public-key input. -/
+theorem loaded_firstHash_trace (hash : SigGolf.Hash)
+    (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
+    (message : SigGolf.Message) :
+    Trace hash SphincsMaskedImages.sign
+      (entryState secretKey cache message) 73 88 1 2
+      (afterHashState hash (afterJumpState secretKey cache message)
+        secretKey) := by
+  have first := firstHash_trace hash
+    (afterJumpState secretKey cache message) secretKey
+    (afterJump_pc secretKey cache message)
+    (afterJump_zero secretKey cache message)
+    (afterJump_word secretKey cache message)
+  exact (entry_jump secretKey cache message).trace.trans first
+
 /-- info: 'SigGolfCandidate.SphincsMaskedSignPrefix.prefix_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms prefix_block
@@ -160,5 +295,9 @@ theorem firstHash_trace (hash : SigGolf.Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignPrefix.firstHash_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms firstHash_trace
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignPrefix.loaded_firstHash_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_firstHash_trace
 
 end SigGolfCandidate.SphincsMaskedSignPrefix
