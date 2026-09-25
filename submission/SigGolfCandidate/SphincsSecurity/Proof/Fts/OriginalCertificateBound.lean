@@ -1183,6 +1183,366 @@ theorem expected_certificateCountedTerminalGame_budget_mass_payoff_le
   exact (certificateCountedContextGame_mass_le_allCalls adversary q required stopAfter
     stopped result.1 hcontext).trans (Nat.cast_le.mpr hcost)
 
+abbrev CertificateShadowState := QueryCache HashSpec ×
+  (((CertificateMonitor × Bool) × Nat) × CertificateMonitor)
+
+def certificateShadowActualProject (state : CertificateShadowState) :
+    CertificateCountedState := (state.1, state.2.1)
+
+noncomputable def certificateShadowUpdate (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateShadowState)
+    (length : Nat) (record : ProposalExecutionRecord input) :
+    ((CertificateMonitor × Bool) × Nat) × CertificateMonitor :=
+  (certificateCountedUpdate key budget required stopAfter input
+      (certificateShadowActualProject state) length record,
+    if state.2.1.2 + record.trace.hashCalls ≤ budget then
+      certificateMonitorUpdate key budget required stopAfter input
+        (state.1, state.2.2) length record
+    else { state.2.2 with stopped := true })
+
+noncomputable def certificateShadowProposalImpl (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    QueryImpl (OracleWorld + SigningSpec)
+      (StateT (List Index × CertificateShadowState) PMF) :=
+  originalProposalImpl key (fun state => state.2.1.1.1.spent)
+    (fun message state => certificateMonitorEnabled key budget message
+      (certificateCacheMonitorProject
+        (certificateCountedProject (certificateShadowActualProject state))))
+    (certificateShadowUpdate key budget required stopAfter)
+
+noncomputable def certificateShadowLengthImpl (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    QueryImpl (OracleWorld + SigningSpec) (StateT CertificateShadowState PMF) :=
+  originalLengthImpl key (fun state => state.2.1.1.1.spent)
+    (fun message state => certificateMonitorEnabled key budget message
+      (certificateCacheMonitorProject
+        (certificateCountedProject (certificateShadowActualProject state))))
+    (certificateShadowUpdate key budget required stopAfter)
+
+theorem certificateShadowLengthImpl_support (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateShadowState)
+    (result : (OracleWorld + SigningSpec).Range input × CertificateShadowState)
+    (hr : result ∈ ((certificateShadowLengthImpl key budget required stopAfter input).run
+      state).support) :
+    ∃ length record, record ∈ (originalProposalRecord key input state.1).support ∧
+      result = (record.output, originalProposalAdvance
+        (certificateShadowUpdate key budget required stopAfter)
+        input state length record) := by
+  simp only [certificateShadowLengthImpl, originalLengthImpl, lengthRecordImpl,
+    StateT.run_mk] at hr
+  split at hr
+  · rw [PMF.mem_support_map_iff] at hr
+    obtain ⟨source, hsource, rfl⟩ := hr
+    have hrecord := (PMF.mem_support_map_iff Prod.snd _ _).mpr
+      ⟨source, hsource, rfl⟩
+    rw [recordLengthBridge_record] at hrecord
+    exact ⟨source.1, source.2, hrecord, rfl⟩
+  · rw [PMF.mem_support_map_iff] at hr
+    obtain ⟨record, hrecord, rfl⟩ := hr
+    exact ⟨0, record, hrecord, rfl⟩
+
+theorem certificateShadowLength_run_calls_monotone {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) (result : α × CertificateShadowState)
+    (hr : result ∈ ((simulateQ (certificateShadowLengthImpl key budget required
+      stopAfter) computation).run state).support) :
+    state.2.1.2 ≤ result.2.2.1.2 := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      exact le_rfl
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, _, rfl⟩ :=
+        certificateShadowLengthImpl_support key budget required stopAfter input state
+          middle hmiddle
+      have htail := ih record.output _ result hr
+      change state.2.1.2 + record.trace.hashCalls ≤ result.2.2.1.2 at htail
+      omega
+
+theorem certificateShadowUpdate_good (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateShadowState)
+    (length : Nat) (record : ProposalExecutionRecord input)
+    (hpre : state.2.2 = state.2.1.1.1)
+    (hcost : state.2.1.2 + record.trace.hashCalls ≤ budget) :
+    (certificateShadowUpdate key budget required stopAfter input state length
+      record).2 =
+    (certificateShadowUpdate key budget required stopAfter input state length
+      record).1.1.1 := by
+  simp only [certificateShadowUpdate, if_pos hcost, certificateCountedUpdate,
+    certificateCacheMonitorUpdate, certificateShadowActualProject]
+  rw [hpre]
+  rfl
+
+theorem certificateShadowUpdate_mass_budget (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateShadowState)
+    (length : Nat) (record : ProposalExecutionRecord input)
+    (hr : record ∈ (originalProposalRecord key input state.1).support)
+    (hbudget : state.2.2.creationMass ≤ (budget : ENNReal))
+    (hcalls : state.2.2.creationMass ≤ (state.2.1.2 : ENNReal)) :
+    (certificateShadowUpdate key budget required stopAfter input state length
+      record).2.creationMass ≤ (budget : ENNReal) ∧
+    (certificateShadowUpdate key budget required stopAfter input state length
+      record).2.creationMass ≤
+      ((certificateShadowUpdate key budget required stopAfter input state length
+        record).1.2 : ENNReal) := by
+  by_cases hcost : state.2.1.2 + record.trace.hashCalls ≤ budget
+  · have hstep := (certificateMonitorUpdate_le_hashCalls key budget required
+      stopAfter input (state.1, state.2.2) length record hr).2
+    simp only [certificateShadowUpdate, if_pos hcost, certificateCountedUpdate] at hstep ⊢
+    constructor
+    · calc
+        _ ≤ (state.2.2.creationMass + record.trace.hashCalls) := hstep
+        _ ≤ (state.2.1.2 + record.trace.hashCalls : Nat) := by
+          simpa only [Nat.cast_add] using
+            (add_le_add hcalls (le_refl (record.trace.hashCalls : ENNReal)))
+        _ ≤ (budget : ENNReal) := Nat.cast_le.mpr hcost
+    · exact hstep.trans (by
+        simpa only [certificateShadowActualProject, Nat.cast_add] using
+          (add_le_add hcalls (le_refl (record.trace.hashCalls : ENNReal))))
+  · simp only [certificateShadowUpdate, if_neg hcost, certificateCountedUpdate]
+    exact ⟨hbudget, hcalls.trans (Nat.cast_le.mpr (Nat.le_add_right _ _))⟩
+
+theorem certificateShadowLength_run_good {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) (hpre : state.2.2 = state.2.1.1.1)
+    (result : α × CertificateShadowState)
+    (hr : result ∈ ((simulateQ (certificateShadowLengthImpl key budget required
+      stopAfter) computation).run state).support)
+    (hcost : result.2.2.1.2 ≤ budget) :
+    result.2.2.2 = result.2.2.1.1.1 := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      exact hpre
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, _, rfl⟩ :=
+        certificateShadowLengthImpl_support key budget required stopAfter input state
+          middle hmiddle
+      let after := originalProposalAdvance (certificateShadowUpdate key budget required
+        stopAfter) input state length record
+      have htail := certificateShadowLength_run_calls_monotone key budget required
+        stopAfter (next record.output) after result hr
+      have hstep : state.2.1.2 + record.trace.hashCalls ≤ budget := by
+        change state.2.1.2 + record.trace.hashCalls ≤ result.2.2.1.2 at htail
+        omega
+      have hafter : after.2.2 = after.2.1.1.1 :=
+        certificateShadowUpdate_good key budget required stopAfter input state length
+          record hpre hstep
+      exact ih record.output after hafter result hr hcost
+
+theorem certificateShadowLength_run_mass_budget {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState)
+    (hbudget : state.2.2.creationMass ≤ (budget : ENNReal))
+    (hcalls : state.2.2.creationMass ≤ (state.2.1.2 : ENNReal))
+    (result : α × CertificateShadowState)
+    (hr : result ∈ ((simulateQ (certificateShadowLengthImpl key budget required
+      stopAfter) computation).run state).support) :
+    result.2.2.2.creationMass ≤ (budget : ENNReal) ∧
+    result.2.2.2.creationMass ≤ (result.2.2.1.2 : ENNReal) := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      exact ⟨hbudget, hcalls⟩
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, hrecord, rfl⟩ :=
+        certificateShadowLengthImpl_support key budget required stopAfter input state
+          middle hmiddle
+      have hnext := certificateShadowUpdate_mass_budget key budget required stopAfter
+        input state length record hrecord hbudget hcalls
+      exact ih record.output _ hnext.1 hnext.2 result hr
+
+theorem certificateShadowProposal_run_mass_budget {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateShadowState)
+    (hbudget : state.2.2.2.creationMass ≤ (budget : ENNReal))
+    (hcalls : state.2.2.2.creationMass ≤ (state.2.2.1.2 : ENNReal))
+    (result : α × (List Index × CertificateShadowState))
+    (hr : result ∈ ((simulateQ (certificateShadowProposalImpl key budget required
+      stopAfter) computation).run state).support) :
+    result.2.2.2.2.creationMass ≤ (budget : ENNReal) ∧
+    result.2.2.2.2.creationMass ≤ (result.2.2.2.1.2 : ENNReal) := by
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr
+    ⟨result, hr, rfl⟩
+  unfold certificateShadowProposalImpl at hm
+  rw [← PMF.monad_map_eq_map, simulateQ_originalProposalImpl_length] at hm
+  exact certificateShadowLength_run_mass_budget key budget required stopAfter
+    computation state.2 hbudget hcalls _ hm
+
+theorem certificateShadowProposal_run_good {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateShadowState)
+    (hpre : state.2.2.2 = state.2.2.1.1.1)
+    (result : α × (List Index × CertificateShadowState))
+    (hr : result ∈ ((simulateQ (certificateShadowProposalImpl key budget required
+      stopAfter) computation).run state).support)
+    (hcost : result.2.2.2.1.2 ≤ budget) :
+    result.2.2.2.2 = result.2.2.2.1.1.1 := by
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr
+    ⟨result, hr, rfl⟩
+  unfold certificateShadowProposalImpl at hm
+  rw [← PMF.monad_map_eq_map, simulateQ_originalProposalImpl_length] at hm
+  exact certificateShadowLength_run_good key budget required stopAfter computation
+    state.2 hpre _ hm hcost
+
+theorem certificateShadowProposalImpl_project (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : List Index × CertificateShadowState) :
+    Prod.map id (Prod.map id certificateShadowActualProject) <$>
+      (certificateShadowProposalImpl key budget required stopAfter input).run state =
+    (certificateCountedProposalImpl key budget required stopAfter input).run
+      (state.1, certificateShadowActualProject state.2) := by
+  change PMF.map _ _ = _
+  cases input with
+  | inl world =>
+      simp only [certificateShadowProposalImpl, certificateCountedProposalImpl,
+        originalProposalImpl, proposalRecordImpl, StateT.run_mk,
+        originalProposalActive, Bool.false_eq_true, if_false, PMF.map_comp]
+      rfl
+  | inr message =>
+      simp only [certificateShadowProposalImpl, certificateCountedProposalImpl,
+        originalProposalImpl, proposalRecordImpl, StateT.run_mk,
+        originalProposalActive, certificateShadowActualProject]
+      by_cases h : (certificateMonitorEnabled key budget message
+        (certificateCacheMonitorProject (certificateCountedProject
+          (certificateShadowActualProject state.2))) &&
+        decide (ProposalCacheBound key state.2.1 state.2.2.1.1.1.spent)) = true
+      · simp only [certificateShadowActualProject, certificateCountedProject] at h ⊢
+        simp only [h, if_true, PMF.map_comp]
+        rfl
+      · simp only [certificateShadowActualProject, certificateCountedProject] at h ⊢
+        simp only [h, if_false, Bool.false_eq_true, PMF.map_comp]
+        rfl
+
+theorem simulateQ_certificateShadowProposalImpl_project {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateShadowState) :
+    Prod.map id (Prod.map id certificateShadowActualProject) <$>
+      (simulateQ (certificateShadowProposalImpl key budget required stopAfter)
+        computation).run state =
+    (simulateQ (certificateCountedProposalImpl key budget required stopAfter)
+      computation).run (state.1, certificateShadowActualProject state.2) :=
+  map_run_simulateQ_eq_of_query_map_eq _ _
+    (Prod.map id certificateShadowActualProject)
+    (certificateShadowProposalImpl_project key budget required stopAfter)
+    computation state
+
+abbrev CertificateShadowContextResult := SecretKey ×
+  (RetainedRestResult × (List Index × CertificateShadowState))
+
+def CertificateShadowContextResult.actual (result : CertificateShadowContextResult) :
+    CertificateCountedContextResult :=
+  (result.1, (result.2.1,
+    (result.2.2.1, certificateShadowActualProject result.2.2.2)))
+
+noncomputable def certificateShadowContextGame (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    PMF CertificateShadowContextResult := do
+  let generated ← (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)
+  let key := generated.1.1.2
+  let initial := initialCertificateMonitor generated.1.2.hashCalls stopped
+  let result ← (simulateQ (certificateShadowProposalImpl key budget required
+    (stopAfter key))
+    (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)).run
+      ([], (generated.2, (((initial, false), generated.1.2.hashCalls), initial)))
+  pure (key, result)
+
+theorem certificateShadowContextGame_actual (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    CertificateShadowContextResult.actual <$>
+      certificateShadowContextGame adversary budget required stopAfter stopped =
+    certificateCountedContextGame adversary budget required stopAfter stopped := by
+  simp only [certificateShadowContextGame, certificateCountedContextGame,
+    map_bind, map_pure]
+  apply PMF.bind_congr
+  intro generated _
+  simp only [bind_pure_comp]
+  have h := congrArg (Functor.map (Prod.mk generated.1.1.2))
+    (simulateQ_certificateShadowProposalImpl_project generated.1.1.2 budget required
+      (stopAfter generated.1.1.2)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+      ([], (generated.2, (((initialCertificateMonitor generated.1.2.hashCalls stopped,
+        false), generated.1.2.hashCalls),
+        initialCertificateMonitor generated.1.2.hashCalls stopped))))
+  simpa only [Functor.map_map, CertificateShadowContextResult.actual,
+    Function.comp_def, Prod.map, id_eq, certificateShadowActualProject] using h
+
+theorem certificateShadowContextGame_good (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (result : CertificateShadowContextResult)
+    (hr : result ∈ (certificateShadowContextGame adversary budget required
+      stopAfter stopped).support)
+    (hcost : result.actual.originalCost.2 ≤ budget) :
+    result.2.2.2.2.2 = result.2.2.2.2.1.1.1 := by
+  rw [certificateShadowContextGame, PMF.monad_bind_eq_bind,
+    PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, _, hr⟩ := hr
+  rw [PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨output, houtput, hr⟩ := hr
+  rw [PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+  subst result
+  exact certificateShadowProposal_run_good generated.1.1.2 budget required
+    (stopAfter generated.1.1.2)
+    (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+    ([], (generated.2, (((initialCertificateMonitor
+      generated.1.2.hashCalls stopped, false), generated.1.2.hashCalls),
+      initialCertificateMonitor generated.1.2.hashCalls stopped)))
+    rfl output houtput hcost
+
+theorem certificateShadowContextGame_mass_budget (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (result : CertificateShadowContextResult)
+    (hr : result ∈ (certificateShadowContextGame adversary budget required
+      stopAfter stopped).support) :
+    result.2.2.2.2.2.creationMass ≤ (budget : ENNReal) := by
+  rw [certificateShadowContextGame, PMF.monad_bind_eq_bind,
+    PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, _, hr⟩ := hr
+  rw [PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨output, houtput, hr⟩ := hr
+  rw [PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+  subst result
+  exact (certificateShadowProposal_run_mass_budget generated.1.1.2 budget required
+    (stopAfter generated.1.1.2)
+    (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+    ([], (generated.2, (((initialCertificateMonitor
+      generated.1.2.hashCalls stopped, false), generated.1.2.hashCalls),
+      initialCertificateMonitor generated.1.2.hashCalls stopped)))
+    (by simp only [initialCertificateMonitor, zero_le])
+    (by simp only [initialCertificateMonitor, zero_le])
+    output houtput).1
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1244,3 +1604,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.expected_certificateCountedTerminalGame_budget_mass_payoff_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.expected_certificateCountedTerminalGame_budget_mass_payoff_le
+
+/-- info: 'SphincsSecurity.Concrete.certificateShadowContextGame_actual' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateShadowContextGame_actual
+
+/-- info: 'SphincsSecurity.Concrete.certificateShadowContextGame_good' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateShadowContextGame_good
+
+/-- info: 'SphincsSecurity.Concrete.certificateShadowContextGame_mass_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateShadowContextGame_mass_budget
