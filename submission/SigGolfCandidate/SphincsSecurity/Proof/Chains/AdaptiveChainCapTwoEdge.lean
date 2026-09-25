@@ -184,6 +184,67 @@ theorem realRun_twoEdge_cost_budget_le_cap_counted_cost
   exact (realRun_twoEdge_cost_budget_le_counted auxiliary computation cost budget hchargeRun).trans
     (counted_twoEdge_budget_le_cap_counted_cost auxiliary computation budget)
 
+omit hcharge hreal in
+theorem idealRun_capped_count_le_budget
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (budget : Nat) (result : State × ((Option (Result × Nat) × Nat) ×
+      (Fin (n + 2) → State → Option State)))
+    (hr : result ∈ (idealRun auxiliary
+      (fun endpoint => QueryCap.counted IsPrefixQuery
+        (QueryCap.run IsPrefixQuery (computation endpoint) budget))
+      (fun _ _ => none)).support) :
+    result.2.1.2 ≤ budget := by
+  rw [idealRun, PMF.mem_support_bind_iff] at hr
+  obtain ⟨endpoint, _, hr⟩ := hr
+  rw [PMF.mem_support_map_iff] at hr
+  obtain ⟨output, houtput, rfl⟩ := hr
+  exact lazyRun_counted_budget_le (auxiliary endpoint)
+    (QueryCap.run IsPrefixQuery (computation endpoint) budget)
+    (fun _ _ => none) budget
+    (QueryCap.run_queryBound IsPrefixQuery (computation endpoint) budget)
+    output houtput
+
+omit hcharge hreal in
+theorem idealRun_capped_count_expectation_le_budget
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (budget : Nat) :
+    (∑' result, idealRun auxiliary
+      (fun endpoint => QueryCap.counted IsPrefixQuery
+        (QueryCap.run IsPrefixQuery (computation endpoint) budget))
+      (fun _ _ => none) result * (result.2.1.2 : ENNReal)) ≤ budget := by
+  let law := idealRun auxiliary
+    (fun endpoint => QueryCap.counted IsPrefixQuery
+      (QueryCap.run IsPrefixQuery (computation endpoint) budget))
+    (fun _ _ => none)
+  change (∑' result, law result * (result.2.1.2 : ENNReal)) ≤ budget
+  calc
+    _ ≤ ∑' result, law result * (budget : ENNReal) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hr : result ∈ law.support
+      · exact mul_le_mul' le_rfl (by exact_mod_cast idealRun_capped_count_le_budget auxiliary computation budget result hr)
+      · have hz : law result = 0 := not_not.mp hr
+        simp [hz]
+    _ = budget := expectation_const law _
+
+omit hcharge hreal in
+theorem realRun_twoEdge_cost_budget_le_linear
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hchargeRun : ∀ result ∈
+      (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)).support, result.2.1.2 ≤ cost result.2.1.1) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+      (((3 / 2 : ENNReal) + 4 * ((budget : ENNReal) / Fintype.card State) +
+        2 * ((budget : ENNReal) / Fintype.card State)^2) / Fintype.card State) * budget := by
+  exact (realRun_twoEdge_cost_budget_le_cap_counted_cost
+    auxiliary computation cost budget hchargeRun).trans
+    (mul_le_mul' le_rfl (idealRun_capped_count_expectation_le_budget auxiliary computation budget))
+
 end SphincsSecurity.Concrete.PartialChainEndpoint
 
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -201,3 +262,15 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_cap_counted_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_cap_counted_cost
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.idealRun_capped_count_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.idealRun_capped_count_le_budget
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.idealRun_capped_count_expectation_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.idealRun_capped_count_expectation_le_budget
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear
