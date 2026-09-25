@@ -33,6 +33,12 @@ private theorem root_ne_of_nat (read : Word) (n : Nat)
   apply root_ne read _ inside
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small] using outside
 
+theorem rootSlot_region (tree : SphincsSecurity.FtsTree)
+    (i : Nat) (hi : i < 20) :
+    RootRegion (alignToDword
+      (BitVec.ofNat 64 (0x44100 + 20 * tree.val + i))) := by
+  fin_cases tree <;> interval_cases i <;> (dsimp [RootRegion, alignToDword]; decide)
+
 theorem parentRound_root_frame (state : MachineState)
     (answer : BitVec 256) (read : Word)
     (inside : RootRegion read) :
@@ -158,6 +164,90 @@ theorem nextTreeSetup_root_frame (state : MachineState)
     · exact root_ne_of_nat read 0x43008 inside (Or.inl (by decide)) (by decide)
   exact readyFrame.trans (advanceFrame.trans (copyFrame.trans
     (pointerFrame.trans (selectFrame.trans headerFrame))))
+
+theorem parentPathRun_root_byte_frame (hash : Hash)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (tree prior : SphincsSecurity.FtsTree)
+    (index : SphincsSecurity.Index)
+    (leaf : SphincsSecurity.FtsLeaf)
+    (start : MachineState) (initial : SphincsSecurity.Digest)
+    (n i : Nat) (hi : i < 20) :
+    (SphincsVerifierFtsPathInduction.parentPathRun hash pk signature tree index
+      leaf start initial n).1.getByte
+        (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) =
+      start.getByte (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) := by
+  simp only [MachineState.getByte]
+  rw [parentPathRun_root_frame hash pk signature tree index leaf start
+    initial n _ (rootSlot_region prior i hi)]
+
+theorem firstLeafStart_root_byte_frame (state : MachineState)
+    (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000)
+    (prior : SphincsSecurity.FtsTree) (i : Nat) (hi : i < 20) :
+    (SphincsVerifierFtsInitialInvariant.firstLeafStartState state answer).getByte
+      (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) =
+      state.getByte (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) := by
+  simp only [MachineState.getByte]
+  rw [firstLeafStart_root_frame state answer destination _
+    (rootSlot_region prior i hi)]
+
+theorem nextTreeSetup_root_byte_frame (state : MachineState)
+    (prior : SphincsSecurity.FtsTree) (i : Nat) (hi : i < 20) :
+    (SphincsVerifierFtsNextTreeSetup.nextTreeHashState state).getByte
+      (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) =
+      state.getByte (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) := by
+  simp only [MachineState.getByte]
+  rw [nextTreeSetup_root_frame state _ (rootSlot_region prior i hi)]
+
+theorem treeProcess_prior_root_byte (hash : Hash)
+    (state : MachineState) (signature : SphincsSecurity.Signature)
+    (pk : SphincsSecurity.PublicKey)
+    (tree prior : SphincsSecurity.FtsTree)
+    (index : SphincsSecurity.Index) (leaf : SphincsSecurity.FtsLeaf)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
+    (destination : state.getReg .x12 = 0x42000)
+    (older : prior.val < tree.val)
+    (i : Nat) (hi : i < 20) :
+    let answer := hash (hashInput state)
+    let start := SphincsVerifierFtsInitialInvariant.firstLeafStartState state answer
+    let pathState := (SphincsVerifierFtsPathInduction.parentPathRun hash pk
+      signature tree index leaf start (SphincsSecurity.truncateHash answer) 8).1
+    (SphincsVerifierFtsGenericTree.treeFinishState pathState).getByte
+      (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) =
+      state.getByte (BitVec.ofNat 64 (0x44100 + 20 * prior.val + i)) := by
+  let answer := hash (hashInput state)
+  let start := SphincsVerifierFtsInitialInvariant.firstLeafStartState state answer
+  let pathState := (SphincsVerifierFtsPathInduction.parentPathRun hash pk
+    signature tree index leaf start (SphincsSecurity.truncateHash answer) 8).1
+  have pathCounter : pathState.getMem 0x43040 =
+      BitVec.ofNat 64 tree.val := by
+    calc
+      _ = start.getMem 0x43040 :=
+        SphincsVerifierFtsGenericTree.parentPathRun_counter_frame
+          hash pk signature tree index leaf start
+          (SphincsSecurity.truncateHash answer) 8
+      _ = state.getMem 0x43040 :=
+        SphincsVerifierFtsLevelInit.levelStart_counter_frame state answer destination
+      _ = BitVec.ofNat 64 tree.val := counter
+  dsimp only
+  exact (SphincsVerifierFtsPriorRoots.treeFinish_prior_root_bytes pathState
+    tree prior i hi pathCounter older).trans
+    ((parentPathRun_root_byte_frame hash pk signature tree prior index leaf
+      start (SphincsSecurity.truncateHash answer) 8 i hi).trans
+      (firstLeafStart_root_byte_frame state answer destination prior i hi))
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRootFrame.treeProcess_prior_root_byte' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeProcess_prior_root_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRootFrame.rootSlot_region' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms rootSlot_region
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsRootFrame.nextTreeSetup_root_frame' depends on axioms: [propext,
  Classical.choice,
