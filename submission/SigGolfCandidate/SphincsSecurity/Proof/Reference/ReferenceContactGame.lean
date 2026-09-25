@@ -1,3 +1,5 @@
+import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.FrontierRandomOracle
+import SigGolfCandidate.SphincsSecurity.Proof.Reference.BoundaryHashCost
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsContactSplit
 import SigGolfCandidate.SphincsSecurity.Proof.Reference.ReferenceInstrumentedGame
 namespace SphincsSecurity.Concrete
@@ -96,3 +98,92 @@ theorem ContactResult.restartCharge_sum_le (parameter : PublicParameter) (words 
   · simp only [ContactResult.restartCharge, hm, false_and, if_false, Finset.sum_const_zero, le_refl]
 
 end SphincsSecurity.Concrete
+
+namespace SigGolfCandidate.BoundaryCount
+open SphincsSecurity OracleComp OracleSpec
+set_option maxRecDepth 8192
+set_option maxHeartbeats 2000000
+set_option backward.isDefEq.respectTransparency false
+
+theorem countHashQueries_sample_bind {A B : Type}
+    (sample : ProbComp A) (next : A → OracleComp OracleWorld B) :
+    countHashQueries ((liftM sample : OracleComp OracleWorld A) >>= next) =
+      (liftM sample : OracleComp OracleWorld A) >>=
+        fun value => countHashQueries (next value) := by
+  rw [countHashQueries_bind, countHashQueries_lift_prob]
+  simp [bind_map_left, bind_pure_comp, Prod.mk.eta]
+
+theorem boundaryGameCore_count_law (adversary : Adversary) :
+    (fun result => (result.1, result.2.hashCalls)) <$>
+      𝒮[(simulateQ romImpl (Concrete.boundaryGameCore adversary)).run' ∅] =
+    𝒮[(simulateQ romImpl
+      (countHashQueries (gameCore Concrete.scheme adversary))).run' ∅] := by
+  rw [Concrete.boundaryGameCore, Concrete.gameCore_eq_secrets]
+  simp only [countHashQueries_sample_bind]
+  simp only [Concrete.simulateQ_romImpl_liftM_bind_run', evalSPMF_bind, map_bind]
+  apply bind_congr
+  intro parameter
+  apply bind_congr
+  intro otsSecret
+  apply bind_congr
+  intro ftsSecret
+  let computation := Concrete.gameAfterSecrets adversary parameter otsSecret ftsSecret
+  have h := Concrete.boundaryRun_count parameter computation (∅ : QueryCache HashSpec)
+  have h' :
+      (fun result : Bool × Concrete.SigningBoundaryTrace => (result.1, result.2.hashCalls)) <$>
+        (Prod.fst <$> Concrete.boundaryRun parameter computation ∅) =
+      Prod.fst <$> (simulateQ romImpl (countHashQueries computation)).run ∅ := by
+    simpa only [Functor.map_map, Function.comp_def] using
+      congrArg (fun distribution => Prod.fst <$> distribution) h
+  rw [Concrete.boundaryRun_fst_eq_boundaryComputation] at h'
+  have h'' := congrArg (fun distribution : ProbComp (Bool × Nat) => 𝒮[distribution]) h'
+  simpa only [computation, StateT.run'_eq, evalSPMF_map,
+    Functor.map_map, Function.comp_def] using h''
+
+theorem referenceContactGame_count_law
+    (dummy : Concrete.OtsReferenceWords) (adversary : Adversary) :
+    𝒮[(simulateQ romImpl
+      (countHashQueries (gameCore Concrete.scheme adversary))).run' ∅] =
+    (fun result : Concrete.InstrumentedResult Concrete.ContactResult =>
+      (result.2.2.output.1, result.2.2.output.2.hashCalls)) <$>
+      Concrete.referenceContactGame (Concrete.canonicalGraphGameInputs adversary)
+        (Concrete.canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary := by
+  rw [← boundaryGameCore_count_law]
+  rw [Concrete.evalSPMF_boundaryGameCore_referenceFamily
+    (Concrete.canonicalGraphGameInputs adversary)
+    (Concrete.canonicalEncodingInputs_subset_gameInputs adversary)
+    (Concrete.canonicalGraphInputs_subset_gameInputs adversary) dummy adversary
+    (Concrete.hashInputs_subset_canonicalGraphGameInputs adversary)]
+  rw [← Concrete.referenceContactGame_erased]
+  simp only [Functor.map_map]
+
+theorem referenceContactGame_budget_event
+    (dummy : Concrete.OtsReferenceWords) (adversary : Adversary) (Q : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ Q |
+      (simulateQ romImpl
+        (countHashQueries (gameCore Concrete.scheme adversary))).run' ∅] =
+    Pr[fun result : Concrete.InstrumentedResult Concrete.ContactResult =>
+      result.2.2.output.1 = true ∧ result.2.2.output.2.hashCalls ≤ Q |
+      Concrete.referenceContactGame (Concrete.canonicalGraphGameInputs adversary)
+        (Concrete.canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] := by
+  conv_lhs => rw [← probEvent_evalSPMF]
+  rw [referenceContactGame_count_law, probEvent_map]
+  rfl
+
+end SigGolfCandidate.BoundaryCount
+
+/-- info: 'SigGolfCandidate.BoundaryCount.countHashQueries_sample_bind' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.BoundaryCount.countHashQueries_sample_bind
+
+/-- info: 'SigGolfCandidate.BoundaryCount.boundaryGameCore_count_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.BoundaryCount.boundaryGameCore_count_law
+
+/-- info: 'SigGolfCandidate.BoundaryCount.referenceContactGame_count_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.BoundaryCount.referenceContactGame_count_law
+
+/-- info: 'SigGolfCandidate.BoundaryCount.referenceContactGame_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.BoundaryCount.referenceContactGame_budget_event
