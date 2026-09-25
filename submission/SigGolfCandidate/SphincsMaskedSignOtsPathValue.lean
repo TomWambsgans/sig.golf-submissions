@@ -1930,4 +1930,36 @@ theorem signer_encoding_bad (location : Fin 5) (s : MachineState)
   exact ⟨by simpa using (digits.append checked).append jumped,
     sumFailureJump_pc location _ rejectedPc⟩
 
+theorem signer_encoding_retry (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x1bc4 + delta location)
+    (bad : answerSum 52 (sumInit s) ≠ 194)
+    (under : (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
+      0x430b8 + 1 ≠ (2 ^ 20 : Word)) :
+    OrdinarySteps SphincsMaskedImages.sign s 513
+      (retryDecision (retryCounter location
+        (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))))) ∧
+    (retryDecision (retryCounter location
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))))).pc =
+      0x1a78 + delta location := by
+  obtain ⟨rejected, rejectedPc⟩ := signer_encoding_bad location s pc bad
+  obtain ⟨retried, retryPc⟩ := retryCounter_continue location _ rejectedPc under
+  exact ⟨by simpa using rejected.append retried, retryPc⟩
+
+theorem signer_encoding_exhausted (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x1bc4 + delta location)
+    (bad : answerSum 52 (sumInit s) ≠ 194)
+    (atLimit : (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
+      0x430b8 + 1 = (2 ^ 20 : Word)) :
+    OrdinarySteps SphincsMaskedImages.sign s 514
+      (retryRejectJump location (retryDecision (retryCounter location
+        (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s))))))) ∧
+    (retryRejectJump location (retryDecision (retryCounter location
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s))))))).pc =
+      0x1004 := by
+  obtain ⟨rejected, rejectedPc⟩ := signer_encoding_bad location s pc bad
+  obtain ⟨exhausted, exhaustedPc⟩ := retryCounter_exhausted location _ rejectedPc atLimit
+  have jump := retryRejectJump_block location _ exhaustedPc
+  exact ⟨by simpa using (rejected.append exhausted).append jump,
+    retryRejectJump_pc location _ exhaustedPc⟩
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
