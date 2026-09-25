@@ -773,4 +773,63 @@ theorem ots_encoding_hash (location : Fin 5) (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms ots_encoding_hash
 
+def otsHashPrepWrites : List Word :=
+  [0x40000#64,0x40008#64,0x40010#64,0x40018#64,
+   0x40020#64,0x40028#64,0x40030#64,0x40038#64]
+
+theorem otsHashPrep_frame (location : Fin 5) (s : MachineState) (a : Word)
+    (outside : a∉otsHashPrepWrites) :
+    (otsHashPrep location s).getMem a=s.getMem a := by
+  simp only [otsHashPrep,shift_mem]
+  simp only [otsHashPrepWrites,List.mem_cons,List.not_mem_nil,
+    not_or,not_false_eq_true,and_true] at outside
+  obtain ⟨h0,h1,h2,h3,h4,h5,h6,h7⟩:=outside
+  simp [otsHashPrepState,otsHashPrepCode,runSchedule,execInstrBr,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,
+    setWord32_eq,MachineState.getMem_setMem_ne,alignToDword,byteOffset,
+    h0,h1,h2,h3,h4,h5,h6,h7]
+
+
+theorem otsHashPrep_low_word (location : Fin 5) (s : MachineState)
+    (read : Nat) (readBound : read<0x40000) :
+    (otsHashPrep location s).getWord32 (BitVec.ofNat 64 read) =
+      s.getWord32 (BitVec.ofNat 64 read) := by
+  have cell := (SphincsMaskedSignForestTail.cell_bounds read 0 0x40000
+    (by decide) (by omega) readBound (by decide)).2
+  simp only [MachineState.getWord32]
+  rw [otsHashPrep_frame]
+  simp only [otsHashPrepWrites,List.mem_cons,List.not_mem_nil,
+    not_or,not_false_eq_true,and_true]
+  refine ⟨?_,?_,?_,?_,?_,?_,?_,?_⟩
+  all_goals
+    intro h
+    rw [h] at cell
+    norm_num at cell
+
+
+theorem ots_encoding_hash_low_word (location : Fin 5) (s : MachineState)
+    (answer : BitVec 256) (read : Nat) (readBound : read<0x40000) :
+    (writeHash (otsHashPrep location (otsPrelude location s)) answer).getWord32
+      (BitVec.ofNat 64 read) = s.getWord32 (BitVec.ofNat 64 read) := by
+  let prep := otsHashPrep location (otsPrelude location s)
+  have cell := (SphincsMaskedSignForestTail.cell_bounds read 0 0x40000
+    (by decide) (by omega) readBound (by decide)).2
+  have dest : prep.getReg .x12 = 0x42000 := (otsHashPrep_registers location _).2.2.1
+  have frame : (writeHash prep answer).getMem (alignToDword (BitVec.ofNat 64 read)) =
+      prep.getMem (alignToDword (BitVec.ofNat 64 read)) := by
+    apply SphincsVerifierFtsLevelInit.writeHash_mem_frame prep answer dest
+    all_goals
+      intro h
+      have impossible : ¬ (alignToDword (BitVec.ofNat 64 read)).toNat < 0x40000 := by
+        rw [h]
+        decide
+      exact impossible cell
+  simp only [MachineState.getWord32]
+  rw [frame]
+  have h1 := otsHashPrep_low_word location (otsPrelude location s) read readBound
+  have h2 := otsPrelude_low_word location s read readBound
+  simp only [MachineState.getWord32] at h1 h2
+  exact h1.trans h2
+
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
