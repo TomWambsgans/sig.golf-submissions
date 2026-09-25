@@ -59,6 +59,31 @@ theorem sign_runWith_one_call (hash : Hash) (secretKey : SecretKey)
     evalWithAnswerFn_bind, evalWithAnswerFn_pure,
     RunResult.hashCalls] using hfloor
 
+theorem record_sign_request_charge (hash : Hash) (secretKey : SecretKey)
+    (request : SigningRequest)
+    (transcript : Transcript SphincsSubmission.submission.sizes) :
+    transcript.hashCalls + 1 ≤
+      (transcript.record request.message
+        (SphincsSubmission.submission.runWith hash .sign
+          (secretKey, request.cache, request.message))).hashCalls := by
+  have h := sign_runWith_one_call hash secretKey request.cache request.message
+  simp only [Transcript.record]
+  omega
+
+theorem record_preserves_request_charge (hash : Hash) (secretKey : SecretKey)
+    (request : SigningRequest)
+    (transcript : Transcript SphincsSubmission.submission.sizes)
+    (hbefore : transcript.signingRequests ≤ transcript.hashCalls) :
+    (transcript.record request.message
+      (SphincsSubmission.submission.runWith hash .sign
+        (secretKey, request.cache, request.message))).signingRequests ≤
+    (transcript.record request.message
+      (SphincsSubmission.submission.runWith hash .sign
+        (secretKey, request.cache, request.message))).hashCalls := by
+  have hstep := record_sign_request_charge hash secretKey request transcript
+  simp only [Transcript.record] at hstep ⊢
+  omega
+
 end SigGolfCandidate.SphincsSignCallFloor
 
 /-- info: 'SigGolfCandidate.SphincsSignCallFloor.trace_calls_le_execute' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -68,3 +93,7 @@ end SigGolfCandidate.SphincsSignCallFloor
 /-- info: 'SigGolfCandidate.SphincsSignCallFloor.sign_runWith_one_call' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSignCallFloor.sign_runWith_one_call
+
+/-- info: 'SigGolfCandidate.SphincsSignCallFloor.record_preserves_request_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSignCallFloor.record_preserves_request_charge

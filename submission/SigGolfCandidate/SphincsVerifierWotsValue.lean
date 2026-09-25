@@ -936,6 +936,30 @@ theorem stepReady_chainQuery_from_state (state : MachineState)
     prefixLayer prefixPosition prefixTree prefixLeaf parameterEncoded
     valueEncoded
 
+theorem stepNext_abstractValueByte (hash : Hash) (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (step : ChainStep) (value : Digest)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (chainCell : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (stepCell : state.getMem 0x43058 = BitVec.ofNat 64 step.val)
+    (parameterEncoded : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (valueEncoded : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+        value.extractLsb' (8 * i) 8)
+    (i : Nat) (hi : i < 20) :
+    (stepNext hash state).getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+      (truncateHash (hash (toQuery
+        (chainInput pk.parameter layer tree leaf chain step value)))).extractLsb'
+          (8 * i) 8 := by
+  exact stepNext_valueByte_of_query hash state
+    (chainInput pk.parameter layer tree leaf chain step value)
+    (stepReady_chainQuery_from_state state pk layer tree leaf chain step value
+      layerCell treeCell leafCell chainCell stepCell parameterEncoded
+      valueEncoded) i hi
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsValue.stepNext_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms stepNext_value
@@ -1079,5 +1103,11 @@ theorem stepReady_chainQuery_from_state (state : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms stepReady_chainQuery_from_state
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsValue.stepNext_abstractValueByte' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms stepNext_abstractValueByte
 
 end SigGolfCandidate.SphincsVerifierWotsValue
