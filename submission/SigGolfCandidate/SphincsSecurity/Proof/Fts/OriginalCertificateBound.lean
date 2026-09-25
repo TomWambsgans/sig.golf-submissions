@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificateBankCompleteness
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificatePathBudget
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.UnitCertificateCoverage
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificateOriginalMessageCost
 namespace SphincsSecurity.Concrete
@@ -206,4 +207,27 @@ theorem originalCertificateSource_full_le_original_message_add_exception (advers
     (add_le_add (add_le_add (mul_le_mul' le_rfl
       (certificateContextGame_messageCalls_le_original adversary q Finset.univ (fun _ => proposalPrefixStop) false)) le_rfl) le_rfl)
 
+theorem certificateContextGame_mass_le_spent (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) (result : CertificateContextResult)
+    (hr : result ∈ (certificateContextGame adversary budget required stopAfter stopped).support) :
+    result.2.2.2.2.1.creationMass ≤ (result.2.2.2.2.1.spent : ENNReal) := by
+  rw [certificateContextGame, PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, _, hr⟩ := hr
+  rw [PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨output, houtput, hr⟩ := hr
+  rw [PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+  subst result
+  apply certificateCacheProposal_run_mass_le_spent
+    generated.1.1.2 budget required (stopAfter generated.1.1.2)
+    (retainedGameRestComputation adversary generated.1.1.1)
+    ([], (generated.2, (initialCertificateMonitor generated.1.2.hashCalls stopped, false)))
+  · simp only [initialCertificateMonitor]
+    exact zero_le
+  · exact houtput
+
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateContextGame_mass_le_spent
