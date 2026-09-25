@@ -18,6 +18,7 @@ open SigGolfCandidate.SphincsVerifierFtsPair
 open SigGolfCandidate.SphincsVerifierFtsPairAdvance
 open SigGolfCandidate.SphincsVerifierFtsLevelShift
 open SigGolfCandidate.SphincsVerifierFtsLevelPosition
+open SigGolfCandidate.SphincsVerifierFtsParentFirstQuery
 set_option maxRecDepth 16384
 
 def parentRoundState (start : MachineState) (answer : BitVec 256) :
@@ -31,6 +32,36 @@ def parentRoundState (start : MachineState) (answer : BitVec 256) :
 theorem ready_destination (start : MachineState) :
     (firstParentReadyState start).getReg .x12 = 0x42000 :=
   (hashRegisters_ready _).2.2.1
+
+theorem firstParentReady_level (start : MachineState) :
+    (firstParentReadyState start).getMem 0x43048 =
+      start.getMem 0x43048 := by
+  change (parentHashReadyState (firstPositionedState start)).getMem
+    0x43048 = _
+  rw [parentHashReady_mem_frame _ 0x43048 (Or.inr (by decide))]
+  change (levelPositionState
+    (shiftIndexState (advancePointerState (pairState start)))).getMem
+    0x43048 = _
+  rw [levelPosition_mem_frame _ 0x43048 (by decide),
+    shiftIndex_mem_frame _ 0x43048 (by decide) (by decide),
+    advancePointer_mem_frame _ 0x43048 (by decide),
+    pair_level_frame]
+
+theorem firstParentReady_tree (start : MachineState) :
+    (firstParentReadyState start).getMem 0x43000 =
+      start.getMem 0x43000 := by
+  change (parentHashReadyState (firstPositionedState start)).getMem
+    0x43000 = _
+  rw [parentHashReady_mem_frame _ 0x43000 (Or.inr (by decide)),
+    positioned_scratch_frame start 0x43000 (Or.inl rfl)]
+
+theorem firstParentReady_index (start : MachineState) :
+    (firstParentReadyState start).getMem 0x43008 =
+      start.getMem 0x43008 := by
+  change (parentHashReadyState (firstPositionedState start)).getMem
+    0x43008 = _
+  rw [parentHashReady_mem_frame _ 0x43008 (Or.inr (by decide)),
+    positioned_scratch_frame start 0x43008 (Or.inr rfl)]
 
 theorem parentRound_witness (start : MachineState)
     (answer : BitVec 256) (signature : Signature)
@@ -76,23 +107,24 @@ theorem parentRound_level (start : MachineState)
     (levelValue : start.getMem 0x43048 = BitVec.ofNat 64 level) :
     (parentRoundState start answer).getMem 0x43048 =
       BitVec.ofNat 64 (level + 1) := by
-  have shiftedLevel :
-      (firstPositionedState start).getMem 0x43048 =
-        start.getMem 0x43048 := by
-    change (levelPositionState
-      (shiftIndexState (advancePointerState (pairState start)))).getMem
-      0x43048 = _
-    rw [levelPosition_mem_frame _ 0x43048 (by decide),
-      shiftIndex_mem_frame _ 0x43048 (by decide) (by decide),
-      advancePointer_mem_frame _ 0x43048 (by decide),
-      pair_level_frame]
   unfold parentRoundState
   rw [fullParent_level _ answer (ready_destination start)]
-  change (parentHashReadyState (firstPositionedState start)).getMem
-    0x43048 + 1 = _
-  rw [parentHashReady_mem_frame _ 0x43048 (Or.inr (by decide)),
-    shiftedLevel, levelValue]
+  rw [firstParentReady_level, levelValue]
   simp [BitVec.ofNat_add]
+
+theorem parentRound_tree (start : MachineState) (answer : BitVec 256) :
+    (parentRoundState start answer).getMem 0x43000 =
+      start.getMem 0x43000 := by
+  unfold parentRoundState
+  rw [fullParent_tree _ answer (ready_destination start),
+    firstParentReady_tree]
+
+theorem parentRound_index (start : MachineState) (answer : BitVec 256) :
+    (parentRoundState start answer).getMem 0x43008 =
+      start.getMem 0x43008 := by
+  unfold parentRoundState
+  rw [fullParent_index _ answer (ready_destination start),
+    firstParentReady_index]
 
 theorem parentRound_root (start : MachineState)
     (answer : BitVec 256) (i : Nat) (hi : i < 20) :

@@ -15,6 +15,8 @@ open SigGolfCandidate.SphincsVerifierFtsRoundInvariant
 open SigGolfCandidate.SphincsVerifierFtsGenericReadyTrace
 open SigGolfCandidate.SphincsVerifierFtsGenericPairTrace
 open SigGolfCandidate.SphincsVerifierFtsParentHash
+open SigGolfCandidate.SphincsVerifierFtsResultControls
+open SigGolfCandidate.SphincsVerifierFtsGenericLoop
 set_option maxRecDepth 16384
 
 theorem parentRound_readyTrace (start : MachineState) (pointer : Word)
@@ -53,6 +55,53 @@ theorem parentRound_tailTrace (start : MachineState)
   have trace := ((copyTrace.append advanceTrace).append checkTrace).append
     branchTrace
   simpa only [parentRoundState, Nat.reduceAdd] using trace
+
+theorem parentRound_pc_repeat (start : MachineState)
+    (answer : BitVec 256) (roundLevel : Nat)
+    (readyPc : (firstParentReadyState start).pc = 0x1b18)
+    (levelValue : start.getMem 0x43048 = BitVec.ofNat 64 roundLevel)
+    (notFinal : roundLevel < 8) :
+    (parentRoundState start answer).pc = 0x1914 := by
+  let ready := firstParentReadyState start
+  let hashed := writeHash ready answer
+  let copied := resultState hashed
+  have hashedPc : hashed.pc = 0x1b1c := by
+    simp [hashed, writeHash]
+    rw [show ready.pc = 0x1b18 from readyPc]
+    decide
+  have copiedPc := result_pc hashed hashedPc
+  have copiedLevel : copied.getMem 0x43048 =
+      BitVec.ofNat 64 roundLevel := by
+    change (resultState (writeHash ready answer)).getMem 0x43048 = _
+    rw [hashedResult_mem_frame ready answer 0x43048
+      (ready_destination start) (by decide) (by decide) (by decide)
+      (by decide) (by intro offset; fin_cases offset <;> decide),
+      firstParentReady_level, levelValue]
+  have loop := parent_loopBack_generic copied roundLevel copiedPc
+    copiedLevel notFinal
+  simpa only [parentRoundState] using loop.2.1
+
+theorem parentRound_pc_done (start : MachineState)
+    (answer : BitVec 256)
+    (readyPc : (firstParentReadyState start).pc = 0x1b18)
+    (levelValue : start.getMem 0x43048 = 8) :
+    (parentRoundState start answer).pc = 0x1b84 := by
+  let ready := firstParentReadyState start
+  let hashed := writeHash ready answer
+  let copied := resultState hashed
+  have hashedPc : hashed.pc = 0x1b1c := by
+    simp [hashed, writeHash]
+    rw [show ready.pc = 0x1b18 from readyPc]
+    decide
+  have copiedPc := result_pc hashed hashedPc
+  have copiedLevel : copied.getMem 0x43048 = 8 := by
+    change (resultState (writeHash ready answer)).getMem 0x43048 = _
+    rw [hashedResult_mem_frame ready answer 0x43048
+      (ready_destination start) (by decide) (by decide) (by decide)
+      (by decide) (by intro offset; fin_cases offset <;> decide),
+      firstParentReady_level, levelValue]
+  have loop := parent_loopDone copied copiedPc copiedLevel
+  simpa only [parentRoundState] using loop.2.1
 
 theorem parentRound_executes (hash : Hash) (start : MachineState)
     (pointer : Word) (steps : Nat) (result : Execution)
