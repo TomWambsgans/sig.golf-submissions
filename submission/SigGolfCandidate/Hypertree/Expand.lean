@@ -239,7 +239,7 @@ theorem run_bound (hash : Hash) (input : Input submission.sizes .expand) :
   obtain ⟨final, trace⟩ := executes hash state pc
   have bound : 89733 ≤ CYCLE_LIMIT := by decide
   have run := runWith_of_executes submission hash .expand input state 89733
-    ⟨.success, final, 89733, 0, 0⟩ loaded trace bound
+    ⟨.success, final, 89733, 0, 0⟩ loaded (unitCost _) trace bound
   simp [run]
 
 /-- info: 'SigGolfCandidate.Hypertree.Expansion.executes' depends on axioms: [propext, Classical.choice, Quot.sound] -/

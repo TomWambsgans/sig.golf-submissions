@@ -144,7 +144,7 @@ theorem run_copies_buffer (hash : Hash) (input : Input submission.sizes .expand)
   obtain ⟨initial, loaded, pc⟩ := initialState_exists submission admitted .expand input
   obtain ⟨final, trace, same⟩ := copies_buffer hash initial pc
   have run := runWith_of_executes submission hash .expand input initial 89733
-    ⟨.success, final, 89733, 0, 0⟩ loaded trace (by decide)
+    ⟨.success, final, 89733, 0, 0⟩ loaded (unitCost _) trace (by decide)
   refine ⟨initial, loaded, ?_⟩
   rw [run]
   change some (readBuffer final (witnessBase submission.sizes) signatureBytes) = _

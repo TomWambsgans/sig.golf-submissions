@@ -67,12 +67,12 @@ theorem Trace.then_executes {hash : Hash} {image : Image} {s t : MachineState}
 
 /-- Prefix soundness, stated directly against the organizer's interpreter and arbitrary extra fuel. -/
 theorem Trace.sound {hash : Hash} {image : Image} {s t : MachineState}
-    {steps cycles calls blocks moreSteps : Nat} {result : Execution}
+    {steps cycles calls blocks moreSteps : Nat} {result : Execution} (unit : UnitCost image)
     (pre : Trace hash image s steps cycles calls blocks t)
     (suffix : Executes hash image t moreSteps result)
     (fuel : Nat) (enough : steps + moreSteps ≤ fuel) :
     evalWithAnswerFn hash (execute fuel image s) = result.charge cycles calls blocks :=
-  (pre.then_executes suffix).sound fuel enough
+  (pre.then_executes suffix).sound unit fuel enough
 
 /-- info: 'SigGolfCandidate.Trace.sound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

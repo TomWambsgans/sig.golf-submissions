@@ -19,11 +19,13 @@ theorem eval_keygen (hash : Hash) (secretKey : SecretKey) :
       ⟨some (Reference.keygen hash secretKey,KeygenFunctional.zeroCache),true,82446,739,761⟩ :=
   KeygenFunctional.run_exact hash secretKey
 
-/-- An abstract version of the organizer pipeline keeps proof reduction independent of bytecode. -/
+/-- An abstract version of the organizer pipeline keeps proof reduction independent of bytecode.
+Scored cycles add the fixed witness charge to verification's RISC-V cycles. -/
 def pipeline {σ ω : Type} (keygen : OracleComp HashSpec (RunResult (PublicKey × Cache)))
     (sign : PublicKey → Cache → OracleComp HashSpec (RunResult σ))
     (expand : PublicKey → σ → OracleComp HashSpec (RunResult ω))
-    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) : OracleComp HashSpec HonestResult := do
+    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) (witnessCharge : Nat) :
+    OracleComp HashSpec HonestResult := do
   let keygen ← keygen
   let costs := recordCost (fun _ => 0) .keygen keygen.hashCompressions
   let some (pk,cache) := keygen.value | return ⟨false,costs,0⟩
@@ -34,13 +36,13 @@ def pipeline {σ ω : Type} (keygen : OracleComp HashSpec (RunResult (PublicKey 
   let costs := recordCost costs .expand expand.hashCompressions
   let some witness := expand.value | return ⟨false,costs,0⟩
   let verify ← verify pk witness
-  return ⟨verify.value.isSome,recordCost costs .verify verify.hashCompressions,verify.cycles⟩
+  return ⟨verify.value.isSome,recordCost costs .verify verify.hashCompressions,verify.cycles + witnessCharge⟩
 
 theorem pipeline_cost {σ ω : Type} (hash : Hash) (keygen : OracleComp HashSpec (RunResult (PublicKey × Cache)))
     (sign : PublicKey → Cache → OracleComp HashSpec (RunResult σ))
     (expand : PublicKey → σ → OracleComp HashSpec (RunResult ω))
-    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) :
-    (evalWithAnswerFn hash (pipeline keygen sign expand verify)).costs .keygen =
+    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) (witnessCharge : Nat) :
+    (evalWithAnswerFn hash (pipeline keygen sign expand verify witnessCharge)).costs .keygen =
       (evalWithAnswerFn hash keygen).hashCompressions := by
   simp only [pipeline,evalWithAnswerFn_bind]
   split <;> simp only [evalWithAnswerFn_bind,evalWithAnswerFn_pure]
@@ -53,7 +55,7 @@ theorem honest_eq_pipeline (s : Submission) (secretKey : SecretKey) (message : M
     s.honest secretKey message = pipeline (s.run .keygen secretKey)
       (fun _ cache => s.run .sign (secretKey,cache,message))
       (fun pk signature => s.run .expand (message,pk,signature))
-      (fun pk witness => s.run .verify (message,pk,witness)) := by
+      (fun pk witness => s.run .verify (message,pk,witness)) (witnessCycles s.sizes.witness) := by
   simp only [Submission.honest,pipeline]
   congr 1
   funext kg
@@ -78,7 +80,7 @@ theorem honest_cost (hash : Hash) (secretKey : SecretKey) (message : Message) :
   have h := pipeline_cost hash (submission.run .keygen secretKey)
     (fun _ cache => submission.run .sign (secretKey,cache,message))
     (fun pk signature => submission.run .expand (message,pk,signature))
-    (fun pk witness => submission.run .verify (message,pk,witness))
+    (fun pk witness => submission.run .verify (message,pk,witness)) (witnessCycles submission.sizes.witness)
   have costEq := congrArg (fun result : RunResult (PublicKey × Cache) => result.hashCompressions) (eval_keygen hash secretKey)
   have result := h.trans costEq
   rw [honest_eq_pipeline]

@@ -5,6 +5,8 @@ Propagate the checksum-aware chain bound through the exact original bytecode.
 Each upper layer saves 14 × 103 = 1,442 cycles relative to TightCertificate,
 and there are 159 such layers. The bottom-layer bound remains 287 cycles.
 This lowers the certificate by 229,278 cycles without changing any image.
+Verification's RISC-V cycles stay below 5,617,758; the scored bound adds the
+468-cycle charge for the 119,632-byte witness, giving C = 5,618,226.
 -/
 
 namespace SigGolfCandidate.Hypertree.ChecksumVerifying
@@ -358,7 +360,7 @@ theorem run_refines (hash : Hash) (pk : PublicKey) (message : Message) (witness 
   obtain ⟨tailSteps, final, tailBound, tailRun, _⟩ := verify_footer_executes hash recovered pc
   have execution := run.then_executes tailRun
   have actual := runWith_of_executes submission hash .verify (message, pk, witness) initial (steps+tailSteps)
-    _ loaded execution (by change steps+tailSteps ≤ 2^32; omega)
+    _ loaded (unitCost _) execution (by change steps+tailSteps ≤ 2^32; omega)
   refine ⟨cycles+tailSteps, calls, blocks, by omega, hcalls, hblocks, ?_⟩
   rw [actual]
   by_cases yes : RootMatches recovered
@@ -377,7 +379,7 @@ open SigGolf OracleComp KeygenOrganizer SignatureEncoding Candidate
 set_option maxRecDepth 4096
 
 theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
-    ∃ cycles calls blocks, cycles≤5617758 ∧ calls≤51841 ∧ blocks≤53602 ∧
+    ∃ cycles calls blocks, cycles≤5618226 ∧ calls≤51841 ∧ blocks≤53602 ∧
       evalWithAnswerFn hash (submission.honest secretKey message)=
         ⟨true,fun phase => match phase with | .keygen => 761 | .sign => 121008 | .expand => 0 | .verify => blocks,cycles⟩ := by
   let pk := Reference.keygen hash secretKey
@@ -388,16 +390,16 @@ theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
     rw [wire_decode]
     exact signCompact_correct hash secretKey message
   rw [if_pos correct] at verifyRun
-  refine ⟨cycles,calls,blocks,cycleBound,callBound,blockBound,?_⟩
-  rw [honest_eq_pipeline]
+  refine ⟨cycles+468,calls,blocks,by omega,callBound,blockBound,?_⟩
+  rw [honest_eq_pipeline,witness_charge]
   exact pipeline_success hash (submission.run .keygen secretKey)
     (fun _ c => submission.run .sign (secretKey,c,message))
     (fun p sig => submission.run .expand (message,p,sig))
-    (fun p wit => submission.run .verify (message,p,wit)) pk KeygenFunctional.zeroCache signature signature
+    (fun p wit => submission.run .verify (message,p,wit)) 468 pk KeygenFunctional.zeroCache signature signature
     82446 739 761 signCycles 117508 121008 89733 0 0 cycles calls blocks
     (KeygenFunctional.run_exact hash secretKey) signRun (expand_exact hash message pk signature) verifyRun
 
-theorem verificationBound : submission.VerificationBound 5617758 := by
+theorem verificationBound : submission.VerificationBound 5618226 := by
   intro hash secretKey message
   dsimp only
   intro _
@@ -406,7 +408,7 @@ theorem verificationBound : submission.VerificationBound 5617758 := by
   exact cycleBound
 
 /-- Checksum-aware certificate for the original images, retaining the cheap bottom-layer bound. -/
-theorem certificate : SigGolf.Certificate submission 5617758 :=
+theorem certificate : SigGolf.Certificate submission 5618226 :=
   ⟨admitted, Candidate.termination, Candidate.completeness, Candidate.compressionBounds,
     Candidate.security, verificationBound⟩
 

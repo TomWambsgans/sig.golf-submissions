@@ -13,7 +13,7 @@ theorem sign_run_refines (hash : Hash) (secretKey : SecretKey) (cache : Cache) (
   obtain ⟨initial,final,instructions,cycles,loaded,execution,ib,cb,stored,randomizer⟩ :=
     sign_execution hash secretKey cache message
   have run := runWith_of_executes submission hash .sign (secretKey,cache,message) initial instructions
-    ⟨.success,final,cycles,117508,121008⟩ loaded execution (by unfold CYCLE_LIMIT; omega)
+    ⟨.success,final,cycles,117508,121008⟩ loaded (unitCost _) execution (by unfold CYCLE_LIMIT; omega)
   have output := SignWire.read_sign hash final secretKey message randomizer stored
   refine ⟨cycles,cb,?_⟩
   rw [run]

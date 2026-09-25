@@ -9,9 +9,9 @@ set_option maxRecDepth 4096
 theorem pipeline_expand_cost {σ ω : Type} (hash : Hash) (keygen : OracleComp HashSpec (RunResult (PublicKey × Cache)))
     (sign : PublicKey → Cache → OracleComp HashSpec (RunResult σ))
     (expand : PublicKey → σ → OracleComp HashSpec (RunResult ω))
-    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit))
+    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) (witnessCharge : Nat)
     (zero : ∀ pk signature, (evalWithAnswerFn hash (expand pk signature)).hashCompressions = 0) :
-    (evalWithAnswerFn hash (pipeline keygen sign expand verify)).costs .expand = 0 := by
+    (evalWithAnswerFn hash (pipeline keygen sign expand verify witnessCharge)).costs .expand = 0 := by
   simp only [pipeline,evalWithAnswerFn_bind]
   split <;> simp only [evalWithAnswerFn_bind,evalWithAnswerFn_pure]
   · split <;> simp only [evalWithAnswerFn_bind,evalWithAnswerFn_pure]

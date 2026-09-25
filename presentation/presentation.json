@@ -25,7 +25,7 @@
     },
     {
       "label": "Verification sample",
-      "value": "10-run mean: 3,280,130.8 cycles; certified maximum C = 5,617,758"
+      "value": "10-run mean: 3,280,598.8 cycles, including the 468-cycle witness charge; certified maximum C = 5,618,226"
     }
   ],
   "profile": {

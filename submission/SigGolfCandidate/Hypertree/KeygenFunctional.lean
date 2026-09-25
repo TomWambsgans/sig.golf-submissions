@@ -38,7 +38,7 @@ theorem run_refines (hash : Hash) (secretKey : SecretKey) :
       ⟨some (Reference.keygen hash secretKey,cache),true,82446,739,761⟩ := by
   obtain ⟨final,trace,words⟩ := executes hash secretKey
   have run := runWith_of_executes submission hash .keygen secretKey (secretKeyState secretKey) 77097
-    ⟨.success,final,82446,739,761⟩ (secretKey_loaded secretKey) trace (by decide)
+    ⟨.success,final,82446,739,761⟩ (secretKey_loaded secretKey) (unitCost _) trace (by decide)
   refine ⟨readBuffer final 0x60 CACHE_BYTES,?_⟩
   rw [run]
   change (⟨some (readBuffer final 0x40 16,readBuffer final 0x60 CACHE_BYTES),true,82446,739,761⟩ :

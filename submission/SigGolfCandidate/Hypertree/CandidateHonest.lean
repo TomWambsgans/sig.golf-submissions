@@ -23,15 +23,15 @@ theorem expand_exact (hash : Hash) (message : Message) (pk : PublicKey) (signatu
 theorem pipeline_success {σ ω : Type} (hash : Hash) (keygen : OracleComp HashSpec (RunResult (PublicKey×Cache)))
     (sign : PublicKey → Cache → OracleComp HashSpec (RunResult σ))
     (expand : PublicKey → σ → OracleComp HashSpec (RunResult ω))
-    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit))
+    (verify : PublicKey → ω → OracleComp HashSpec (RunResult Unit)) (witnessCharge : Nat)
     (pk : PublicKey) (cache : Cache) (signature : σ) (witness : ω)
     (kc kh kb sc sh sb ec eh eb vc vh vb : Nat)
     (kg : evalWithAnswerFn hash keygen=⟨some (pk,cache),true,kc,kh,kb⟩)
     (sg : evalWithAnswerFn hash (sign pk cache)=⟨some signature,true,sc,sh,sb⟩)
     (ex : evalWithAnswerFn hash (expand pk signature)=⟨some witness,true,ec,eh,eb⟩)
     (vr : evalWithAnswerFn hash (verify pk witness)=⟨some (),true,vc,vh,vb⟩) :
-    evalWithAnswerFn hash (pipeline keygen sign expand verify)=
-      ⟨true,fun phase => match phase with | .keygen => kb | .sign => sb | .expand => eb | .verify => vb,vc⟩ := by
+    evalWithAnswerFn hash (pipeline keygen sign expand verify witnessCharge)=
+      ⟨true,fun phase => match phase with | .keygen => kb | .sign => sb | .expand => eb | .verify => vb,vc+witnessCharge⟩ := by
   simp only [pipeline,evalWithAnswerFn_bind,kg,sg,ex,vr,evalWithAnswerFn_pure]
   congr 1
   funext phase
@@ -39,7 +39,7 @@ theorem pipeline_success {σ ω : Type} (hash : Hash) (keygen : OracleComp HashS
 
 /-- Every message succeeds against each single fixed oracle, with exact budgeted-phase costs. -/
 theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
-    ∃ cycles calls blocks, cycles≤5883520 ∧ calls≤51841 ∧ blocks≤53602 ∧
+    ∃ cycles calls blocks, cycles≤5883988 ∧ calls≤51841 ∧ blocks≤53602 ∧
       evalWithAnswerFn hash (submission.honest secretKey message)=
         ⟨true,fun phase => match phase with | .keygen => 761 | .sign => 121008 | .expand => 0 | .verify => blocks,cycles⟩ := by
   let pk := Reference.keygen hash secretKey
@@ -50,12 +50,12 @@ theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
     rw [wire_decode]
     exact signCompact_correct hash secretKey message
   rw [if_pos correct] at verifyRun
-  refine ⟨cycles,calls,blocks,cycleBound,callBound,blockBound,?_⟩
-  rw [honest_eq_pipeline]
+  refine ⟨cycles+468,calls,blocks,by omega,callBound,blockBound,?_⟩
+  rw [honest_eq_pipeline,witness_charge]
   exact pipeline_success hash (submission.run .keygen secretKey)
     (fun _ c => submission.run .sign (secretKey,c,message))
     (fun p sig => submission.run .expand (message,p,sig))
-    (fun p wit => submission.run .verify (message,p,wit)) pk KeygenFunctional.zeroCache signature signature
+    (fun p wit => submission.run .verify (message,p,wit)) 468 pk KeygenFunctional.zeroCache signature signature
     82446 739 761 signCycles 117508 121008 89733 0 0 cycles calls blocks
     (KeygenFunctional.run_exact hash secretKey) signRun (expand_exact hash message pk signature) verifyRun
 

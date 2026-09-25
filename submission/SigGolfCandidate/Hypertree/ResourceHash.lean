@@ -21,16 +21,16 @@ theorem forgetHash_models {a : AbstractState} {s : MachineState} (h : a.Models s
   simpa [forgetHash, AbstractState.setMem, writeHash, MachineState.writeWords,
     hd, h.pc, BitVec.add_assoc] using m4.setPC (a.pc + 4)
 
-def hashGuard (source bits destination : Word) : Bool :=
-  decide (source.toNat % 8 = 0) && rangeValid source ((bits.toNat + 7) / 8) &&
+def hashGuard (source bytes destination : Word) : Bool :=
+  decide (source.toNat % 8 = 0) && decide (bytes.toNat % 8 = 0) && rangeValid source bytes.toNat &&
     accessValid destination 8 && rangeValid destination 32
 
 def hashTransfer (a : AbstractState) : Option (AbstractState × Nat) := do
   let source ← a.getReg .x10
-  let bits ← a.getReg .x11
+  let bytes ← a.getReg .x11
   let destination ← a.getReg .x12
-  if hashGuard source bits destination then
-    some (forgetHash a destination, compressions bits.toNat)
+  if hashGuard source bytes destination then
+    some (forgetHash a destination, compressions (8 * bytes.toNat))
   else none
 
 theorem hashTransfer_sound {a next : AbstractState} {s : MachineState} {blocks : Nat}

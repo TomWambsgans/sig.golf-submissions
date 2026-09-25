@@ -259,7 +259,7 @@ theorem run_refines (hash : Hash) (pk : PublicKey) (message : Message) (witness 
   obtain ⟨tailSteps, final, tailBound, tailRun, _⟩ := verify_footer_executes hash recovered pc
   have execution := run.then_executes tailRun
   have actual := runWith_of_executes submission hash .verify (message, pk, witness) initial (steps+tailSteps)
-    _ loaded execution (by change steps+tailSteps ≤ 2^32; omega)
+    _ loaded (unitCost _) execution (by change steps+tailSteps ≤ 2^32; omega)
   refine ⟨cycles+tailSteps, calls, blocks, by omega, hcalls, hblocks, ?_⟩
   rw [actual]
   by_cases yes : RootMatches recovered
@@ -278,7 +278,7 @@ open SigGolf OracleComp KeygenOrganizer SignatureEncoding Candidate
 set_option maxRecDepth 4096
 
 theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
-    ∃ cycles calls blocks, cycles≤5847036 ∧ calls≤51841 ∧ blocks≤53602 ∧
+    ∃ cycles calls blocks, cycles≤5847504 ∧ calls≤51841 ∧ blocks≤53602 ∧
       evalWithAnswerFn hash (submission.honest secretKey message)=
         ⟨true,fun phase => match phase with | .keygen => 761 | .sign => 121008 | .expand => 0 | .verify => blocks,cycles⟩ := by
   let pk := Reference.keygen hash secretKey
@@ -289,16 +289,16 @@ theorem honest_exact (hash : Hash) (secretKey : SecretKey) (message : Message) :
     rw [wire_decode]
     exact signCompact_correct hash secretKey message
   rw [if_pos correct] at verifyRun
-  refine ⟨cycles,calls,blocks,cycleBound,callBound,blockBound,?_⟩
-  rw [honest_eq_pipeline]
+  refine ⟨cycles+468,calls,blocks,by omega,callBound,blockBound,?_⟩
+  rw [honest_eq_pipeline,witness_charge]
   exact pipeline_success hash (submission.run .keygen secretKey)
     (fun _ c => submission.run .sign (secretKey,c,message))
     (fun p sig => submission.run .expand (message,p,sig))
-    (fun p wit => submission.run .verify (message,p,wit)) pk KeygenFunctional.zeroCache signature signature
+    (fun p wit => submission.run .verify (message,p,wit)) 468 pk KeygenFunctional.zeroCache signature signature
     82446 739 761 signCycles 117508 121008 89733 0 0 cycles calls blocks
     (KeygenFunctional.run_exact hash secretKey) signRun (expand_exact hash message pk signature) verifyRun
 
-theorem verificationBound : submission.VerificationBound 5847036 := by
+theorem verificationBound : submission.VerificationBound 5847504 := by
   intro hash secretKey message
   dsimp only
   intro _
@@ -307,7 +307,7 @@ theorem verificationBound : submission.VerificationBound 5847036 := by
   exact cycleBound
 
 /-- Tighter certificate for exactly the original program images: the bottom layer has no WOTS chains. -/
-theorem certificate : SigGolf.Certificate submission 5847036 :=
+theorem certificate : SigGolf.Certificate submission 5847504 :=
   ⟨admitted, Candidate.termination, Candidate.completeness, Candidate.compressionBounds,
     Candidate.security, verificationBound⟩
 

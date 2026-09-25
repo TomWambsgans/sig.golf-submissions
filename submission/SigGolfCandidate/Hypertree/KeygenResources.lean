@@ -28,7 +28,7 @@ theorem run_bound (hash : Hash) (secretKey : SecretKey) :
       result.hashCalls = 739 ∧ result.hashCompressions = 761 := by
   obtain ⟨final, trace⟩ := executes hash (secretKeyState secretKey) (secretKey_models secretKey)
   have run := runWith_of_executes submission hash .keygen secretKey (secretKeyState secretKey) 77097
-    ⟨.success, final, 82446, 739, 761⟩ (secretKey_loaded secretKey) trace (by decide)
+    ⟨.success, final, 82446, 739, 761⟩ (secretKey_loaded secretKey) (unitCost _) trace (by decide)
   simp [run]
 
 /-- The exact keygen image satisfies the competition's universal strict termination limit. -/

@@ -21,9 +21,28 @@ inductive Executes (hash : Hash) (image : Image) : MachineState → Nat → Exec
       Executes hash image state (steps + 1)
         (result.charge (8 * compressions (hashInput state).1) 1 (compressions (hashInput state).1))
 
+/-- Every instruction the image can fetch costs one cycle: the image has no multiplication or division. -/
+def UnitCost (image : Image) : Prop :=
+  ∀ state instruction, fetch image state = some instruction → instructionCycles instruction = 1
+
+/-- A decidable check over the code words establishes unit cost. -/
+theorem UnitCost.of_all (image : Image)
+    (check : image.code.all (fun word => (decodeInstruction word).all (fun i => instructionCycles i == 1)) = true) :
+    UnitCost image := by
+  intro state instruction hf
+  simp only [fetch] at hf
+  split at hf
+  · simp at hf
+  · cases hw : image.code[(state.pc.toNat - 0x1000) / 4]? with
+    | none => simp [hw] at hf
+    | some word =>
+      simp only [hw, Option.bind_eq_bind, Option.bind_some] at hf
+      have entry := List.all_eq_true.mp check word (List.mem_of_getElem? hw)
+      simpa [hf] using entry
+
 /-- More observation fuel does not change a certified finite execution. -/
 theorem Executes.sound {hash : Hash} {image : Image} {state : MachineState} {steps : Nat}
-    {result : Execution} (derivation : Executes hash image state steps result) :
+    {result : Execution} (unit : UnitCost image) (derivation : Executes hash image state steps result) :
     ∀ fuel, steps ≤ fuel → evalWithAnswerFn hash (execute fuel image state) = result := by
   induction derivation with
   | halt state hf hs =>
@@ -33,6 +52,7 @@ theorem Executes.sound {hash : Hash} {image : Image} {state : MachineState} {ste
     | succ fuel => simp [execute, hf, hs]
   | ordinary state next instruction steps result hf he hs tail ih =>
     intro fuel h
+    have hc := unit state instruction hf
     cases fuel with
     | zero => omega
     | succ fuel =>
@@ -40,8 +60,8 @@ theorem Executes.sound {hash : Hash} {image : Image} {state : MachineState} {ste
       cases instruction with
       | base instruction =>
         cases instruction <;> simp_all [execute]
-      | word op rd rs1 rs2 => simp [execute, hf, hs, ih fuel hstep]
-      | sraiw rd rs shift => simp [execute, hf, hs, ih fuel hstep]
+      | word op rd rs1 rs2 => simp [execute, hf, hs, hc, ih fuel hstep]
+      | sraiw rd rs shift => simp [execute, hf, hs, hc, ih fuel hstep]
   | hash state steps result hf hs hv tail ih =>
     intro fuel h
     cases fuel with
@@ -93,12 +113,13 @@ theorem initialState_exists (submission : Submission) (admitted : submission.Adm
 theorem runWith_of_executes (submission : Submission) (hash : Hash) (phase : Phase)
     (input : Input submission.sizes phase) (state : MachineState) (steps : Nat) (result : Execution)
     (loaded : initialState submission phase input = some state)
+    (unit : UnitCost (submission.image phase))
     (derivation : Executes hash (submission.image phase) state steps result)
     (limit : steps ≤ CYCLE_LIMIT) :
     submission.runWith hash phase input =
       ⟨if result.exit = .success then some (readOutput submission.sizes submission.layout phase result.state) else none,
         result.exit != .unfinished, result.cycles, result.hashCalls, result.hashCompressions⟩ := by
-  simp [Submission.runWith, Submission.run, loaded, derivation.sound CYCLE_LIMIT limit]
+  simp [Submission.runWith, Submission.run, loaded, derivation.sound unit CYCLE_LIMIT limit]
 
 /-- info: 'SigGolfCandidate.Executes.sound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

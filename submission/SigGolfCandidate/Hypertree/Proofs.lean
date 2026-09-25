@@ -1,3 +1,4 @@
+import SigGolfCandidate.Execution
 import SigGolfCandidate.Hypertree.Images
 
 namespace SigGolfCandidate.Hypertree
@@ -11,6 +12,15 @@ theorem admitted : submission.Admissible := by
     decide
   · intro phase
     cases phase <;> decide
+
+/-- Verification is also charged one cycle per started 256-byte block of the witness. -/
+theorem witness_charge : witnessCycles submission.sizes.witness = 468 := by decide
+
+set_option maxRecDepth 4096 in
+/-- No image multiplies or divides, so every instruction it can fetch costs one cycle. -/
+theorem unitCost (phase : Phase) : UnitCost (submission.image phase) := by
+  apply UnitCost.of_all
+  cases phase <;> decide
 
 /-- A position-tweaked chain, with no assumptions on the hash function. -/
 def walk {α : Type} (hash : Nat → α → α) (start : Nat) : Nat → α → α

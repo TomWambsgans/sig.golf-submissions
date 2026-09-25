@@ -64,12 +64,12 @@ theorem copy_next_pc (s : MachineState) :
     Expansion.loop_body_pc, Expansion.loop_body_count, Expansion.reg_zero, signExtend13]
   simp [decrement, BitVec.add_assoc]
 
-/-- The HASH service accepts exactly the fixed buffers used by all four images. -/
-theorem hash_arguments (s : MachineState) (bits : Nat)
-    (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bits)
-    (dst : s.getReg .x12 = 0x80300) (bound : bits ≤ 6144) :
+/-- The HASH service accepts exactly the fixed buffers used by all four images: whole words of input bytes. -/
+theorem hash_arguments (s : MachineState) (bytes : Nat)
+    (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bytes)
+    (dst : s.getReg .x12 = 0x80300) (bound : bytes % 8 = 0 ∧ bytes ≤ 768) :
     hashArgumentsValid s = true := by
-  have small : bits < 2 ^ 64 := by omega
+  have small : bytes < 2 ^ 64 := by omega
   simp [hashArgumentsValid, src, len, dst, accessValid, rangeValid,
     BitVec.toNat_ofNat, MEMORY_BYTES]
   omega
@@ -82,20 +82,20 @@ theorem hash_pc (s : MachineState) (answer : BitVec 256) :
     (writeHash s answer).pc = s.pc + 4 := rfl
 
 /-- Resource accounting at a real HASH instruction, independent of the oracle answer. -/
-theorem hash_then (image : Image) (hash : Hash) (s : MachineState) (bits : Nat)
+theorem hash_then (image : Image) (hash : Hash) (s : MachineState) (bytes : Nat)
     (code : instructionAt image s.pc = some (.base .ECALL))
     (service : s.getReg .x5 = 1)
-    (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bits)
-    (dst : s.getReg .x12 = 0x80300) (bound : bits ≤ 6144)
+    (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bytes)
+    (dst : s.getReg .x12 = 0x80300) (bound : bytes % 8 = 0 ∧ bytes ≤ 768)
     (steps : Nat) (result : Execution)
     (tail : Executes hash image (writeHash s (hash (hashInput s))) steps result) :
     Executes hash image s (steps + 1)
-      (result.charge (8 * compressions bits) 1 (compressions bits)) := by
-  have small : bits < 2 ^ 64 := by omega
-  have input_len : (hashInput s).1 = bits := by
+      (result.charge (8 * compressions (8 * bytes)) 1 (compressions (8 * bytes))) := by
+  have small : bytes < 2 ^ 64 := by omega
+  have input_len : (hashInput s).1 = 8 * bytes := by
     simp only [hashInput, len, BitVec.toNat_ofNat, Nat.mod_eq_of_lt small]
   simpa only [input_len] using Executes.hash s steps result code service
-    (hash_arguments s bits src len dst bound) tail
+    (hash_arguments s bytes src len dst bound) tail
 
 /-- Source and destination are mathematical byte addresses, and `n` counts remaining words. -/
 def CopyInvariant (p : Word) (source destination total n : Nat) (s : MachineState) : Prop :=
@@ -182,7 +182,7 @@ theorem copy_loop (image : Image) (p : Word) (code : CopyCode image p)
 #guard_msgs in
 #print axioms copy_loop
 
-/-- info: 'SigGolfCandidate.Hypertree.Keygen.hash_then' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'SigGolfCandidate.Hypertree.Keygen.hash_then' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms hash_then
 
