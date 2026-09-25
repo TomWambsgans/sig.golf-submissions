@@ -6,6 +6,7 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
 open SigGolfCandidate.SphincsVerifierFtsRootCopySetup
 open SigGolfCandidate.SphincsVerifierFtsRootCopyBytes
 open SigGolfCandidate.SphincsVerifierFtsRootCopy
+open SigGolfCandidate.SphincsVerifierHashBytes
 open SigGolfCandidate.SphincsVerifierFtsRootSetupFrame
 set_option maxRecDepth 65536
 set_option maxHeartbeats 0
@@ -110,10 +111,49 @@ theorem forestPostCopy_full (state : MachineState)
     simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt upper] at same
     omega
 
+theorem witnessPrefix_of_low_mem_frame (original copied : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (hprefix : WitnessPrefix original pk)
+    (frame : ∀ read, read.toNat < 0x40000 →
+      copied.getMem read = original.getMem read) :
+    WitnessPrefix copied pk := by
+  have lowAligned (i : Nat) (hi : i < 40) :
+      (alignToDword (BitVec.ofNat 64 (0x22ca0 + i))).toNat <
+        0x40000 := by
+    have bound : 0x22ca0 + i < 0x40000 := by omega
+    have small : 0x22ca0 + i < 2 ^ 64 := by omega
+    have aligned : (alignToDword
+        (BitVec.ofNat 64 (0x22ca0 + i))).toNat ≤
+        (BitVec.ofNat 64 (0x22ca0 + i)).toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    simp only [BitVec.toNat_ofNat] at aligned
+    rw [Nat.mod_eq_of_lt small] at aligned
+    omega
+  have byteFrame (i : Nat) (hi : i < 40) :
+      copied.getByte (BitVec.ofNat 64 (0x22ca0 + i)) =
+        original.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := by
+    simp only [MachineState.getByte]
+    rw [frame _ (lowAligned i hi)]
+  constructor
+  · intro i hi
+    exact (byteFrame i (by omega)).trans (hprefix.root i hi)
+  · intro i hi
+    have low := byteFrame (20 + i) (by omega)
+    have address : 0x22ca0 + (20 + i) = 0x22cb4 + i := by omega
+    rw [address] at low
+    exact low.trans (hprefix.parameter i hi)
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsPostForestCopy.forestPostCopy_full' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms forestPostCopy_full
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsPostForestCopy.witnessPrefix_of_low_mem_frame' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms witnessPrefix_of_low_mem_frame
 
 end SigGolfCandidate.SphincsVerifierFtsPostForestCopy
