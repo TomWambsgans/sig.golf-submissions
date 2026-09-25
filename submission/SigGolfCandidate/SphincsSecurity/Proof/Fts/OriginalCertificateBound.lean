@@ -356,6 +356,40 @@ theorem countedAdversaryPMFImpl_query_count (key : SecretKey)
   simp only [StateT.run_mk, Functor.map_map]
   rfl
 
+theorem countedAdversaryPMFImpl_run_count {α : Type} (key : SecretKey)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (cache : QueryCache HashSpec) (spent : Nat) :
+    (fun result : α × (QueryCache HashSpec × Nat) =>
+      ((result.1, result.2.2), result.2.1)) <$>
+      (simulateQ (countedAdversaryPMFImpl key) computation).run (cache, spent) =
+    (liftM ((fun result : (α × Nat) × QueryCache HashSpec =>
+      ((result.1.1, spent + result.1.2), result.2)) <$>
+      (simulateQ romImpl
+        (countHashQueries (simulateQ (expandedAdversaryImpl key) computation))).run cache) : PMF _) := by
+  induction computation using OracleComp.inductionOn generalizing cache spent with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, countHashQueries_pure,
+        Nat.add_zero, PMF.monad_map_eq_map, map_pure, liftM_pure]
+      change PMF.map (fun result : α × (QueryCache HashSpec × Nat) =>
+        ((result.1, result.2.2), result.2.1)) (PMF.pure (value, (cache, spent))) =
+        PMF.pure ((value, spent), cache)
+      rw [PMF.pure_map]
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
+      rw [simulateQ_bind, simulateQ_spec_query, countHashQueries_bind]
+      simp only [StateT.run_bind, simulateQ_bind, map_bind, bind_pure_comp]
+      rw [countedAdversaryPMFImpl_query_count]
+      simp only [PMF.monad_map_eq_map, liftM_bind, liftM_map]
+      simp only [PMF.monad_bind_eq_bind, PMF.bind_map]
+      apply PMF.bind_congr
+      intro a _
+      simp only [Function.comp_def]
+      have htail := ih a.1.1 a.2 (spent + a.1.2)
+      rw [PMF.monad_map_eq_map] at htail
+      rw [htail]
+      simp only [simulateQ_map, StateT.run_map, liftM_map,
+        PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def, Nat.add_assoc]
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -373,3 +407,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.countedAdversaryPMFImpl_query_count' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.countedAdversaryPMFImpl_query_count
+
+/-- info: 'SphincsSecurity.Concrete.countedAdversaryPMFImpl_run_count' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.countedAdversaryPMFImpl_run_count
