@@ -169,6 +169,27 @@ theorem runCount_layers_exact (hash : QueryImpl HashSpec Id)
     (signTopWithCache secretKey index cache) lower seededTopPathCalls
     (congrArg Option.isSome htopValue) htopCost
 
+theorem runCount_layers_value (hash : QueryImpl HashSpec Id)
+    (secretKey : Seeded.SecretKey) (index : Index) :
+    (runCount hash
+      (Concrete.sequenceLayers (fun lay => Seeded.signLayer secretKey index lay) :
+        OracleComp HashSpec (Option ((lay : Layer) → LayerSignature lay)))).1 =
+      (runCount hash (signLayersWithCache secretKey index
+        (canonicalTopCache hash secretKey))).1 :=
+  (runCount_layers_exact hash secretKey index).1
+
+theorem runCount_layers_cost (hash : QueryImpl HashSpec Id)
+    (secretKey : Seeded.SecretKey) (index : Index) :
+    (runCount hash
+      (Concrete.sequenceLayers (fun lay => Seeded.signLayer secretKey index lay) :
+        OracleComp HashSpec (Option ((lay : Layer) → LayerSignature lay)))).2 =
+      (runCount hash (signLayersWithCache secretKey index
+        (canonicalTopCache hash secretKey))).2 +
+        if (runCount hash (signLayersWithCache secretKey index
+          (canonicalTopCache hash secretKey))).1.isSome
+        then seededTopPathCalls else 0 :=
+  (runCount_layers_exact hash secretKey index).2
+
 end SigGolfCandidate.SphincsCachedLayersBridge
 
 /-- info: 'SigGolfCandidate.SphincsCachedLayersBridge.runCount_layers_exact' depends on axioms: [propext, Classical.choice, Quot.sound] -/
