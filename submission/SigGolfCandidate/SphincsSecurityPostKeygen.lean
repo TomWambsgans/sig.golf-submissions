@@ -1003,6 +1003,35 @@ theorem stoppedReferenceGame_hashQueryBound
     (OracleComp.support_simulateQ_run'_subset SphincsSecurity.romImpl
       (SphincsSecurity.countHashQueries (stoppedReferenceGame adversary Q)) ∅ hresult)
 
+/-- The eager hash table has the same private-sampling law as the fixed-hash
+probabilistic interpreter used by the reference reduction. -/
+noncomputable def fixedReferenceWorld
+    (f : QueryImpl SphincsSecurity.HashSpec Id) :
+    QueryImpl SphincsSecurity.OracleWorld PMF
+  | .inl input => PMF.uniformOfFintype (Fin (input + 1))
+  | .inr input => pure (f input)
+
+theorem fixedReferenceWorld_evalSPMF {α : Type}
+    (f : QueryImpl SphincsSecurity.HashSpec Id)
+    (program : OracleComp SphincsSecurity.OracleWorld α) :
+    𝒮[simulateQ (SphincsSecurity.Concrete.fixedHashWorld f) program] =
+      𝒮[simulateQ (fixedReferenceWorld f) program] := by
+  induction program using OracleComp.inductionOn with
+  | pure value => simp only [simulateQ_pure, evalSPMF_pure]
+  | query_bind input next ih =>
+      simp only [simulateQ_bind, simulateQ_spec_query, evalSPMF_bind]
+      simp_rw [ih]
+      cases input with
+      | inl input =>
+          change (𝒮[(liftM (unifSpec.query input) : ProbComp (Fin (input + 1)))] >>= fun answer =>
+            𝒮[simulateQ (fixedReferenceWorld f) (next answer)]) =
+            (𝒮[PMF.uniformOfFintype (Fin (input + 1))] >>= fun answer =>
+              𝒮[simulateQ (fixedReferenceWorld f) (next answer)])
+          rw [evalSPMF_query]
+      | inr input =>
+          simp only [SphincsSecurity.Concrete.fixedHashWorld, fixedReferenceWorld,
+            QueryImpl.add_apply_inr, ← PMF.monad_pure_eq_pure, evalSPMF_pure]
+
 
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
@@ -1097,3 +1126,7 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_hashQueryBound
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.fixedReferenceWorld_evalSPMF' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.fixedReferenceWorld_evalSPMF
