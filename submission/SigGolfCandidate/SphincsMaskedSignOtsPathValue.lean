@@ -5,6 +5,7 @@ namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
 open SphincsMaskedSignOtsParents SphincsMaskedSignOtsTree SphincsMaskedSignOtsPath
 open SphincsMaskedSignOtsPathSetup SphincsMaskedSignOtsPathSibling SphincsMaskedSignOtsPathFinish
+open SphincsMaskedSignOtsShift SphincsMaskedKeygenPrefix
 open SphincsSecurity SphincsBridge SphincsVerifierCopy SphincsMaskedChainDomain
 set_option maxRecDepth 65536
 set_option maxHeartbeats 4000000
@@ -324,5 +325,122 @@ theorem paths_abstract (location : Fin 5) (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.paths_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms paths_abstract
+
+theorem initialized_frame (location : Fin 5) (s : MachineState) (a : Word)
+    (outside : a∉controlWrites) :
+    (initialized location s).getMem a=s.getMem a := by
+  simp only [controlWrites,List.mem_cons,List.not_mem_nil,not_or,
+    not_false_eq_true,and_true] at outside
+  obtain ⟨h0,h1,h2,h3,h4⟩:=outside
+  simp [initialized,initCode,runSchedule,execInstrBr,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,
+    h0,h1,h2,h3,h4]
+
+
+
+theorem cache_node_bounds (location : Fin 5) (level node : Nat)
+    (levelBound : level≤Levels.height location)
+    (nodeBound : node<Levels.width location level) :
+    0x50000≤Levels.cacheBase location level+20*node ∧
+      Levels.cacheBase location level+20*node+20≤0x53000 := by
+  fin_cases location <;>
+    simp [Levels.height] at levelBound <;>
+    interval_cases level <;>
+    simp [Levels.height,Levels.width,Levels.cacheBase] at * <;> omega
+
+
+
+def entryState (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (initialized location (s.setPC 0x18d8))
+
+theorem entry_mem_frame (location : Fin 5) (s : MachineState) (a : Word)
+    (high : 0x50000≤a.toNat) :
+    (entryState location s).getMem a=s.getMem a := by
+  simp only [entryState,shift_mem]
+  rw [initialized_frame]
+  · rfl
+  · simp only [controlWrites,List.mem_cons,List.not_mem_nil,
+      not_or,not_false_eq_true,and_true]
+    refine ⟨?_,?_,?_,?_,?_⟩
+    all_goals
+      intro h
+      rw [h] at high
+      norm_num at high
+
+theorem entry_cache (location : Fin 5) (s : MachineState)
+    (hash : Hash) (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (cache : ∀ l,l ≤ Levels.height location → ∀ node,node<Levels.width location l →
+      Words20 s (Levels.cacheBase location l+20*node)
+        (treeValue hash parameter seed (signerLayer location) treeIdx l node)) :
+    ∀ l,l ≤ Levels.height location → ∀ node,node<Levels.width location l →
+      Words20 (entryState location s) (Levels.cacheBase location l+20*node)
+        (treeValue hash parameter seed (signerLayer location) treeIdx l node) := by
+  intro l lb node nb i
+  have bounds := cache_node_bounds location l node lb nb
+  let source := Levels.cacheBase location l+20*node
+  have cell := SphincsMaskedSignForestTail.cell_bounds (source+4*i.val)
+    0x50000 0x53000 (by decide) (by omega) (by have := i.isLt;omega) (by decide)
+  have saved := cache l lb node nb i
+  simp only [MachineState.getWord32] at saved ⊢
+  rw [entry_mem_frame location s _ cell.1]
+  exact saved
+
+
+
+theorem entry_pc (location : Fin 5) (s : MachineState) :
+    (entryState location s).pc=0x1938+delta location := by
+  rw [entryState,shift_pc,initialized_pc location (s.setPC 0x18d8) rfl]
+
+theorem entry_controls (location : Fin 5) (s : MachineState) (selected : Nat)
+    (hs : s.getMem 0x430a8=BitVec.ofNat 64 selected) :
+    PathControls location (entryState location s) 0 selected (pathPointer location) := by
+  have controls := initialized_controls location (s.setPC 0x18d8) selected (by simpa using hs)
+  constructor
+  · simpa only [entryState,shift_mem] using controls.base
+  · simpa only [entryState,shift_mem] using controls.count
+  · simpa only [entryState,shift_mem] using controls.level
+  · simpa only [entryState,shift_mem] using controls.bit
+  · simpa only [entryState,shift_mem] using controls.pointer
+
+theorem pointer_height_bound (location : Fin 5) :
+    pathPointer location+20*Levels.height location≤0x40000 := by
+  fin_cases location <;> decide
+
+/-- The real path initializer followed by all sibling copies. -/
+theorem path_complete (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (selected : LeafIndex)
+    (pc : s.pc=0x18d8+delta location)
+    (selectedMem : s.getMem 0x430a8=BitVec.ofNat 64 selected.val)
+    (selectedBound : selected.val<Levels.width location 0)
+    (cache : ∀ l,l ≤ Levels.height location → ∀ node,node<Levels.width location l →
+      Words20 s (Levels.cacheBase location l+20*node)
+        (treeValue hash parameter seed (signerLayer location) treeIdx l node)) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s (24+70*Levels.height location) t ∧
+      t.pc=0x1a50+delta location ∧
+      ∀ j : Fin (Levels.height location),
+        let pathLevel : Fin (layerHeight (signerLayer location)) :=
+          ⟨j.val,by rw [←signerLayer_height]; exact j.isLt⟩
+        Words20 t (pathPointer location+20*j.val)
+          (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+            (Seeded.treePath parameter (signerLayer location) treeIdx seed selected :
+              OracleComp SphincsSecurity.HashSpec
+                (Fin (layerHeight (signerLayer location)) → Digest)) pathLevel) := by
+  have first := init_block location s pc
+  have controls := entry_controls location s selected.val selectedMem
+  have cached := entry_cache location s hash parameter seed treeIdx cache
+  obtain ⟨t,second,_,endPc,values⟩ := paths_abstract location hash (entryState location s)
+    parameter seed treeIdx selected (pathPointer location)
+    (entry_pc location s) controls selectedBound (pointer_height_bound location)
+    (pointer_bound location).1 cached (Levels.height location) (le_refl _)
+  refine ⟨t,?_,?_,?_⟩
+  · exact first.append second
+  · simpa using endPc
+  · intro j
+    simpa only using values j
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.path_complete' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms path_complete
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
