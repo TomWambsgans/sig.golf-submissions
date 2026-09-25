@@ -21,6 +21,16 @@ open SigGolfCandidate.SphincsBridge
 open SigGolfCandidate.SphincsVerifierFtsRootStore
 open SigGolfCandidate.SphincsVerifierFtsRootStoreData
 open SigGolfCandidate.SphincsVerifierFtsTreeAdvance
+open SigGolfCandidate.SphincsVerifierFtsPair
+open SigGolfCandidate.SphincsVerifierFtsPairAdvance
+open SigGolfCandidate.SphincsVerifierFtsGenericPosition
+open SigGolfCandidate.SphincsVerifierFtsLevelShift
+open SigGolfCandidate.SphincsVerifierFtsLevelPosition
+open SigGolfCandidate.SphincsVerifierFtsParentMemoryFrame
+open SigGolfCandidate.SphincsVerifierFtsParentSetup
+open SigGolfCandidate.SphincsVerifierFtsParentExecution
+open SigGolfCandidate.SphincsVerifierFtsResultControls
+open SigGolfCandidate.SphincsVerifierFtsRoundInvariant
 open SigGolfCandidate.SphincsVerifierCopyMemory
 open SigGolfCandidate.SphincsVerifierCopy
 set_option maxRecDepth 16384
@@ -151,6 +161,24 @@ theorem treeFinish_counter (state : MachineState) (tree : FtsTree)
     rootStore_counter state tree counter, counter]
   simp [BitVec.ofNat_add]
 
+theorem treeFinish_pc_next (state : MachineState) (tree : FtsTree)
+    (pc : state.pc = 0x1b84)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
+    (next : tree.val + 1 < ftsTrees - 1) :
+    (treeFinishState state).pc = 0x173c := by
+  have stored := (rootStore_block state tree pc counter).2
+  exact treeAdvance_pc_next _ tree stored
+    ((rootStore_counter state tree counter).trans counter) next
+
+theorem treeFinish_pc_done (state : MachineState)
+    (pc : state.pc = 0x1b84)
+    (counter : state.getMem 0x43040 = 23) :
+    (treeFinishState state).pc = 0x1c08 := by
+  let tree : FtsTree := ⟨23, by decide⟩
+  have stored := (rootStore_block state tree pc counter).2
+  exact treeAdvance_pc_done _ stored
+    ((rootStore_counter state tree counter).trans counter)
+
 theorem treeFinish_root_data (state : MachineState) (tree : FtsTree)
     (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
     (index : Fin 5) :
@@ -161,6 +189,104 @@ theorem treeFinish_root_data (state : MachineState) (tree : FtsTree)
   rw [treeAdvance_mem_frame _ _ (by
     fin_cases tree <;> fin_cases index <;> decide)]
   exact rootStore_data state tree counter index
+
+theorem parentRound_counter_frame (state : MachineState)
+    (answer : BitVec 256) :
+    (parentRoundState state answer).getMem 0x43040 =
+      state.getMem 0x43040 := by
+  have positioned :
+      (firstPositionedState state).getMem 0x43040 =
+        state.getMem 0x43040 := by
+    change (levelPositionState
+      (shiftIndexState (advancePointerState (pairState state)))).getMem
+        0x43040 = _
+    rw [levelPosition_mem_frame _ 0x43040 (by decide),
+      shiftIndex_mem_frame _ 0x43040 (by decide) (by decide),
+      advancePointer_mem_frame _ 0x43040 (by decide)]
+    apply pair_scratch_frame
+    all_goals intro offset <;> fin_cases offset <;> decide
+  have ready : (firstParentReadyState state).getMem 0x43040 =
+      state.getMem 0x43040 := by
+    change (parentHashReadyState (firstPositionedState state)).getMem
+      0x43040 = _
+    rw [parentHashReady_mem_frame _ 0x43040 (Or.inr (by decide)),
+      positioned]
+  unfold parentRoundState
+  rw [fullParent_mem_frame _ answer 0x43040 (ready_destination state)
+    (by decide) (by decide) (by decide) (by decide) (by decide) (by
+      intro offset
+      fin_cases offset <;> decide), ready]
+
+theorem parentPathRun_counter_frame (hash : Hash)
+    (pk : SphincsSecurity.PublicKey) (signature : Signature)
+    (tree : FtsTree) (index : Index) (leaf : FtsLeaf)
+    (start : MachineState) (initial : Digest) (n : Nat) :
+    (parentPathRun hash pk signature tree index leaf start initial n).1.getMem
+      0x43040 = start.getMem 0x43040 := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [parentPathRun_succ]
+      exact (parentRound_counter_frame _ _).trans ih
+
+theorem treeThroughFinish_executes (hash : Hash) (state : MachineState)
+    (signature : Signature) (pk : SphincsSecurity.PublicKey)
+    (tree : FtsTree) (index : Index) (leaf : FtsLeaf)
+    (pc : state.pc = 0x18c8)
+    (source : state.getReg .x10 = 0x40000)
+    (bits : state.getReg .x11 = 480)
+    (destination : state.getReg .x12 = 0x42000)
+    (service : state.getReg .x5 = 1)
+    (pointer : state.getMem 0x43028 =
+      BitVec.ofNat 64 (pathAddress tree ⟨0, by decide⟩))
+    (selector : state.getMem 0x43070 = BitVec.ofNat 64 leaf.val)
+    (treeCell : state.getMem 0x43000 = BitVec.ofNat 64 tree.val)
+    (indexCell : state.getMem 0x43008 = BitVec.ofNat 64 index.val)
+    (hprefix : WitnessPrefix state pk)
+    (witness : FtsWitness state signature)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
+    (steps : Nat) (result : Execution)
+    (tail : Executes hash SphincsImages.verify
+      (treeFinishState
+        (parentPathRun hash pk signature tree index leaf
+          (firstLeafStartState state (hash (hashInput state)))
+          (truncateHash (hash (hashInput state))) 8).1)
+      steps result) :
+    ∃ totalSteps totalResult,
+      Executes hash SphincsImages.verify state totalSteps totalResult ∧
+      totalSteps ≤ steps + 1068 ∧
+      totalResult.cycles ≤ result.cycles + 1195 ∧
+      totalResult.hashCalls = result.hashCalls + 9 ∧
+      totalResult.hashCompressions = result.hashCompressions + 17 := by
+  let pathState :=
+    (parentPathRun hash pk signature tree index leaf
+      (firstLeafStartState state (hash (hashInput state)))
+      (truncateHash (hash (hashInput state))) 8).1
+  have pathPc : pathState.pc = 0x1b84 :=
+    (tree_abstract_root hash state (hash (hashInput state)) signature
+      pk tree index leaf pc source bits destination pointer selector
+      treeCell indexCell hprefix witness).1
+  have pathCounter : pathState.getMem 0x43040 =
+      BitVec.ofNat 64 tree.val := by
+    calc
+      _ = (firstLeafStartState state (hash (hashInput state))).getMem
+          0x43040 := parentPathRun_counter_frame _ _ _ _ _ _ _ _ _
+      _ = state.getMem 0x43040 :=
+        levelStart_counter_frame state (hash (hashInput state)) destination
+      _ = BitVec.ofNat 64 tree.val := counter
+  have finished :=
+    (treeFinish_block pathState tree pathPc pathCounter).then_executes tail
+  obtain ⟨totalSteps, totalResult, execution, stepBound, cycleBound,
+    hashBound, compressionBound⟩ :=
+    tree_executes hash state signature pk tree index leaf pc source bits
+      destination service pointer selector treeCell indexCell hprefix witness
+      (steps + 33) (result.charge 33 0 0) finished
+  refine ⟨totalSteps, totalResult, execution, ?_, ?_, ?_, ?_⟩
+  · omega
+  · simp only [Execution.charge] at cycleBound
+    omega
+  · simpa only [Execution.charge, Nat.zero_add] using hashBound
+  · simpa only [Execution.charge, Nat.zero_add] using compressionBound
 
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.tree_abstract_root' depends on axioms: [propext,
  Classical.choice,
@@ -192,10 +318,40 @@ theorem treeFinish_root_data (state : MachineState) (tree : FtsTree)
 #guard_msgs in
 #print axioms treeFinish_counter
 
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_pc_next' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeFinish_pc_next
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_pc_done' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeFinish_pc_done
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_root_data' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms treeFinish_root_data
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.parentRound_counter_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms parentRound_counter_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.parentPathRun_counter_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms parentPathRun_counter_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeThroughFinish_executes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeThroughFinish_executes
 
 end SigGolfCandidate.SphincsVerifierFtsGenericTree
