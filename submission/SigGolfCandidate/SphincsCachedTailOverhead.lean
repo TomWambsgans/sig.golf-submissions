@@ -31,9 +31,33 @@ theorem runCount_rawTail_exact (hash : QueryImpl HashSpec Id)
       | none => simp [runCount_pure]
       | some layers => simp [runCount_map, runCount_treeRoot]
 
+/-- The cached tail costs exactly its layer sequence. -/
+theorem runCount_cachedTail_some (hash : QueryImpl HashSpec Id)
+    (secretKey : Seeded.SecretKey) (cache : Nat → Nat → Digest)
+    (randomness : Randomness) (index : Index)
+    (secrets : FtsTree → Digest)
+    (ftsPath : FtsTree → Fin ftsTreeHeight → Digest) :
+    (runCount hash
+      (cachedTail secretKey cache (some (randomness, index, secrets, ftsPath)))).2 =
+      (runCount hash (signLayersWithCache secretKey index cache)).2 := by
+  unfold cachedTail
+  rw [runCount_bind]
+  cases h : runCount hash (signLayersWithCache secretKey index cache) with
+  | mk result cost =>
+    cases result <;> simp [runCount_pure]
+
+theorem runCount_cachedTail_none (hash : QueryImpl HashSpec Id)
+    (secretKey : Seeded.SecretKey) (cache : Nat → Nat → Digest) :
+    (runCount hash (cachedTail secretKey cache none)).2 = 0 := by
+  rfl
+
 end SigGolfCandidate.CachedSignerTrace
 
 /-- info: 'SigGolfCandidate.CachedSignerTrace.runCount_rawTail_exact' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.CachedSignerTrace.runCount_rawTail_exact
 
+
+/-- info: 'SigGolfCandidate.CachedSignerTrace.runCount_cachedTail_some' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.CachedSignerTrace.runCount_cachedTail_some
