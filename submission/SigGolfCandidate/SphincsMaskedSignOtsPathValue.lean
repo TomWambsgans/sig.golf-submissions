@@ -1621,4 +1621,277 @@ theorem signerDigit_run_all (location : Fin 5) (state : MachineState)
     fin_cases location <;> decide
   simpa [cost,finish] using all
 
+private def sumInit (s : MachineState) : MachineState :=
+  execInstrBr s (.ADDI .x15 .x0 0)
+
+theorem sumInit_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bc4+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (sumInit s) := by
+  have fetched : fetch SphincsMaskedImages.sign s =
+      some (.base (.ADDI .x15 .x0 0)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.ADDI .x15 .x0 0)) = some (sumInit s) := by
+    simp [sumInit,ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem sumInit_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bc4+delta location) :
+    (sumInit s).pc=0x1bc8+delta location := by
+  simp [sumInit,execInstrBr,pc]
+  calc
+    _ = (7108#64+4#64)+delta location := by ac_rfl
+    _ = 7112#64+delta location := by congr 1
+
+theorem sumInit_register (s : MachineState) : (sumInit s).getReg .x15=0 := by
+  simp [sumInit,execInstrBr,signExtend12,MachineState.getReg_setReg_eq]
+
+theorem sumInit_digits (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bc4+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 497
+      (signerDecoderRun 52 (sumInit s)) ∧
+    (signerDecoderRun 52 (sumInit s)).pc=0x2388+delta location ∧
+    (signerDecoderRun 52 (sumInit s)).getReg .x15 = answerSum 52 (sumInit s) := by
+  have first := sumInit_block location s pc
+  have second := signerDigit_run_all location (sumInit s) (sumInit_pc location s pc)
+  refine ⟨by simpa using first.append second.1, second.2, ?_⟩
+  rw [signer_run_checksum 52 (sumInit s) (by decide),sumInit_register]
+  simp
+
+
+private def sumTest (s : MachineState) : MachineState :=
+  execInstrBr (execInstrBr s (.ADDI .x10 .x0 194)) (.BEQ .x15 .x10 64)
+
+theorem sumTest_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2388+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 2 (sumTest s) := by
+  let s1 := execInstrBr s (.ADDI .x10 .x0 194)
+  have p1 : s1.pc = 0x238c+delta location := by
+    simp [s1,execInstrBr,pc]
+    calc
+      _ = (9096#64+4#64)+delta location := by ac_rfl
+      _ = 9100#64+delta location := by congr 1
+  have fetch0 : fetch SphincsMaskedImages.sign s =
+      some (.base (.ADDI .x10 .x0 194)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have fetch1 : fetch SphincsMaskedImages.sign s1 =
+      some (.base (.BEQ .x15 .x10 64)) := by
+    rw [fetch_at,p1]
+    fin_cases location <;> decide
+  have step0 : ordinaryStep s (.base (.ADDI .x10 .x0 194)) = some s1 := by
+    simp [s1,ordinaryStep,memoryArgumentsValid]
+  have step1 : ordinaryStep s1 (.base (.BEQ .x15 .x10 64)) = some (sumTest s) := by
+    simp [sumTest,s1,ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s s1 _ _ 1 fetch0 step0
+    (OrdinarySteps.step s1 _ _ _ 0 fetch1 step1 (OrdinarySteps.refl _))
+
+theorem sumTest_good_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2388+delta location)
+    (good : s.getReg .x15 = 194) :
+    (sumTest s).pc=0x23cc+delta location := by
+  simp [sumTest,execInstrBr,signExtend12,signExtend13,good,pc,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+  calc
+    _ = (9096#64+4#64+64#64)+delta location := by ac_rfl
+    _ = 9164#64+delta location := by congr 1
+
+theorem sumTest_bad_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2388+delta location)
+    (bad : s.getReg .x15 ≠ 194) :
+    (sumTest s).pc=0x2390+delta location := by
+  have hb : s.getReg .x15 ≠ 194#64 := by exact bad
+  simp [sumTest,execInstrBr,signExtend12,signExtend13,hb,pc,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+  calc
+    _ = (9096#64+4#64+4#64)+delta location := by ac_rfl
+    _ = 9104#64+delta location := by congr 1
+
+
+def sumFailureJump (s : MachineState) : MachineState := execInstrBr s (.JAL .x0 4)
+
+theorem sumFailureJump_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2390+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (sumFailureJump s) := by
+  have fetched : fetch SphincsMaskedImages.sign s = some (.base (.JAL .x0 4)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.JAL .x0 4)) = some (sumFailureJump s) := by
+    simp [sumFailureJump,ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem sumFailureJump_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2390+delta location) :
+    (sumFailureJump s).pc=0x2394+delta location := by
+  simp [sumFailureJump,execInstrBr,signExtend21,pc]
+  calc
+    _ = (9104#64+4#64)+delta location := by ac_rfl
+    _ = 9108#64+delta location := by congr 1
+
+def retryCounterCode : List (Word × Instr) := [
+ (0x2394,.LUI .x28 0x43),
+ (0x2398,.ADDI .x28 .x28 0xb8),
+ (0x239c,.LD .x6 .x28 0),
+ (0x23a0,.ADDI .x6 .x6 1),
+ (0x23a4,.LUI .x28 0x43),
+ (0x23a8,.ADDI .x28 .x28 0xb8),
+ (0x23ac,.SD .x28 .x6 0),
+ (0x23b0,.LUI .x28 0x43),
+ (0x23b4,.ADDI .x28 .x28 0xb8),
+ (0x23b8,.LD .x6 .x28 0),
+ (0x23bc,.LUI .x7 0x100),
+ (0x23c0,.ADDI .x7 .x7 0)]
+
+def retryCounterState (s : MachineState) : MachineState :=
+  runSchedule retryCounterCode s
+
+def retryCounter (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (retryCounterState (s.setPC 0x2394))
+
+theorem retryCounter_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (1253+offset location) retryCounterCode := by
+  fin_cases location <;> rfl
+
+theorem retryCounter_encoded (location : Fin 5) : ∀ e∈retryCounterCode,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (1253+offset location) _ _ (retryCounter_image location)
+  · have h := SphincsMaskedSignOtsParents.offset_bound location
+    change 1253+offset location+12≤11000
+    omega
+  · intro i
+    have h : ∀ i : Fin retryCounterCode.length,
+        retryCounterCode[i.val].1=BitVec.ofNat 64 (0x2394+4*i.val) := by
+      intro j
+      fin_cases j <;> rfl
+    rw [h i,delta,←BitVec.ofNat_add]
+    congr 1
+    omega
+
+theorem retryCounter_supported : ∀ e∈retryCounterCode,Supported e.2 := by decide
+
+theorem retryCounter_checked (s : MachineState) (pc : s.pc=0x2394) :
+    Checked retryCounterCode s := by
+  simp [retryCounterCode,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem retryCounter_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2394+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 12 (retryCounter location s) := by
+  have trace := block_shift SphincsMaskedImages.sign (delta location) retryCounterCode
+    retryCounter_supported (retryCounter_encoded location) (s.setPC 0x2394)
+    (retryCounter_checked (s.setPC 0x2394) rfl)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s pc] at trace
+  have len : retryCounterCode.length=12 := rfl
+  simpa only [retryCounter,retryCounterState,len] using trace
+
+theorem retryCounter_pc (location : Fin 5) (s : MachineState) :
+    (retryCounter location s).pc=0x23c4+delta location := by
+  simp [retryCounter,retryCounterState,retryCounterCode,runSchedule,
+    shift,execInstrBr]
+
+
+theorem retryCounter_value (location : Fin 5) (s : MachineState) :
+    (retryCounter location s).getMem 0x430b8 = s.getMem 0x430b8 + 1 := by
+  simp [retryCounter,retryCounterState,retryCounterCode,runSchedule,shift,execInstrBr,
+    signExtend12,MachineState.getMem_setMem_eq,MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+
+theorem retryCounter_registers (location : Fin 5) (s : MachineState) :
+    (retryCounter location s).getReg .x6 = s.getMem 0x430b8 + 1 ∧
+    (retryCounter location s).getReg .x7 = 2^20 := by
+  simp [retryCounter,retryCounterState,retryCounterCode,runSchedule,shift,execInstrBr,
+    signExtend12,MachineState.getMem_setMem_eq,MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+  all_goals decide
+
+
+def retryDecision (s : MachineState) : MachineState :=
+  execInstrBr s (.BNE .x6 .x7 0x16b4)
+
+theorem retryDecision_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x23c4+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (retryDecision s) := by
+  have fetched : fetch SphincsMaskedImages.sign s =
+      some (.base (.BNE .x6 .x7 0x16b4)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.BNE .x6 .x7 0x16b4)) =
+      some (retryDecision s) := by simp [retryDecision,ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem retryDecision_continue (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x23c4+delta location)
+    (different : s.getReg .x6 ≠ s.getReg .x7) :
+    (retryDecision s).pc=0x1a78+delta location := by
+  simp [retryDecision,execInstrBr,signExtend13,different,pc]
+  fin_cases location <;> decide
+
+theorem retryDecision_exhausted (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x23c4+delta location)
+    (equal : s.getReg .x6 = s.getReg .x7) :
+    (retryDecision s).pc=0x23c8+delta location := by
+  simp [retryDecision,execInstrBr,signExtend13,equal,pc]
+  fin_cases location <;> decide
+
+
+theorem retryCounter_continue (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2394+delta location)
+    (under : s.getMem 0x430b8 + 1 ≠ (2^20 : Word)) :
+    OrdinarySteps SphincsMaskedImages.sign s 13
+      (retryDecision (retryCounter location s)) ∧
+    (retryDecision (retryCounter location s)).pc=0x1a78+delta location := by
+  have first := retryCounter_block location s pc
+  have second := retryDecision_block location (retryCounter location s)
+    (retryCounter_pc location s)
+  have regs := retryCounter_registers location s
+  refine ⟨by simpa using first.append second, ?_⟩
+  apply retryDecision_continue location _ (retryCounter_pc location s)
+  rw [regs.1,regs.2]
+  exact under
+
+theorem retryCounter_exhausted (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x2394+delta location)
+    (atLimit : s.getMem 0x430b8 + 1 = (2^20 : Word)) :
+    OrdinarySteps SphincsMaskedImages.sign s 13
+      (retryDecision (retryCounter location s)) ∧
+    (retryDecision (retryCounter location s)).pc=0x23c8+delta location := by
+  have first := retryCounter_block location s pc
+  have second := retryDecision_block location (retryCounter location s)
+    (retryCounter_pc location s)
+  have regs := retryCounter_registers location s
+  refine ⟨by simpa using first.append second, ?_⟩
+  apply retryDecision_exhausted location _ (retryCounter_pc location s)
+  rw [regs.1,regs.2]
+  exact atLimit
+
+
+def retryRejectImm (location : Fin 5) : BitVec 21 :=
+  if location.val = 0 then 0x1f794c
+  else if location.val = 1 then 0x1f9058
+  else if location.val = 2 then 0x1fa764
+  else if location.val = 3 then 0x1fbe70
+  else 0x1fd57c
+
+def retryRejectJump (location : Fin 5) (s : MachineState) : MachineState :=
+  execInstrBr s (.JAL .x0 (retryRejectImm location))
+
+theorem retryRejectJump_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x23c8+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (retryRejectJump location s) := by
+  have fetched : fetch SphincsMaskedImages.sign s =
+      some (.base (.JAL .x0 (retryRejectImm location))) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.JAL .x0 (retryRejectImm location))) =
+      some (retryRejectJump location s) := by
+    simp [retryRejectJump,ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem retryRejectJump_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x23c8+delta location) :
+    (retryRejectJump location s).pc=0x1004 := by
+  simp [retryRejectJump,execInstrBr,signExtend21,pc,retryRejectImm]
+  fin_cases location <;> decide
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
