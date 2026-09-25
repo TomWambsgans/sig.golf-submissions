@@ -115,7 +115,7 @@ theorem exceptionHistorySourceGame_prefix_le (dummy : OtsReferenceWords) (advers
 
 theorem forgeAdvantage_le_native_bound_add_cache_history (dummy : OtsReferenceWords)
     (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf)) (adversary : Adversary)
-    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     forgeAdvantage scheme adversary ≤
       ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
         (budget : ENNReal) * fullCertificateTotalRate +

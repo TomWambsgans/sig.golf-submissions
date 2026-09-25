@@ -120,7 +120,7 @@ theorem initialMonitoredSource_stop_add_strong_le (key : SecretKey) (adversary :
     (hparameter : key.parameter ∈ support sampleParameter)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     Pr[fun result => result.1 = none |
       initialMonitoredSource key adversary encoding dummy exposed high budget Finset.univ (proposalStop stopAfter) stopped] +
       Pr[MonitoredStrongWin |

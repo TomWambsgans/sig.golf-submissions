@@ -60,6 +60,6 @@ theorem forgeAdvantage_le_nearGuess_normalized_small_budget (dummy : OtsReferenc
       Pr[ReferenceForgerySample.nearGuess dummy | referenceForgeryGame (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] :=
   (forgeAdvantage_le_nearGuess_small_budget dummy hdummy adversary q hbound hsmall).trans
-    (add_le_add (add_le_add le_rfl (FtsGuessHash.pairRate_le_normalized q (hsmall.trans budgetSplit_le))) le_rfl)
+    (add_le_add (add_le_add le_rfl (FtsGuessHash.pairRate_le_normalized q ((hsmall.trans budgetSplit_le).trans (by norm_num)))) le_rfl)
 
 end SphincsSecurity.Concrete

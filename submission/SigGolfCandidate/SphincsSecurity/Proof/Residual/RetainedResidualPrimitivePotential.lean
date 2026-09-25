@@ -473,7 +473,7 @@ theorem initialMonitoredSource_joint_primitive_messages (key : SecretKey) (adver
     (hparameter : key.parameter ∈ support sampleParameter)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     Pr[fun result => result.1 = none | initialMonitoredSource key adversary encoding dummy exposed high budget required stopAfter stopped] +
       (∑' result, Pr[= result | initialMonitoredSource key adversary encoding dummy exposed high budget required stopAfter stopped] *
         (result.2.1.memory.messageCalls.length : ENNReal)) / 2 ^ digestBits ≤
@@ -579,7 +579,7 @@ theorem initialMonitoredSource_primitive_add_full_count_le (key : SecretKey) (ad
     (hparameter : key.parameter ∈ support sampleParameter)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     Pr[fun result => result.1 = none |
       initialMonitoredSource key adversary encoding dummy exposed high budget Finset.univ (proposalStop stopAfter) stopped] +
       (∑' result, Pr[= result |

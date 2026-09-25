@@ -15,7 +15,7 @@ private theorem largeRangeClosing (x : ℝ) (hx : 3 / 16384 ≤ x) :
   norm_num at hx htail ⊢
   nlinarith [hn, htail, hsquare]
 
-theorem native_bound_le_security128 (q : Nat) (hlarge : budgetSplit ≤ q) (hsmall : q ≤ 2 ^ 127) :
+theorem native_bound_le_security128 (q : Nat) (hlarge : budgetSplit ≤ q) (hsmall : q ≤ 2 ^ 128) :
     ENNReal.ofReal (2 * ((q : ℝ) / 2 ^ digestBits) - ((q : ℝ) / 2 ^ digestBits) ^ 2) +
       (q : ENNReal) * fullCertificateTotalRate +
       ((q : ENNReal) * certificateCacheExceptionRate + proposalPrefixExceptionBound) ≤ (q : ENNReal) / 2 ^ 128 := by
@@ -34,16 +34,11 @@ theorem native_bound_le_security128 (q : Nat) (hlarge : budgetSplit ≤ q) (hsma
     norm_num at hq ⊢
     exact hq
   have hn : 0 ≤ x := by positivity
-  have hu : x ≤ 1 / 2 := by
-    have hq : (q : ℝ) ≤ 2 ^ 127 := by exact_mod_cast hsmall
-    apply (div_le_iff₀ (by positivity)).mpr
-    norm_num at hq ⊢
-    exact hq
   have hp : 0 ≤ 2 * ((q : ℝ) / 2 ^ digestBits) - ((q : ℝ) / 2 ^ digestBits) ^ 2 := by
     have hq' : (q : ℝ) / 2 ^ digestBits ≤ 1 := by
       apply (div_le_iff₀ (by positivity)).mpr
       simpa only [one_mul] using (calc
-        (q : ℝ) ≤ 2 ^ 127 := by exact_mod_cast hsmall
+        (q : ℝ) ≤ 2 ^ 128 := by exact_mod_cast hsmall
         _ ≤ 2 ^ digestBits := by norm_num [digestBits])
     have hq : 0 ≤ (q : ℝ) / 2 ^ digestBits := by positivity
     nlinarith [mul_nonneg hq (sub_nonneg.mpr hq')]
@@ -53,7 +48,7 @@ theorem native_bound_le_security128 (q : Nat) (hlarge : budgetSplit ≤ q) (hsma
   simp only [ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat]
   convert largeRangeClosing x hx using 1 <;> dsimp only [x, digestBits] <;> norm_num <;> ring
 
-theorem security128_of_large_budget (q : Nat) (hlarge : budgetSplit ≤ q) (hsmall : q ≤ 2 ^ 127)
+theorem security128_of_large_budget (q : Nat) (hlarge : budgetSplit ≤ q) (hsmall : q ≤ 2 ^ 128)
     (adversary : Adversary) (hcost : HasHashQueryBound scheme adversary q) :
     forgeAdvantage scheme adversary ≤ (q : ENNReal) / 2 ^ 128 :=
   (RetainedResidual.forgeAdvantage_le_native_bound fixedReferenceDummy
@@ -62,7 +57,7 @@ theorem security128_of_large_budget (q : Nat) (hlarge : budgetSplit ≤ q) (hsma
 
 theorem security127_of_large_budget (q : Nat) (hlarge : budgetSplit ≤ q) (adversary : Adversary)
     (hcost : HasHashQueryBound scheme adversary q) : forgeAdvantage scheme adversary ≤ (q : ENNReal) / 2 ^ 127 := by
-  by_cases hsmall : q ≤ 2 ^ 127
+  by_cases hsmall : q ≤ 2 ^ 128
   · exact (security128_of_large_budget q hlarge hsmall adversary hcost).trans (by
           apply ENNReal.div_le_div_left
           norm_num)

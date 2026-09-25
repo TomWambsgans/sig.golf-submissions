@@ -13,7 +13,7 @@ attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs canon
 noncomputable def pairRate (budget : Nat) : ENNReal :=
   (budget.choose 2 : ENNReal) * ((2 ^ 160 - budget : Nat) : ENNReal)⁻¹ ^ 2
 
-theorem pairRate_le_quadratic (budget : Nat) (hsmall : budget ≤ 2 ^ 127) :
+theorem pairRate_le_quadratic (budget : Nat) (hsmall : budget ≤ 2 ^ 128) :
     pairRate budget ≤ (budget : ENNReal) ^ 2 / (2 * ((2 ^ 128 - budget : Nat) : ENNReal) ^ 2) := by
   have hchoose : budget.choose 2 * 2 ≤ budget * budget := by
     rw [Nat.choose_two_right]
@@ -34,7 +34,7 @@ theorem pairRate_le_quadratic (budget : Nat) (hsmall : budget ≤ 2 ^ 127) :
         ENNReal.mul_inv (Or.inl (by norm_num : (2 : ENNReal) ≠ 0)) (Or.inl (by norm_num : (2 : ENNReal) ≠ ⊤)),
         ENNReal.inv_pow, mul_assoc]
 
-theorem pairRate_le_normalized (budget : Nat) (hsmall : budget ≤ 2 ^ 127) :
+theorem pairRate_le_normalized (budget : Nat) (hsmall : budget ≤ 2 ^ 128) :
     pairRate budget ≤ ((budget : ENNReal) / 2 ^ 128) ^ 2 / (2 * (1 - (budget : ENNReal) / 2 ^ 128) ^ 2) := by
   have hsub : 1 - (budget : ENNReal) / 2 ^ 128 = ((2 ^ 128 - budget : Nat) : ENNReal) / 2 ^ 128 := by
     rw [ENNReal.natCast_sub, Nat.cast_pow, Nat.cast_ofNat,

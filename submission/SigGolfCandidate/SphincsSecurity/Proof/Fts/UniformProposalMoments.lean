@@ -67,7 +67,7 @@ theorem expected_uniformProposalWord_power_sum {α : Type} [SampleableType α] [
 
 theorem reuseRawEnvelope_le_expected_uniformProposalWord (key : SecretKey)
     (spent queries signatures bound proposals : Nat) (state : CoverLogState) (remaining : Finset FtsTree)
-    (consumed : Index → Nat) (hqueries : spent + queries ≤ 2 ^ 127) (hsignatures : signatures ≤ signatureLimit)
+    (consumed : Index → Nat) (hqueries : spent + queries ≤ 2 ^ 128) (hsignatures : signatures ≤ signatureLimit)
     (hdegree : remaining.card ≤ bound) (hbound : bound ≤ 24)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
       (spent : ENNReal) * ((2 ^ 42 : Nat) : ENNReal)⁻¹ + ((2 ^ 74 : Nat) : ENNReal))
@@ -123,7 +123,7 @@ theorem targetProposalPoolMinimum_eq :
 
 theorem reuseRawEnvelope_le_expected_terminalProposalWord (key : SecretKey)
     (spent queries completed total : Nat) (state : CoverLogState) (remaining : Finset FtsTree)
-    (consumedWord : List Index) (hqueries : spent + queries ≤ 2 ^ 127) (hcompleted : completed ≤ signatureLimit)
+    (consumedWord : List Index) (hqueries : spent + queries ≤ 2 ^ 128) (hcompleted : completed ≤ signatureLimit)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
       (spent : ENNReal) * ((2 ^ 42 : Nat) : ENNReal)⁻¹ + ((2 ^ 74 : Nat) : ENNReal))
     (hcounts : ∀ index : Index,

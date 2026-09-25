@@ -10,7 +10,7 @@ open _root_.OracleComp OracleSpec ENNReal
 
 theorem security128_of_small_budget (q : Nat) (hq : 1 ≤ q) (hsmall : q ≤ budgetSplit) (adversary : Adversary)
     (hbound : HasHashQueryBound scheme adversary q) : forgeAdvantage scheme adversary ≤ (q : ENNReal) / 2 ^ 128 := by
-  have hbudget : q ≤ 2 ^ 127 := hsmall.trans budgetSplit_le
+  have hbudget : q ≤ 2 ^ 128 := (hsmall.trans budgetSplit_le).trans (by norm_num)
   have hslots : (∑ slot ∈ Finset.range q, Pr[fun hit => hit = true | FtsGuessHash.forcedNearGame fixedReferenceDummy adversary slot]) ≤
       (q : ENNReal) * nearCertificateBound q := by
     refine (Finset.sum_le_card_nsmul _ _ _ fun slot _ =>
@@ -36,7 +36,7 @@ theorem security128_below_trivial_budget (q : Nat) (hq : 1 ≤ q) (hmax : q ≤ 
     forgeAdvantage scheme adversary ≤ (q : ENNReal) / 2 ^ 128 := by
   by_cases hsmall : q ≤ budgetSplit
   · exact security128_of_small_budget q hq hsmall adversary hbound
-  · exact security128_of_large_budget q (by omega) hmax adversary hbound
+  · exact security128_of_large_budget q (by omega) (hmax.trans (by norm_num)) adversary hbound
 
 /-- `127` bits of classical strong unforgeability for the concrete SPHINCS instance: every adversary whose whole experiment makes at most `q ≥ 1` hash queries forges with probability at most `q / 2^127`. -/
 theorem security127 : HasClassicalSecurityBits scheme 127 := by

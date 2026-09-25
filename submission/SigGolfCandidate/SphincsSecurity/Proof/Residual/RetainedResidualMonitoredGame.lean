@@ -82,7 +82,7 @@ private theorem probEvent_bind_add_le_const_add {A B : Type} (law : SPMF A) (nex
 theorem monitoredSourceGame_stop_add_strong_le (dummy : OtsReferenceWords)
     (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf)) (adversary : Adversary)
     (budget : Nat) (stopAfter : CertificateStopRule)
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     Pr[fun result => result.1 = none | monitoredSourceGame dummy adversary budget stopAfter] +
       Pr[MonitoredStrongWin | monitoredSourceGame dummy adversary budget stopAfter] ≤
       ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
@@ -110,7 +110,7 @@ theorem monitoredSourceGame_stop_add_strong_le (dummy : OtsReferenceWords)
 theorem forgeAdvantage_le_monitored_bound_add_exception (dummy : OtsReferenceWords)
     (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf)) (adversary : Adversary)
     (budget : Nat) (stopAfter : CertificateStopRule)
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     forgeAdvantage scheme adversary ≤
       ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
         (budget : ENNReal) * fullCertificateTotalRate +

@@ -34,7 +34,7 @@ theorem initialExceptionHistorySource_exception (key : SecretKey) (adversary : A
     (budget : Nat) (hparameter : key.parameter ∈ support sampleParameter)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127)
+    (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128)
     (result : Option (Forgery × Bool) × ExceptionHistoryState (gameInputs adversary))
     (hresult : initialExceptionHistorySource key adversary encoding dummy exposed high budget result ≠ 0)
     (hexception : MonitoredStrongException (result.1, result.2.1)) :
@@ -100,7 +100,7 @@ theorem exceptionHistorySourceGame_erasure (dummy : OtsReferenceWords) (adversar
   simp only [exceptionHistorySourceGame, monitoredSourceGame, map_bind, initialExceptionHistoryPrior_erasure]
 
 theorem exceptionHistorySourceGame_exception (dummy : OtsReferenceWords) (adversary : Adversary)
-    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127)
+    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128)
     (result : Option (Forgery × Bool) × ExceptionHistoryState (gameInputs adversary))
     (hresult : exceptionHistorySourceGame dummy adversary budget result ≠ 0)
     (hexception : MonitoredStrongException (result.1, result.2.1)) :
@@ -123,7 +123,7 @@ theorem exceptionHistorySourceGame_exception (dummy : OtsReferenceWords) (advers
     hparameter' hencoding' rfl hcost hbudget result hresult hexception
 
 theorem monitoredSourceGame_exception_le_history (dummy : OtsReferenceWords) (adversary : Adversary)
-    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     Pr[MonitoredStrongException | monitoredSourceGame dummy adversary budget (fun _ _ _ _ => false)] ≤
       Pr[fun result => result.2.2.1 = true | exceptionHistorySourceGame dummy adversary budget] +
       Pr[fun result => result.2.2.2 = true | exceptionHistorySourceGame dummy adversary budget] := by
@@ -137,7 +137,7 @@ theorem monitoredSourceGame_exception_le_history (dummy : OtsReferenceWords) (ad
 
 theorem forgeAdvantage_le_native_bound_add_histories (dummy : OtsReferenceWords)
     (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf)) (adversary : Adversary)
-    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 127) :
+    (budget : Nat) (hcost : HasHashQueryBound scheme adversary budget) (hbudget : budget ≤ 2 ^ 128) :
     forgeAdvantage scheme adversary ≤
       ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
         (budget : ENNReal) * fullCertificateTotalRate +
