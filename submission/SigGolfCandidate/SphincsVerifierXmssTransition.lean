@@ -2,6 +2,8 @@ import SigGolfCandidate.SphincsVerifierXmssPathComplete
 import SigGolfCandidate.SphincsVerifierCopy20DataGeneral
 import SigGolfCandidate.SphincsVerifierSecondHashBytes
 import SigGolfCandidate.SphincsMaskedSignOtsShift
+import SigGolfCandidate.SphincsVerifierWotsRootCopy
+import SigGolfCandidate.SphincsVerifierXmssInit
 
 namespace SigGolfCandidate.SphincsVerifierXmssTransition
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
@@ -1007,3 +1009,599 @@ theorem trace_inside_of_rank (hash : Hash)
 #print axioms trace_inside_of_rank
 
 end SigGolfCandidate.SphincsVerifierWotsRank
+
+
+namespace SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsStepIteration
+open SigGolfCandidate.SphincsVerifierWotsStepCheck
+open SigGolfCandidate.SphincsVerifierWotsFullChain
+open SigGolfCandidate.SphincsVerifierWotsDigitFrame
+open SigGolfCandidate.SphincsVerifierWotsChainEntryGeneral
+open SigGolfCandidate.SphincsVerifierWotsChainEntry
+open SigGolfCandidate.SphincsVerifierWotsChainRound
+open SigGolfCandidate.SphincsVerifierWotsChainEndGeneral
+open SigGolfCandidate.SphincsVerifierWotsChainEnd
+open SigGolfCandidate.SphincsVerifierWotsAllChains
+open SigGolfCandidate.SphincsVerifierWotsAllChainsGeneral
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem bounded_loop_interior (hash : Hash)
+    (Inv : Nat → MachineState → Prop) (limit : Nat)
+    (stepLimit cycleLimit callLimit blockLimit : Nat)
+    (step : ∀ (i : Nat) (state : MachineState), i < limit → Inv i state →
+      ∃ (next : MachineState) (steps cycles calls blocks : Nat)
+        (pre : Trace hash SphincsImages.verify state steps cycles calls blocks next),
+        Inv (i + 1) next ∧ steps ≤ stepLimit ∧ cycles ≤ cycleLimit ∧
+        calls ≤ callLimit ∧ blocks ≤ blockLimit ∧ SegmentInterior hash pre)
+    (start count : Nat) (state : MachineState)
+    (within : start + count ≤ limit) (initial : Inv start state) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      Inv (start + count) final ∧
+      steps ≤ stepLimit * count ∧ cycles ≤ cycleLimit * count ∧
+      calls ≤ callLimit * count ∧ blocks ≤ blockLimit * count ∧
+      SegmentInterior hash run := by
+  induction count generalizing start state with
+  | zero =>
+      exact ⟨state, 0, 0, 0, 0, Trace.refl _,
+        by simpa using initial, by simp, by simp, by simp, by simp,
+        SegmentInterior.refl _⟩
+  | succ count ih =>
+      have small : start < limit := by omega
+      obtain ⟨next, a, b, c, d, pre, nextInv, ha, hb, hc, hd,
+          preInside⟩ := step start state small initial
+      obtain ⟨final, e, f, g, h, suffix, finalInv, he, hf, hg, hh,
+          suffixInside⟩ := ih (start + 1) next (by omega) nextInv
+      refine ⟨final, a + e, b + f, c + g, d + h,
+        pre.trans suffix,
+        by simpa [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+          using finalInv,
+        ?_, ?_, ?_, ?_, ?_⟩
+      · rw [Nat.mul_succ]; omega
+      · rw [Nat.mul_succ]; omega
+      · rw [Nat.mul_succ]; omega
+      · rw [Nat.mul_succ]; omega
+      · exact segment_interior_trans hash pre suffix preInside suffixInside
+
+theorem step_round_inside (hash : Hash) (state : MachineState)
+    (digit : Fin 8) (pc : state.pc = 0x2774)
+    (cell : state.getMem 0x43058 = BitVec.ofNat 64 digit.val)
+    (small : digit.val < 7) :
+    SegmentInterior hash (step_round_trace hash state digit pc cell small) := by
+  apply trace_inside_of_rank
+  rw [pc]
+  decide
+
+end SigGolfCandidate.SphincsVerifierWotsInterior
+
+namespace SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsStepIteration
+open SigGolfCandidate.SphincsVerifierWotsStepCheck
+open SigGolfCandidate.SphincsVerifierWotsFullChain
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem step_loop_inside (hash : Hash) (start : Fin 8)
+    (state : MachineState)
+    (pc : state.pc = 0x2774)
+    (cell : state.getMem 0x43058 = BitVec.ofNat 64 start.val) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc = 0x28ec ∧
+      (∀ address, Preserved address →
+        final.getMem address = state.getMem address) ∧
+      steps ≤ 94 * (7 - start.val) + 5 ∧
+      cycles ≤ 101 * (7 - start.val) + 5 ∧
+      calls ≤ 7 - start.val ∧ blocks ≤ 7 - start.val ∧
+      SegmentInterior hash run := by
+  let Inv : Nat → MachineState → Prop := fun i current =>
+    current.pc = 0x2774 ∧
+    current.getMem 0x43058 = BitVec.ofNat 64 (start.val + i) ∧
+    ∀ address, Preserved address →
+      current.getMem address = state.getMem address
+  have next (i : Nat) (current : MachineState)
+      (bound : i < 7 - start.val) (inv : Inv i current) :
+      ∃ (following : MachineState) (steps cycles calls blocks : Nat)
+        (run : Trace hash SphincsImages.verify current steps cycles calls blocks following),
+        Inv (i + 1) following ∧
+        steps ≤ 94 ∧ cycles ≤ 101 ∧ calls ≤ 1 ∧ blocks ≤ 1 ∧
+        SegmentInterior hash run := by
+    let digit : Fin 8 := ⟨start.val + i, by have := start.isLt; omega⟩
+    have small : digit.val < 7 := by dsimp [digit]; omega
+    have currentCell : current.getMem 0x43058 =
+        BitVec.ofNat 64 digit.val := inv.2.1
+    let run := step_round_trace hash current digit inv.1 currentCell small
+    refine ⟨stepRound hash current, 94, 101, 1, 1, run, ?_,
+      by decide, by decide, by decide, by decide, ?_⟩
+    · refine ⟨stepRound_pc hash current digit inv.1 currentCell small,
+        ?_, ?_⟩
+      · rw [stepRound_cell, currentCell]
+        change BitVec.ofNat 64 (start.val + i) +
+          BitVec.ofNat 64 1 =
+          BitVec.ofNat 64 (start.val + (i + 1))
+        rw [← BitVec.ofNat_add]
+        congr 1
+      · intro address preserved
+        exact (preserved_round_frame hash current address preserved).trans
+          (inv.2.2 address preserved)
+    · exact step_round_inside hash current digit inv.1 currentCell small
+  obtain ⟨seven, steps, cycles, calls, blocks, run, finalInv,
+      stepBound, cycleBound, callBound, blockBound, inside⟩ :=
+    bounded_loop_interior hash Inv (7 - start.val)
+      94 101 1 1 next 0 (7 - start.val) state
+      (by omega) ⟨pc, by simpa [Inv] using cell,
+        by intro address _; rfl⟩
+  have sevenCell : seven.getMem 0x43058 = 7 := by
+    have sum : start.val + (7 - start.val) = 7 := by
+      have := start.isLt
+      omega
+    simpa [Inv, sum] using finalInv.2.1
+  have checked := stepCheck_block seven (⟨7, by decide⟩ : Fin 8)
+    finalInv.1 (by simpa using sevenCell)
+  let finish := checked.1.trace (hash := hash)
+  have finishInside : SegmentInterior hash finish := by
+    apply trace_inside_of_rank
+    rw [finalInv.1]
+    decide
+  refine ⟨stepCheckState seven, steps + 5, cycles + 5,
+    calls, blocks, run.trans finish,
+    by simpa using checked.2, ?_,
+    by omega, by omega, by simpa using callBound,
+    by simpa using blockBound, ?_⟩
+  · intro address preserved
+    have frame : (stepCheckState seven).getMem address =
+        seven.getMem address := by
+      simp [stepCheckState, execInstrBr]
+    exact frame.trans (finalInv.2.2 address preserved)
+  · exact segment_interior_trans hash run finish inside finishInside
+
+end SigGolfCandidate.SphincsVerifierWotsInterior
+
+namespace SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsChainEntryGeneral
+open SigGolfCandidate.SphincsVerifierWotsChainEntry
+open SigGolfCandidate.SphincsVerifierWotsChainEndGeneral
+open SigGolfCandidate.SphincsVerifierWotsChainEnd
+open SigGolfCandidate.SphincsVerifierWotsChainRound
+open SigGolfCandidate.SphincsVerifierWotsDigitFrame
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem chain_round_inside (hash : Hash) (state : MachineState)
+    (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (chain : Fin 52) (digit : Fin 8)
+    (pc : state.pc = 0x2710)
+    (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : state.getMem 0x43028 =
+      BitVec.ofNat 64 (sourceBase + 20 * chain.val))
+    (decoded : state.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc =
+        (if chain.val + 1 = 52 then 0x298c else 0x2710) ∧
+      final.getMem 0x43050 = BitVec.ofNat 64 (chain.val + 1) ∧
+      final.getMem 0x43028 =
+        BitVec.ofNat 64 (sourceBase + 20 * (chain.val + 1)) ∧
+      (∀ address, DigitAddr address →
+        final.getMem address = state.getMem address) ∧
+      steps ≤ 94 * (7 - digit.val) + 70 ∧
+      cycles ≤ 101 * (7 - digit.val) + 70 ∧
+      calls ≤ 7 - digit.val ∧ blocks ≤ 7 - digit.val ∧
+      SegmentInterior hash run := by
+  obtain ⟨entry, entryPc⟩ := chainEntry_block_general state chain
+    (sourceBase + 20 * chain.val)
+    (by have := chain.isLt; omega) (by omega) pc pointer counter
+  let entryTrace := entry.trace (hash := hash)
+  have entryInside : SegmentInterior hash entryTrace := by
+    apply trace_inside_of_rank
+    rw [pc]
+    decide
+  have entryCell : (chainEntryState state).getMem 0x43058 =
+      BitVec.ofNat 64 digit.val := by
+    rw [chainEntry_step state chain counter, decoded]
+    fin_cases digit <;> decide
+  obtain ⟨middle, middleSteps, middleCycles, middleCalls, middleBlocks,
+      middleTrace, middlePc, middleFrame, middleStepBound,
+      middleCycleBound, middleCallBound, middleBlockBound, middleInside⟩ :=
+    step_loop_inside hash digit (chainEntryState state) entryPc entryCell
+  have middleCounter : middle.getMem 0x43050 =
+      BitVec.ofNat 64 chain.val := by
+    rw [middleFrame 0x43050 (Or.inl (Or.inl rfl)),
+      chainEntry_controlFrame state 0x43050 (Or.inl rfl), counter]
+  have middlePointer : middle.getMem 0x43028 =
+      BitVec.ofNat 64 (sourceBase + 20 * chain.val) := by
+    rw [middleFrame 0x43028 (Or.inl (Or.inr rfl)),
+      chainEntry_controlFrame state 0x43028 (Or.inr rfl), pointer]
+  obtain ⟨endTrace, endPc, endCounter⟩ :=
+    chainEnd_block middle chain middlePc middleCounter
+  let finish := endTrace.trace (hash := hash)
+  have finishInside : SegmentInterior hash finish := by
+    apply trace_inside_of_rank
+    rw [middlePc]
+    decide
+  have endPointer := chainEnd_pointer_general middle chain sourceBase
+    middleCounter middlePointer
+  let pre := entryTrace.trans middleTrace
+  let run := pre.trans finish
+  refine ⟨chainEndState middle, 25 + middleSteps + 40,
+    25 + middleCycles + 40,
+    0 + middleCalls + 0, 0 + middleBlocks + 0, run,
+    endPc, endCounter, endPointer, ?_,
+    by omega, by omega, by omega, by omega, ?_⟩
+  · intro address digitAddr
+    exact (chainEnd_digitFrame middle chain middleCounter address
+      digitAddr).trans ((middleFrame address (Or.inr digitAddr)).trans
+        (chainEntry_digitFrame state address digitAddr))
+  · exact segment_interior_trans hash pre finish
+      (segment_interior_trans hash entryTrace middleTrace
+        entryInside middleInside) finishInside
+
+end SigGolfCandidate.SphincsVerifierWotsInterior
+
+namespace SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsAllChains
+open SigGolfCandidate.SphincsVerifierWotsAllChainsGeneral
+open SigGolfCandidate.SphincsVerifierWotsDigitFrame
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem all_chains_inside (hash : Hash) (state : MachineState)
+    (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (pc : state.pc = 0x2710)
+    (counter : state.getMem 0x43050 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (valid : DigitsValid state) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc = 0x298c ∧
+      final.getMem 0x43050 = 52 ∧
+      final.getMem 0x43028 = BitVec.ofNat 64 (sourceBase + 20 * 52) ∧
+      (∀ address, DigitAddr address →
+        final.getMem address = state.getMem address) ∧
+      steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
+      calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 ∧
+      SegmentInterior hash run := by
+  have next (i : Nat) (current : MachineState)
+      (small : i < 52) (inv : LoopInvGeneral state sourceBase i current) :
+      ∃ (following : MachineState) (steps cycles calls blocks : Nat)
+        (run : Trace hash SphincsImages.verify current steps cycles calls blocks following),
+        LoopInvGeneral state sourceBase (i + 1) following ∧
+        steps ≤ 728 ∧ cycles ≤ 777 ∧ calls ≤ 7 ∧ blocks ≤ 7 ∧
+        SegmentInterior hash run := by
+    let chain : Fin 52 := ⟨i, small⟩
+    let digit : Fin 8 := ⟨
+      (current.getByte (BitVec.ofNat 64 (0x44000 + i))).toNat,
+      inv.2.2.2.2 chain⟩
+    have decoded : current.getByte
+        (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 digit.val := by
+      simp [chain, digit]
+    obtain ⟨following, steps, cycles, calls, blocks, run,
+        nextPc, nextCounter, nextPointer, digitFrame,
+        stepBound, cycleBound, callBound, blockBound, inside⟩ :=
+      chain_round_inside hash current sourceBase
+        baseBound baseAligned chain digit
+        (by have ne : i ≠ 52 := by omega
+            simpa [LoopInvGeneral, ne] using inv.1)
+        inv.2.1 inv.2.2.1 decoded
+    refine ⟨following, steps, cycles, calls, blocks, run,
+      ⟨?_, nextCounter, nextPointer, ?_, ?_⟩,
+      by omega, by omega, by omega, by omega, inside⟩
+    · simpa [chain] using nextPc
+    · intro address addressInside
+      exact (digitFrame address addressInside).trans
+        (inv.2.2.2.1 address addressInside)
+    · exact digitsValid_frame current following digitFrame inv.2.2.2.2
+  obtain ⟨final, steps, cycles, calls, blocks, run,
+      inv, stepBound, cycleBound, callBound, blockBound, inside⟩ :=
+    bounded_loop_interior hash (LoopInvGeneral state sourceBase) 52
+      728 777 7 7 next 0 52 state (by decide)
+      ⟨by simpa [LoopInvGeneral] using pc, by simpa using counter,
+        by simpa using pointer, by intro address _; rfl, valid⟩
+  exact ⟨final, steps, cycles, calls, blocks, run,
+    by simpa [LoopInvGeneral] using inv.1,
+    inv.2.1, inv.2.2.1, inv.2.2.2.1,
+    stepBound, cycleBound, callBound, blockBound, inside⟩
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsInterior.bounded_loop_interior' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms bounded_loop_interior
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsInterior.step_round_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms step_round_inside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsInterior.step_loop_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms step_loop_inside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsInterior.chain_round_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms chain_round_inside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsInterior.all_chains_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms all_chains_inside
+
+end SigGolfCandidate.SphincsVerifierWotsInterior
+
+
+namespace SigGolfCandidate.SphincsVerifierWotsLeafInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsRootCopy
+open SigGolfCandidate.SphincsVerifierFtsRootCopy
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem copy_loop_inside (hash : Hash)
+    (n : Nat) (original state : MachineState)
+    (inv : CopyInvariant 0x29b0 0x44300 0x40028 130 n state)
+    (content : CopyContent 0x44300 0x40028 130 n original state) :
+    ∃ (final : MachineState) (run : Trace hash SphincsImages.verify state
+      (6 * n) (6 * n) 0 0 final),
+      CopyInvariant 0x29b0 0x44300 0x40028 130 0 final ∧
+      CopyContent 0x44300 0x40028 130 0 original final ∧
+      SegmentInterior hash run := by
+  induction n generalizing state with
+  | zero =>
+      exact ⟨state, Trace.refl _, inv, content, SegmentInterior.refl _⟩
+  | succ n ih =>
+      have access := copy_accesses 0x29b0 0x44300 0x40028 130 n
+        state inv (by decide) (by decide) (by decide) (by decide)
+      have atPc : state.pc = 0x29b0 := by simpa [CopyInvariant] using inv.2.2.1
+      have block := copy_block SphincsImages.verify 0x29b0
+        SphincsVerifierWotsRootCopy.rootCopy_code
+        state atPc access.1 access.2
+      let pre := block.trace (hash := hash)
+      have preInside : SegmentInterior hash pre := by
+        apply trace_inside_of_rank
+        rw [atPc]
+        decide
+      have nextInv := copy_invariant_next 0x29b0 0x44300 0x40028 130 n
+        state inv
+      have disjoint : ∀ i j, i < 130 → j < 130 →
+          wordAddress 0x44300 i ≠ wordAddress 0x40028 j :=
+        wordAddress_disjoint 0x44300 0x40028 130
+          (by decide) (by decide) (Or.inr (by decide))
+      have nextContent := copy_content_next 0x29b0 0x44300 0x40028
+        130 n original state inv content (by decide) disjoint
+      obtain ⟨final, suffix, done, output, suffixInside⟩ :=
+        ih (LocalLoop.loopNext state) nextInv nextContent
+      let whole := pre.trans suffix
+      have all : Trace hash SphincsImages.verify state
+          (6 * (n + 1)) (6 * (n + 1)) 0 0 final := by
+        simpa [whole, pre, Nat.mul_succ, Nat.add_comm,
+          Nat.add_left_comm, Nat.add_assoc] using whole
+      refine ⟨final, all, done, output, ?_⟩
+      have inside := segment_interior_trans hash pre suffix
+        preInside suffixInside
+      simpa [all, whole, pre, Nat.mul_succ, Nat.add_comm,
+        Nat.add_left_comm, Nat.add_assoc] using inside
+
+theorem root_copy_inside (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x29b0)
+    (source : state.getReg .x6 = 0x44300)
+    (destination : state.getReg .x7 = 0x40028)
+    (count : state.getReg .x10 = 130) :
+    ∃ (final : MachineState) (run : Trace hash SphincsImages.verify state 780 780 0 0 final),
+      final.pc = 0x29c8 ∧
+      (∀ i, i < 130 →
+        final.getMem (BitVec.ofNat 64 (0x40028 + 8 * i)) =
+          state.getMem (BitVec.ofNat 64 (0x44300 + 8 * i))) ∧
+      (∀ address,
+        (∀ i, i < 130 →
+          address ≠ BitVec.ofNat 64 (0x40028 + 8 * i)) →
+        final.getMem address = state.getMem address) ∧
+      SegmentInterior hash run := by
+  have inv : CopyInvariant 0x29b0 0x44300 0x40028 130 130 state := by
+    refine ⟨by decide, by decide, ?_, ?_, ?_, ?_⟩
+    · simpa using pc
+    · simpa using source
+    · simpa using destination
+    · simpa using count
+  have content : CopyContent 0x44300 0x40028 130 130 state state := by
+    constructor
+    · intro _ _; rfl
+    · intro i hi; omega
+  obtain ⟨final, run, done, output, inside⟩ :=
+    copy_loop_inside hash 130 state state inv content
+  refine ⟨final, by simpa using run, ?_, ?_, ?_, inside⟩
+  · simpa [CopyInvariant] using done.2.2.1
+  · simpa [CopyContent, wordAddress] using output.2
+  · simpa [CopyContent, wordAddress] using output.1
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.copy_loop_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms copy_loop_inside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.root_copy_inside' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms root_copy_inside
+
+end SigGolfCandidate.SphincsVerifierWotsLeafInterior
+
+
+namespace SigGolfCandidate.SphincsVerifierWotsLeafInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsLeafHashReady
+open SigGolfCandidate.SphincsVerifierWotsLeafResult
+open SigGolfCandidate.SphincsVerifierXmssInit
+open SigGolfCandidate.SphincsVerifierMessageCopy
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem leaf_finish_trace (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x29c8) :
+    ∃ (final : MachineState) (run : Trace hash SphincsImages.verify state 67 202 1 17 final),
+      final.pc = 0x2ad4 ∧ SegmentInterior hash run := by
+  have readyBlock := leafHashReady_block state pc
+  have readyPc := leafHashReady_pc state pc
+  have regs := leafHashReady_regs state
+  let ready := leafHashReadyState state
+  have site : fetch SphincsImages.verify ready = some (.base .ECALL) := by
+    rw [fetch_index SphincsImages.verify ready 1692 (by decide)
+      (by simpa [ready] using readyPc)]
+    decide
+  have service : ready.getReg .x5 = 1 := regs.2.2.2
+  have valid : hashArgumentsValid ready = true := by
+    simp [hashArgumentsValid, ready, regs.1, regs.2.1, regs.2.2.1,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have compression : compressions (hashInput ready).1 = 17 := by
+    simp [hashInput, ready, regs.2.1, compressions]
+  let hashed := writeHash ready (hash (hashInput ready))
+  have hashedPc : hashed.pc = 0x2a74 := by
+    simp [hashed, writeHash, readyPc, ready]
+  have copied := leafAnswerCopy_block hashed hashedPc
+  have copiedPc : (leafAnswerCopyState hashed).pc = 0x2aac :=
+    leafAnswerCopy_pc hashed hashedPc
+  have initialized := xmssInit_block (leafAnswerCopyState hashed) copiedPc
+  have initializedPc := xmssInit_pc (leafAnswerCopyState hashed) copiedPc
+  let final := xmssInitState (leafAnswerCopyState hashed)
+  let after := (copied.trace (hash := hash)).trans
+    (initialized.trace (hash := hash))
+  let hashTrace := Trace.hash ready final 24 24 0 0 site service valid after
+  let pre := readyBlock.trace (hash := hash)
+  have full : Trace hash SphincsImages.verify state 67 202 1 17 final := by
+    simpa [pre, hashTrace, after, hashed, ready, compression,
+      Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using pre.trans hashTrace
+  refine ⟨final, full, initializedPc, ?_⟩
+  apply trace_inside_of_rank
+  rw [pc]
+  decide
+
+end SigGolfCandidate.SphincsVerifierWotsLeafInterior
+
+namespace SigGolfCandidate.SphincsVerifierWotsLeafInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsRootCopy
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem leaf_segment (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x298c) :
+    ∃ (final : MachineState)
+      (run : Trace hash SphincsImages.verify state 856 991 1 17 final),
+      final.pc = 0x2ad4 ∧ SegmentInterior hash run := by
+  obtain ⟨setup, setupPc, source, destination, count⟩ :=
+    rootCopySetup_block state pc
+  let setupTrace := setup.trace (hash := hash)
+  have setupInside : SegmentInterior hash setupTrace := by
+    apply trace_inside_of_rank
+    rw [pc]
+    decide
+  obtain ⟨copied, copyTrace, copyPc, _, _, copyInside⟩ :=
+    root_copy_inside hash (rootCopySetupState state)
+      setupPc source destination count
+  obtain ⟨final, finishTrace, finishPc, finishInside⟩ :=
+    leaf_finish_trace hash copied copyPc
+  let before := setupTrace.trans copyTrace
+  let run := before.trans finishTrace
+  have whole : Trace hash SphincsImages.verify state 856 991 1 17 final := by
+    simpa [run, before, setupTrace, Nat.add_assoc,
+      Nat.add_comm, Nat.add_left_comm] using run
+  refine ⟨final, whole, finishPc, ?_⟩
+  have interior := segment_interior_trans hash before finishTrace
+    (segment_interior_trans hash setupTrace copyTrace
+      setupInside copyInside) finishInside
+  simpa [whole, run, before, setupTrace, Nat.add_assoc,
+    Nat.add_comm, Nat.add_left_comm] using interior
+
+end SigGolfCandidate.SphincsVerifierWotsLeafInterior
+
+namespace SigGolfCandidate.SphincsVerifierWotsLeafInterior
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem whole_wots_segment (hash : Hash) (state : MachineState)
+    (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (pc : state.pc = 0x2710)
+    (counter : state.getMem 0x43050 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (valid : SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid state) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc = 0x2ad4 ∧
+      steps ≤ 728 * 52 + 856 ∧
+      cycles ≤ 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧
+      blocks ≤ 7 * 52 + 17 ∧
+      SegmentInterior hash run := by
+  obtain ⟨chainsFinal, chainSteps, chainCycles, chainCalls, chainBlocks,
+      chainRun, chainPc, _, _, _, chainStepBound, chainCycleBound,
+      chainCallBound, chainBlockBound, chainInside⟩ :=
+    all_chains_inside hash state sourceBase baseBound baseAligned
+      pc counter pointer valid
+  obtain ⟨final, leafRun, leafPc, leafInside⟩ :=
+    leaf_segment hash chainsFinal chainPc
+  refine ⟨final, chainSteps + 856, chainCycles + 991,
+    chainCalls + 1, chainBlocks + 17, chainRun.trans leafRun,
+    leafPc, by omega, by omega, by omega, by omega, ?_⟩
+  exact segment_interior_trans hash chainRun leafRun
+    chainInside leafInside
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_finish_trace' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_finish_trace
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_segment' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_segment
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafInterior.whole_wots_segment' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms whole_wots_segment
+
+end SigGolfCandidate.SphincsVerifierWotsLeafInterior

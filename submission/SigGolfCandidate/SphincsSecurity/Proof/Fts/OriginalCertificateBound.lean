@@ -644,6 +644,330 @@ theorem simulateQ_certificateCountedLengthImpl_project {α : Type} (key : Secret
   map_run_simulateQ_eq_of_query_map_eq _ _ certificateCountedProject
     (certificateCountedLengthImpl_project key budget required stopAfter) computation state
 
+theorem certificateCountedLength_run_calls_monotone {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateCountedState) (result : α × CertificateCountedState)
+    (hr : result ∈ ((simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+      computation).run state).support) :
+    state.2.2 ≤ result.2.2.2 := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      exact le_rfl
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, _, rfl⟩ :=
+        certificateCountedLengthImpl_support key budget required stopAfter input state middle hmiddle
+      have htail := ih record.output _ result hr
+      change state.2.2 + record.trace.hashCalls ≤ result.2.2.2 at htail
+      omega
+
+theorem certificateCountedProposal_run_calls_monotone {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCountedState)
+    (result : α × (List Index × CertificateCountedState))
+    (hr : result ∈ ((simulateQ (certificateCountedProposalImpl key budget required stopAfter)
+      computation).run state).support) :
+    state.2.2.2 ≤ result.2.2.2.2 := by
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr ⟨result, hr, rfl⟩
+  unfold certificateCountedProposalImpl at hm
+  rw [← PMF.monad_map_eq_map, simulateQ_originalProposalImpl_length] at hm
+  exact certificateCountedLength_run_calls_monotone key budget required stopAfter
+    computation state.2 _ hm
+
+theorem certificateCountedLength_withSigningLog_clean {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 128)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateCountedState)
+    (hready : CertificateMonitorReady key budget
+      (certificateCacheMonitorProject (certificateCountedProject state)))
+    (halive : state.2.1.1.stopped = false)
+    (hspent : state.2.1.1.spent ≤ state.2.2)
+    (result : (α × QueryLog SigningSpec) × CertificateCountedState)
+    (hr : result ∈ ((simulateQ (certificateCountedLengthImpl key budget required proposalPrefixStop)
+      (FtsProbeSimulation.withSigningLog computation state.2.1.1.log)).run state).support)
+    (hfinal : result.2.2.2 ≤ budget)
+    (hvalid : SigningTranscript.Valid result.1.2) (hhit : result.2.2.1.2 = false)
+    (hprefix : ¬ ProposalPrefixExceptional result.2.2.1.1.proposals result.2.2.1.1.log.length) :
+    result.2.2.1.1.stopped = false ∧ result.2.2.1.1.log = result.1.2 ∧
+      CertificateMonitorReady key budget (certificateCacheMonitorProject
+        (certificateCountedProject result.2)) := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [FtsProbeSimulation.withSigningLog_pure, simulateQ_pure, StateT.run_pure,
+        PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+      subst result
+      exact ⟨halive, rfl, hready⟩
+  | query_bind input next ih =>
+      rw [FtsProbeSimulation.withSigningLog_query_bind, simulateQ_bind,
+        simulateQ_spec_query, StateT.run_bind, PMF.monad_bind_eq_bind,
+        PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, hrecord, rfl⟩ :=
+        certificateCountedLengthImpl_support key budget required proposalPrefixStop
+          input state middle hmiddle
+      let after := originalProposalAdvance
+        (certificateCountedUpdate key budget required proposalPrefixStop)
+        input state length record
+      have htailCalls := certificateCountedLength_run_calls_monotone key budget required
+        proposalPrefixStop
+        (FtsProbeSimulation.withSigningLog (next record.output)
+          (state.2.1.1.log ++ signingLogFragment input record.output)) after result hr
+      have hstepCost : state.2.1.1.spent + record.trace.hashCalls ≤ budget := by
+        change state.2.2 + record.trace.hashCalls ≤ result.2.2.2 at htailCalls
+        omega
+      have hlogLength := withSigningLog_run_length_le
+        (certificateCountedLengthImpl key budget required proposalPrefixStop)
+        (next record.output)
+        (state.2.1.1.log ++ signingLogFragment input record.output) after result hr
+      have hstepValid : ValidSigningStep state.2.1.1.log input := by
+        change result.1.2.length ≤ signatureLimit at hvalid
+        cases input <;> simp only [ValidSigningStep, signingLogFragment, List.length_append,
+          List.length_nil, List.length_singleton] at hlogLength ⊢ <;> omega
+      have hmin := signingMacroHashCost_le_record key input state.1 record hrecord
+      have hactive : CertificateMonitorActive key budget input
+          (certificateCacheMonitorProject (certificateCountedProject state)) :=
+        ⟨halive, hready, hstepValid, by
+          change signingMacroHashCost input ≤ budget - state.2.1.1.spent
+          omega⟩
+      have hafterHit : after.2.1.2 = false := by
+        apply Bool.eq_false_iff.mpr
+        intro htrue
+        have htailSupport := (PMF.mem_support_map_iff
+          (Prod.map id certificateCountedProject) _ _).mpr ⟨result, hr, rfl⟩
+        rw [← PMF.monad_map_eq_map, simulateQ_certificateCountedLengthImpl_project]
+          at htailSupport
+        have hfinalHit := certificateCacheLength_run_hit key budget required proposalPrefixStop
+          (FtsProbeSimulation.withSigningLog (next record.output)
+            (state.2.1.1.log ++ signingLogFragment input record.output))
+          (certificateCountedProject after) htrue _ htailSupport
+        change result.2.2.1.2 = true at hfinalHit
+        rw [hhit] at hfinalHit
+        contradiction
+      have hafterClean : ¬ CertificateCacheExceptional key record.cache := by
+        intro hbad
+        have htrue := certificateCacheMonitorUpdate_bad_after key budget required
+          proposalPrefixStop input (certificateCountedProject state) length record hbad
+        change after.2.1.2 = true at htrue
+        rw [hafterHit] at htrue
+        contradiction
+      have hafterReady : CertificateMonitorReady key budget
+          (certificateCacheMonitorProject (certificateCountedProject after)) :=
+        certificateMonitorUpdate_ready key budget required proposalPrefixStop input
+          (certificateCacheMonitorProject (certificateCountedProject state)) length record
+          hrecord hactive hbudget hstepCost hafterClean
+      have hstop : proposalPrefixStop input
+          (certificateCacheMonitorProject (certificateCountedProject state))
+          length record = false := by
+        apply Bool.eq_false_iff.mpr
+        intro htrue
+        have hstopped : after.2.1.1.stopped = true := by
+          simp only [after, originalProposalAdvance, certificateCountedUpdate,
+            certificateCacheMonitorUpdate, certificateMonitorUpdate,
+            if_pos hactive, htrue, Bool.true_or]
+        have hoverflow := htrue
+        rw [proposalPrefixStop_eq_after_exception key budget required proposalPrefixStop
+          input (certificateCacheMonitorProject (certificateCountedProject state))
+          length record hactive, decide_eq_true_eq] at hoverflow
+        have htailSupport := (PMF.mem_support_map_iff
+          (Prod.map id certificateCountedProject) _ _).mpr ⟨result, hr, rfl⟩
+        rw [← PMF.monad_map_eq_map, simulateQ_certificateCountedLengthImpl_project]
+          at htailSupport
+        exact hprefix (certificateCacheLength_run_prefixOverflow key budget required
+          proposalPrefixStop
+          (FtsProbeSimulation.withSigningLog (next record.output)
+            (state.2.1.1.log ++ signingLogFragment input record.output))
+          (certificateCountedProject after) hstopped hoverflow _ htailSupport)
+      have hafterAlive : after.2.1.1.stopped = false := by
+        change (certificateMonitorUpdate key budget required proposalPrefixStop input
+          (certificateCacheMonitorProject (certificateCountedProject state)) length record).stopped = false
+        rw [certificateMonitorUpdate_stopped_eq key budget required proposalPrefixStop input
+          (certificateCacheMonitorProject (certificateCountedProject state)) length record hactive]
+        change (proposalPrefixStop input (certificateCacheMonitorProject
+          (certificateCountedProject state)) length record ||
+          decide (¬ CertificateMonitorReady key budget
+            (certificateCacheMonitorProject (certificateCountedProject after)))) = false
+        simp only [hstop, hafterReady, not_true_eq_false, decide_false, Bool.false_or]
+      have hafterLog : after.2.1.1.log =
+          state.2.1.1.log ++ signingLogFragment input record.output := by
+        change (certificateMonitorUpdate key budget required proposalPrefixStop input
+          (certificateCacheMonitorProject (certificateCountedProject state)) length record).log = _
+        simp only [certificateMonitorUpdate, if_pos hactive, proposalRecordLogState]
+        rfl
+      have hafterSpent : after.2.1.1.spent ≤ after.2.2 := by
+        exact certificateCountedUpdate_spent_le_allCalls key budget required
+          proposalPrefixStop input state length record hspent hrecord
+      apply ih record.output after hafterReady hafterAlive hafterSpent result
+      · simpa only [hafterLog] using hr
+      · exact hfinal
+      · exact hvalid
+      · exact hhit
+      · exact hprefix
+
+theorem certificateCountedProposal_withSigningLog_clean {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 128)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCountedState)
+    (hready : CertificateMonitorReady key budget
+      (certificateCacheMonitorProject (certificateCountedProject state.2)))
+    (halive : state.2.2.1.1.stopped = false)
+    (hspent : state.2.2.1.1.spent ≤ state.2.2.2)
+    (result : (α × QueryLog SigningSpec) × (List Index × CertificateCountedState))
+    (hr : result ∈ ((simulateQ (certificateCountedProposalImpl key budget required proposalPrefixStop)
+      (FtsProbeSimulation.withSigningLog computation state.2.2.1.1.log)).run state).support)
+    (hfinal : result.2.2.2.2 ≤ budget)
+    (hvalid : SigningTranscript.Valid result.1.2)
+    (hhit : result.2.2.2.1.2 = false)
+    (hprefix : ¬ ProposalPrefixExceptional result.2.2.2.1.1.proposals
+      result.2.2.2.1.1.log.length) :
+    result.2.2.2.1.1.stopped = false ∧
+      result.2.2.2.1.1.log = result.1.2 ∧
+      CertificateMonitorReady key budget (certificateCacheMonitorProject
+        (certificateCountedProject result.2.2)) := by
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr ⟨result, hr, rfl⟩
+  unfold certificateCountedProposalImpl at hm
+  rw [← PMF.monad_map_eq_map, simulateQ_originalProposalImpl_length] at hm
+  exact certificateCountedLength_withSigningLog_clean key budget required hbudget
+    computation state.2 hready halive hspent _ hm hfinal hvalid hhit hprefix
+
+theorem certificateCountedProposal_rest_clean (adversary : Adversary)
+    (publicKey : PublicKey) (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 128)
+    (state : List Index × CertificateCountedState)
+    (hready : CertificateMonitorReady key budget
+      (certificateCacheMonitorProject (certificateCountedProject state.2)))
+    (halive : state.2.2.1.1.stopped = false)
+    (hlog : state.2.2.1.1.log = [])
+    (hspent : state.2.2.1.1.spent ≤ state.2.2.2)
+    (result : RetainedRestResult × (List Index × CertificateCountedState))
+    (hr : result ∈ ((simulateQ (certificateCountedProposalImpl key budget required
+      proposalPrefixStop)
+      (FtsProbeSimulation.retainedGameRestComputation adversary publicKey)).run state).support)
+    (hfinal : result.2.2.2.2 ≤ budget)
+    (hvalid : SigningTranscript.Valid result.1.1.2)
+    (hclean : ¬ CertificateGameExceptional
+      (result.1, (result.2.1, certificateCountedProject result.2.2))) :
+    result.2.2.2.1.1.stopped = false ∧
+      result.2.2.2.1.1.log = result.1.1.2 ∧
+      CertificateMonitorReady key budget (certificateCacheMonitorProject
+        (certificateCountedProject result.2.2)) := by
+  rw [FtsProbeSimulation.retainedGameRestComputation_eq_signingTrace,
+    simulateQ_map, StateT.run_map, PMF.monad_map_eq_map,
+    PMF.mem_support_map_iff] at hr
+  obtain ⟨source, hsource, rfl⟩ := hr
+  have htrace : FtsProbeSimulation.withSigningLog
+      (FtsProbeSimulation.unloggedRetainedRestComputation adversary publicKey)
+      state.2.2.1.1.log =
+      FtsProbeSimulation.signingTraceComputation
+        (FtsProbeSimulation.unloggedRetainedRestComputation adversary publicKey) := by
+    simp only [FtsProbeSimulation.withSigningLog, hlog, List.nil_append, Prod.mk.eta]
+    exact id_map _
+  exact certificateCountedProposal_withSigningLog_clean key budget required hbudget
+    (FtsProbeSimulation.unloggedRetainedRestComputation adversary publicKey) state
+    hready halive hspent source (by rwa [htrace]) hfinal hvalid
+    (Bool.eq_false_iff.mpr (fun h => hclean (Or.inl h)))
+    (fun h => hclean (Or.inr h))
+
+theorem certificateCountedProposal_run_bank_complete {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCountedState)
+    (hbank : state.2.2.1.1.stopped = false →
+      CertificateBankComplete key required
+        (certificateCacheMonitorProject (certificateCountedProject state.2)))
+    (result : α × (List Index × CertificateCountedState))
+    (hr : result ∈ ((simulateQ (certificateCountedProposalImpl key budget required stopAfter)
+      computation).run state).support)
+    (halive : result.2.2.2.1.1.stopped = false) :
+    CertificateBankComplete key required
+      (certificateCacheMonitorProject (certificateCountedProject result.2.2)) := by
+  have hm := (PMF.mem_support_map_iff
+    (Prod.map id (Prod.map id certificateCountedProject)) _ _).mpr ⟨result, hr, rfl⟩
+  rw [← PMF.monad_map_eq_map, simulateQ_certificateCountedProposalImpl_project] at hm
+  exact certificateCacheProposal_run_bank_complete key budget required stopAfter computation
+    (state.1, certificateCountedProject state.2) hbank _ hm halive
+
+theorem certificateCountedProposal_rest_clean_certificate (adversary : Adversary)
+    (publicKey : PublicKey) (key : SecretKey) (budget spent : Nat)
+    (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 128)
+    (cache : QueryCache HashSpec) (hspent : spent ≤ budget)
+    (hcache : QueryCache.enncard cache ≤ spent)
+    (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input →
+      cache input = none)
+    (result : RetainedRestResult × (List Index × CertificateCountedState))
+    (hr : result ∈ ((simulateQ (certificateCountedProposalImpl key budget required
+      proposalPrefixStop)
+      (FtsProbeSimulation.retainedGameRestComputation adversary publicKey)).run
+        ([], (cache, ((initialCertificateMonitor spent false, false), spent)))).support)
+    (hfinal : result.2.2.2.2 ≤ budget)
+    (hvalid : SigningTranscript.Valid result.1.1.2)
+    (hclean : ¬ CertificateGameExceptional
+      (result.1, (result.2.1, certificateCountedProject result.2.2)))
+    (input : HashInput)
+    (hcertificate : TargetCertificateAt key required
+      (result.2.2.1, result.1.1.2) input) :
+    1 ≤ certificateBankCount result.2.2.2.1.1.bank := by
+  have hready := initialCertificateMonitor_ready key budget spent cache false
+    hbudget hspent hcache hnone
+  have hresult := certificateCountedProposal_rest_clean adversary publicKey key budget
+    required hbudget
+    ([], (cache, ((initialCertificateMonitor spent false, false), spent)))
+    hready rfl rfl (le_refl spent) result hr hfinal hvalid hclean
+  have hbank := certificateCountedProposal_run_bank_complete key budget required
+    proposalPrefixStop
+    (FtsProbeSimulation.retainedGameRestComputation adversary publicKey)
+    ([], (cache, ((initialCertificateMonitor spent false, false), spent)))
+    (fun _ => initialCertificateMonitor_bank_complete key spent required cache false hnone)
+    result hr hresult.1
+  apply one_le_certificateBankCount _ input
+  apply hbank input
+  change TargetCertificateAt key required (result.2.2.1, result.2.2.2.1.1.log) input
+  rwa [hresult.2.1]
+
+theorem certificateCountedContextGame_full_count (adversary : Adversary) (q : Nat)
+    (hbudget : q ≤ 2 ^ 128) (result : CertificateCountedContextResult)
+    (hr : result ∈ (certificateCountedContextGame adversary q Finset.univ
+      (fun _ => proposalPrefixStop) false).support)
+    (hfull : OriginalFullCertificate result.originalCost.1)
+    (hclean : ¬ CertificateGameExceptional result.project.2)
+    (hcost : result.originalCost.2 ≤ q) :
+    1 ≤ certificateBankCount result.2.2.2.2.1.1.bank := by
+  rw [certificateCountedContextGame, PMF.monad_bind_eq_bind,
+    PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, hgenerated, hr⟩ := hr
+  rw [PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨output, houtput, hr⟩ := hr
+  rw [PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+  subst result
+  rw [probCompLift_support] at hgenerated
+  have hcache := boundaryRun_enncard_le 0 scheme.keygen ∅ generated hgenerated
+  simp only [QueryCache.enncard_empty, zero_add] at hcache
+  have hg : (generated.1.1, generated.2) ∈
+      support ((simulateQ romImpl scheme.keygen).run ∅) := by
+    rw [← boundaryRun_forget 0 scheme.keygen ∅, support_map]
+    exact ⟨generated, hgenerated, rfl⟩
+  have hspent : generated.1.2.hashCalls ≤ q := by
+    have hmono := certificateCountedProposal_run_calls_monotone generated.1.1.2
+      q Finset.univ proposalPrefixStop
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+      ([], (generated.2, ((initialCertificateMonitor
+        generated.1.2.hashCalls false, false), generated.1.2.hashCalls)))
+      output houtput
+    exact hmono.trans hcost
+  dsimp only [OriginalFullCertificate, CertificateCountedContextResult.originalCost]
+    at hfull
+  obtain ⟨hvalid, input, hcertificate⟩ := hfull
+  exact certificateCountedProposal_rest_clean_certificate adversary generated.1.1.1
+    generated.1.1.2 q generated.1.2.hashCalls Finset.univ hbudget generated.2
+    hspent hcache (keygen_cache_message_none (generated.1.1, generated.2) hg)
+    output houtput hcost hvalid hclean input hcertificate
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -689,3 +1013,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.simulateQ_certificateCountedLengthImpl_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.simulateQ_certificateCountedLengthImpl_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_full_count' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedContextGame_full_count
