@@ -295,3 +295,112 @@ theorem forgeAdvantage_le_referenceForgery_cases (dummy : OtsReferenceWords)
     (canonicalGraphInputs_subset_gameInputs adversary) dummy hdummy adversary
 
 end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+set_option maxRecDepth 8192
+set_option maxHeartbeats 2000000
+
+theorem referenceForgeryGame_verdict_budget (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => (sample.context dummy).2.2.2.output.1 = true ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame inputs hencoding dummy adversary] =
+    Pr[fun result => result.2.2.2.output.1 = true ∧
+      result.2.2.2.output.2.hashCalls ≤ q |
+      referenceGraphContextGame contactObserver inputs hencoding dummy adversary] := by
+  have h := congrArg (fun law => Pr[fun result : GraphContextTraceResult =>
+    result.2.2.2.2.1.1 = true ∧ result.2.2.2.2.1.2.hashCalls ≤ q | law])
+    (referenceForgeryGame_graph_trace inputs hencoding dummy adversary)
+  simpa only [probEvent_map, Function.comp_def, graphContextTrace, ContactResult.traceView] using h
+
+theorem referenceForgeryGame_primitive_budget (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => GraphPrimitiveEvent dummy (sample.context dummy) ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame inputs hencoding dummy adversary] =
+    Pr[fun result => GraphPrimitiveEvent dummy result ∧
+      result.2.2.2.output.2.hashCalls ≤ q |
+      referenceGraphContextGame contactObserver inputs hencoding dummy adversary] := by
+  have h := congrArg (fun law => Pr[fun result : GraphContextTraceResult =>
+    result.primitive dummy ∧ result.2.2.2.2.1.2.hashCalls ≤ q | law])
+    (referenceForgeryGame_graph_trace inputs hencoding dummy adversary)
+  simp only [probEvent_map, Function.comp_def] at h
+  simp_rw [graphContextTrace_primitive] at h
+  simpa only [graphContextTrace, ContactResult.traceView] using h
+
+theorem referenceForgeryGame_cases_budget (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (hgraph : ∀ parameter, canonicalGraphInputs parameter ⊆ inputs)
+    (dummy : OtsReferenceWords) (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => (sample.context dummy).2.2.2.output.1 = true ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame inputs hencoding dummy adversary] ≤
+    Pr[fun sample => sample.ftsOutcome dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame inputs hencoding dummy adversary] +
+    Pr[fun result => GraphPrimitiveEvent dummy result ∧
+      result.2.2.2.output.2.hashCalls ≤ q |
+      referenceGraphContextGame contactObserver inputs hencoding dummy adversary] := by
+  rw [← referenceForgeryGame_primitive_budget inputs hencoding dummy adversary q]
+  refine (_root_.probEvent_mono (mx := referenceForgeryGame inputs hencoding dummy adversary)
+    (p := fun sample => (sample.context dummy).2.2.2.output.1 = true ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q)
+    (q := fun sample =>
+      (sample.ftsOutcome dummy ∧ (sample.context dummy).2.2.2.output.2.hashCalls ≤ q) ∨
+      (GraphPrimitiveEvent dummy (sample.context dummy) ∧
+        (sample.context dummy).2.2.2.output.2.hashCalls ≤ q)) ?_).trans (probEvent_or_le _ _ _)
+  intro sample hsample hsuccess
+  rcases hsuccess with ⟨hsuccess, hbudget⟩
+  rcases referenceForgeryGame_success inputs hencoding hgraph dummy hdummy adversary sample hsample hsuccess with
+    hfts | hprimitive
+  · exact Or.inl ⟨hfts, hbudget⟩
+  · exact Or.inr ⟨hprimitive, hbudget⟩
+
+theorem referenceGameBudget_cases
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    Pr[fun sample => sample.ftsOutcome dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] +
+    Pr[fun result => GraphPrimitiveEvent dummy result ∧
+      result.2.2.2.output.2.hashCalls ≤ q |
+      referenceGraphContextGame contactObserver (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] := by
+  rw [SigGolfCandidate.BoundaryCount.referenceContactGame_budget_event dummy adversary q]
+  rw [← referenceGraphContextGame_contact_event
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
+    (fun result => result.2.2.output.1 = true ∧ result.2.2.output.2.hashCalls ≤ q)]
+  rw [← referenceForgeryGame_verdict_budget
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary q]
+  exact referenceForgeryGame_cases_budget
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary)
+    (canonicalGraphInputs_subset_gameInputs adversary) dummy hdummy adversary q
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_verdict_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_verdict_budget
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_primitive_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_primitive_budget
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_cases_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_cases_budget
+
+/-- info: 'SphincsSecurity.Concrete.referenceGameBudget_cases' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceGameBudget_cases
