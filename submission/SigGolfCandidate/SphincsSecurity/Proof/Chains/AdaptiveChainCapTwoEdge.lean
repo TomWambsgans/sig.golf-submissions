@@ -245,6 +245,43 @@ theorem realRun_twoEdge_cost_budget_le_linear
     auxiliary computation cost budget hchargeRun).trans
     (mul_le_mul' le_rfl (idealRun_capped_count_expectation_le_budget auxiliary computation budget))
 
+omit hcharge hreal in
+theorem realRun_counted_charge
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (cost : Result → Nat)
+    (hcharge : ∀ endpoint result, result ∈ support (QueryCap.counted IsPrefixQuery (computation endpoint)) →
+      result.2 ≤ cost result.1)
+    (result : State × ((Result × Nat) × (Fin n → State → Option State)))
+    (hr : result ∈ (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+      (fun _ _ => none)).support) :
+    result.2.1.2 ≤ cost result.2.1.1 := by
+  rw [realRun, PMF.mem_support_bind_iff] at hr
+  obtain ⟨pair, _, hr⟩ := hr
+  rw [PMF.mem_support_map_iff] at hr
+  obtain ⟨output, houtput, rfl⟩ := hr
+  have hfixed : output.1 ∈ (simulateQ (fixedImpl (auxiliary pair.2) pair.1)
+      (QueryCap.counted IsPrefixQuery (computation pair.2))).support := by
+    rw [← observedRun_forget (auxiliary pair.2) pair.1
+      (QueryCap.counted IsPrefixQuery (computation pair.2)) (fun _ _ => none)]
+    exact (PMF.mem_support_map_iff Prod.fst _ _).mpr ⟨output, houtput, rfl⟩
+  exact hcharge pair.2 output.1 (QueryCap.simulate_mem_support _ _ output.1 hfixed)
+
+omit hcharge hreal in
+theorem realRun_twoEdge_cost_budget_le_linear_of_charge
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hcharge : ∀ endpoint result,
+      result ∈ support (QueryCap.counted IsPrefixQuery (computation endpoint)) →
+        result.2 ≤ cost result.1) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+      (((3 / 2 : ENNReal) + 4 * ((budget : ENNReal) / Fintype.card State) +
+        2 * ((budget : ENNReal) / Fintype.card State)^2) / Fintype.card State) * budget := by
+  exact realRun_twoEdge_cost_budget_le_linear auxiliary computation cost budget
+    (fun result hr => realRun_counted_charge auxiliary computation cost hcharge result hr)
+
 end SphincsSecurity.Concrete.PartialChainEndpoint
 
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -274,3 +311,11 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_counted_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_counted_charge
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear_of_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear_of_charge
