@@ -76,4 +76,59 @@ theorem forestEnd_payload_bytes (hash : Hash) (initial : MachineState)
 #guard_msgs in
 #print axioms forestEnd_payload_bytes
 
+def forestInput (pk : SphincsSecurity.PublicKey) (index : Index)
+    (roots : FtsTree → Digest) : HashInput :=
+  tweakableHashInput pk.parameter (.ftsRoots index)
+    (SphincsSecurity.Concrete.ftsRootsPayload roots)
+
+theorem forestInput_eq (pk : SphincsSecurity.PublicKey) (index : Index)
+    (roots : FtsTree → Digest) :
+    forestInput pk index roots =
+      fieldBytes (tweakFields 11 0 index.val 0 0) ++
+        bytesLE 20 pk.parameter ++
+          SphincsSecurity.Concrete.ftsRootsPayload roots := rfl
+
+theorem forestInput_length (pk : SphincsSecurity.PublicKey) (index : Index)
+    (roots : FtsTree → Digest) :
+    (forestInput pk index roots).length = 520 := by
+  have headerLength :
+      (fieldBytes (tweakFields 11 0 index.val 0 0)).length = 20 := by
+    change (tweakBytes (.ftsRoots index)).length = 20
+    exact tweakBytes_length _
+  have payloadLength :
+      (SphincsSecurity.Concrete.ftsRootsPayload roots).length = 480 := by
+    rw [rootsPayload_flat]
+    rfl
+  rw [forestInput_eq, List.length_append, List.length_append,
+    headerLength, payloadLength]
+  simp only [bytesLE, List.length_ofFn]
+
+/-- The exact post-FORS HASH query follows from the 20-byte tweak, 20-byte
+    public parameter, and 480 serialized forest-root bytes in the VM buffer. -/
+theorem forestHash_query (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) (index : Index)
+    (roots : FtsTree → Digest)
+    (source : state.getReg .x10 = 0x40000)
+    (bits : state.getReg .x11 = 4160)
+    (bytes : ∀ i, (hi : i < 520) →
+      state.getByte (BitVec.ofNat 64 (0x40000 + i)) =
+        ((forestInput pk index roots).map UInt8.toBitVec)[i]'(by
+          rw [List.length_map, forestInput_length]; exact hi)) :
+    hashInput state = toQuery (forestInput pk index roots) := by
+  apply Serialization.hashInput_of_list state 0x40000
+    ((forestInput pk index roots).map UInt8.toBitVec)
+  · exact source
+  · rw [bits, List.length_map, forestInput_length]
+    rfl
+  · intro i hi
+    have hi520 : i < 520 := by
+      simpa only [List.length_map, forestInput_length] using hi
+    exact bytes i hi520
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRootsPayload.forestHash_query' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms forestHash_query
+
 end SigGolfCandidate.SphincsVerifierFtsRootsPayload
