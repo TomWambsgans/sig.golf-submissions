@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsVerifierXmssPathComplete
 import SigGolfCandidate.SphincsVerifierCopy20DataGeneral
 import SigGolfCandidate.SphincsVerifierSecondHashBytes
+import SigGolfCandidate.SphincsMaskedSignOtsShift
 
 namespace SigGolfCandidate.SphincsVerifierXmssTransition
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
@@ -579,3 +580,205 @@ theorem transition_index_leaf (target : Fin 5) (s : MachineState)
 #print axioms transition_leaf_index
 
 end SigGolfCandidate.SphincsVerifierXmssTransitionIndex
+
+namespace SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate
+open SigGolfCandidate.SphincsVerifierWotsRelocation
+open SigGolfCandidate.SphincsVerifierFtsRootCopy
+open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+def delta (target : Fin 5) : Word := BitVec.ofNat 64 (0xfcc * (5 - target.val))
+def wordOffset (target : Fin 5) : Nat := 1011 * (5 - target.val)
+
+theorem delta_offset (target : Fin 5) :
+    delta target = BitVec.ofNat 64 (4 * wordOffset target) := by
+  fin_cases target <;> decide
+
+theorem word_reloc (target : Fin 5) (i : Fin 241) :
+    SphincsImages.verify.code[1476 + wordOffset target + i.val]? =
+      SphincsImages.verify.code[1476 + i.val]? := by
+  have eq := congrArg (fun words : List (BitVec 32) => words[i.val]?)
+    (chain_segment_identical target)
+  have start : ((chainPc target - 0x1000) / 4) =
+      1476 + wordOffset target := by
+    simp [chainPc, wordOffset]
+    omega
+  simpa only [start, List.getElem?_take_of_lt i.isLt,
+    List.getElem?_drop] using eq
+
+theorem instructionAt_index (image : Image) (i : Nat)
+    (small : 0x1000 + 4 * i < 2 ^ 64) :
+    instructionAt image (BitVec.ofNat 64 (0x1000 + 4 * i)) =
+      image.code[i]?.bind decodeInstruction := by
+  simpa [instructionAt] using fetch_index image
+    ({ regs := fun _ => 0, mem := fun _ => 0,
+       pc := BitVec.ofNat 64 (0x1000 + 4 * i) } : MachineState)
+    i small rfl
+
+theorem instruction_transfer (target : Fin 5) (pc : Word)
+    (lower : 0x2710 ≤ pc.toNat) (upper : pc.toNat < 0x2ad4)
+    (aligned : pc.toNat % 4 = 0) :
+    instructionAt SphincsImages.verify (pc + delta target) =
+      instructionAt SphincsImages.verify pc := by
+  let i : Fin 241 := ⟨(pc.toNat - 0x2710) / 4, by omega⟩
+  have original : pc = BitVec.ofNat 64 (0x1000 + 4 * (1476 + i.val)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp [i]; omega)]
+    dsimp [i]
+    omega
+  have translated : pc + delta target =
+      BitVec.ofNat 64 (0x1000 + 4 * (1476 + wordOffset target + i.val)) := by
+    rw [original, delta_offset, ← BitVec.ofNat_add]
+    congr 1
+    omega
+  rw [translated, instructionAt_index _ _ (by
+      fin_cases target <;> simp [wordOffset] <;> omega),
+    original, instructionAt_index _ _ (by omega), word_reloc target i]
+
+
+def VerifierSupported (i : Instr) : Prop :=
+  Supported i ∨ ∃ offset, i = .JAL .x0 offset
+
+instance (i : Instr) : Decidable (VerifierSupported i) := by
+  unfold VerifierSupported
+  cases i <;> infer_instance
+
+theorem exec_shift_verifier (target : Fin 5) (s : MachineState)
+    (i : Instr) (supported : VerifierSupported i) :
+    execInstrBr (shift (delta target) s) i =
+      shift (delta target) (execInstrBr s i) := by
+  rcases supported with h | ⟨offset, rfl⟩
+  · exact exec_shift _ _ _ h
+  · simp [shift, execInstrBr, MachineState.setReg, MachineState.setPC,
+      add_assoc, add_comm, add_left_comm]
+
+theorem ordinary_shift_verifier (target : Fin 5) (s : MachineState)
+    (i : Instr) (supported : VerifierSupported i)
+    (step : ordinaryStep s (.base i) = some (execInstrBr s i)) :
+    ordinaryStep (shift (delta target) s) (.base i) =
+      some (shift (delta target) (execInstrBr s i)) := by
+  rcases supported with h | ⟨offset, rfl⟩
+  · rw [ordinary_shift _ _ _ h step, exec_shift _ _ _ h]
+  · have valid : memoryArgumentsValid s (.JAL .x0 offset) = true := rfl
+    simpa [ordinaryStep, memory_shift, valid] using
+      congrArg some (exec_shift_verifier target s (.JAL .x0 offset)
+        (Or.inr ⟨offset, rfl⟩))
+
+def supportedWord (i : Nat) : Bool :=
+  match SphincsImages.verify.code[1476 + i]?.bind decodeInstruction with
+  | some (.base instruction) => decide (VerifierSupported instruction)
+  | _ => false
+
+theorem supportedWord_all : (List.range 241).all supportedWord = true := by
+  decide
+
+theorem segment_supported (i : Fin 241) :
+    match SphincsImages.verify.code[1476 + i.val]?.bind decodeInstruction with
+    | some (.base instruction) => VerifierSupported instruction
+    | _ => False := by
+  have h := List.all_eq_true.mp supportedWord_all i.val (List.mem_range.mpr i.isLt)
+  unfold supportedWord at h
+  cases hc : SphincsImages.verify.code[1476 + i.val]?.bind decodeInstruction with
+  | none => simp [hc] at h ⊢
+  | some result =>
+      cases result with
+      | base instruction =>
+          simpa [hc] using (of_decide_eq_true (by simpa [hc] using h))
+      | word op rd rs1 rs2 => simp [hc] at h ⊢
+      | sraiw rd rs shamt => simp [hc] at h ⊢
+
+theorem fetched_supported (s : MachineState) (instruction : Instruction)
+    (lower : 0x2710 ≤ s.pc.toNat) (upper : s.pc.toNat < 0x2ad4)
+    (aligned : s.pc.toNat % 4 = 0)
+    (fetched : fetch SphincsImages.verify s = some instruction) :
+    ∃ base, instruction = .base base ∧ VerifierSupported base := by
+  let i : Fin 241 := ⟨(s.pc.toNat - 0x2710) / 4, by omega⟩
+  have pc : s.pc = BitVec.ofNat 64 (0x1000 + 4 * (1476 + i.val)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp [i]; omega)]
+    dsimp [i]
+    omega
+  rw [fetch_index SphincsImages.verify s (1476 + i.val) (by omega) pc] at fetched
+  have safe := segment_supported i
+  cases h : SphincsImages.verify.code[1476 + i.val]?.bind decodeInstruction with
+  | none => simp [h] at fetched
+  | some result =>
+      rw [h] at safe fetched
+      cases result with
+      | base base => exact ⟨base, by cases fetched; rfl, by simpa using safe⟩
+      | word op rd rs1 rs2 => simp at safe
+      | sraiw rd rs shamt => simp at safe
+
+theorem ordinaryStep_result (s next : MachineState) (i : Instr)
+    (step : ordinaryStep s (.base i) = some next) :
+    next = execInstrBr s i := by
+  cases i <;> simp_all [ordinaryStep]
+
+def InSegment (s : MachineState) : Prop :=
+  0x2710 ≤ s.pc.toNat ∧ s.pc.toNat < 0x2ad4 ∧ s.pc.toNat % 4 = 0
+
+inductive SegmentInterior (hash : Hash) :
+    {s : MachineState} → {steps cycles calls blocks : Nat} →
+    {t : MachineState} →
+    Trace hash SphincsImages.verify s steps cycles calls blocks t → Prop where
+  | refl (s : MachineState) :
+      SegmentInterior hash (Trace.refl s)
+  | ordinary (s next final : MachineState) (instruction : Instruction)
+      (steps cycles calls blocks : Nat)
+      (hf : fetch SphincsImages.verify s = some instruction)
+      (hs : ordinaryStep s instruction = some next)
+      (tail : Trace hash SphincsImages.verify next steps cycles calls blocks final)
+      (inside : InSegment s) (rest : SegmentInterior hash tail) :
+      SegmentInterior hash (Trace.ordinary s next final instruction
+        steps cycles calls blocks hf hs tail)
+  | hash (s final : MachineState) (steps cycles calls blocks : Nat)
+      (hf : fetch SphincsImages.verify s = some (.base .ECALL))
+      (service : s.getReg .x5 = 1) (valid : hashArgumentsValid s = true)
+      (tail : Trace hash SphincsImages.verify
+        (writeHash s (hash (hashInput s))) steps cycles calls blocks final)
+      (inside : InSegment s) (rest : SegmentInterior hash tail) :
+      SegmentInterior hash (Trace.hash s final steps cycles calls blocks
+        hf service valid tail)
+
+theorem trace_shift (target : Fin 5) (hash : Hash)
+    {s t : MachineState} {steps cycles calls blocks : Nat}
+    (trace : Trace hash SphincsImages.verify s steps cycles calls blocks t)
+    (inside : SegmentInterior hash trace) :
+    Trace hash SphincsImages.verify (shift (delta target) s)
+      steps cycles calls blocks (shift (delta target) t) := by
+  induction inside with
+  | refl s => exact Trace.refl _
+  | ordinary s next final instruction steps cycles calls blocks
+      hf hs tail range rest ih =>
+      obtain ⟨base, rfl, supported⟩ := fetched_supported s instruction
+        range.1 range.2.1 range.2.2 hf
+      have fetchShift : fetch SphincsImages.verify (shift (delta target) s) =
+          some (.base base) := by
+        rw [fetch_at, shift_pc,
+          instruction_transfer target s.pc range.1 range.2.1 range.2.2]
+        simpa [fetch_at] using hf
+      have eqNext := ordinaryStep_result s next base hs
+      subst next
+      have stepShift := ordinary_shift_verifier target s base supported hs
+      exact Trace.ordinary _ _ _ _ _ _ _ _ fetchShift stepShift ih
+  | hash s final steps cycles calls blocks hf service valid tail range rest ih =>
+      have fetchShift : fetch SphincsImages.verify (shift (delta target) s) =
+          some (.base .ECALL) := by
+        rw [fetch_at, shift_pc,
+          instruction_transfer target s.pc range.1 range.2.1 range.2.2]
+        simpa [fetch_at] using hf
+      have nextShift := writeHash_shift (delta target) s (hash (hashInput s))
+      rw [←nextShift] at ih
+      exact Trace.hash _ _ _ _ _ _ fetchShift
+        (by simpa using service) (by simpa using valid) ih
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRelocationTrace.trace_shift' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms trace_shift
+
+end SigGolfCandidate.SphincsVerifierWotsRelocationTrace
