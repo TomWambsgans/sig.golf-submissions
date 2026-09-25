@@ -229,3 +229,44 @@ theorem forgeAdvantage_le_remainingFts_small_budget (dummy : OtsReferenceWords)
   exact h.trans (add_le_add (original_primitive_add_full_certificate_small_budget dummy adversary q hbound hsmall) le_rfl)
 
 end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+set_option maxRecDepth 8192
+set_option maxHeartbeats 2000000
+
+theorem referenceForgeryGame_ftsOutcome_budget_cases
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => sample.ftsOutcome dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+    Pr[fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] +
+    Pr[fun sample => sample.remainingFts dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] := by
+  let law := referenceForgeryGame (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
+  refine (_root_.probEvent_mono (mx := law)
+    (p := fun sample => sample.ftsOutcome dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q)
+    (q := fun sample =>
+      (sample.fullCertificate dummy ∧ (sample.context dummy).2.2.2.output.2.hashCalls ≤ q) ∨
+      (sample.remainingFts dummy ∧ (sample.context dummy).2.2.2.output.2.hashCalls ≤ q)) ?_).trans
+      (probEvent_or_le _ _ _)
+  intro sample _ h
+  rcases h with ⟨hfts, hbudget⟩
+  rcases sample.ftsOutcome_cases dummy hfts with hfull | hremaining
+  · exact Or.inl ⟨hfull, hbudget⟩
+  · exact Or.inr ⟨hremaining, hbudget⟩
+
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_cases' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_cases
