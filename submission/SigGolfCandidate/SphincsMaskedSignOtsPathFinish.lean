@@ -4,7 +4,7 @@ namespace SigGolfCandidate.SphincsMaskedSignOtsPathFinish
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
 open SphincsMaskedSignOtsShift SphincsMaskedSignOtsParents SphincsMaskedSignOtsTree
 open SphincsMaskedSignOtsPath SphincsMaskedSignOtsPathSetup
-open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix SphincsMaskedSignForestTail
+open SphincsVerifierFtsRootCopy SphincsVerifierCopy SphincsMaskedSignForestParents SphincsMaskedKeygenPrefix SphincsMaskedSignForestTail
 set_option maxRecDepth 65536
 set_option maxHeartbeats 8000000
 
@@ -195,5 +195,63 @@ theorem finished_pc (location : Fin 5) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathFinish.finished_pc' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms finished_pc
+
+theorem copied_controls (location : Fin 5) (s : MachineState)
+    (level bit pointer : Nat) (ctrl : PathControls location s level bit pointer)
+    (pointerBound : pointer+20≤0x40000) :
+    PathControls location (copyRootState (setupState location s)) level bit pointer := by
+  have regs := setup_regs location s level bit pointer ctrl
+  have frame (a : Word) (high : 0x40000≤a.toNat) :
+      (copyRootState (setupState location s)).getMem a=s.getMem a := by
+    rw [SphincsMaskedSignForestTail.copy_memory_frame _ pointer 0 0x40000 regs.2
+      (by decide) (by omega) pointerBound (by decide) a (Or.inr high)]
+    exact setup_frame location s a
+  constructor
+  · exact (frame _ (by decide)).trans ctrl.base
+  · exact (frame _ (by decide)).trans ctrl.count
+  · exact (frame _ (by decide)).trans ctrl.level
+  · exact (frame _ (by decide)).trans ctrl.bit
+  · exact (frame _ (by decide)).trans ctrl.pointer
+
+
+
+def pathNext (location : Fin 5) (s : MachineState) : MachineState :=
+  finished location (copyRootState (setupState location s))
+
+theorem width_le_32 (location : Fin 5) :
+    ∀ level : Fin (Levels.height location), Levels.width location level.val ≤ 32 := by
+  fin_cases location <;> intro level <;> fin_cases level <;> decide
+
+/-- One actual lower-layer authentication sibling, including the back-edge. -/
+theorem path_step (location : Fin 5) (s : MachineState)
+    (level : Fin (Levels.height location)) (bit pointer : Nat)
+    (pc : s.pc=0x1938+SphincsMaskedSignOtsParents.delta location)
+    (ctrl : PathControls location s level.val bit pointer)
+    (bitBound : bit<Levels.width location level.val)
+    (pointerBound : pointer+20≤0x40000) (pointerAlign : pointer%4=0) :
+    OrdinarySteps SphincsMaskedImages.sign s 70 (pathNext location s) ∧
+    PathControls location (pathNext location s) (level.val+1) (bit/2) (pointer+20) ∧
+    (pathNext location s).pc =
+      if level.val+1=Levels.height location then 0x1a50+SphincsMaskedSignOtsParents.delta location
+      else 0x1938+SphincsMaskedSignOtsParents.delta location := by
+  have copied := (SphincsMaskedSignOtsPathSibling.copy_sibling location s level bit pointer
+    pc ctrl bitBound pointerBound pointerAlign).1
+  have middlePc : (copyRootState (setupState location s)).pc=0x1998+SphincsMaskedSignOtsParents.delta location := by
+    rw [SphincsMaskedSignForestParents.copyRoot_pc,
+      SphincsMaskedSignOtsPathSetup.setup_pc location s pc]
+    calc
+      (0x1970 + SphincsMaskedSignOtsParents.delta location) + 40 =
+          (0x1970 + 40 : Word) + SphincsMaskedSignOtsParents.delta location := by ac_rfl
+      _ = 0x1998 + SphincsMaskedSignOtsParents.delta location := by norm_num
+  have copiedCtrl := copied_controls location s level.val bit pointer ctrl pointerBound
+  have small : bit<32 := lt_of_lt_of_le bitBound (width_le_32 location level)
+  refine ⟨?_,?_,?_⟩
+  · exact ordinary_trans _ _ _ _ 24 46 copied
+      (finish_block location _ middlePc)
+  · exact finished_controls location _ level bit pointer copiedCtrl small
+  · exact finished_pc location _ level copiedCtrl.level
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathFinish.path_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms path_step
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathFinish
