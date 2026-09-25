@@ -263,6 +263,22 @@ private theorem copySetup_block (state : MachineState)
 def rootCopyEntryState (state : MachineState) : MachineState :=
   copySetupState (clearHeaderState state)
 
+theorem rootCopyEntry_header_cells (state : MachineState) :
+    (rootCopyEntryState state).getMem 0x43000 = 0 ∧
+    (rootCopyEntryState state).getMem 0x43010 = 0 ∧
+    (rootCopyEntryState state).getMem 0x43018 = 0 ∧
+    (rootCopyEntryState state).getMem 0x43008 =
+      state.getMem 0x43078 := by
+  simp [rootCopyEntryState, copySetupState, clearHeaderState,
+    zeroLayer, zeroTree, zeroPosition, zeroIndex, execInstrBr,
+    signExtend12, MachineState.getMem_setMem_eq,
+    MachineState.getMem_setMem_ne, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRootCopySetup.rootCopyEntry_header_cells' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms rootCopyEntry_header_cells
+
 /-- From the final FORS root store to the first copy-loop instruction. -/
 theorem rootCopyEntry (state : MachineState)
     (pc : state.pc = 0x1c08) :
