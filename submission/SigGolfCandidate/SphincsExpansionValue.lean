@@ -328,4 +328,8 @@ theorem run_expand_pure (message : Message) (pk : PublicKey)
 #guard_msgs (whitespace := lax) in
 #print axioms runWith_expand
 
+/-- info: 'SigGolfCandidate.Sphincs.ExpansionValue.run_expand_pure' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms run_expand_pure
+
 end SigGolfCandidate.Sphincs.ExpansionValue
