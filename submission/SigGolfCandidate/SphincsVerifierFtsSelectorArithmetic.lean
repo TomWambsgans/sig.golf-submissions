@@ -34,6 +34,19 @@ theorem selector_parent_index (leaf : FtsLeaf) (level : Nat) :
     Nat.mod_eq_of_lt quotientSmall]
   simp [pow_succ]
 
+theorem selector_next (leaf : FtsLeaf) (level : Nat) :
+    ((BitVec.ofNat 64 leaf.val >>> level) >>> 1) =
+      BitVec.ofNat 64 leaf.val >>> (level + 1) := by
+  rw [selector_parent_index]
+  apply BitVec.eq_of_toNat_eq
+  rw [selector_shift_nat, BitVec.toNat_ofNat]
+  apply Nat.mod_eq_of_lt
+  have bound := leaf.isLt
+  have small : leaf.val < 2 ^ 64 := by
+    norm_num [ftsTreeHeight] at bound ⊢
+    omega
+  exact lt_of_le_of_lt (Nat.div_le_self _ _) small
+
 theorem selector_parity_nat (leaf : FtsLeaf) (level : Nat) :
     (((BitVec.ofNat 64 leaf.val) >>> level) &&& 1).toNat =
       (leaf.val / 2 ^ level) % 2 := by
