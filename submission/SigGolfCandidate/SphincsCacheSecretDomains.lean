@@ -141,3 +141,11 @@ end SigGolfCandidate.SphincsCacheSecretDomains
 /-- info: 'SigGolfCandidate.SphincsCacheSecretDomains.padInput_ne_tweakableHashInput' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsCacheSecretDomains.padInput_ne_tweakableHashInput
+
+/-- info: 'SigGolfCandidate.SphincsCacheSecretDomains.padInput_injective_node' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsCacheSecretDomains.padInput_injective_node
+
+/-- info: 'SigGolfCandidate.SphincsCacheSecretDomains.macInput_injective_ciphertext' depends on axioms: [propext] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsCacheSecretDomains.macInput_injective_ciphertext
