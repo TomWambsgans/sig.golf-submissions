@@ -584,6 +584,66 @@ theorem certificateCountedContextGame_originalCost (adversary : Adversary) (budg
   simpa only [Functor.map_map, Function.comp_def, bind_pure_comp, Nat.add_assoc,
     liftM_map, CertificateCountedContextResult.originalCost] using h
 
+noncomputable def originalCertificateBoundaryTraceSource (adversary : Adversary) :
+    ProbComp (OriginalCertificateResult × Nat) := do
+  let generated ← boundaryRun 0 scheme.keygen ∅
+  let key := generated.1.1.2
+  let result ← boundaryRun key.parameter
+    (simulateQ (expandedAdversaryImpl key)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)) generated.2
+  pure ((key, result.1.1, result.2), generated.1.2.hashCalls + result.1.2.hashCalls)
+
+theorem originalCertificateCountedSource_eq_boundary (adversary : Adversary) :
+    originalCertificateCountedSource adversary =
+      originalCertificateBoundaryTraceSource adversary := by
+  simp only [originalCertificateCountedSource, originalCertificateBoundaryTraceSource]
+  apply bind_congr
+  intro generated
+  rw [← boundaryRun_count generated.1.1.2.parameter
+    (simulateQ (expandedAdversaryImpl generated.1.1.2)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)) generated.2]
+  simp only [bind_pure_comp, Functor.map_map]
+
+theorem certificateCountedLengthImpl_project (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState) :
+    Prod.map id certificateCountedProject <$>
+      (certificateCountedLengthImpl key budget required stopAfter input).run state =
+    (certificateCacheLengthImpl key budget required stopAfter input).run
+      (certificateCountedProject state) := by
+  change PMF.map _ _ = _
+  cases input with
+  | inl world =>
+      simp only [certificateCountedLengthImpl, certificateCacheLengthImpl,
+        originalLengthImpl, lengthRecordImpl, StateT.run_mk,
+        originalProposalActive, Bool.false_eq_true, if_false, PMF.map_comp]
+      rfl
+  | inr message =>
+      simp only [certificateCountedLengthImpl, certificateCacheLengthImpl,
+        originalLengthImpl, lengthRecordImpl, StateT.run_mk,
+        originalProposalActive, certificateCountedProject]
+      by_cases h : (certificateMonitorEnabled key budget message
+        (certificateCacheMonitorProject (certificateCountedProject state)) &&
+          decide (ProposalCacheBound key state.1 state.2.1.1.spent)) = true
+      · simp only [certificateCountedProject] at h
+        simp only [h, if_true, PMF.map_comp]
+        rfl
+      · simp only [certificateCountedProject] at h
+        simp only [h]
+        simp only [Bool.false_eq_true, if_false, PMF.map_comp]
+        rfl
+
+theorem simulateQ_certificateCountedLengthImpl_project {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateCountedState) :
+    Prod.map id certificateCountedProject <$>
+      (simulateQ (certificateCountedLengthImpl key budget required stopAfter) computation).run state =
+    (simulateQ (certificateCacheLengthImpl key budget required stopAfter) computation).run
+      (certificateCountedProject state) :=
+  map_run_simulateQ_eq_of_query_map_eq _ _ certificateCountedProject
+    (certificateCountedLengthImpl_project key budget required stopAfter) computation state
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -621,3 +681,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_originalCost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedContextGame_originalCost
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificateCountedSource_eq_boundary' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificateCountedSource_eq_boundary
+
+/-- info: 'SphincsSecurity.Concrete.simulateQ_certificateCountedLengthImpl_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.simulateQ_certificateCountedLengthImpl_project
