@@ -1662,3 +1662,389 @@ theorem whole_wots_segment_shifted (target : Fin 5) (hash : Hash)
 #guard_msgs in
 #print axioms whole_wots_segment_shifted
 end SigGolfCandidate.SphincsVerifierWotsLeafInterior
+
+namespace SigGolfCandidate.SphincsVerifierDecoderRelocation
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+abbrev DecoderInstr : Instr → Prop
+  | .ADDI .. | .LUI .. | .LD .. | .SD .. | .LWU .. | .SW .. | .ADD .. |
+    .SLLI .. | .SRLI .. | .ANDI .. | .SB .. | .LBU .. => True
+  | _ => False
+
+instance (i : Instr) : Decidable (DecoderInstr i) := by cases i <;> infer_instance
+
+def decoderWord (i : Nat) : Bool :=
+  match SphincsImages.verify.code[968 + i]?.bind decodeInstruction with
+  | some (.base instruction) => decide (DecoderInstr instruction)
+  | _ => false
+
+theorem decoderWord_all : (List.range 496).all decoderWord = true := by decide
+
+theorem decoder_instr_supported (i : Instr) (h : DecoderInstr i) :
+    SigGolfCandidate.SphincsMaskedSignOtsShift.Supported i := by
+  cases i <;> simp_all [DecoderInstr, SigGolfCandidate.SphincsMaskedSignOtsShift.Supported]
+
+theorem decoder_instr_pc (i : Instr) (h : DecoderInstr i) (s : MachineState) :
+    (execInstrBr s i).pc = s.pc + 4 := by
+  cases i <;> simp_all [DecoderInstr, execInstrBr]
+
+
+
+
+theorem decoder_segment_identical (target : Fin 5) :
+    (SphincsImages.verify.code.drop (968 + wordOffset target)).take 496 =
+      (SphincsImages.verify.code.drop 968).take 496 := by
+  fin_cases target <;> decide
+
+theorem decoder_word_reloc (target : Fin 5) (i : Fin 496) :
+    SphincsImages.verify.code[968 + wordOffset target + i.val]? =
+      SphincsImages.verify.code[968 + i.val]? := by
+  have eq := congrArg (fun words : List (BitVec 32) => words[i.val]?)
+    (decoder_segment_identical target)
+  simpa only [List.getElem?_take_of_lt i.isLt, List.getElem?_drop] using eq
+
+theorem decoder_word_supported (i : Fin 496) :
+    match SphincsImages.verify.code[968 + i.val]?.bind decodeInstruction with
+    | some (.base instruction) => DecoderInstr instruction
+    | _ => False := by
+  have h := List.all_eq_true.mp decoderWord_all i.val (List.mem_range.mpr i.isLt)
+  unfold decoderWord at h
+  cases hc : SphincsImages.verify.code[968 + i.val]?.bind decodeInstruction with
+  | none => simp [hc] at h ⊢
+  | some result =>
+      rw [hc] at h
+      cases result with
+      | base instruction => simpa using (of_decide_eq_true (by simpa using h))
+      | word op rd rs1 rs2 => simp at h
+      | sraiw rd rs shamt => simp at h
+
+theorem decoder_fetch (i : Fin 496) (s : MachineState)
+    (pc : s.pc = BitVec.ofNat 64 (0x1f20 + 4 * i.val))
+    (instr : Instruction) (hf : fetch SphincsImages.verify s = some instr) :
+    ∃ base, instr = .base base ∧ DecoderInstr base := by
+  have here : s.pc = BitVec.ofNat 64 (0x1000 + 4 * (968 + i.val)) := by
+    simpa [show 0x1000 + 4 * (968 + i.val) = 0x1f20 + 4 * i.val by omega]
+      using pc
+  rw [fetch_index SphincsImages.verify s (968+i.val) (by omega) here] at hf
+  have safe := decoder_word_supported i
+  cases hc : SphincsImages.verify.code[968+i.val]?.bind decodeInstruction with
+  | none => simp [hc] at hf
+  | some result =>
+      rw [hc] at hf safe
+      cases result with
+      | base base => exact ⟨base, by cases hf; rfl, by simpa using safe⟩
+      | word op rd rs1 rs2 => simp at safe
+      | sraiw rd rs shamt => simp at safe
+
+theorem decoder_fetch_shift (target : Fin 5) (i : Fin 496)
+    (s : MachineState)
+    (pc : s.pc = BitVec.ofNat 64 (0x1f20 + 4 * i.val)) :
+    fetch SphincsImages.verify (shift (delta target) s) =
+      fetch SphincsImages.verify s := by
+  have original : s.pc = BitVec.ofNat 64 (0x1000 + 4 * (968 + i.val)) := by
+    simpa [show 0x1000 + 4 * (968 + i.val) = 0x1f20 + 4 * i.val by omega]
+      using pc
+  have moved : (shift (delta target) s).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * (968 + wordOffset target + i.val)) := by
+    simp [shift_pc, original, delta, ← BitVec.ofNat_add]
+    congr 1
+    simp [wordOffset] <;> omega
+  rw [fetch_index SphincsImages.verify (shift (delta target) s)
+      (968 + wordOffset target + i.val) (by fin_cases target <;> simp [wordOffset] <;> omega)
+      moved,
+    fetch_index SphincsImages.verify s (968 + i.val) (by omega) original,
+    decoder_word_reloc]
+
+theorem decoder_ordinary_shift (target : Fin 5)
+    {s t : MachineState} {n : Nat}
+    (run : OrdinarySteps SphincsImages.verify s n t)
+    (small : n ≤ 496)
+    (pc : s.pc = BitVec.ofNat 64 (0x1f20 + 4 * (496 - n))) :
+    OrdinarySteps SphincsImages.verify
+      (shift (delta target) s) n (shift (delta target) t) := by
+  induction run with
+  | refl state => exact OrdinarySteps.refl _
+  | step state next final instruction steps hf hs tail ih =>
+      let i : Fin 496 := ⟨496 - (steps + 1), by omega⟩
+      have pcIndex : state.pc = BitVec.ofNat 64 (0x1f20 + 4 * i.val) := by
+        simpa [i] using pc
+      obtain ⟨base, rfl, supported⟩ := decoder_fetch i state pcIndex instruction hf
+      have equalNext : next = execInstrBr state base := by
+        cases base <;> simp_all [ordinaryStep]
+      subst next
+      have nextPc : (execInstrBr state base).pc =
+          BitVec.ofNat 64 (0x1f20 + 4 * (496 - steps)) := by
+        rw [decoder_instr_pc base supported state, pcIndex]
+        simp [← BitVec.ofNat_add]
+        congr 1
+        dsimp [i]
+        omega
+      have shiftedStep := ordinary_shift_verifier target state base
+        (Or.inl (decoder_instr_supported base supported)) hs
+      have fetched : fetch SphincsImages.verify (shift (delta target) state) =
+          some (.base base) := by
+        rw [decoder_fetch_shift target i state pcIndex]
+        exact hf
+      exact OrdinarySteps.step _ _ _ _ _ fetched shiftedStep
+        (ih (by omega) nextPc)
+
+
+
+def setupHi (target : Fin 5) : BitVec 20 :=
+  if target.val < 3 then 0x24 else 0x25
+
+def setupLo (target : Fin 5) : BitVec 12 :=
+  if target.val = 0 then 0xdc0
+  else if target.val = 1 then 0x2b0
+  else if target.val = 2 then 0x728
+  else if target.val = 3 then 0xba0
+  else 0x018
+
+def setupPc (target : Fin 5) : Word :=
+  BitVec.ofNat 64 (0x26e0 + 4 * wordOffset target)
+
+def setupSchedule (target : Fin 5) : List (Word × Instr) :=
+  let p := setupPc target
+  [ (p, .ADDI .x10 .x0 194),
+    (p + 4, .BEQ .x15 .x10 8),
+    (p + 12, .ADDI .x6 .x0 0),
+    (p + 16, .LUI .x28 0x43),
+    (p + 20, .ADDI .x28 .x28 80),
+    (p + 24, .SD .x28 .x6 0),
+    (p + 28, .LUI .x6 (setupHi target)),
+    (p + 32, .ADDI .x6 .x6 (setupLo target)),
+    (p + 36, .LUI .x28 0x43),
+    (p + 40, .ADDI .x28 .x28 40),
+    (p + 44, .SD .x28 .x6 0) ]
+
+theorem setup_code (target : Fin 5) :
+    ∀ entry ∈ setupSchedule target,
+      SigGolfCandidate.SphincsVerifierFtsRootCopy.instructionAt
+        SphincsImages.verify entry.1 = some (.base entry.2) := by
+  fin_cases target <;> decide
+
+def setupState (target : Fin 5) (s : MachineState) : MachineState :=
+  SigGolfCandidate.SphincsMaskedKeygenPrefix.runSchedule (setupSchedule target) s
+
+theorem setup_checked (target : Fin 5) (s : MachineState)
+    (pc : s.pc = setupPc target) (checksum : s.getReg .x15 = 194) :
+    SigGolfCandidate.SphincsMaskedKeygenPrefix.Checked
+      (setupSchedule target) s := by
+  fin_cases target <;>
+    simp [SigGolfCandidate.SphincsMaskedKeygenPrefix.Checked,
+      setupSchedule, setupPc, setupHi, setupLo,
+      SigGolfCandidate.SphincsMaskedKeygenPrefix.runSchedule,
+      execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+      rangeValid, MEMORY_BYTES, signExtend12, signExtend13,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, checksum] <;> bv_decide
+
+theorem setup_block (target : Fin 5) (s : MachineState)
+    (pc : s.pc = setupPc target) (checksum : s.getReg .x15 = 194) :
+    OrdinarySteps SphincsImages.verify s 11 (setupState target s) := by
+  simpa only [setupState, show (setupSchedule target).length = 11 by
+      simp [setupSchedule]] using
+    SigGolfCandidate.SphincsMaskedKeygenPrefix.checked_sound _
+      (setupSchedule target) (setup_code target) s
+      (setup_checked target s pc checksum)
+
+
+
+theorem answerWord_shift (offset : Word) (i : Fin 52) (s : MachineState) :
+    SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord i (shift offset s) =
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord i s := by
+  simp [SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord]
+
+theorem answerSum_shift (offset : Word) (n : Nat) (s : MachineState) :
+    SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum n (shift offset s) =
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum n s := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      simp [SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum,
+        ih, answerWord_shift]
+
+def upperDecoderState (target : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta target)
+    (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun 52
+      (shift (-delta target) s))
+
+theorem decoder_upper (target : Fin 5) (s : MachineState)
+    (pc : s.pc = BitVec.ofNat 64 (0x1f20 + 4 * wordOffset target)) :
+    OrdinarySteps SphincsImages.verify s 496 (upperDecoderState target s) ∧
+    (upperDecoderState target s).pc = setupPc target ∧
+    (upperDecoderState target s).getReg .x15 =
+      s.getReg .x15 + SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 s := by
+  let base := shift (-delta target) s
+  have basePc : base.pc = 0x1f20 := by
+    fin_cases target <;> simp [base, pc, delta, wordOffset, shift]
+  obtain ⟨run, done⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsDecodeData.decoder_run_all base basePc
+  have transferred := decoder_ordinary_shift target run (by decide) basePc
+  have source : shift (delta target) base = s := by
+    simp [base, shift, MachineState.setPC]
+  have finalPc : (upperDecoderState target s).pc = setupPc target := by
+    change (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun 52 base).pc +
+      delta target = setupPc target
+    rw [done]
+    simp [setupPc, delta, wordOffset, ← BitVec.ofNat_add]
+    congr 1
+    omega
+  have checksum := SigGolfCandidate.SphincsVerifierWotsDecodeData.decoder_run_checksum
+    52 base (by decide)
+  refine ⟨?_, finalPc, ?_⟩
+  · simpa [upperDecoderState, base, source] using transferred
+  · simpa [upperDecoderState, base, answerSum_shift] using checksum
+
+/-- info: 'SigGolfCandidate.SphincsVerifierDecoderRelocation.decoder_ordinary_shift' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms decoder_ordinary_shift
+
+/-- info: 'SigGolfCandidate.SphincsVerifierDecoderRelocation.decoder_upper' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms decoder_upper
+
+end SigGolfCandidate.SphincsVerifierDecoderRelocation
+
+namespace SigGolfCandidate.SphincsVerifierDecoderRelocation
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsMaskedKeygenPrefix
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+open SigGolfCandidate.SphincsVerifierWotsRelocation
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+def sourceBase (target : Fin 5) : Nat :=
+  if target.val = 0 then 0x23dc0
+  else if target.val = 1 then 0x242b0
+  else if target.val = 2 then 0x24728
+  else if target.val = 3 then 0x24ba0
+  else 0x25018
+
+theorem sourceBase_bound (target : Fin 5) :
+    sourceBase target + 20 * 52 ≤ 0x40000 := by fin_cases target <;> decide
+
+theorem sourceBase_aligned (target : Fin 5) :
+    sourceBase target % 4 = 0 := by fin_cases target <;> decide
+
+theorem setup_final (target : Fin 5) (s : MachineState)
+    (pc : s.pc = setupPc target) (checksum : s.getReg .x15 = 194) :
+    (setupState target s).pc = BitVec.ofNat 64 (chainPc target) ∧
+    (setupState target s).getMem 0x43050 = 0 ∧
+    (setupState target s).getMem 0x43028 = BitVec.ofNat 64 (sourceBase target) := by
+  fin_cases target <;>
+    simp [setupState, setupSchedule, setupPc, setupHi, setupLo,
+      sourceBase, chainPc, wordOffset, runSchedule, execInstrBr,
+      signExtend12, signExtend13, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, MachineState.getMem_setMem_eq,
+      MachineState.getMem_setMem_ne, pc, checksum] <;> bv_decide
+
+
+
+theorem setup_mem_other (target : Fin 5) (s : MachineState)
+    (address : Word) (counter : address ≠ 0x43050)
+    (pointer : address ≠ 0x43028) :
+    (setupState target s).getMem address = s.getMem address := by
+  fin_cases target
+  all_goals
+    simp [setupState, setupSchedule, setupPc, setupHi, setupLo,
+      wordOffset, runSchedule, execInstrBr, signExtend12, signExtend13,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne]
+    split_ifs with hp hc
+    · exact (pointer (by simpa using hp)).elim
+    · exact (counter (by simpa using hc)).elim
+    · rfl
+
+
+
+theorem upper_decoder_digits (target : Fin 5) (s : MachineState) :
+    SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid
+      (upperDecoderState target s) := by
+  intro j
+  have digit := SigGolfCandidate.SphincsVerifierWotsDecodeData.decoder_run_digit
+    52 (shift (-delta target) s) (by decide) j (by have := j.isLt; omega)
+  change ((upperDecoderState target s).getByte
+      (BitVec.ofNat 64 (0x44000 + j.val))).toNat < 8
+  rw [upperDecoderState, shift_byte, digit]
+  exact SigGolfCandidate.SphincsVerifierWotsAllChains.answerDigit_small j
+    (shift (-delta target) s)
+
+theorem setup_digits (target : Fin 5) (s : MachineState)
+    (valid : SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid s) :
+    SigGolfCandidate.SphincsVerifierWotsAllChains.DigitsValid
+      (setupState target s) := by
+  intro j
+  let addr := BitVec.ofNat 64 (0x44000 + j.val)
+  let aligned := alignToDword addr
+  have notCounter : aligned ≠ 0x43050 := by
+    fin_cases j <;> decide
+  have notPointer : aligned ≠ 0x43028 := by
+    fin_cases j <;> decide
+  have mem := setup_mem_other target s aligned notCounter notPointer
+  have byteEq : (setupState target s).getByte addr = s.getByte addr := by
+    simpa [MachineState.getByte, aligned] using
+      congrArg (fun word => extractByte word (byteOffset addr)) mem
+  rw [byteEq]
+  exact valid j
+
+
+
+theorem upper_decoder_wots (target : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = BitVec.ofNat 64 (0x1f20 + 4 * wordOffset target))
+    (checksum : s.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 s = 194) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify s steps cycles calls blocks final),
+      final.pc = SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) ∧
+      steps ≤ 496 + 11 + 728 * 52 + 856 ∧
+      cycles ≤ 496 + 11 + 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧
+      blocks ≤ 7 * 52 + 17 := by
+  obtain ⟨decoderRun, decodedPc, decodedChecksum⟩ := decoder_upper target s pc
+  let decoded := upperDecoderState target s
+  have goodChecksum : decoded.getReg .x15 = 194 := by
+    rw [decodedChecksum]
+    exact checksum
+  have setupRun := setup_block target decoded decodedPc goodChecksum
+  obtain ⟨setupPc', setupCounter, setupPointer⟩ :=
+    setup_final target decoded decodedPc goodChecksum
+  let ready := setupState target decoded
+  have readyValid := setup_digits target decoded (upper_decoder_digits target s)
+  obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
+      finalPc, stepBound, cycleBound, callBound, blockBound⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsLeafInterior.whole_wots_segment_shifted
+      target hash ready (sourceBase target) (sourceBase_bound target)
+      (sourceBase_aligned target) setupPc' setupCounter setupPointer readyValid
+  let before := (decoderRun.trace (hash := hash)).trans
+    (setupRun.trace (hash := hash))
+  let all := before.trans wotsRun
+  refine ⟨final, 496 + 11 + steps, 496 + 11 + cycles,
+    calls, blocks, ?_, finalPc, by omega, by omega, callBound, blockBound⟩
+  simpa [before, all, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+    using all
+
+/-- info: 'SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_block' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms setup_block
+
+/-- info: 'SigGolfCandidate.SphincsVerifierDecoderRelocation.upper_decoder_wots' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_decoder_wots
+
+end SigGolfCandidate.SphincsVerifierDecoderRelocation
