@@ -457,3 +457,131 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted_selected
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+theorem counted_observed_budget_le_cap_selected
+    (selected : AuxIndex ⊕ (Fin n × State) → Prop) [DecidablePred selected]
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (event : (Fin n → State → Option State) → State → Prop)
+    (budget : Nat) :
+    Pr[fun result => event result.2.2 result.1 ∧ result.2.1.2 ≤ budget |
+      realRun auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint))
+        (fun _ _ => none)] ≤
+    Pr[fun result => event result.2.2 result.1 |
+      realRun auxiliary (fun endpoint => QueryCap.run selected (computation endpoint) budget)
+        (fun _ _ => none)] := by
+  let observed : Fin n → State → Option State := fun _ _ => none
+  let p : Option (State × ((Result × Nat) × (Fin n → State → Option State))) → Prop :=
+    fun opt => ∃ result, opt = some result ∧ event result.2.2 result.1
+  have hlaw := realRun_cap_finish_counted_selected selected auxiliary computation observed budget
+  have hprob := congrArg (fun law : PMF (Option (State × ((Result × Nat) × (Fin n → State → Option State)))) =>
+    Pr[p | law]) hlaw
+  simp only [← PMF.monad_map_eq_map, probEvent_map, Function.comp_def] at hprob
+  calc
+    _ = Pr[fun result => p ((QueryCap.finish budget result.2.1).map
+        (fun finished => (result.1, finished, result.2.2))) |
+        realRun auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint)) observed] := by
+      simp only [probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+      apply tsum_congr
+      intro result
+      by_cases hb : result.2.1.2 ≤ budget
+      · simp [p, QueryCap.finish, hb, observed]
+      · simp [p, QueryCap.finish, hb]
+    _ = Pr[fun result => p (result.2.1.map
+        (fun finished => (result.1, finished, result.2.2))) |
+        realRun auxiliary (fun endpoint => QueryCap.run selected (computation endpoint) budget) observed] := hprob.symm
+    _ ≤ _ := by
+      simp only [probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hp : p (result.2.1.map (fun finished => (result.1, finished, result.2.2)))
+      · have he : event result.2.2 result.1 := by
+          dsimp [p] at hp
+          obtain ⟨witness, hw, he⟩ := hp
+          cases hopt : result.2.1 with
+          | none => simp [hopt] at hw
+          | some pair =>
+              simp [hopt] at hw
+              cases hw
+              exact he
+        simp [hp, he, observed]
+      · simp [hp]
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_observed_budget_le_cap_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.counted_observed_budget_le_cap_selected
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+theorem realRun_counted_forget_selected
+    (selected : AuxIndex ⊕ (Fin n × State) → Prop) [DecidablePred selected]
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (observed : Fin n → State → Option State) :
+    (realRun auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint)) observed).map
+      (fun result => (result.1, result.2.1.1, result.2.2)) =
+    realRun auxiliary computation observed := by
+  simpa only [QueryCap.counted_forget] using
+    (realRun_map auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint))
+      (fun _ => Prod.fst) observed).symm
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+theorem realRun_observed_cost_budget_le_cap_selected
+    (selected : AuxIndex ⊕ (Fin n × State) → Prop) [DecidablePred selected]
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (event : (Fin n → State → Option State) → State → Prop)
+    (cost : Result → Nat) (budget : Nat)
+    (hchargeRun : ∀ result ∈
+      (realRun auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint))
+        (fun _ _ => none)).support, result.2.1.2 ≤ cost result.2.1.1) :
+    Pr[fun result => event result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+    Pr[fun result => event result.2.2 result.1 |
+      realRun auxiliary (fun endpoint => QueryCap.run selected (computation endpoint) budget)
+        (fun _ _ => none)] := by
+  apply le_trans ?_ (counted_observed_budget_le_cap_selected selected auxiliary computation event budget)
+  rw [← realRun_counted_forget_selected selected auxiliary computation (fun _ _ => none)]
+  simp only [← PMF.monad_map_eq_map]
+  rw [probEvent_map]
+  simp only [Function.comp_def, probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  by_cases hr : result ∈ (realRun auxiliary
+      (fun endpoint => QueryCap.counted selected (computation endpoint))
+      (fun _ _ => none)).support
+  · by_cases hevent : event result.2.2 result.1 ∧ cost result.2.1.1 ≤ budget
+    · have hcount : result.2.1.2 ≤ budget := (hchargeRun result hr).trans hevent.2
+      simp [hevent, hcount]
+    · simp [hevent]
+  · have hz : (realRun auxiliary
+      (fun endpoint => QueryCap.counted selected (computation endpoint))
+      (fun _ _ => none)) result = 0 := not_not.mp hr
+    simp [hz]
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_observed_cost_budget_le_cap_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_observed_cost_budget_le_cap_selected
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_counted_forget_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_counted_forget_selected
