@@ -117,6 +117,10 @@ theorem rootStoreSetup_source (state : MachineState) :
   simp [rootStoreSetupState, execInstrBr, signExtend12,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
+theorem rootStoreSetup_mem (state : MachineState) (address : Word) :
+    (rootStoreSetupState state).getMem address = state.getMem address := by
+  simp [rootStoreSetupState, execInstrBr]
+
 theorem rootStoreSetup_destination (state : MachineState)
     (tree : FtsTree)
     (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val) :
