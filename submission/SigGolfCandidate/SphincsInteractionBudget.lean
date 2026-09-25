@@ -23,11 +23,11 @@ theorem checkForgery_calls_ge (submission : Submission)
           simp [Submission.checkForgery, evalWithAnswerFn_bind, h]
           omega
 
-private def projectedHash (world : QueryImpl World Id) : Hash :=
+def projectedHash (world : QueryImpl World Id) : Hash :=
   fun q => evalWithAnswerFn world
     (liftM (HashSpec.query q) : OracleComp World (BitVec 256))
 
-private theorem eval_lift_hash {α : Type} (world : QueryImpl World Id)
+theorem eval_lift_hash {α : Type} (world : QueryImpl World Id)
     (program : OracleComp HashSpec α) :
     evalWithAnswerFn world (liftM program : OracleComp World α) =
       evalWithAnswerFn (projectedHash world) program := by

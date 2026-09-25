@@ -34,6 +34,14 @@ theorem stepRound_controlCells (hash : Hash) (state : MachineState) :
     leaf.trans (stepCheck_mem state _),
     chain.trans (stepCheck_mem state _)⟩
 
+theorem stepRound_pointerCell (hash : Hash) (state : MachineState) :
+    (stepRound hash state).getMem 0x43028 = state.getMem 0x43028 := by
+  rw [stepRound]
+  have preserved := SphincsVerifierWotsSemanticFrame.stepNext_safeFrame hash
+    (SphincsVerifierWotsStepCheck.stepCheckState state) 0x43028
+    (Or.inr ⟨by decide, by decide, by decide, by decide⟩)
+  exact preserved.trans (stepCheck_mem state 0x43028)
+
 /-- Semantic and execution invariant for the remainder of one WOTS chain. -/
 structure WalkInv (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
@@ -45,6 +53,8 @@ structure WalkInv (hash : Hash) (pk : SphincsSecurity.PublicKey)
   treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val
   leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val
   chainCell : state.getMem 0x43050 = BitVec.ofNat 64 chain.val
+  pointerCell : state.getMem 0x43028 =
+    BitVec.ofNat 64 (0x2547c + 20 * chain.val)
   publicKey : SphincsVerifierHashBytes.WitnessPrefix state pk
   value : ∀ j, (hj : j < 20) →
     state.getByte (BitVec.ofNat 64 (0x44b00 + j)) =
@@ -74,6 +84,7 @@ theorem walkInv_step (hash : Hash) (pk : SphincsSecurity.PublicKey)
   · rw [frame.2.1]; exact inv.treeCell
   · rw [frame.2.2.1]; exact inv.leafCell
   · rw [frame.2.2.2]; exact inv.chainCell
+  · rw [stepRound_pointerCell hash state]; exact inv.pointerCell
   · exact stepRound_witnessPrefix hash state pk inv.publicKey
   · intro j hj
     exact stepRound_walkByte hash state pk layer tree leaf chain
@@ -136,6 +147,7 @@ theorem walkInv_recoverChain (hash : Hash) (pk : SphincsSecurity.PublicKey)
   simpa [Concrete.walkValue, Concrete.recoverChain, chainLength,
     winternitzBits] using inv.value i hi
 
+#print axioms stepRound_pointerCell
 #print axioms stepRound_witnessPrefix
 #print axioms walkInv_step
 #print axioms walkInv_loop
