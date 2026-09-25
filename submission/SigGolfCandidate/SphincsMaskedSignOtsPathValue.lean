@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsMaskedSignOtsPathFinish
 import RiscvZkvm.Rv64.Logic.ByteOps
+import SigGolfCandidate.SphincsVerifierWotsDecodeData
 
 namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
@@ -7,8 +8,9 @@ open SphincsMaskedSignOtsParents SphincsMaskedSignOtsTree SphincsMaskedSignOtsPa
 open SphincsMaskedSignOtsPathSetup SphincsMaskedSignOtsPathSibling SphincsMaskedSignOtsPathFinish
 open SphincsMaskedSignOtsShift SphincsMaskedKeygenPrefix
 open SphincsSecurity SphincsBridge SphincsVerifierCopy SphincsVerifierFtsRootCopy SphincsMaskedChainDomain
+open SphincsVerifierWotsDecode SphincsVerifierWotsDecodeData SphincsVerifierMessageCopy
 set_option maxRecDepth 65536
-set_option maxHeartbeats 4000000
+set_option maxHeartbeats 6000000
 
 /-- An emitted lower-layer sibling is the abstract seeded authentication node,
 not merely a copy of an unspecified cache cell. -/
@@ -1023,5 +1025,600 @@ theorem otsPaddingRetrySecond_pc (location : Fin 5) (s : MachineState)
     _ = (7104#64+2004#64)+delta location := by ac_rfl
     _ = 9108#64+delta location := by congr 1
 
+def signerDecoderMiddleState (i : Fin 52) (state : MachineState) : MachineState :=
+  let shift := digitBit i.val % 8
+  if shift = 0 then state
+  else
+    let first := execInstrBr state (.SRLI .x10 .x10 (BitVec.ofNat 6 shift))
+    if shift ≤ 5 then first
+    else
+      let second := execInstrBr first
+        (.LBU .x12 .x6 (BitVec.ofNat 12 (digitBit i.val / 8 + 1)))
+      let third := execInstrBr second
+        (.SLLI .x12 .x12 (BitVec.ofNat 6 (8 - shift)))
+      execInstrBr third (.ADD .x10 .x10 .x12)
+
+def signerDecoderState (i : Fin 52) (state : MachineState) : MachineState :=
+  decoderSuffixState i (signerDecoderMiddleState i (decoderPrefixState i state))
+
+theorem signerDecoderMiddle_value (i : Fin 52) (state : MachineState)
+    (source : state.getReg .x6 = 0x42000) :
+    (signerDecoderMiddleState i state).getReg .x10 = middleValue i state := by
+  fin_cases i <;>
+    simp [signerDecoderMiddleState,middleValue,digitBit,execInstrBr,signExtend12,
+      source,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,
+      MachineState.getByte]
+
+theorem signerDecoderMiddle_memory (i : Fin 52) (state : MachineState)
+    (address : Word) :
+    (signerDecoderMiddleState i state).getByte address = state.getByte address := by
+  fin_cases i <;>
+    simp [signerDecoderMiddleState,execInstrBr,MachineState.getByte]
+
+theorem signerDecoderMiddle_checksum (i : Fin 52) (state : MachineState) :
+    (signerDecoderMiddleState i state).getReg .x15 = state.getReg .x15 := by
+  fin_cases i <;>
+    simp [signerDecoderMiddleState,execInstrBr,MachineState.getReg_setReg_ne]
+
+theorem signerDecoder_word (i : Fin 52) (state : MachineState) :
+    (signerDecoderMiddleState i (decoderPrefixState i state)).getReg .x10 =
+      answerWord i state := by
+  rw [signerDecoderMiddle_value i (decoderPrefixState i state)
+    (decoder_prefix_source i state)]
+  simp [middleValue,answerWord,decoder_prefix_value,decoder_prefix_memory]
+
+theorem signerDecoder_digit (i : Fin 52) (state : MachineState) :
+    (signerDecoderState i state).getByte (BitVec.ofNat 64 (0x44000+i.val)) =
+      answerDigit i state := by
+  change (decoderSuffixState i
+    (signerDecoderMiddleState i (decoderPrefixState i state))).getByte _ = _
+  rw [decoder_suffix_byte,signerDecoder_word]
+  rfl
+
+theorem signerDecoder_checksum (i : Fin 52) (state : MachineState) :
+    (signerDecoderState i state).getReg .x15 =
+      state.getReg .x15 + (answerWord i state &&& 7#64) := by
+  change (decoderSuffixState i
+    (signerDecoderMiddleState i (decoderPrefixState i state))).getReg .x15 = _
+  rw [decoder_suffix_sum,signerDecoder_word,signerDecoderMiddle_checksum,
+    decoder_prefix_checksum]
+
+theorem signerDecoder_memory (i : Fin 52) (state : MachineState)
+    (address : Word) :
+    (signerDecoderState i state).getByte address =
+      if address = BitVec.ofNat 64 (0x44000+i.val) then answerDigit i state
+      else state.getByte address := by
+  change (decoderSuffixState i
+    (signerDecoderMiddleState i (decoderPrefixState i state))).getByte address = _
+  rw [decoder_suffix_memory]
+  by_cases same : address = BitVec.ofNat 64 (0x44000+i.val)
+  · simp [same,answerDigit,signerDecoder_word]
+  · simp [same,signerDecoderMiddle_memory,decoder_prefix_memory]
+
+def signerDecoderRun : Nat → MachineState → MachineState
+  | 0, state => state
+  | count + 1, state =>
+      signerDecoderState ⟨count % 52, Nat.mod_lt _ (by decide)⟩
+        (signerDecoderRun count state)
+
+theorem signer_run_answer_byte (count : Nat) (state : MachineState)
+    (within : count ≤ 52) (index : Fin 32) :
+    (signerDecoderRun count state).getByte
+      (BitVec.ofNat 64 (0x42000 + index.val)) =
+      state.getByte (BitVec.ofNat 64 (0x42000 + index.val)) := by
+  induction count with
+  | zero => rfl
+  | succ count ih =>
+      have small : count < 52 := by omega
+      let i : Fin 52 := ⟨count, small⟩
+      have different :
+          BitVec.ofNat 64 (0x42000 + index.val) ≠
+            BitVec.ofNat 64 (0x44000 + i.val) := by
+        intro eq
+        have h := congrArg BitVec.toNat eq
+        have leftSmall : 0x42000 + index.val < 2^64 := by omega
+        have rightSmall : 0x44000 + i.val < 2^64 := by
+          have := i.isLt
+          omega
+        simp only [BitVec.toNat_ofNat,
+          Nat.mod_eq_of_lt leftSmall, Nat.mod_eq_of_lt rightSmall] at h
+        have := index.isLt
+        have := i.isLt
+        omega
+      have stepEq : signerDecoderRun (count + 1) state =
+          signerDecoderState i (signerDecoderRun count state) := by
+        simp [signerDecoderRun, i, Nat.mod_eq_of_lt small]
+      rw [stepEq]
+      rw [signerDecoder_memory]
+      simp only [if_neg different]
+      exact ih (by omega)
+
+theorem signer_answerWord_run (count : Nat) (state : MachineState)
+    (within : count ≤ 52) (i : Fin 52) :
+    answerWord i (signerDecoderRun count state) = answerWord i state := by
+  let lowIndex : Fin 32 := ⟨digitBit i.val / 8, by fin_cases i <;> decide⟩
+  let highIndex : Fin 32 := ⟨digitBit i.val / 8 + 1, by fin_cases i <;> decide⟩
+  have low := signer_run_answer_byte count state within lowIndex
+  have high := signer_run_answer_byte count state within highIndex
+  have high' : (signerDecoderRun count state).getByte
+      (BitVec.ofNat 64 (0x42000 + digitBit i.val / 8 + 1)) =
+      state.getByte (BitVec.ofNat 64 (0x42000 + digitBit i.val / 8 + 1)) := by
+    simpa [highIndex, Nat.add_assoc] using high
+  simp [answerWord, lowIndex, low, high']
+
+theorem signer_answerDigit_run (count : Nat) (state : MachineState)
+    (within : count ≤ 52) (i : Fin 52) :
+    answerDigit i (signerDecoderRun count state) = answerDigit i state := by
+  simp [answerDigit, signer_answerWord_run count state within i]
+
+theorem signer_run_digit (count : Nat) (state : MachineState)
+    (within : count ≤ 52) (i : Fin 52) (inside : i.val < count) :
+    (signerDecoderRun count state).getByte
+      (BitVec.ofNat 64 (0x44000 + i.val)) = answerDigit i state := by
+  induction count with
+  | zero => omega
+  | succ count ih =>
+      have small : count < 52 := by omega
+      let last : Fin 52 := ⟨count, small⟩
+      have stepEq : signerDecoderRun (count + 1) state =
+          signerDecoderState last (signerDecoderRun count state) := by
+        simp [signerDecoderRun, last, Nat.mod_eq_of_lt small]
+      rw [stepEq]
+      by_cases same : i.val = count
+      · have equality : i = last := Fin.ext (by simpa [last] using same)
+        subst i
+        rw [signerDecoder_digit]
+        exact signer_answerDigit_run count state (by omega) last
+      · have different :
+            BitVec.ofNat 64 (0x44000 + i.val) ≠
+              BitVec.ofNat 64 (0x44000 + last.val) := by
+          intro eq
+          have h := congrArg BitVec.toNat eq
+          have ismall : 0x44000 + i.val < 2^64 := by
+            have := i.isLt
+            omega
+          have lsmall : 0x44000 + last.val < 2^64 := by
+            have := last.isLt
+            omega
+          simp only [BitVec.toNat_ofNat,
+            Nat.mod_eq_of_lt ismall, Nat.mod_eq_of_lt lsmall] at h
+          have : last.val = count := rfl
+          omega
+        rw [signerDecoder_memory]
+        simp only [if_neg different]
+        exact ih (by omega) (by omega)
+
+def answerSum : Nat → MachineState → Word
+  | 0, _ => 0
+  | count + 1, state =>
+      answerSum count state +
+        (answerWord ⟨count % 52, Nat.mod_lt _ (by decide)⟩ state &&& 7#64)
+
+theorem signer_run_checksum (count : Nat) (state : MachineState)
+    (within : count ≤ 52) :
+    (signerDecoderRun count state).getReg .x15 =
+      state.getReg .x15 + answerSum count state := by
+  induction count with
+  | zero => simp [signerDecoderRun, answerSum]
+  | succ count ih =>
+      have small : count < 52 := by omega
+      let last : Fin 52 := ⟨count, small⟩
+      have stepEq : signerDecoderRun (count + 1) state =
+          signerDecoderState last (signerDecoderRun count state) := by
+        simp [signerDecoderRun, last, Nat.mod_eq_of_lt small]
+      rw [stepEq, signerDecoder_checksum, ih (by omega),
+        signer_answerWord_run count state (by omega) last]
+      simp [answerSum, last, Nat.mod_eq_of_lt small, BitVec.add_assoc]
+
+def signerDigitIndex (location : Fin 5) (i : Nat) : Nat :=
+  754+offset location+digitCost i
+
+theorem signerDigit_slice (location : Fin 5) :
+    (SphincsMaskedImages.sign.code.drop (754+offset location)).take 496 =
+    (SphincsMaskedImages.sign.code.drop 2210).take 496 := by
+  fin_cases location <;> rfl
+
+theorem signerDigit_word (location : Fin 5) (n : Nat) (hn : n<496) :
+    SphincsMaskedImages.sign.code[754+offset location+n]? =
+      SphincsMaskedImages.sign.code[2210+n]? := by
+  have eq:=congrArg (fun words : List (BitVec 32) => words[n]?) (signerDigit_slice location)
+  simpa only [List.getElem?_take_of_lt hn,List.getElem?_drop] using eq
+
+theorem signerDigit_code (location : Fin 5) (n : Nat) (hn : n<496) :
+    (SphincsMaskedImages.sign.code[754+offset location+n]?).bind decodeInstruction =
+      (SphincsMaskedImages.sign.code[2210+n]?).bind decodeInstruction := by
+  rw [signerDigit_word location n hn]
+
+theorem signerDigit_prefix_code (location : Fin 5) (i : Fin 52) :
+    (SphincsMaskedImages.sign.code[signerDigitIndex location i.val]?).bind decodeInstruction =
+      some (.base (.LUI .x6 0x42)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+1]?).bind decodeInstruction =
+      some (.base (.ADDI .x6 .x6 0)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+2]?).bind decodeInstruction =
+      some (.base (.LBU .x10 .x6 (BitVec.ofNat 12 (digitBit i.val/8)))) := by
+  have b0 : digitCost i.val<496 := by fin_cases i <;> decide
+  have b1 : digitCost i.val+1<496 := by fin_cases i <;> decide
+  have b2 : digitCost i.val+2<496 := by fin_cases i <;> decide
+  simp only [signerDigitIndex]
+  rw [signerDigit_code location _ b0]
+  rw [show 754+offset location+digitCost i.val+1 = 754+offset location+(digitCost i.val+1) by omega]
+  rw [signerDigit_code location _ b1]
+  rw [show 754+offset location+digitCost i.val+2 = 754+offset location+(digitCost i.val+2) by omega]
+  rw [signerDigit_code location _ b2]
+  fin_cases i <;> decide
+
+
+def signerDigitSuffixIndex (location : Fin 5) (i : Nat) : Nat :=
+  signerDigitIndex location i + digitWords i - 5
+
+theorem signerDigit_suffix_at (location : Fin 5) (i : Fin 52) (j : Fin 5) :
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val+j.val]?).bind decodeInstruction =
+      (SphincsMaskedImages.sign.code[2210+(digitCost i.val+digitWords i.val-5+j.val)]?).bind decodeInstruction := by
+  have bound : digitCost i.val+digitWords i.val-5+j.val<496 := by
+    fin_cases i <;> fin_cases j <;> decide
+  have width : 5≤digitWords i.val := by fin_cases i <;> decide
+  rw [show signerDigitSuffixIndex location i.val+j.val =
+      754+offset location+(digitCost i.val+digitWords i.val-5+j.val) by
+      simp only [signerDigitSuffixIndex,signerDigitIndex]
+      omega]
+  exact signerDigit_code location _ bound
+
+theorem signerDigit_suffix_code (location : Fin 5) (i : Fin 52) :
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val]?).bind decodeInstruction =
+      some (.base (.ANDI .x10 .x10 7)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val+1]?).bind decodeInstruction =
+      some (.base (.ADD .x15 .x15 .x10)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val+2]?).bind decodeInstruction =
+      some (.base (.LUI .x6 0x44)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val+3]?).bind decodeInstruction =
+      some (.base (.ADDI .x6 .x6 i.val)) ∧
+    (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val+4]?).bind decodeInstruction =
+      some (.base (.SB .x6 .x10 0)) := by
+  have e0 : (SphincsMaskedImages.sign.code[signerDigitSuffixIndex location i.val]?).bind decodeInstruction =
+      (SphincsMaskedImages.sign.code[2210+(digitCost i.val+digitWords i.val-5)]?).bind decodeInstruction := by
+    simpa only [Nat.add_zero] using signerDigit_suffix_at location i ⟨0,by decide⟩
+  rw [e0]
+  rw [signerDigit_suffix_at location i ⟨1,by decide⟩]
+  rw [signerDigit_suffix_at location i ⟨2,by decide⟩]
+  rw [signerDigit_suffix_at location i ⟨3,by decide⟩]
+  rw [signerDigit_suffix_at location i ⟨4,by decide⟩]
+  fin_cases i <;> decide
+
+theorem signerDigit_middle_at (location : Fin 5) (i : Fin 52) (j : Fin 7)
+    (bound : digitCost i.val+j.val<496) :
+    (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+j.val]?).bind decodeInstruction =
+      (SphincsMaskedImages.sign.code[2210+digitCost i.val+j.val]?).bind decodeInstruction := by
+  rw [show signerDigitIndex location i.val+j.val =
+      754+offset location+(digitCost i.val+j.val) by
+      simp [signerDigitIndex]; omega]
+  simpa only [Nat.add_assoc] using signerDigit_code location _ bound
+
+theorem signerDigit_shift_code (location : Fin 5) (i : Fin 52) :
+    (digitBit i.val % 8 ≠ 0 →
+      (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+3]?).bind decodeInstruction =
+        some (.base (.SRLI .x10 .x10 (BitVec.ofNat 6 (digitBit i.val % 8))))) ∧
+    (digitBit i.val % 8 > 5 →
+      (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+4]?).bind decodeInstruction =
+        some (.base (.LBU .x12 .x6 (BitVec.ofNat 12 (digitBit i.val/8+1)))) ∧
+      (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+5]?).bind decodeInstruction =
+        some (.base (.SLLI .x12 .x12 (BitVec.ofNat 6 (8-digitBit i.val%8)))) ∧
+      (SphincsMaskedImages.sign.code[signerDigitIndex location i.val+6]?).bind decodeInstruction =
+        some (.base (.ADD .x10 .x10 .x12))) := by
+  have b3 : digitCost i.val+3<496 := by fin_cases i <;> decide
+  have b4 : digitCost i.val+4<496 := by fin_cases i <;> decide
+  have b5 : digitCost i.val+5<496 := by fin_cases i <;> decide
+  have b6 : digitCost i.val+6<496 := by fin_cases i <;> decide
+  rw [signerDigit_middle_at location i ⟨3,by decide⟩ b3]
+  rw [signerDigit_middle_at location i ⟨4,by decide⟩ b4]
+  rw [signerDigit_middle_at location i ⟨5,by decide⟩ b5]
+  rw [signerDigit_middle_at location i ⟨6,by decide⟩ b6]
+  fin_cases i <;> decide
+
+theorem signerDigitPC_small (location : Fin 5) (i : Fin 52) (j : Nat)
+    (hj : j≤12) :
+    0x1000+4*(signerDigitIndex location i.val+j)<2^64 := by
+  have cost : digitCost i.val≤496 := by fin_cases i <;> decide
+  have off := SphincsMaskedSignOtsParents.offset_bound location
+  simp only [signerDigitIndex]
+  omega
+
+theorem signerDigit_prefix_block (location : Fin 5) (i : Fin 52) (state : MachineState)
+    (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * signerDigitIndex location i.val)) :
+    OrdinarySteps SphincsMaskedImages.sign state 3
+      (decoderPrefixState i state) ∧
+    (decoderPrefixState i state).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * (signerDigitIndex location i.val + 3)) ∧
+    (decoderPrefixState i state).getReg .x6 = 0x42000 := by
+  let s1 := execInstrBr state (.LUI .x6 0x42)
+  let s2 := execInstrBr s1 (.ADDI .x6 .x6 0)
+  let s3 := execInstrBr s2 (.LBU .x10 .x6 (BitVec.ofNat 12 (digitBit i.val / 8)))
+  have hcode := signerDigit_prefix_code location i
+  have p1 : s1.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitIndex location i.val + 1)) := by
+    simp [s1, execInstrBr, pc, ← BitVec.ofNat_add]
+    congr 1
+  have p2 : s2.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitIndex location i.val + 2)) := by
+    simp [s2, execInstrBr, p1, ← BitVec.ofNat_add]
+    congr 1
+  have source : s2.getReg .x6 = 0x42000 := by
+    simp [s2, s1, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq]
+  have valid : memoryArgumentsValid s2
+      (.LBU .x10 .x6 (BitVec.ofNat 12 (digitBit i.val / 8))) = true := by
+    simp only [memoryArgumentsValid, source]
+    fin_cases i <;> decide
+  have trace : OrdinarySteps SphincsMaskedImages.sign state 3 s3 := by
+    apply OrdinarySteps.step state s1 _ (.base (.LUI .x6 0x42)) 2
+    · rw [fetch_index SphincsMaskedImages.sign state (signerDigitIndex location i.val)
+        (signerDigitPC_small location i 0 (by decide)) pc]
+      exact hcode.1
+    · rfl
+    apply OrdinarySteps.step s1 s2 _ (.base (.ADDI .x6 .x6 0)) 1
+    · rw [fetch_index SphincsMaskedImages.sign s1 (signerDigitIndex location i.val + 1)
+        (signerDigitPC_small location i 1 (by decide)) p1]
+      exact hcode.2.1
+    · rfl
+    apply OrdinarySteps.step s2 s3 _
+      (.base (.LBU .x10 .x6 (BitVec.ofNat 12 (digitBit i.val / 8)))) 0
+    · rw [fetch_index SphincsMaskedImages.sign s2 (signerDigitIndex location i.val + 2)
+        (signerDigitPC_small location i 2 (by decide)) p2]
+      exact hcode.2.2
+    · simp [s3, ordinaryStep, valid]
+    exact OrdinarySteps.refl _
+  refine ⟨by simpa only [decoderPrefixState] using trace, ?_, ?_⟩
+  · change s3.pc = _
+    simp [s3, execInstrBr, p2, ← BitVec.ofNat_add]
+    congr 1
+  · change s3.getReg .x6 = _
+    simpa [s3, execInstrBr, MachineState.getReg_setReg_ne] using source
+
+
+theorem signerDigitSuffixPC_small (location : Fin 5) (i : Fin 52) (j : Nat)
+    (hj : j≤5) :
+    0x1000+4*(signerDigitSuffixIndex location i.val+j)<2^64 := by
+  have cost : digitCost i.val≤496 := by fin_cases i <;> decide
+  have width : 5≤digitWords i.val := by fin_cases i <;> decide
+  have words : digitWords i.val≤12 := by fin_cases i <;> decide
+  have off := SphincsMaskedSignOtsParents.offset_bound location
+  simp only [signerDigitSuffixIndex,signerDigitIndex]
+  omega
+
+theorem signerDigit_suffix_block (location : Fin 5) (i : Fin 52) (state : MachineState)
+    (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * signerDigitSuffixIndex location i.val)) :
+    OrdinarySteps SphincsMaskedImages.sign state 5
+      (decoderSuffixState i state) ∧
+    (decoderSuffixState i state).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * (signerDigitSuffixIndex location i.val + 5)) := by
+  let s1 := execInstrBr state (.ANDI .x10 .x10 7)
+  let s2 := execInstrBr s1 (.ADD .x15 .x15 .x10)
+  let s3 := execInstrBr s2 (.LUI .x6 0x44)
+  let s4 := execInstrBr s3 (.ADDI .x6 .x6 i.val)
+  let s5 := execInstrBr s4 (.SB .x6 .x10 0)
+  have hcode := signerDigit_suffix_code location i
+  have p1 : s1.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitSuffixIndex location i.val + 1)) := by
+    simp [s1, execInstrBr, pc, ← BitVec.ofNat_add]
+    congr 1
+  have p2 : s2.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitSuffixIndex location i.val + 2)) := by
+    simp [s2, execInstrBr, p1, ← BitVec.ofNat_add]
+    congr 1
+  have p3 : s3.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitSuffixIndex location i.val + 3)) := by
+    simp [s3, execInstrBr, p2, ← BitVec.ofNat_add]
+    congr 1
+  have p4 : s4.pc = BitVec.ofNat 64
+      (0x1000 + 4 * (signerDigitSuffixIndex location i.val + 4)) := by
+    simp [s4, execInstrBr, p3, ← BitVec.ofNat_add]
+    congr 1
+  have destination : s4.getReg .x6 = BitVec.ofNat 64 (0x44000 + i.val) := by
+    fin_cases i <;> simp [s4, s3, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq]
+  have valid : memoryArgumentsValid s4 (.SB .x6 .x10 0) = true := by
+    simp only [memoryArgumentsValid, destination]
+    fin_cases i <;> decide
+  have trace : OrdinarySteps SphincsMaskedImages.sign state 5 s5 := by
+    apply OrdinarySteps.step state s1 _ (.base (.ANDI .x10 .x10 7)) 4
+    · rw [fetch_index SphincsMaskedImages.sign state (signerDigitSuffixIndex location i.val)
+        (signerDigitSuffixPC_small location i 0 (by decide)) pc]
+      exact hcode.1
+    · rfl
+    apply OrdinarySteps.step s1 s2 _ (.base (.ADD .x15 .x15 .x10)) 3
+    · rw [fetch_index SphincsMaskedImages.sign s1 (signerDigitSuffixIndex location i.val + 1)
+        (signerDigitSuffixPC_small location i 1 (by decide)) p1]
+      exact hcode.2.1
+    · rfl
+    apply OrdinarySteps.step s2 s3 _ (.base (.LUI .x6 0x44)) 2
+    · rw [fetch_index SphincsMaskedImages.sign s2 (signerDigitSuffixIndex location i.val + 2)
+        (signerDigitSuffixPC_small location i 2 (by decide)) p2]
+      exact hcode.2.2.1
+    · rfl
+    apply OrdinarySteps.step s3 s4 _ (.base (.ADDI .x6 .x6 i.val)) 1
+    · rw [fetch_index SphincsMaskedImages.sign s3 (signerDigitSuffixIndex location i.val + 3)
+        (signerDigitSuffixPC_small location i 3 (by decide)) p3]
+      exact hcode.2.2.2.1
+    · rfl
+    apply OrdinarySteps.step s4 s5 _ (.base (.SB .x6 .x10 0)) 0
+    · rw [fetch_index SphincsMaskedImages.sign s4 (signerDigitSuffixIndex location i.val + 4)
+        (signerDigitSuffixPC_small location i 4 (by decide)) p4]
+      exact hcode.2.2.2.2
+    · simp [s5, ordinaryStep, memoryArgumentsValid, destination,
+        signExtend12, accessValid, rangeValid, MEMORY_BYTES]
+      fin_cases i <;> decide
+    exact OrdinarySteps.refl _
+  refine ⟨by simpa only [decoderSuffixState] using trace, ?_⟩
+  change s5.pc = _
+  simp [s5, execInstrBr, p4, ← BitVec.ofNat_add]
+  congr 1
+
+
+theorem signerDigit_middle_block (location : Fin 5) (i : Fin 52) (state : MachineState)
+    (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * (signerDigitIndex location i.val + 3)))
+    (source : state.getReg .x6 = 0x42000) :
+    OrdinarySteps SphincsMaskedImages.sign state (digitWords i.val - 8)
+      (signerDecoderMiddleState i state) ∧
+    (signerDecoderMiddleState i state).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * signerDigitSuffixIndex location i.val) ∧
+    (signerDecoderMiddleState i state).getReg .x6 = 0x42000 := by
+  let shift := digitBit i.val % 8
+  by_cases hz : shift = 0
+  · have words : digitWords i.val = 8 := by simp [digitWords, shift, hz]
+    have start : signerDigitSuffixIndex location i.val = signerDigitIndex location i.val + 3 := by
+      simp [signerDigitSuffixIndex, words] <;> omega
+    simp [signerDecoderMiddleState, shift, hz, words, start, pc, source,
+      OrdinarySteps.refl]
+  · let s1 := execInstrBr state (.SRLI .x10 .x10 (BitVec.ofNat 6 shift))
+    have code1 := (signerDigit_shift_code location i).1 hz
+    have p1 : s1.pc = BitVec.ofNat 64
+        (0x1000 + 4 * (signerDigitIndex location i.val + 4)) := by
+      simp [s1, execInstrBr, pc, ← BitVec.ofNat_add]
+      congr 1
+    have source1 : s1.getReg .x6 = 0x42000 := by
+      simpa [s1, execInstrBr, MachineState.getReg_setReg_ne] using source
+    have first : OrdinarySteps SphincsMaskedImages.sign state 1 s1 := by
+      apply OrdinarySteps.step state s1 _
+        (.base (.SRLI .x10 .x10 (BitVec.ofNat 6 shift))) 0
+      · rw [fetch_index SphincsMaskedImages.sign state (signerDigitIndex location i.val + 3)
+          (signerDigitPC_small location i 3 (by decide)) pc]
+        exact code1
+      · rfl
+      exact OrdinarySteps.refl _
+    by_cases hsmall : shift ≤ 5
+    · have words : digitWords i.val = 9 := by
+        simp [digitWords, shift, hz]
+        omega
+      have start : signerDigitSuffixIndex location i.val = signerDigitIndex location i.val + 4 := by
+        simp [signerDigitSuffixIndex, words] <;> omega
+      refine ⟨?_, ?_, ?_⟩
+      · simpa [signerDecoderMiddleState, shift, hz, hsmall, words] using first
+      · simpa [signerDecoderMiddleState, shift, hz, hsmall, start] using p1
+      · simpa [signerDecoderMiddleState, shift, hz, hsmall] using source1
+    · have hlarge : shift > 5 := by omega
+      have words : digitWords i.val = 12 := by
+        simp [digitWords, shift, hz]
+        omega
+      have start : signerDigitSuffixIndex location i.val = signerDigitIndex location i.val + 7 := by
+        simp [signerDigitSuffixIndex, words] <;> omega
+      let s2 := execInstrBr s1
+        (.LBU .x12 .x6 (BitVec.ofNat 12 (digitBit i.val / 8 + 1)))
+      let s3 := execInstrBr s2 (.SLLI .x12 .x12 (BitVec.ofNat 6 (8 - shift)))
+      let s4 := execInstrBr s3 (.ADD .x10 .x10 .x12)
+      have code := (signerDigit_shift_code location i).2 hlarge
+      have p2 : s2.pc = BitVec.ofNat 64
+          (0x1000 + 4 * (signerDigitIndex location i.val + 5)) := by
+        simp [s2, execInstrBr, p1, ← BitVec.ofNat_add]
+        congr 1
+      have p3 : s3.pc = BitVec.ofNat 64
+          (0x1000 + 4 * (signerDigitIndex location i.val + 6)) := by
+        simp [s3, execInstrBr, p2, ← BitVec.ofNat_add]
+        congr 1
+      have p4 : s4.pc = BitVec.ofNat 64
+          (0x1000 + 4 * (signerDigitIndex location i.val + 7)) := by
+        simp [s4, execInstrBr, p3, ← BitVec.ofNat_add]
+        congr 1
+      have valid : memoryArgumentsValid s1
+          (.LBU .x12 .x6 (BitVec.ofNat 12 (digitBit i.val / 8 + 1))) = true := by
+        simp only [memoryArgumentsValid, source1]
+        fin_cases i <;> decide
+      have rest : OrdinarySteps SphincsMaskedImages.sign s1 3 s4 := by
+        apply OrdinarySteps.step s1 s2 _
+          (.base (.LBU .x12 .x6 (BitVec.ofNat 12 (digitBit i.val / 8 + 1)))) 2
+        · rw [fetch_index SphincsMaskedImages.sign s1 (signerDigitIndex location i.val + 4)
+            (signerDigitPC_small location i 4 (by decide)) p1]
+          exact code.1
+        · simp [s2, ordinaryStep, valid]
+        apply OrdinarySteps.step s2 s3 _
+          (.base (.SLLI .x12 .x12 (BitVec.ofNat 6 (8 - shift)))) 1
+        · rw [fetch_index SphincsMaskedImages.sign s2 (signerDigitIndex location i.val + 5)
+            (signerDigitPC_small location i 5 (by decide)) p2]
+          exact code.2.1
+        · rfl
+        apply OrdinarySteps.step s3 s4 _
+          (.base (.ADD .x10 .x10 .x12)) 0
+        · rw [fetch_index SphincsMaskedImages.sign s3 (signerDigitIndex location i.val + 6)
+            (signerDigitPC_small location i 6 (by decide)) p3]
+          exact code.2.2
+        · rfl
+        exact OrdinarySteps.refl _
+      refine ⟨?_, ?_, ?_⟩
+      · simpa [signerDecoderMiddleState, shift, hz, hsmall, words] using first.append rest
+      · simpa [signerDecoderMiddleState, shift, hz, hsmall, start] using p4
+      · have source4 : s4.getReg .x6 = 0x42000 := by
+          simpa [s4, s3, s2, execInstrBr,
+            MachineState.getReg_setReg_ne] using source1
+        simpa [signerDecoderMiddleState, shift, hz, hsmall] using source4
+
+
+theorem signerDigit_block (location : Fin 5) (i : Fin 52) (state : MachineState)
+    (pc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * signerDigitIndex location i.val)) :
+    OrdinarySteps SphincsMaskedImages.sign state (digitWords i.val)
+      (signerDecoderState i state) ∧
+    (signerDecoderState i state).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * (signerDigitIndex location i.val + digitWords i.val)) := by
+  have first := signerDigit_prefix_block location i state pc
+  have middle := signerDigit_middle_block location i (decoderPrefixState i state)
+    first.2.1 first.2.2
+  have suffix := signerDigit_suffix_block location i
+    (signerDecoderMiddleState i (decoderPrefixState i state)) middle.2.1
+  have width : 8 ≤ digitWords i.val := by fin_cases i <;> decide
+  have count : 3 + (digitWords i.val - 8) + 5 = digitWords i.val := by
+    omega
+  have finish : signerDigitSuffixIndex location i.val + 5 =
+      signerDigitIndex location i.val + digitWords i.val := by
+    simp [signerDigitSuffixIndex]
+    omega
+  refine ⟨?_, ?_⟩
+  · simpa only [signerDecoderState, count] using
+      (first.1.append middle.1).append suffix.1
+  · simpa only [signerDecoderState, finish] using suffix.2
+
+
+
+theorem signerDigitIndex_succ (location : Fin 5) (count : Nat) :
+    signerDigitIndex location (count+1) =
+      signerDigitIndex location count+digitWords count := by
+  simp [signerDigitIndex,digitCost_succ,Nat.add_assoc]
+
+theorem signerDigit_run_block (location : Fin 5) (count : Nat) (state : MachineState)
+    (within : count≤52)
+    (pc : state.pc=BitVec.ofNat 64 (0x1000+4*signerDigitIndex location 0)) :
+    OrdinarySteps SphincsMaskedImages.sign state (digitCost count)
+      (signerDecoderRun count state) ∧
+    (signerDecoderRun count state).pc =
+      BitVec.ofNat 64 (0x1000+4*signerDigitIndex location count) := by
+  induction count with
+  | zero =>
+      constructor
+      · simpa [digitCost,signerDecoderRun] using
+          OrdinarySteps.refl (image:=SphincsMaskedImages.sign) state
+      · simpa [signerDecoderRun] using pc
+  | succ count ih =>
+      have small : count<52 := by omega
+      obtain ⟨pre,prePc⟩ := ih (by omega)
+      let i : Fin 52 := ⟨count,small⟩
+      have step := signerDigit_block location i (signerDecoderRun count state)
+        (by simpa [i] using prePc)
+      have result : signerDecoderRun (count+1) state =
+          signerDecoderState i (signerDecoderRun count state) := by
+        simp [signerDecoderRun,i,Nat.mod_eq_of_lt small]
+      refine ⟨?_,?_⟩
+      · simpa [result,digitCost_succ,i] using pre.append step.1
+      · simpa [result,signerDigitIndex_succ,i] using step.2
+
+theorem signerDigit_run_all (location : Fin 5) (state : MachineState)
+    (pc : state.pc=0x1bc8+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign state 496
+      (signerDecoderRun 52 state) ∧
+    (signerDecoderRun 52 state).pc=0x2388+delta location := by
+  have start : state.pc = BitVec.ofNat 64 (0x1000+4*signerDigitIndex location 0) := by
+    rw [pc]
+    fin_cases location <;> decide
+  have all := signerDigit_run_block location 52 state (by decide) start
+  have cost : digitCost 52=496 := by decide
+  have finish : BitVec.ofNat 64 (0x1000+4*signerDigitIndex location 52) =
+      0x2388+delta location := by
+    fin_cases location <;> decide
+  simpa [cost,finish] using all
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
