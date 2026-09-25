@@ -6,7 +6,7 @@ open SigGolf OracleComp OracleSpec OracleComp.EvalDist
 
 set_option maxRecDepth 4096
 
-private theorem fixed_hash_of_support {α : Type} (program : OracleComp HashSpec α)
+theorem fixed_hash_of_support {α : Type} (program : OracleComp HashSpec α)
     (value : α) (mem : value ∈ support (withRandomOracle program)) :
     ∃ hash : Hash, evalWithAnswerFn hash program = value := by
   rw [withRandomOracle, StateT.run'_eq] at mem
