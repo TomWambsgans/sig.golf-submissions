@@ -24,6 +24,10 @@ theorem bindSome_assoc {α β γ : Type}
   funext result
   cases result <;> simp [bind_assoc]
 
+@[simp] theorem bindSome_pure_some {α β : Type} (value : α)
+    (next : α → OracleComp HashSpec (Option β)) :
+    bindSome (pure (some value)) next = next value := rfl
+
 theorem runCount_bindSome {α β : Type} (hash : QueryImpl HashSpec Id)
     (head : OracleComp HashSpec (Option α))
     (next : α → OracleComp HashSpec (Option β)) :
@@ -91,6 +95,15 @@ def appendSome {α β : Type} (first : OracleComp HashSpec (Option α))
     (second : OracleComp HashSpec (Option β)) :
     OracleComp HashSpec (Option (α × β)) :=
   bindSome first fun left => bindSome second fun right => pure (some (left, right))
+
+theorem bindSome_appendSome_assoc {α β γ : Type}
+    (first : OracleComp HashSpec (Option α))
+    (second : OracleComp HashSpec (Option β))
+    (next : α × β → OracleComp HashSpec (Option γ)) :
+    bindSome (appendSome first second) next =
+      bindSome first fun left =>
+        bindSome second fun right => next (left, right) := by
+  simp only [appendSome, bindSome_assoc, bindSome_pure_some]
 
 theorem appendSome_success_floor {α β : Type} (hash : QueryImpl HashSpec Id)
     (first : OracleComp HashSpec (Option α))
