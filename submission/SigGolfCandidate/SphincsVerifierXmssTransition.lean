@@ -782,3 +782,44 @@ theorem trace_shift (target : Fin 5) (hash : Hash)
 #print axioms trace_shift
 
 end SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+
+namespace SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem segment_interior_trans (hash : Hash)
+    {s t u : MachineState}
+    {steps cycles calls blocks moreSteps moreCycles moreCalls moreBlocks : Nat}
+    (left : Trace hash SphincsImages.verify s steps cycles calls blocks t)
+    (right : Trace hash SphincsImages.verify t
+      moreSteps moreCycles moreCalls moreBlocks u)
+    (leftInside : SegmentInterior hash left)
+    (rightInside : SegmentInterior hash right) :
+    SegmentInterior hash (left.trans right) := by
+  induction leftInside with
+  | refl state => simpa using rightInside
+  | ordinary state next final instruction steps cycles calls blocks
+      hf hs tail inside rest ih =>
+      simpa only [Trace.trans, Nat.add_assoc, Nat.add_left_comm,
+        Nat.add_comm] using
+        SegmentInterior.ordinary state next u instruction
+          (steps + moreSteps) (cycles + moreCycles)
+          (calls + moreCalls) (blocks + moreBlocks)
+          hf hs (tail.trans right) inside (ih right rightInside)
+  | hash state final steps cycles calls blocks hf service valid
+      tail inside rest ih =>
+      simpa only [Trace.trans, Nat.add_assoc, Nat.add_left_comm,
+        Nat.add_comm] using
+        SegmentInterior.hash state u
+          (steps + moreSteps) (cycles + moreCycles)
+          (calls + moreCalls) (blocks + moreBlocks)
+          hf service valid (tail.trans right) inside (ih right rightInside)
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsStepTrace.segment_interior_trans' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms segment_interior_trans
+
+end SigGolfCandidate.SphincsVerifierWotsStepTrace
