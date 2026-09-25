@@ -120,6 +120,27 @@ theorem root_query (s : MachineState) (parameter : BitVec 160)
       toQuery (padInput parameter seed 4094) :=
   query_eq (init s) parameter seed 4094 (init_context s parameter seed par key)
 
+/-- Five lanes of the root pad answer are the abstract domain-separated hash. -/
+theorem pad_answer_words32 (hash : Hash) (s : MachineState)
+    (parameter : BitVec 160) (seed : MasterSeed)
+    (par : Words20 s 0x74 parameter) (key : Words32 s seed)
+    (i : Fin 5) :
+    (padAnswer hash (init s)).getWord32
+      (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+      (hash (toQuery (padInput parameter seed 4094))).extractLsb'
+        (32 * i.val) 32 := by
+  have dst := (pad_registers (init s)).2.2.1
+  unfold padAnswer
+  rw [root_query s parameter seed par key]
+  fin_cases i <;>
+    simp [writeHash,dst,MachineState.writeWords,
+      MachineState.getWord32,alignToDword,byteOffset,extractWord32]
+  all_goals ext b hb;interval_cases b <;> simp
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignRootPadDomain.pad_answer_words32' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms pad_answer_words32
+
 /-- info: 'SigGolfCandidate.SphincsMaskedSignRootPadDomain.root_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms root_query

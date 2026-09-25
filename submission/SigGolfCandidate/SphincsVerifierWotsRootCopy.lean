@@ -1,10 +1,12 @@
 import SigGolfCandidate.SphincsVerifierWotsAllChains
 import SigGolfCandidate.SphincsVerifierFtsRootCopy
+import SigGolfCandidate.SphincsVerifierFtsRootCopyBytes
 
 namespace SigGolfCandidate.SphincsVerifierWotsRootCopy
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierFtsRootCopy
 open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsVerifierFtsRootCopyBytes
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -120,6 +122,79 @@ theorem rootCopy_all (state : MachineState)
   refine ⟨final, by simpa using trace, ?_, copied, frame⟩
   simpa [CopyInvariant] using done.2.2.1
 
+theorem rootCopy_bytes (state : MachineState)
+    (pc : state.pc = 0x29b0)
+    (source : state.getReg .x6 = 0x44300)
+    (destination : state.getReg .x7 = 0x40028)
+    (count : state.getReg .x10 = 130) :
+    ∃ final,
+      OrdinarySteps SphincsImages.verify state 780 final ∧
+      final.pc = 0x29c8 ∧
+      (∀ i, i < 1040 →
+        final.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+          state.getByte (BitVec.ofNat 64 (0x44300 + i))) := by
+  obtain ⟨final, trace, finalPc, copied, _⟩ :=
+    rootCopy_all state pc source destination count
+  refine ⟨final, trace, finalPc, ?_⟩
+  intro i hi
+  apply bytes_eq_of_words state final 0x44300 0x40028 1040
+    (by decide) (by decide) (by decide) (by decide) _ i hi
+  intro j hj
+  simpa only [wordAddress] using copied j (by omega)
+
+theorem rootCopySetup_source_byte (state : MachineState)
+    (i : Nat) (hi : i < 1040) :
+    (rootCopySetupState state).getByte
+      (BitVec.ofNat 64 (0x44300 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x44300 + i)) := by
+  have ha : ((BitVec.ofNat 64 0x44300).toNat % 8 = 0) := by decide
+  have hover : (BitVec.ofNat 64 0x44300).toNat + i < 2 ^ 64 := by
+    simp only [BitVec.toNat_ofNat]
+    omega
+  have aligned : alignToDword (BitVec.ofNat 64 (0x44300 + i)) =
+      BitVec.ofNat 64 (0x44300 + 8 * (i / 8)) := by
+    simpa only [BitVec.ofNat_add] using
+      (alignToDword_add_ofNat_of_aligned ha hover)
+  have different : alignToDword
+      (BitVec.ofNat 64 (0x44300 + i)) ≠ 0x43010 := by
+    rw [aligned]
+    intro equal
+    have natEqual := congrArg BitVec.toNat equal
+    have small : 0x44300 + 8 * (i / 8) < 2 ^ 64 := by omega
+    have leftNat : (BitVec.ofNat 64 (0x44300 + 8 * (i / 8))).toNat =
+        0x44300 + 8 * (i / 8) := by
+      simp only [BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt small
+    rw [leftNat] at natEqual
+    have impossible : 0x44300 + 8 * (i / 8) = 0x43010 := by
+      have rightNat : BitVec.toNat (274448 : Word) = 274448 := by decide
+      exact natEqual.trans rightNat
+    omega
+  simp [rootCopySetupState, execInstrBr, signExtend12,
+    MachineState.getByte, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+  split_ifs with equal
+  · exact (different equal).elim
+  · rfl
+
+theorem rootCopy_setup_and_bytes (state : MachineState)
+    (pc : state.pc = 0x298c) :
+    ∃ final,
+      OrdinarySteps SphincsImages.verify state 789 final ∧
+      final.pc = 0x29c8 ∧
+      (∀ i, i < 1040 →
+        final.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+          state.getByte (BitVec.ofNat 64 (0x44300 + i))) := by
+  obtain ⟨setup, setupPc, source, destination, count⟩ :=
+    rootCopySetup_block state pc
+  obtain ⟨final, copied, finalPc, bytes⟩ :=
+    rootCopy_bytes (rootCopySetupState state) setupPc
+      source destination count
+  refine ⟨final, by simpa using setup.append copied,
+    finalPc, ?_⟩
+  intro i hi
+  exact (bytes i hi).trans (rootCopySetup_source_byte state i hi)
+
 theorem rootCopy_setup_and_all (state : MachineState)
     (pc : state.pc = 0x298c) :
     ∃ final,
@@ -173,6 +248,16 @@ theorem rootHash_step (hash : Hash) (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopy_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms rootCopy_all
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopy_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms rootCopy_bytes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopy_setup_and_bytes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms rootCopy_setup_and_bytes
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopy_setup_and_all' depends on axioms: [propext,
  Classical.choice,
