@@ -2048,3 +2048,371 @@ theorem upper_decoder_wots (target : Fin 5) (hash : Hash) (s : MachineState)
 #print axioms upper_decoder_wots
 
 end SigGolfCandidate.SphincsVerifierDecoderRelocation
+
+namespace SigGolfCandidate.SphincsVerifierWotsTight
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsInterior
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierWotsStepTrace
+open SigGolfCandidate.SphincsVerifierWotsAllChains
+open SigGolfCandidate.SphincsVerifierWotsAllChainsGeneral
+open SigGolfCandidate.SphincsVerifierWotsDigitFrame
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+def deficit : Nat → MachineState → Nat
+  | 0, _ => 0
+  | i + 1, s => deficit i s +
+      (7 - (s.getByte (BitVec.ofNat 64 (0x44000 + i))).toNat)
+
+theorem prefix_tight (hash : Hash) (state : MachineState)
+    (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (pc : state.pc = 0x2710)
+    (counter : state.getMem 0x43050 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (valid : DigitsValid state)
+    (n : Nat) (small : n ≤ 52) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      LoopInvGeneral state sourceBase n final ∧
+      steps ≤ 70 * n + 94 * deficit n state ∧
+      cycles ≤ 70 * n + 101 * deficit n state ∧
+      calls ≤ deficit n state ∧
+      blocks ≤ deficit n state ∧
+      SegmentInterior hash run := by
+  induction n with
+  | zero =>
+      refine ⟨state, 0, 0, 0, 0, Trace.refl state,
+        ⟨by simpa [LoopInvGeneral] using pc,
+         by simpa using counter,
+         by simpa using pointer,
+         by intro address _; rfl,
+         valid⟩, ?_, ?_, ?_, ?_, SegmentInterior.refl state⟩
+      all_goals simp [deficit]
+  | succ i ih =>
+      have iBound : i ≤ 52 := by omega
+      have smallI : i < 52 := by omega
+      obtain ⟨current, oldSteps, oldCycles, oldCalls, oldBlocks,
+        oldRun, inv, oldStepBound, oldCycleBound,
+        oldCallBound, oldBlockBound, oldInside⟩ := ih iBound
+      let chain : Fin 52 := ⟨i, smallI⟩
+      let digit : Fin 8 := ⟨
+        (current.getByte (BitVec.ofNat 64 (0x44000 + i))).toNat,
+        inv.2.2.2.2 chain⟩
+      have decoded : current.getByte
+          (BitVec.ofNat 64 (0x44000 + chain.val)) =
+          BitVec.ofNat 8 digit.val := by simp [chain, digit]
+      have digitFrame := digitByte_frame state current inv.2.2.2.1 chain
+      have digitEq : digit.val =
+          (state.getByte (BitVec.ofNat 64 (0x44000 + i))).toNat := by
+        simpa [chain, digit] using congrArg BitVec.toNat digitFrame
+      obtain ⟨following, steps, cycles, calls, blocks, run,
+          nextPc, nextCounter, nextPointer, frame,
+          stepBound, cycleBound, callBound, blockBound, inside⟩ :=
+        chain_round_inside hash current sourceBase baseBound baseAligned
+          chain digit
+          (by have ne : i ≠ 52 := by omega
+              simpa [LoopInvGeneral, ne] using inv.1)
+          inv.2.1 inv.2.2.1 decoded
+      have nextInv : LoopInvGeneral state sourceBase (i + 1) following := by
+        refine ⟨by simpa [chain] using nextPc,
+          nextCounter, nextPointer, ?_,
+          digitsValid_frame current following frame inv.2.2.2.2⟩
+        intro address insideAddress
+        exact (frame address insideAddress).trans
+          (inv.2.2.2.1 address insideAddress)
+      let full := oldRun.trans run
+      refine ⟨following, oldSteps + steps, oldCycles + cycles,
+        oldCalls + calls, oldBlocks + blocks, full, nextInv,
+        ?_, ?_, ?_, ?_, ?_⟩
+      · simp only [deficit]
+        omega
+      · simp only [deficit]
+        omega
+      · simp only [deficit]
+        omega
+      · simp only [deficit]
+        omega
+      · exact SigGolfCandidate.SphincsVerifierWotsStepTrace.segment_interior_trans
+          hash oldRun run oldInside inside
+
+
+
+def answerValue (i : Nat) (s : MachineState) : Nat :=
+  (SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord
+    ⟨i % 52, Nat.mod_lt _ (by decide)⟩ s &&& 7#64).toNat
+
+def answerTotal : Nat → MachineState → Nat
+  | 0, _ => 0
+  | i + 1, s => answerTotal i s + answerValue i s
+
+theorem answerValue_small (i : Nat) (s : MachineState) :
+    answerValue i s < 8 := by
+  simp [answerValue, BitVec.toNat_and]
+  exact Nat.lt_succ_of_le Nat.and_le_right
+
+theorem answerTotal_bound (n : Nat) (s : MachineState) :
+    answerTotal n s ≤ 7 * n := by
+  induction n with
+  | zero => simp [answerTotal]
+  | succ n ih =>
+      simp only [answerTotal]
+      have small := answerValue_small n s
+      omega
+
+theorem answerSum_eq (n : Nat) (s : MachineState) :
+    SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum n s =
+      BitVec.ofNat 64 (answerTotal n s) := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      simp only [SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum,
+        answerTotal, ih]
+      rw [show (SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord
+          ⟨n % 52, Nat.mod_lt _ (by decide)⟩ s &&& 7#64) =
+          BitVec.ofNat 64 (answerValue n s) by
+            simp [answerValue, BitVec.ofNat_toNat]]
+      rw [← BitVec.ofNat_add]
+
+theorem answerTotal_52 (s : MachineState)
+    (checksum : SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 s = 194) :
+    answerTotal 52 s = 194 := by
+  rw [answerSum_eq] at checksum
+  have equal := congrArg BitVec.toNat checksum
+  simp only [BitVec.toNat_ofNat] at equal
+  rw [Nat.mod_eq_of_lt (show answerTotal 52 s < 2 ^ 64 by
+    have bound := answerTotal_bound 52 s
+    omega)] at equal
+  simpa using equal
+
+theorem decoder_digit_value (s : MachineState) (i : Fin 52) :
+    ((SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun 52 s).getByte
+      (BitVec.ofNat 64 (0x44000 + i.val))).toNat = answerValue i.val s := by
+  rw [SigGolfCandidate.SphincsVerifierWotsDecodeData.decoder_run_digit
+    52 s (by decide) i (by have := i.isLt; omega)]
+  have small := answerValue_small i.val s
+  change ((SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord i s &&&
+    7#64).toNat % 256) = answerValue i.val s
+  rw [Nat.mod_eq_of_lt]
+  · simp [answerValue, Nat.mod_eq_of_lt i.isLt]
+  · have h : (SigGolfCandidate.SphincsVerifierWotsDecodeData.answerWord i s &&&
+        7#64).toNat < 8 := by
+        simpa [answerValue, Nat.mod_eq_of_lt i.isLt] using small
+    omega
+
+theorem deficit_run (n : Nat) (bound : n ≤ 52) (s : MachineState) :
+    deficit n (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun 52 s) +
+      answerTotal n s = 7 * n := by
+  induction n with
+  | zero => simp [deficit, answerTotal]
+  | succ i ih =>
+      have small : i < 52 := by omega
+      have digit := decoder_digit_value s ⟨i, small⟩
+      simp only [Fin.val_mk] at digit
+      have valueSmall := answerValue_small i s
+      simp only [deficit, answerTotal]
+      have prev := ih (by omega)
+      omega
+
+
+
+theorem deficit_shift (offset : Word) (n : Nat) (s : MachineState) :
+    deficit n (SigGolfCandidate.SphincsMaskedSignOtsShift.shift offset s) =
+      deficit n s := by
+  induction n with
+  | zero => rfl
+  | succ i ih =>
+      simp [deficit, ih, SigGolfCandidate.SphincsMaskedSignOtsShift.shift_byte]
+
+theorem setup_digit_byte (target : Fin 5) (s : MachineState)
+    (i : Fin 52) :
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target s).getByte
+      (BitVec.ofNat 64 (0x44000 + i.val)) =
+    s.getByte (BitVec.ofNat 64 (0x44000 + i.val)) := by
+  let addr := BitVec.ofNat 64 (0x44000 + i.val)
+  let aligned := alignToDword addr
+  have noCounter : aligned ≠ 0x43050 := by fin_cases i <;> decide
+  have noPointer : aligned ≠ 0x43028 := by fin_cases i <;> decide
+  have frame := SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_mem_other
+    target s aligned noCounter noPointer
+  simpa [MachineState.getByte, aligned] using
+    congrArg (fun word => extractByte word (byteOffset addr)) frame
+
+theorem deficit_setup (target : Fin 5) (s : MachineState)
+    (n : Nat) (bound : n ≤ 52) :
+    deficit n (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target s) =
+      deficit n s := by
+  induction n with
+  | zero => rfl
+  | succ i ih =>
+      have small : i < 52 := by omega
+      simp [deficit, ih (by omega),
+        setup_digit_byte target s ⟨i, small⟩]
+
+theorem decoded_deficit_170 (target : Fin 5) (s : MachineState)
+    (initialZero : s.getReg .x15 = 0)
+    (checksum : s.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 s = 194) :
+    deficit 52 (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+      target s) = 170 := by
+  let base := SigGolfCandidate.SphincsMaskedSignOtsShift.shift
+    (-SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta target) s
+  have total : answerTotal 52 base = 194 := by
+    apply answerTotal_52
+    rw [SigGolfCandidate.SphincsVerifierDecoderRelocation.answerSum_shift]
+    simpa [initialZero] using checksum
+  have sum := deficit_run 52 (by decide) base
+  have upper : deficit 52
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState target s) =
+        deficit 52 (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun 52 base) := by
+    simp [SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState,
+      base, deficit_shift]
+  rw [upper]
+  omega
+
+
+
+theorem whole_wots_tight_shifted (target : Fin 5) (hash : Hash)
+    (state : MachineState) (sourceBase : Nat)
+    (baseBound : sourceBase + 20 * 52 ≤ 0x40000)
+    (baseAligned : sourceBase % 4 = 0)
+    (pc : state.pc = BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierWotsRelocation.chainPc target))
+    (counter : state.getMem 0x43050 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (valid : DigitsValid state)
+    (sum : deficit 52 state = 170) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify state steps cycles calls blocks final),
+      final.pc = SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) ∧
+      steps ≤ 70 * 52 + 94 * 170 + 856 ∧
+      cycles ≤ 70 * 52 + 101 * 170 + 991 ∧
+      calls ≤ 170 + 1 ∧
+      blocks ≤ 170 + 17 := by
+  let base := SigGolfCandidate.SphincsMaskedSignOtsShift.shift
+    (-SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta target) state
+  have basePc : base.pc = 0x2710 := by
+    fin_cases target <;>
+      simp [base, pc, SigGolfCandidate.SphincsVerifierWotsRelocation.chainPc,
+        SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta,
+        SigGolfCandidate.SphincsMaskedSignOtsShift.shift]
+  have baseCounter : base.getMem 0x43050 = 0 := by simpa [base] using counter
+  have basePointer : base.getMem 0x43028 = BitVec.ofNat 64 sourceBase := by
+    simpa [base] using pointer
+  have baseValid : DigitsValid base := by
+    simpa [DigitsValid, base] using valid
+  have baseSum : deficit 52 base = 170 := by simpa [base, deficit_shift] using sum
+  obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
+      chainRun, inv, stepBound, cycleBound, callBound, blockBound, inside⟩ :=
+    prefix_tight hash base sourceBase baseBound baseAligned basePc
+      baseCounter basePointer baseValid 52 (by decide)
+  have chainsPc : chains.pc = 0x298c := by simpa [LoopInvGeneral] using inv.1
+  obtain ⟨finish, leafRun, leafPc, leafInside⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_segment
+      hash chains chainsPc
+  let all := chainRun.trans leafRun
+  have allInside := SigGolfCandidate.SphincsVerifierWotsStepTrace.segment_interior_trans
+    hash chainRun leafRun inside leafInside
+  have shifted := SigGolfCandidate.SphincsVerifierWotsRelocationTrace.trace_shift
+    target hash all allInside
+  have source : SigGolfCandidate.SphincsMaskedSignOtsShift.shift
+      (SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta target) base = state := by
+    simp [base, SigGolfCandidate.SphincsMaskedSignOtsShift.shift,
+      MachineState.setPC]
+  let final := SigGolfCandidate.SphincsMaskedSignOtsShift.shift
+    (SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta target) finish
+  have finalPc : final.pc = SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) := by
+    simp [final, leafPc, SigGolfCandidate.SphincsVerifierWotsRelocationTrace.delta,
+      SigGolfCandidate.SphincsVerifierXmssParity.nodePc,
+      SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer]
+    fin_cases target <;> decide
+  refine ⟨final, chainSteps + 856, chainCycles + 991,
+    chainCalls + 1, chainBlocks + 17, ?_, finalPc,
+    by omega, by omega, by omega, by omega⟩
+  simpa [all, final, source] using shifted
+
+
+
+theorem upper_decoder_wots_tight (target : Fin 5) (hash : Hash)
+    (s : MachineState)
+    (pc : s.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SigGolfCandidate.SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (initialZero : s.getReg .x15 = 0)
+    (checksum : s.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 s = 194) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat)
+      (run : Trace hash SphincsImages.verify s steps cycles calls blocks final),
+      final.pc = SigGolfCandidate.SphincsVerifierXmssParity.nodePc
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) ∧
+      steps ≤ 496 + 11 + 70 * 52 + 94 * 170 + 856 ∧
+      cycles ≤ 496 + 11 + 70 * 52 + 101 * 170 + 991 ∧
+      calls ≤ 170 + 1 ∧
+      blocks ≤ 170 + 17 := by
+  obtain ⟨decoderRun, decodedPc, decodedChecksum⟩ :=
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.decoder_upper target s pc
+  let decoded := SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+    target s
+  have goodChecksum : decoded.getReg .x15 = 194 := by
+    rw [decodedChecksum]
+    exact checksum
+  have setupRun := SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_block
+    target decoded decodedPc goodChecksum
+  obtain ⟨setupPc', setupCounter, setupPointer⟩ :=
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_final
+      target decoded decodedPc goodChecksum
+  let ready := SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState
+    target decoded
+  have readyValid := SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_digits
+    target decoded
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.upper_decoder_digits target s)
+  have readySum : deficit 52 ready = 170 := by
+    rw [show ready = SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState
+      target decoded by rfl,
+      deficit_setup target decoded 52 (by decide)]
+    exact decoded_deficit_170 target s initialZero checksum
+  obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
+      finalPc, stepBound, cycleBound, callBound, blockBound⟩ :=
+    whole_wots_tight_shifted target hash ready
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_bound target)
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_aligned target)
+      setupPc' setupCounter setupPointer readyValid readySum
+  let before := (decoderRun.trace (hash := hash)).trans
+    (setupRun.trace (hash := hash))
+  let all := before.trans wotsRun
+  refine ⟨final, 496 + 11 + steps, 496 + 11 + cycles,
+    calls, blocks, ?_, finalPc, by omega, by omega,
+    callBound, blockBound⟩
+  simpa [before, all, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+    using all
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsTight.prefix_tight' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms prefix_tight
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsTight.deficit_run' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms deficit_run
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsTight.decoded_deficit_170' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms decoded_deficit_170
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsTight.whole_wots_tight_shifted' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms whole_wots_tight_shifted
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsTight.upper_decoder_wots_tight' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_decoder_wots_tight
+end SigGolfCandidate.SphincsVerifierWotsTight
