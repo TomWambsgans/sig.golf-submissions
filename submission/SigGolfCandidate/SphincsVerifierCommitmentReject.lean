@@ -311,6 +311,7 @@ open SigGolfCandidate.SphincsVerifierCommitmentReject
 open SigGolfCandidate.SphincsVerifierXmssFinish
 set_option maxRecDepth 16384
 set_option maxHeartbeats 4000000
+set_option synthInstance.maxHeartbeats 200000
 
 def rejectSchedule (i : Fin 5) : List (Word × Instr) :=
   finishSchedule.take (7 + 3 * i.val) ++
@@ -438,8 +439,47 @@ theorem mismatch_executes (hash : Hash) (i : Fin 5) (s : MachineState)
   · simp [Execution.charge]
     omega
 
+private theorem first_mismatch {α : Type} (left right : Fin 5 → α)
+    (h : ¬∀ i, left i = right i) :
+    ∃ i : Fin 5, (∀ j : Fin 5, j.val < i.val → left j = right j) ∧
+      left i ≠ right i := by
+  classical
+  letI : DecidableEq α := Classical.decEq α
+  by_cases h0 : left 0 = right 0
+  · by_cases h1 : left 1 = right 1
+    · by_cases h2 : left 2 = right 2
+      · by_cases h3 : left 3 = right 3
+        · have h4 : left 4 ≠ right 4 := by
+            intro h4
+            apply h
+            intro i
+            fin_cases i <;> assumption
+          exact ⟨4, by intro j hj; fin_cases j <;> simp_all, h4⟩
+        · exact ⟨3, by intro j hj; fin_cases j <;> simp_all, h3⟩
+      · exact ⟨2, by intro j hj; fin_cases j <;> simp_all, h2⟩
+    · exact ⟨1, by intro j hj; fin_cases j <;> simp_all, h1⟩
+  · exact ⟨0, by intro j hj; omega, h0⟩
+
+theorem mismatch_executes_of_not_all (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x7c3c)
+    (different : ¬∀ i : Fin 5,
+      s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val))) :
+    ∃ i : Fin 5, Executes hash SphincsImages.verify s (11 + 3 * i.val)
+      ⟨.failure, runSchedule failureSchedule (afterReject i s),
+        11 + 3 * i.val, 0, 0⟩ := by
+  obtain ⟨i, prior, bad⟩ := first_mismatch
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)))
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val)))
+    different
+  exact ⟨i, mismatch_executes hash i s pc prior bad⟩
+
 /-- info: 'SigGolfCandidate.SphincsVerifierRootReject.mismatch_executes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms mismatch_executes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierRootReject.mismatch_executes_of_not_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms mismatch_executes_of_not_all
 
 end SigGolfCandidate.SphincsVerifierRootReject
