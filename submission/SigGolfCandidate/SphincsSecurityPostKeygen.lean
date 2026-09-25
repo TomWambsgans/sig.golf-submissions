@@ -471,6 +471,160 @@ theorem securityExperiment_programmed_mac
     organizer_full_fixed_seed_programmed_mac submission adversary
       image valid secretAddress publicAddress cacheAddress seed rounds
 
+/-- The organizer interaction with its two program services made explicit.
+This is the exact interface needed to replace bytecode signing and checking by
+reference services while retaining the full outcome and hash-call counter. -/
+def interactWithServices {sizes : SigGolf.Sizes}
+    (adversary : SigGolf.Adversary sizes)
+    (sign : SigGolf.SigningRequest → OracleComp SigGolf.HashSpec
+      (SigGolf.RunResult (SigGolf.Bytes sizes.signature)))
+    (check : SigGolf.Transcript sizes → SigGolf.Forgery sizes →
+      OracleComp SigGolf.HashSpec SigGolf.AttackResult) :
+    Nat → adversary.State → SigGolf.Transcript sizes →
+      OracleComp SigGolf.World SigGolf.AttackResult
+  | 0, _, transcript => pure ⟨false, transcript.hashCalls⟩
+  | rounds + 1, state, transcript =>
+      match adversary.step state with
+      | .submit candidate => liftM (check transcript candidate)
+      | .hash input resume => do
+          let answer ← liftM (SigGolf.HashSpec.query input)
+          interactWithServices adversary sign check rounds (resume answer)
+            {transcript with hashCalls := transcript.hashCalls + 1}
+      | .sign request resume => do
+          if transcript.signingRequests < SigGolf.LIFETIME then
+            let result ← liftM (sign request)
+            interactWithServices adversary sign check rounds (resume result.value)
+              (transcript.record request.message result)
+          else return ⟨false, transcript.hashCalls⟩
+      | .sample n resume => do
+          let answer ← liftM (unifSpec.query n)
+          interactWithServices adversary sign check rounds (resume answer) transcript
+      | .step next =>
+          interactWithServices adversary sign check rounds next transcript
+
+/-- Exact service-level simulation, including all hash calls. -/
+theorem interactWithServices_congr {sizes : SigGolf.Sizes}
+    (adversary : SigGolf.Adversary sizes)
+    (sign₁ sign₂ : SigGolf.SigningRequest → OracleComp SigGolf.HashSpec
+      (SigGolf.RunResult (SigGolf.Bytes sizes.signature)))
+    (check₁ check₂ : SigGolf.Transcript sizes → SigGolf.Forgery sizes →
+      OracleComp SigGolf.HashSpec SigGolf.AttackResult)
+    (hsign : ∀ request, sign₁ request = sign₂ request)
+    (hcheck : ∀ transcript candidate,
+      check₁ transcript candidate = check₂ transcript candidate)
+    (rounds : Nat) (state : adversary.State)
+    (transcript : SigGolf.Transcript sizes) :
+    interactWithServices adversary sign₁ check₁ rounds state transcript =
+      interactWithServices adversary sign₂ check₂ rounds state transcript := by
+  induction rounds generalizing state transcript with
+  | zero => rfl
+  | succ rounds ih =>
+      cases haction : adversary.step state with
+      | submit candidate =>
+          simp only [interactWithServices, haction, hcheck]
+      | hash input resume =>
+          simp only [interactWithServices, haction]
+          congr 1
+          funext answer
+          exact ih (resume answer) _
+      | sign request resume =>
+          simp only [interactWithServices, haction, hsign]
+          split
+          · congr 1
+            funext result
+            exact ih (resume result.value) _
+          · rfl
+      | sample n resume =>
+          simp only [interactWithServices, haction]
+          congr 1
+          funext answer
+          exact ih (resume answer) _
+      | step next =>
+          simpa only [interactWithServices, haction] using ih next transcript
+
+/-- The explicit-service interpreter is exactly the organizer's interaction. -/
+theorem interact_eq_services
+    (submission : SigGolf.Submission)
+    (adversary : SigGolf.Adversary submission.sizes)
+    (secretKey : SigGolf.SecretKey) (pk : SigGolf.PublicKey)
+    (rounds : Nat) (state : adversary.State)
+    (transcript : SigGolf.Transcript submission.sizes) :
+    submission.interact adversary secretKey pk rounds state transcript =
+      interactWithServices adversary
+        (submission.signingOracle secretKey)
+        (submission.checkForgery pk) rounds state transcript := by
+  induction rounds generalizing state transcript with
+  | zero => rfl
+  | succ rounds ih =>
+      cases haction : adversary.step state with
+      | submit candidate =>
+          simp only [SigGolf.Submission.interact, interactWithServices, haction]
+      | hash input resume =>
+          simp only [SigGolf.Submission.interact, interactWithServices, haction]
+          congr 1
+          funext answer
+          exact ih (resume answer) _
+      | sign request resume =>
+          simp only [SigGolf.Submission.interact, interactWithServices, haction]
+          split
+          · congr 1
+            funext result
+            exact ih (resume result.value) _
+          · rfl
+      | sample n resume =>
+          simp only [SigGolf.Submission.interact, interactWithServices, haction]
+          congr 1
+          funext answer
+          exact ih (resume answer) _
+      | step next =>
+          simpa only [SigGolf.Submission.interact, interactWithServices,
+            haction] using ih next transcript
+
+/-- The programmed finite-oracle continuation exposes precisely the signing
+and final-checking services that must be refined to the reference game. -/
+theorem organizerContinuation_eq_services
+    (submission : SigGolf.Submission)
+    (adversary : SigGolf.Adversary submission.sizes)
+    (seed : SphincsSecurity.MasterSeed) (rounds : Nat)
+    (inputs : Finset SigGolf.Query)
+    (row : SigGolf.PublicKey × SigGolf.Cache × (inputs → BitVec 256)) :
+    organizerContinuation submission adversary seed rounds inputs row =
+      𝒮[simulateQ (fixedOrganizerWorld (finiteHashAnswer ∅ inputs row.2.2))
+        (interactWithServices adversary
+          (submission.signingOracle seed)
+          (submission.checkForgery row.1)
+          rounds (adversary.initial row.1 row.2.1)
+          {hashCalls := 860161})] := by
+  unfold organizerContinuation
+  rw [interact_eq_services]
+
+/-- Pointwise service refinements transport the whole programmed adaptive
+game, with no change to the success bit or the charged call count. -/
+theorem organizerContinuation_service_refinement
+    (submission : SigGolf.Submission)
+    (adversary : SigGolf.Adversary submission.sizes)
+    (seed : SphincsSecurity.MasterSeed) (rounds : Nat)
+    (inputs : Finset SigGolf.Query)
+    (row : SigGolf.PublicKey × SigGolf.Cache × (inputs → BitVec 256))
+    (sign : SigGolf.SigningRequest → OracleComp SigGolf.HashSpec
+      (SigGolf.RunResult (SigGolf.Bytes submission.sizes.signature)))
+    (check : SigGolf.Transcript submission.sizes →
+      SigGolf.Forgery submission.sizes →
+      OracleComp SigGolf.HashSpec SigGolf.AttackResult)
+    (hsign : ∀ request, submission.signingOracle seed request = sign request)
+    (hcheck : ∀ transcript candidate,
+      submission.checkForgery row.1 transcript candidate =
+        check transcript candidate) :
+    organizerContinuation submission adversary seed rounds inputs row =
+      𝒮[simulateQ (fixedOrganizerWorld (finiteHashAnswer ∅ inputs row.2.2))
+        (interactWithServices adversary sign check
+          rounds (adversary.initial row.1 row.2.1)
+          {hashCalls := 860161})] := by
+  rw [organizerContinuation_eq_services]
+  rw [interactWithServices_congr adversary
+    (submission.signingOracle seed) sign
+    (submission.checkForgery row.1) check hsign hcheck]
+
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.bind_fresh_setup' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -516,3 +670,15 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.securityExperiment_programmed_mac' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.securityExperiment_programmed_mac
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.interact_eq_services' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.interact_eq_services
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.interactWithServices_congr' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.interactWithServices_congr
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.organizerContinuation_service_refinement' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.organizerContinuation_service_refinement
