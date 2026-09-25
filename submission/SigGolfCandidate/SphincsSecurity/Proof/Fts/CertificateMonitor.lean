@@ -1,6 +1,19 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.InterleavedCoverStep
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.BankedProposalStep
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.ValidInterleavedCover
+namespace SphincsSecurity.Concrete
+
+open _root_.OracleComp OracleSpec ENNReal
+open FtsProbeSimulation (messageAnswers)
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+def ValidSigningStep (log : QueryLog SigningSpec) : (OracleWorld + SigningSpec).Domain → Prop
+  | .inl _ => log.length ≤ signatureLimit
+  | .inr _ => log.length < signatureLimit
+
+
+end SphincsSecurity.Concrete
 
 /-! ## SigningMacroBudget -/
 
