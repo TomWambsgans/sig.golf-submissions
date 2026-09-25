@@ -10,6 +10,11 @@ open SigGolfCandidate.SphincsVerifierXmssNodeTransport
 open SigGolfCandidate.SphincsVerifierXmssNodeHeader
 open SigGolfCandidate.SphincsBridge
 open SigGolfCandidate.SphincsVerifierHashBytes
+open SigGolfCandidate.SphincsVerifierWotsLeafResult
+open SigGolfCandidate.SphincsVerifierFtsParentResult
+
+theorem leafAnswerCopy_eq_result (s : MachineState) :
+    leafAnswerCopyState s = resultState s := by rfl
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
