@@ -3,6 +3,8 @@ import SigGolfCandidate.SphincsVerifierFtsPostForestCopy
 namespace SigGolfCandidate.SphincsVerifierFtsForestHeader
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsVerifierHashMemory
+open SigGolfCandidate.SphincsVerifierCopyMemory
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -30,6 +32,54 @@ theorem forestTag_hash_pointer (state : MachineState) :
   simp [forestTagState, forestTagBeforeStore, execInstrBr,
     signExtend12, MachineState.getReg_setReg_eq,
     MachineState.getReg_setReg_ne]
+
+theorem forestTag_mem_frame (state : MachineState) (address : Word)
+    (outside : address ≠ alignToDword (0x40000#64)) :
+    (forestTagState state).getMem address = state.getMem address := by
+  simp [forestTagState, forestTagBeforeStore, execInstrBr,
+    signExtend12, setWord32_eq, outside,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+
+theorem forestTag_value (state : MachineState)
+    (layerZero : state.getMem 0x43000 = 0) :
+    (forestTagState state).getWord32 0x40000 = 0xb01 := by
+  simp [forestTagState, forestTagBeforeStore, execInstrBr,
+    signExtend12, getWord32_setWord32_same,
+    MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+  have zero : state.getMem (274432#64) = 0 := by
+    have address : (274432#64) = (0x43000 : Word) := by decide
+    rw [address]
+    exact layerZero
+  rw [zero]
+  decide
+
+def forestPrefixState (state : MachineState) : MachineState :=
+  SphincsVerifierHeader.positionState (forestTagState state)
+
+theorem forestPrefix_values (state : MachineState)
+    (layerZero : state.getMem 0x43000 = 0)
+    (positionZero : state.getMem 0x43010 = 0) :
+    (forestPrefixState state).getWord32 0x40000 = 0xb01 ∧
+      (forestPrefixState state).getWord32 0x40004 = 0 := by
+  constructor
+  · rw [forestPrefixState,
+      SphincsVerifierFtsParentTag.parentPosition_preserve_tag _
+        (forestTag_hash_pointer state), forestTag_value state layerZero]
+  · change (SphincsVerifierHeader.positionState
+      (forestTagState state)).getWord32 0x40004 = 0
+    have prior : (forestTagState state).getMem 0x43010 = 0 := by
+      rw [forestTag_mem_frame state 0x43010 (by decide)]
+      exact positionZero
+    simp [SphincsVerifierHeader.positionState,
+      SphincsVerifierHeader.positionBeforeStore, execInstrBr,
+      signExtend12, getWord32_setWord32_same,
+      forestTag_hash_pointer, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+    change (forestTagState state).getMem (274448#64) = 0 at prior
+    rw [prior]
+    rfl
 
 theorem forestTag_block (state : MachineState)
     (pc : state.pc = 0x1c8c) :
