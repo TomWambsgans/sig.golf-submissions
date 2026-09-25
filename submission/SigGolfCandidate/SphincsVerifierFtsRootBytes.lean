@@ -15,14 +15,13 @@ theorem rootSlot_word_byte (state : MachineState) (tree : FtsTree)
       (state.getWord32 (BitVec.ofNat 64
         (0x44100 + 20 * tree.val + 4 * index.val))).extractLsb'
           (8 * byte.val) 8 := by
-  have split := SphincsVerifierSecondHashHeader.extractByte_from_word32
-    (state.getMem (alignToDword (BitVec.ofNat 64
-      (0x44100 + 20 * tree.val + 4 * index.val + byte.val))))
-    ⟨(0x44100 + 20 * tree.val + 4 * index.val + byte.val) % 8,
-      Nat.mod_lt _ (by decide)⟩
-  fin_cases tree <;> fin_cases index <;> fin_cases byte <;>
-    simpa [MachineState.getByte, MachineState.getWord32,
-      alignToDword, byteOffset] using split
+  have bound : 0x44100 + 20 * tree.val + 20 ≤ 0x50000 := by
+    have h : tree.val < 24 := by simpa only [ftsTrees] using tree.isLt
+    omega
+  have aligned : (0x44100 + 20 * tree.val) % 4 = 0 := by omega
+  simpa only [Nat.add_assoc] using
+    SphincsVerifierFtsGenericBytes.variableWord_byte state
+      (0x44100 + 20 * tree.val) bound aligned index byte
 
 theorem treeFinish_root_bytes (state : MachineState) (tree : FtsTree)
     (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
