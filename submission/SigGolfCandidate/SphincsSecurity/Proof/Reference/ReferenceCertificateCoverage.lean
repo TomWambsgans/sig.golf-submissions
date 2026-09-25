@@ -270,3 +270,60 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_cases' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_cases
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+set_option maxRecDepth 8192
+set_option maxHeartbeats 2000000
+
+theorem completedReferenceContact_cost_same_root
+    (key : SecretKey) (f : QueryImpl HashSpec Id)
+    (words : OtsReferenceWords) (before : OtsContactTrace.AdversaryTrace) :
+    (completedReferenceContact key.parameter f words
+      (canonicalGraphFrontier key.otsSecret
+        (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) words)
+      before).output.2.hashCalls =
+    keygenHashCost +
+      (completeCertificateRest
+        { key with root := (frontierRoot key.parameter
+          (maskOtsPrefixes key.parameter words f) words
+          (canonicalGraphFrontier key.otsSecret
+            (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) words)) }
+        f before.1).2.hashCalls := by
+  unfold completedReferenceContact
+  unfold completeCertificateRest
+  simp only [SigningBoundaryTrace.hashCalls_mul, SigningBoundaryTrace.hashCalls_pow_none]
+
+theorem completedReferenceContact_cost
+    (key : SecretKey) (f : QueryImpl HashSpec Id)
+    (words : OtsReferenceWords) (before : OtsContactTrace.AdversaryTrace) :
+    (completedReferenceContact key.parameter f words
+      (canonicalGraphFrontier key.otsSecret
+        (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) words)
+      before).output.2.hashCalls =
+    keygenHashCost +
+      (completeCertificateRest (ReferenceVerifierWitness.rootedKey key f) f before.1).2.hashCalls := by
+  rw [completedReferenceContact_cost_same_root]
+  rw [ReferenceVerifierWitness.source_root]
+
+theorem referenceForgerySample_context_cost {inputs : Finset HashInput}
+    (dummy : OtsReferenceWords) (sample : ReferenceForgerySample inputs) :
+    (sample.context dummy).2.2.2.output.2.hashCalls =
+      keygenHashCost + sample.certificateRecord.2.2.hashCalls := by
+  exact completedReferenceContact_cost sample.1
+    (finiteHashAnswer ∅ inputs sample.2.1.2)
+    (referenceFamilyWords sample.2.1.1 dummy) sample.2.2
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.completedReferenceContact_cost_same_root' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.completedReferenceContact_cost_same_root
+
+/-- info: 'SphincsSecurity.Concrete.completedReferenceContact_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.completedReferenceContact_cost
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgerySample_context_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgerySample_context_cost
