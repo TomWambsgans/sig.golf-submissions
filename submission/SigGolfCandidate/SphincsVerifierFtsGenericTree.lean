@@ -1,5 +1,7 @@
 import SigGolfCandidate.SphincsVerifierFtsGenericInitialInvariant
 import SigGolfCandidate.SphincsVerifierFtsFirstTreeExecution
+import SigGolfCandidate.SphincsVerifierFtsRootStoreData
+import SigGolfCandidate.SphincsVerifierFtsTreeAdvance
 
 /-! One certified leaf-and-path theorem, uniform in the FORS tree index. -/
 
@@ -16,7 +18,13 @@ open SigGolfCandidate.SphincsVerifierFtsHash
 open SigGolfCandidate.SphincsVerifierHashBytes
 open SigGolfCandidate.SphincsVerifierFtsEarlyFrame
 open SigGolfCandidate.SphincsBridge
+open SigGolfCandidate.SphincsVerifierFtsRootStore
+open SigGolfCandidate.SphincsVerifierFtsRootStoreData
+open SigGolfCandidate.SphincsVerifierFtsTreeAdvance
+open SigGolfCandidate.SphincsVerifierCopyMemory
+open SigGolfCandidate.SphincsVerifierCopy
 set_option maxRecDepth 16384
+set_option maxHeartbeats 0
 
 theorem tree_abstract_root (hash : Hash) (state : MachineState)
     (answer : BitVec 256) (signature : Signature)
@@ -106,6 +114,54 @@ theorem tree_executes (hash : Hash) (state : MachineState)
   · simp [Execution.charge, Nat.add_assoc, Nat.add_comm,
       Nat.add_left_comm]
 
+def treeFinishState (state : MachineState) : MachineState :=
+  treeAdvanceState (copyRootState (rootStoreSetupState state))
+
+theorem rootStore_counter (state : MachineState) (tree : FtsTree)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val) :
+    (copyRootState (rootStoreSetupState state)).getMem 0x43040 =
+      state.getMem 0x43040 := by
+  let setup := rootStoreSetupState state
+  have destination := rootStoreSetup_destination state tree counter
+  have outside : ∀ offset : Fin 5,
+      (0x43040 : Word) ≠ alignToDword
+        (setup.getReg .x7 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val)) := by
+    intro offset
+    change (0x43040 : Word) ≠ alignToDword
+      ((rootStoreSetupState state).getReg .x7 + signExtend12
+        (4#12 * BitVec.ofNat 12 offset.val))
+    rw [destination]
+    fin_cases tree <;> fin_cases offset <;> decide
+  rw [copyRoot_mem_frame setup 0x43040 outside]
+  exact rootStoreSetup_mem state 0x43040
+
+theorem treeFinish_block (state : MachineState) (tree : FtsTree)
+    (pc : state.pc = 0x1b84)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val) :
+    OrdinarySteps SphincsImages.verify state 33 (treeFinishState state) := by
+  have stored := rootStore_block state tree pc counter
+  exact stored.1.append (treeAdvance_block _ stored.2)
+
+theorem treeFinish_counter (state : MachineState) (tree : FtsTree)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val) :
+    (treeFinishState state).getMem 0x43040 =
+      BitVec.ofNat 64 (tree.val + 1) := by
+  rw [treeFinishState, treeAdvance_counter,
+    rootStore_counter state tree counter, counter]
+  simp [BitVec.ofNat_add]
+
+theorem treeFinish_root_data (state : MachineState) (tree : FtsTree)
+    (counter : state.getMem 0x43040 = BitVec.ofNat 64 tree.val)
+    (index : Fin 5) :
+    (treeFinishState state).getWord32
+      (BitVec.ofNat 64 (0x44100 + 20 * tree.val + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) := by
+  simp only [MachineState.getWord32, treeFinishState]
+  rw [treeAdvance_mem_frame _ _ (by
+    fin_cases tree <;> fin_cases index <;> decide)]
+  exact rootStore_data state tree counter index
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.tree_abstract_root' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -117,5 +173,29 @@ theorem tree_executes (hash : Hash) (state : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms tree_executes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.rootStore_counter' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms rootStore_counter
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_block' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeFinish_block
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_counter' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeFinish_counter
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericTree.treeFinish_root_data' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms treeFinish_root_data
 
 end SigGolfCandidate.SphincsVerifierFtsGenericTree
