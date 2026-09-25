@@ -486,6 +486,70 @@ theorem certificateCountedProposal_run_spent_le_allCalls {α : Type} (key : Secr
   exact certificateCountedLength_run_spent_le_allCalls key budget required stopAfter computation
     state.2 hpre _ hm
 
+abbrev CertificateCountedContextResult := SecretKey ×
+  (RetainedRestResult × (List Index × CertificateCountedState))
+
+noncomputable def certificateCountedContextGame (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) : PMF CertificateCountedContextResult := do
+  let generated ← (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)
+  let key := generated.1.1.2
+  let result ← (simulateQ (certificateCountedProposalImpl key budget required (stopAfter key))
+    (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)).run
+      ([], (generated.2, ((initialCertificateMonitor generated.1.2.hashCalls stopped, false),
+        generated.1.2.hashCalls)))
+  pure (key, result)
+
+def CertificateCountedContextResult.project (result : CertificateCountedContextResult) :
+    CertificateContextResult :=
+  (result.1, (result.2.1, (result.2.2.1, certificateCountedProject result.2.2.2)))
+
+theorem certificateCountedContextGame_project (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) :
+    CertificateCountedContextResult.project <$>
+      certificateCountedContextGame adversary budget required stopAfter stopped =
+    certificateContextGame adversary budget required stopAfter stopped := by
+  simp only [certificateCountedContextGame, certificateContextGame,
+    map_bind, map_pure]
+  apply PMF.bind_congr
+  intro generated _
+  simp only [bind_pure_comp]
+  have h := congrArg (Functor.map (Prod.mk generated.1.1.2))
+    (simulateQ_certificateCountedProposalImpl_project generated.1.1.2 budget required
+      (stopAfter generated.1.1.2)
+      (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+      ([], (generated.2, ((initialCertificateMonitor generated.1.2.hashCalls stopped, false),
+        generated.1.2.hashCalls))))
+  simpa only [Functor.map_map, CertificateCountedContextResult.project,
+    Function.comp_def, Prod.map, id_eq, certificateCountedProject] using h
+
+theorem certificateCountedContextGame_mass_le_allCalls (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) (result : CertificateCountedContextResult)
+    (hr : result ∈ (certificateCountedContextGame adversary budget required stopAfter stopped).support) :
+    result.2.2.2.2.1.1.creationMass ≤ (result.2.2.2.2.2 : ENNReal) := by
+  have hproject : result.project ∈
+      (certificateContextGame adversary budget required stopAfter stopped).support := by
+    have hm := (PMF.mem_support_map_iff CertificateCountedContextResult.project _ _).mpr
+      ⟨result, hr, rfl⟩
+    rwa [← PMF.monad_map_eq_map,
+      certificateCountedContextGame_project] at hm
+  have hmass := certificateContextGame_mass_le_spent adversary budget required stopAfter
+    stopped result.project hproject
+  rw [certificateCountedContextGame, PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, _, hr⟩ := hr
+  rw [PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+  obtain ⟨output, houtput, hr⟩ := hr
+  rw [PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+  subst result
+  have hspent := certificateCountedProposal_run_spent_le_allCalls generated.1.1.2 budget
+    required (stopAfter generated.1.1.2)
+    (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+    ([], (generated.2, ((initialCertificateMonitor generated.1.2.hashCalls stopped, false),
+      generated.1.2.hashCalls))) (by rfl) output houtput
+  exact hmass.trans (Nat.cast_le.mpr hspent)
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -515,3 +579,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedProposal_run_spent_le_allCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedProposal_run_spent_le_allCalls
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_mass_le_allCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedContextGame_mass_le_allCalls
