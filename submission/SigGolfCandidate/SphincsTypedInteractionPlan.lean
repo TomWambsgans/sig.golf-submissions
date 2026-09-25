@@ -329,6 +329,29 @@ theorem plan_real_first_hit_le
     adversary canonical nonalignedAnswer wire seed Q rounds state 0 (by omega)
     result hmem
 
+/-- Before the first altered-cache MAC hit, a signing request either uses the
+canonical cache or returns failure after at most two HASH calls. -/
+theorem sign_request_no_hit_split
+    (hash : SigGolf.Hash) (secretKey : SigGolf.SecretKey)
+    (canonical cache : SigGolf.Cache) (message : SigGolf.Message)
+    (sem : SphincsMaskedKeygenRefinement.CacheSemantics hash secretKey canonical)
+    (hmiss : authPrefix cache ≠ authPrefix canonical →
+      ¬TagPass hash secretKey cache) :
+    cache = canonical ∨
+      ((SphincsSubmission.submission.runWith hash .sign
+        (secretKey, cache, message)).value = none ∧
+       (SphincsSubmission.submission.runWith hash .sign
+        (secretKey, cache, message)).hashCalls ≤ 2) := by
+  by_cases hp : authPrefix cache = authPrefix canonical
+  · by_cases ht : macTag cache = macTag canonical
+    · exact Or.inl (cache_eq_of_prefix_tag cache canonical hp ht)
+    · exact Or.inr ⟨(same_prefix_wrong_tag_rejects hash secretKey
+        canonical cache message sem hp ht).1, by
+          rw [(same_prefix_wrong_tag_rejects hash secretKey canonical
+            cache message sem hp ht).2]⟩
+  · exact Or.inr (altered_prefix_no_mac_hit_rejects hash secretKey
+      canonical cache message hp (hmiss hp))
+
 end SigGolfCandidate.SphincsTypedInteractionPlan
 
 /-- info: 'SigGolfCandidate.SphincsTypedInteractionPlan.plan_attempts_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -350,3 +373,7 @@ end SigGolfCandidate.SphincsTypedInteractionPlan
 /-- info: 'SigGolfCandidate.SphincsTypedInteractionPlan.plan_real_first_hit_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsTypedInteractionPlan.plan_real_first_hit_le
+
+/-- info: 'SigGolfCandidate.SphincsTypedInteractionPlan.sign_request_no_hit_split' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsTypedInteractionPlan.sign_request_no_hit_split
