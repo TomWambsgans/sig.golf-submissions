@@ -14,6 +14,39 @@ open SigGolfCandidate.SphincsVerifierFtsRootCopyBytes
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
+/-- A checked execution with no HASH steps is the same pure computation under
+    the oracle semantics, rather than merely having the same value for each
+    fixed oracle. -/
+private theorem pure_of_zero_hash {hash : Hash} {image : Image}
+    {state : MachineState} {steps : Nat} {result : Execution}
+    (derivation : Executes hash image state steps result)
+    (zero : result.hashCalls = 0) :
+    ∀ fuel, steps ≤ fuel → execute fuel image state = pure result := by
+  induction derivation with
+  | halt state hf hs =>
+      intro fuel bound
+      cases fuel with
+      | zero => omega
+      | succ fuel => simp [execute, hf, hs]
+  | ordinary state next instruction steps result hf he hs tail ih =>
+      have tailZero : result.hashCalls = 0 := by
+        simpa [Execution.charge] using zero
+      intro fuel bound
+      cases fuel with
+      | zero => omega
+      | succ fuel =>
+          have tailBound : steps ≤ fuel := by omega
+          cases instruction with
+          | base instruction =>
+              cases instruction <;> simp_all [execute, ih tailZero fuel tailBound,
+                Execution.charge]
+          | word op rd rs1 rs2 =>
+              simp [execute, hf, hs, ih tailZero fuel tailBound, Execution.charge]
+          | sraiw rd rs shift =>
+              simp [execute, hf, hs, ih tailZero fuel tailBound, Execution.charge]
+  | hash state steps result hf hs hv tail ih =>
+      simp [Execution.charge] at zero
+
 theorem copy_code : CopyCode SphincsImages.expand 0x1014 := by decide
 
 theorem prefix_copy_invariant (s : MachineState) (pc : s.pc = 0x1000) :
@@ -252,6 +285,44 @@ theorem runWith_expand (hash : Hash)
     .expand (message, pk, signature)
   rw [runWith_copy hash (message, pk, signature) state loaded pc]
   rw [loaded_signature (message, pk, signature) state loaded]
+
+/-- Expansion issues no oracle query. This equation can be rewritten inside
+    adaptive security games, where a fixed-oracle equality alone is too weak. -/
+theorem run_expand_pure (message : Message) (pk : PublicKey)
+    (signature : Bytes SphincsSubmission.submission.sizes.signature) :
+    SphincsSubmission.submission.run .expand (message, pk, signature) =
+      pure ⟨some signature, true, 8500, 0, 0⟩ := by
+  obtain ⟨state, loaded, pc⟩ := initialState_exists
+    SphincsSubmission.submission SphincsSubmission.admissible
+    .expand (message, pk, signature)
+  obtain ⟨final, derivation, copied⟩ :=
+    executes_copy (fun _ => 0) state pc
+  have exactExec : execute CYCLE_LIMIT SphincsImages.expand state =
+      pure (⟨.success, final, 8500, 0, 0⟩ : Execution) :=
+    pure_of_zero_hash derivation rfl CYCLE_LIMIT (by decide)
+  simp only [Submission.run, loaded]
+  change (do
+    let execution ← execute CYCLE_LIMIT SphincsImages.expand state
+    pure (⟨if execution.exit = Exit.success then
+      some (readOutput SphincsSubmission.submission.sizes
+        SphincsSubmission.submission.layout .expand execution.state)
+      else none, execution.exit != Exit.unfinished, execution.cycles,
+      execution.hashCalls, execution.hashCompressions⟩ :
+        RunResult (Bytes SphincsSubmission.submission.sizes.witness))) = _
+  rw [exactExec]
+  simp only [pure_bind]
+  have copiedEq : readBuffer final 0x22ca0 11324 =
+      readBuffer state 0x20060 11324 := by
+    unfold readBuffer
+    apply congrArg (BitVec.ofNat (8 * 11324))
+    apply Memory.foldl_eq_on
+    intro i hi acc
+    rw [copied i (by simpa using hi)]
+  have loadedEq := loaded_signature (message, pk, signature) state loaded
+  change pure (⟨some (readBuffer final 0x22ca0 11324), true, 8500, 0, 0⟩ :
+    RunResult (Bytes 11324)) =
+    pure (⟨some signature, true, 8500, 0, 0⟩ : RunResult (Bytes 11324))
+  rw [copiedEq, loadedEq]
 
 /-- info: 'SigGolfCandidate.Sphincs.ExpansionValue.runWith_expand' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
