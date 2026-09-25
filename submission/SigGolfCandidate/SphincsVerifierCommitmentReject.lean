@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsVerifierCommitmentCheck
 import SigGolfCandidate.SphincsMaskedKeygenPrefix
+import SigGolfCandidate.SphincsVerifierXmssPathComplete
 
 /-! The verifier's two public-key commitment mismatches reach the shared rejection block. -/
 
@@ -302,3 +303,143 @@ theorem loaded_high_mismatch_terminates (hash : Hash)
 #print axioms loaded_high_mismatch_terminates
 
 end SigGolfCandidate.SphincsVerifierCommitmentReject
+
+namespace SigGolfCandidate.SphincsVerifierRootReject
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsMaskedKeygenPrefix
+open SigGolfCandidate.SphincsVerifierCommitmentReject
+open SigGolfCandidate.SphincsVerifierXmssFinish
+set_option maxRecDepth 16384
+set_option maxHeartbeats 4000000
+
+def rejectSchedule (i : Fin 5) : List (Word × Instr) :=
+  finishSchedule.take (7 + 3 * i.val) ++
+    [(BitVec.ofNat 64 (0x7c58 + 16 * i.val),
+      .JAL .x0 (-(27732 + 16 * i.val)))]
+
+def afterReject (i : Fin 5) (s : MachineState) : MachineState :=
+  runSchedule (rejectSchedule i) s
+
+theorem rejectSchedule_code (i : Fin 5) : ∀ entry ∈ rejectSchedule i,
+    SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+      some (.base entry.2) := by
+  fin_cases i <;> decide
+
+private theorem widened_eq_iff (a b : BitVec 32) :
+    (a.setWidth 64 = b.setWidth 64) ↔ a = b := by
+  constructor
+  · intro h
+    have q := congrArg (fun x : BitVec 64 => x.setWidth 32) h
+    simpa using q
+  · intro h
+    rw [h]
+
+theorem reject_checked (i : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x7c3c)
+    (prior : ∀ j : Fin 5, j.val < i.val →
+      s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * j.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * j.val)))
+    (different : s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)) ≠
+      s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val))) :
+    Checked (rejectSchedule i) s := by
+  fin_cases i
+  · norm_num at different
+    simp [Checked, rejectSchedule, finishSchedule, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13, signExtend21, widened_eq_iff,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, different]
+  · have h0 := prior 0 (by decide)
+    norm_num at h0 different
+    simp [Checked, rejectSchedule, finishSchedule, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13, signExtend21, widened_eq_iff,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, h0, different]
+  · have h0 := prior 0 (by decide)
+    have h1 := prior 1 (by decide)
+    norm_num at h0 h1 different
+    simp [Checked, rejectSchedule, finishSchedule, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13, signExtend21, widened_eq_iff,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, h0, h1, different]
+  · have h0 := prior 0 (by decide)
+    have h1 := prior 1 (by decide)
+    have h2 := prior 2 (by decide)
+    norm_num at h0 h1 h2 different
+    simp [Checked, rejectSchedule, finishSchedule, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13, signExtend21, widened_eq_iff,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, h0, h1, h2, different]
+  · have h0 := prior 0 (by decide)
+    have h1 := prior 1 (by decide)
+    have h2 := prior 2 (by decide)
+    have h3 := prior 3 (by decide)
+    norm_num at h0 h1 h2 h3 different
+    simp [Checked, rejectSchedule, finishSchedule, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13, signExtend21, widened_eq_iff,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc, h0, h1, h2, h3, different]
+
+private theorem checked_last_jump_pc (pre : List (Word × Instr))
+    (last : Word × Instr) (s : MachineState)
+    (checked : Checked (pre ++ [last]) s)
+    (jump : ∀ t : MachineState, t.pc = last.1 →
+      (execInstrBr t last.2).pc = 0x1004) :
+    (runSchedule (pre ++ [last]) s).pc = 0x1004 := by
+  induction pre generalizing s with
+  | nil =>
+    obtain ⟨atPc, _, _⟩ := checked
+    simpa [runSchedule] using jump s atPc
+  | cons entry rest ih =>
+    obtain ⟨_, _, tail⟩ := checked
+    simpa [runSchedule] using ih (execInstrBr s entry.2) tail
+
+theorem reject_pc (i : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x7c3c)
+    (prior : ∀ j : Fin 5, j.val < i.val →
+      s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * j.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * j.val)))
+    (different : s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)) ≠
+      s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val))) :
+    (afterReject i s).pc = 0x1004 := by
+  have checked := reject_checked i s pc prior different
+  apply checked_last_jump_pc
+    (finishSchedule.take (7 + 3 * i.val))
+    (BitVec.ofNat 64 (0x7c58 + 16 * i.val),
+      .JAL .x0 (-(27732 + 16 * i.val))) s
+  · exact checked
+  · intro t tpc
+    fin_cases i <;> simp [execInstrBr, signExtend21, tpc]
+
+theorem mismatch_executes (hash : Hash) (i : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x7c3c)
+    (prior : ∀ j : Fin 5, j.val < i.val →
+      s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * j.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * j.val)))
+    (different : s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)) ≠
+      s.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val))) :
+    Executes hash SphincsImages.verify s (11 + 3 * i.val)
+      ⟨.failure, runSchedule failureSchedule (afterReject i s),
+        11 + 3 * i.val, 0, 0⟩ := by
+  have path := checked_sound _ (rejectSchedule i) (rejectSchedule_code i) s
+    (reject_checked i s pc prior different)
+  have length : (rejectSchedule i).length = 8 + 3 * i.val := by
+    fin_cases i <;> decide
+  rw [length] at path
+  have suffix := failure_executes hash (afterReject i s)
+    (reject_pc i s pc prior different)
+  have whole := path.then_executes suffix
+  convert whole using 1
+  · omega
+  · simp [Execution.charge]
+    omega
+
+/-- info: 'SigGolfCandidate.SphincsVerifierRootReject.mismatch_executes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms mismatch_executes
+
+end SigGolfCandidate.SphincsVerifierRootReject
