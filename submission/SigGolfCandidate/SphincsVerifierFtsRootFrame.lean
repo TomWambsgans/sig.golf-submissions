@@ -116,6 +116,55 @@ theorem firstLeafStart_root_frame (state : MachineState)
     apply root_ne read _ inside
     fin_cases offset <;> decide
 
+theorem nextTreeSetup_root_frame (state : MachineState)
+    (read : Word) (inside : RootRegion read) :
+    (SphincsVerifierFtsNextTreeSetup.nextTreeHashState state).getMem read =
+      state.getMem read := by
+  let header := SphincsVerifierFtsTreeHeader.ftsTreeHeaderState state
+  let selected := SphincsVerifierFtsSelect.ftsSelectState header
+  let pointers := SphincsVerifierFtsCopyPointers.ftsCopyPointers selected
+  let copied := SphincsVerifierCopy.copyRootState pointers
+  let advanced := SphincsVerifierFtsAdvance.ftsAdvanceState copied
+  have readyFrame : (SphincsVerifierFtsSetup.ftsHashReadyState advanced).getMem
+      read = advanced.getMem read := by
+    apply SphincsVerifierFtsLevelInit.hashReady_mem_frame
+    · exact root_ne_of_nat read 0x40000 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x40000 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x40008 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x40010 inside (Or.inl (by decide)) (by decide)
+    · intro offset
+      apply root_ne read _ inside
+      fin_cases offset <;> decide
+  have advanceFrame : advanced.getMem read = copied.getMem read := by
+    apply SphincsVerifierFtsAdvance.ftsAdvance_mem_frame
+    · exact root_ne_of_nat read 0x43028 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x43018 inside (Or.inl (by decide)) (by decide)
+  have copyFrame : copied.getMem read = pointers.getMem read := by
+    apply SphincsVerifierCopyMemory.copyRoot_mem_frame
+    intro offset
+    rw [(SphincsVerifierFtsCopyPointers.ftsCopyPointers_regs selected).2]
+    apply root_ne read _ inside
+    fin_cases offset <;> decide
+  have pointerFrame : pointers.getMem read = selected.getMem read :=
+    SphincsVerifierFtsCopyPointers.ftsCopyPointers_mem selected read
+  have selectFrame : selected.getMem read = header.getMem read := by
+    apply SphincsVerifierFtsSelect.ftsSelect_mem_frame
+    · exact root_ne_of_nat read 0x43010 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x43020 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x43070 inside (Or.inl (by decide)) (by decide)
+  have headerFrame : header.getMem read = state.getMem read := by
+    apply SphincsVerifierFtsTreeHeader.ftsTreeHeader_mem_frame
+    · exact root_ne_of_nat read 0x43000 inside (Or.inl (by decide)) (by decide)
+    · exact root_ne_of_nat read 0x43008 inside (Or.inl (by decide)) (by decide)
+  exact readyFrame.trans (advanceFrame.trans (copyFrame.trans
+    (pointerFrame.trans (selectFrame.trans headerFrame))))
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsRootFrame.nextTreeSetup_root_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms nextTreeSetup_root_frame
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsRootFrame.parentRound_root_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
