@@ -358,3 +358,102 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_observed_cost_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_observed_cost_budget_le_cap
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+omit [Fintype State] [Nonempty State] in
+theorem observedRun_cap_finish_counted_selected
+    (selected : AuxIndex ⊕ (Fin n × State) → Prop) [DecidablePred selected]
+    (auxiliary : QueryImpl auxSpec PMF) (tables : Fin n → State → State)
+    (computation : OracleComp (auxSpec + PrefixSpec n State) Result)
+    (observed : Fin n → State → Option State) (budget : Nat) :
+    (fun result => result.1.map (fun finished => (finished, result.2))) <$>
+      observedRun auxiliary tables (QueryCap.run selected computation budget) observed =
+    (fun result => (QueryCap.finish budget result.1).map (fun finished => (finished, result.2))) <$>
+      observedRun auxiliary tables (QueryCap.counted selected computation) observed := by
+  induction computation using OracleComp.inductionOn generalizing observed budget with
+  | pure value =>
+      simp only [QueryCap.run_pure, QueryCap.counted_pure, observedRun_pure,
+        PMF.monad_map_eq_map, PMF.map, PMF.pure_bind, Function.comp_apply, QueryCap.finish]
+      simp
+  | query_bind input next ih =>
+      rw [QueryCap.run_query_bind, QueryCap.counted_query_bind]
+      by_cases hselected : selected input
+      · rw [if_pos hselected]
+        cases budget with
+        | zero =>
+            simp only [observedRun_pure, hselected, if_true, PMF.monad_map_eq_map,
+              PMF.map, PMF.pure_bind, Function.comp_apply, Option.map_none]
+            have hmap (answer : (auxSpec + PrefixSpec n State).Range input)
+                (seen : Fin n → State → Option State) :
+                observedRun auxiliary tables
+                  (do
+                    let result ← QueryCap.counted selected (next answer)
+                    pure (result.1, 1 + result.2)) seen =
+                  (observedRun auxiliary tables
+                    (QueryCap.counted selected (next answer)) seen).map
+                    (fun result => ((result.1.1, 1 + result.1.2), result.2)) := by
+              simpa only [bind_pure_comp] using
+                (observedRun_map auxiliary tables
+                  (QueryCap.counted selected (next answer))
+                  (fun result => (result.1, 1 + result.2)) seen)
+            simp only [observedRun_query_bind, hmap, PMF.bind_bind,
+              PMF.bind_map, Function.comp_def, finish_zero_succ,
+              Option.map_none, PMF.bind_const]
+        | succ budget =>
+            simp only [observedRun_query_bind, hselected, if_true,
+              PMF.monad_map_eq_map, PMF.map_bind]
+            have hmap (answer : (auxSpec + PrefixSpec n State).Range input)
+                (seen : Fin n → State → Option State) :
+                observedRun auxiliary tables
+                  (do
+                    let result ← QueryCap.counted selected (next answer)
+                    pure (result.1, 1 + result.2)) seen =
+                  (observedRun auxiliary tables
+                    (QueryCap.counted selected (next answer)) seen).map
+                    (fun result => ((result.1.1, 1 + result.1.2), result.2)) := by
+              simpa only [bind_pure_comp] using
+                (observedRun_map auxiliary tables
+                  (QueryCap.counted selected (next answer))
+                  (fun result => (result.1, 1 + result.2)) seen)
+            simp only [hmap, PMF.map_comp, Function.comp_def, finish_succ]
+            exact congrArg ((observedImpl auxiliary tables input).run observed).bind
+              (funext fun answer => ih answer.1 answer.2 budget)
+      · rw [if_neg hselected]
+        simp only [observedRun_query_bind, hselected, if_false, Nat.zero_add,
+          Prod.mk.eta, bind_pure, PMF.monad_map_eq_map, PMF.map_bind]
+        exact congrArg ((observedImpl auxiliary tables input).run observed).bind
+          (funext fun answer => ih answer.1 answer.2 budget)
+
+
+theorem realRun_cap_finish_counted_selected
+    (selected : AuxIndex ⊕ (Fin n × State) → Prop) [DecidablePred selected]
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (observed : Fin n → State → Option State) (budget : Nat) :
+    (realRun auxiliary (fun endpoint => QueryCap.run selected (computation endpoint) budget) observed).map
+      (fun result => result.2.1.map (fun finished => (result.1, finished, result.2.2))) =
+    (realRun auxiliary (fun endpoint => QueryCap.counted selected (computation endpoint)) observed).map
+      (fun result => (QueryCap.finish budget result.2.1).map
+        (fun finished => (result.1, finished, result.2.2))) := by
+  simp only [realRun, PMF.map_bind, PMF.map_comp, Function.comp_def]
+  apply congrArg (EndpointPreimageDensity.real (completeTables observed) evaluate).bind
+  funext pair
+  have h := congrArg (PMF.map (Option.map (fun r : (Result × Nat) × (Fin n → State → Option State) =>
+    (pair.2, r.1, r.2))))
+    (observedRun_cap_finish_counted_selected selected (auxiliary pair.2) pair.1
+      (computation pair.2) observed budget)
+  simpa only [PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def, Option.map_map] using h
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_cap_finish_counted_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_cap_finish_counted_selected
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted_selected' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted_selected
