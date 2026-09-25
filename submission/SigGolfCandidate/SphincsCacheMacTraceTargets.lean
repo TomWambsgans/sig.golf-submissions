@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsCacheMacTargetPackage
 import SigGolfCandidate.SphincsCacheMacFiniteTrace
 import Mathlib.Data.List.Dedup
+import SigGolfCandidate.SphincsCacheBlindMacGuess
 
 /-! Enumerate the distinct MAC inputs mentioned by an all-failure comparison
 trace. This enumeration is chosen before the hidden answers are programmed. -/
@@ -137,3 +138,51 @@ end SigGolfCandidate.SphincsCacheMacTraceTargets
 /-- info: 'SigGolfCandidate.SphincsCacheMacTraceTargets.trace_keys_presampling_preserves_plan' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsCacheMacTraceTargets.trace_keys_presampling_preserves_plan
+
+/-! Replace a trace with an equivalent list of guesses against its distinct
+finite target table. Repeated guesses retain separate list entries. -/
+
+namespace SigGolfCandidate.SphincsCacheMacIndexedHit
+open SphincsSecurity
+open SigGolfCandidate.SphincsCacheMacTraceTargets
+open SigGolfCandidate.SphincsCacheBlindMacGuess
+
+noncomputable def indexedAttempts (attempts : List (HashInput × Digest)) :
+    List (Fin (distinctKeys attempts).length × Digest) :=
+  attempts.attach.map fun entry =>
+    ((key_of_attempt attempts entry.1 entry.2).choose, entry.1.2)
+
+theorem indexedAttempts_length (attempts : List (HashInput × Digest)) :
+    (indexedAttempts attempts).length = attempts.length := by
+  simp [indexedAttempts]
+
+theorem hit_indexed_iff (attempts : List (HashInput × Digest))
+    (hash : HashInput → Digest)
+    (table : Fin (distinctKeys attempts).length → Digest)
+    (hagrees : ∀ i, hash (keys attempts i) = table i) :
+    Hit attempts hash ↔ Hit (indexedAttempts attempts) table := by
+  constructor
+  · rintro ⟨attempt, hmem, hmatch⟩
+    let entry : {a // a ∈ attempts} := ⟨attempt, hmem⟩
+    refine ⟨((key_of_attempt attempts attempt hmem).choose, attempt.2), ?_, ?_⟩
+    · exact List.mem_map.mpr ⟨entry, List.mem_attach _ _, rfl⟩
+    · have hkey := (key_of_attempt attempts attempt hmem).choose_spec
+      calc
+        table (key_of_attempt attempts attempt hmem).choose =
+            hash (keys attempts (key_of_attempt attempts attempt hmem).choose) :=
+          (hagrees _).symm
+        _ = hash attempt.1 := congrArg hash hkey
+        _ = attempt.2 := hmatch
+  · rintro ⟨indexed, hmem, hmatch⟩
+    obtain ⟨entry, hentry, heq⟩ := List.mem_map.mp hmem
+    have hkey := (key_of_attempt attempts entry.1 entry.2).choose_spec
+    have hsource : entry.1 ∈ attempts := entry.2
+    refine ⟨entry.1, hsource, ?_⟩
+    subst indexed
+    simpa [hkey] using (hagrees _).trans hmatch
+
+end SigGolfCandidate.SphincsCacheMacIndexedHit
+
+/-- info: 'SigGolfCandidate.SphincsCacheMacIndexedHit.hit_indexed_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsCacheMacIndexedHit.hit_indexed_iff
