@@ -314,6 +314,62 @@ theorem referenceForgerySample_context_cost {inputs : Finset HashInput}
     (finiteHashAnswer ∅ inputs sample.2.1.2)
     (referenceFamilyWords sample.2.1.1 dummy) sample.2.2
 
+private theorem budget_probEvent_le_project {Source Result : Type} (source : SPMF Source)
+    (native : ProbComp Result) (projection : Source → Result)
+    (event : Source → Prop) (nativeEvent : Result → Prop)
+    (hlaw : projection <$> source = 𝒮[native])
+    (hevent : ∀ sample ∈ support source, event sample → nativeEvent (projection sample)) :
+    Pr[event | source] ≤ Pr[nativeEvent | native] := by
+  calc
+    _ ≤ Pr[nativeEvent ∘ projection | source] := _root_.probEvent_mono hevent
+    _ = Pr[nativeEvent | projection <$> source] := (probEvent_map source projection nativeEvent).symm
+    _ = Pr[nativeEvent | native] := by rw [hlaw]; rfl
+
+theorem referenceForgeryGame_full_budget_project
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+    Pr[fun record : CertificateTraceRecord => record.full ∧
+      keygenHashCost + record.2.2.hashCalls ≤ q |
+      (simulateQ romImpl (certificateTraceProgram adversary)).run' ∅] := by
+  apply budget_probEvent_le_project
+    (referenceForgeryGame (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)
+    ((simulateQ romImpl (certificateTraceProgram adversary)).run' ∅)
+    ReferenceForgerySample.certificateRecord
+    (fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q)
+    (fun record => record.full ∧ keygenHashCost + record.2.2.hashCalls ≤ q)
+    (referenceForgeryGame_native_certificateRecord dummy adversary)
+  intro sample hsample h
+  constructor
+  · exact referenceForgeryGame_full_record
+      (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary)
+      (canonicalGraphInputs_subset_gameInputs adversary)
+      dummy adversary sample hsample h.1
+  · rw [← referenceForgerySample_context_cost dummy sample]
+    exact h.2
+
+theorem certificateTraceProgram_full_budget_original
+    (adversary : Adversary) (q : Nat) :
+    Pr[fun record : CertificateTraceRecord => record.full ∧
+      keygenHashCost + record.2.2.hashCalls ≤ q |
+      (simulateQ romImpl (certificateTraceProgram adversary)).run' ∅] ≤
+    Pr[fun result : OriginalCertificateTraceResult =>
+      OriginalFullCertificate result.1 ∧ keygenHashCost + result.2.hashCalls ≤ q |
+      originalCertificateTraceSource adversary] := by
+  rw [← originalCertificateTraceSource_record, probEvent_map]
+  apply _root_.probEvent_mono
+  intro result hr h
+  constructor
+  · obtain ⟨hvalid, input, hcertificate⟩ := h.1
+    exact ⟨hvalid, input, hcertificate.mono
+      (originalCertificateTraceSource_messageCache_le adversary result hr)⟩
+  · exact h.2
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.completedReferenceContact_cost_same_root' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -327,3 +383,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.referenceForgerySample_context_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceForgerySample_context_cost
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateTraceProgram_full_budget_original' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateTraceProgram_full_budget_original
