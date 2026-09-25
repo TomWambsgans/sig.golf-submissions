@@ -221,3 +221,35 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+theorem realRun_cap_finish_counted
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec n State) Result)
+    (observed : Fin n → State → Option State) (budget : Nat) :
+    (realRun auxiliary (fun endpoint => QueryCap.run IsPrefixQuery (computation endpoint) budget) observed).map
+      (fun result => result.2.1.map (fun finished => (result.1, finished, result.2.2))) =
+    (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint)) observed).map
+      (fun result => (QueryCap.finish budget result.2.1).map
+        (fun finished => (result.1, finished, result.2.2))) := by
+  simp only [realRun, PMF.map_bind, PMF.map_comp, Function.comp_def]
+  apply congrArg (EndpointPreimageDensity.real (completeTables observed) evaluate).bind
+  funext pair
+  have h := congrArg (PMF.map (Option.map (fun r : (Result × Nat) × (Fin n → State → Option State) =>
+    (pair.2, r.1, r.2))))
+    (observedRun_cap_finish_counted (auxiliary pair.2) pair.1
+      (computation pair.2) observed budget)
+  simpa only [PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def, Option.map_map] using h
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_cap_finish_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_cap_finish_counted
