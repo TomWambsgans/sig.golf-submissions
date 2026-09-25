@@ -207,6 +207,10 @@ theorem path_executes (hash : Hash) (lay : Layer) (n : Nat) :
         simp [pathCycles, Execution.charge]
         omega
 
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.path_pc_done' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
 #print axioms path_pc_done
 /-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.path_executes' depends on axioms: [propext,
  Classical.choice,
@@ -214,6 +218,8 @@ theorem path_executes (hash : Hash) (lay : Layer) (n : Nat) :
 #guard_msgs in
 #print axioms path_executes
 #print axioms pathCycles_le
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssPathControl.pathCycles_eq' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
 #print axioms pathCycles_eq
 #print axioms pathInstructions_eq
 #print axioms pathRights_le
