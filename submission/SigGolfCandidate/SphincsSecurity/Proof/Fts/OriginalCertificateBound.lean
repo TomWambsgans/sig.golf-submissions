@@ -226,8 +226,150 @@ theorem certificateContextGame_mass_le_spent (adversary : Adversary) (budget : N
     exact zero_le
   · exact houtput
 
+abbrev CertificateCountedState := QueryCache HashSpec × ((CertificateMonitor × Bool) × Nat)
+
+def certificateCountedProject (state : CertificateCountedState) : CertificateCacheMonitorState :=
+  (state.1, state.2.1)
+
+noncomputable def certificateCountedUpdate (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (length : Nat) (record : ProposalExecutionRecord input) : (CertificateMonitor × Bool) × Nat :=
+  (certificateCacheMonitorUpdate key budget required stopAfter input
+      (certificateCountedProject state) length record,
+    state.2.2 + record.trace.hashCalls)
+
+noncomputable def certificateCountedProposalImpl (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    QueryImpl (OracleWorld + SigningSpec) (StateT (List Index × CertificateCountedState) PMF) :=
+  originalProposalImpl key (fun state => state.2.1.1.spent)
+    (fun message state => certificateMonitorEnabled key budget message
+      (certificateCacheMonitorProject (certificateCountedProject state)))
+    (certificateCountedUpdate key budget required stopAfter)
+
+noncomputable def certificateCountedLengthImpl (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    QueryImpl (OracleWorld + SigningSpec) (StateT CertificateCountedState PMF) :=
+  originalLengthImpl key (fun state => state.2.1.1.spent)
+    (fun message state => certificateMonitorEnabled key budget message
+      (certificateCacheMonitorProject (certificateCountedProject state)))
+    (certificateCountedUpdate key budget required stopAfter)
+
+def certificateCountedRawProject (state : CertificateCountedState) :
+    QueryCache HashSpec × Nat := (state.1, state.2.2)
+
+noncomputable def countedAdversaryPMFImpl (key : SecretKey) :
+    QueryImpl (OracleWorld + SigningSpec) (StateT (QueryCache HashSpec × Nat) PMF) :=
+  fun input => StateT.mk fun state =>
+    (originalProposalRecord key input state.1).map fun record =>
+      (record.output, (record.cache, state.2 + record.trace.hashCalls))
+
+theorem certificateCountedUpdate_project (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (length : Nat) (record : ProposalExecutionRecord input) :
+    (certificateCountedProject (record.cache,
+      certificateCountedUpdate key budget required stopAfter input state length record)) =
+    (record.cache, certificateCacheMonitorUpdate key budget required stopAfter input
+      (certificateCountedProject state) length record) := rfl
+
+theorem certificateCountedProposalImpl_project (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : List Index × CertificateCountedState) :
+    Prod.map id (Prod.map id certificateCountedProject) <$>
+      (certificateCountedProposalImpl key budget required stopAfter input).run state =
+    (certificateCacheProposalImpl key budget required stopAfter input).run
+      (state.1, certificateCountedProject state.2) := by
+  change PMF.map _ _ = _
+  cases input with
+  | inl world =>
+      simp only [certificateCountedProposalImpl, certificateCacheProposalImpl,
+        originalProposalImpl, proposalRecordImpl, StateT.run_mk,
+        originalProposalActive, Bool.false_eq_true, if_false, PMF.map_comp]
+      rfl
+  | inr message =>
+      simp only [certificateCountedProposalImpl, certificateCacheProposalImpl,
+        originalProposalImpl, proposalRecordImpl, StateT.run_mk,
+        originalProposalActive, certificateCountedProject]
+      split <;> simp only [PMF.map_comp] <;> rfl
+
+theorem simulateQ_certificateCountedProposalImpl_project {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCountedState) :
+    Prod.map id (Prod.map id certificateCountedProject) <$>
+      (simulateQ (certificateCountedProposalImpl key budget required stopAfter) computation).run state =
+    (simulateQ (certificateCacheProposalImpl key budget required stopAfter) computation).run
+      (state.1, certificateCountedProject state.2) :=
+  map_run_simulateQ_eq_of_query_map_eq _ _ (Prod.map id certificateCountedProject)
+    (certificateCountedProposalImpl_project key budget required stopAfter) computation state
+
+theorem simulateQ_certificateCountedLengthImpl_raw {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateCountedState) :
+    Prod.map id certificateCountedRawProject <$>
+      (simulateQ (certificateCountedLengthImpl key budget required stopAfter) computation).run state =
+    (simulateQ (countedAdversaryPMFImpl key) computation).run
+      (certificateCountedRawProject state) := by
+  exact simulateQ_lengthRecordImpl_project
+    (fun input current => originalProposalRecord key input current.1)
+    (fun _ record => record.output)
+    (originalProposalAdvance (certificateCountedUpdate key budget required stopAfter))
+    (originalProposalActive key (fun current => current.2.1.1.spent)
+      (fun message current => certificateMonitorEnabled key budget message
+        (certificateCacheMonitorProject (certificateCountedProject current))))
+    targetProposalAcceptance targetProposalAcceptance_ne_zero targetProposalAcceptance_lt_one.le
+    (countedAdversaryPMFImpl key) certificateCountedRawProject
+    (fun _ current record => (record.cache, current.2.2 + record.trace.hashCalls))
+    (by intros; rfl) (by intros; rfl) computation state
+
+theorem simulateQ_certificateCountedProposalImpl_raw {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateCountedState) :
+    (fun result => (result.1, certificateCountedRawProject result.2.2)) <$>
+      (simulateQ (certificateCountedProposalImpl key budget required stopAfter) computation).run state =
+    (simulateQ (countedAdversaryPMFImpl key) computation).run
+      (certificateCountedRawProject state.2) := by
+  calc
+    _ = Prod.map id certificateCountedRawProject <$>
+        (Prod.map id Prod.snd <$>
+          (simulateQ (certificateCountedProposalImpl key budget required stopAfter) computation).run state) := by
+      simp only [Functor.map_map]
+      rfl
+    _ = _ := by
+      unfold certificateCountedProposalImpl
+      rw [simulateQ_originalProposalImpl_length]
+      exact simulateQ_certificateCountedLengthImpl_raw key budget required stopAfter computation state.2
+
+theorem countedAdversaryPMFImpl_query_count (key : SecretKey)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : QueryCache HashSpec × Nat) :
+    (countedAdversaryPMFImpl key input).run state =
+      (fun result => (result.1.1, (result.2, state.2 + result.1.2))) <$>
+        (liftM ((simulateQ romImpl
+          (countHashQueries (expandedAdversaryImpl key input))).run state.1) : PMF _) := by
+  rw [countedAdversaryPMFImpl]
+  rw [← originalProposalRecord_counted key input state.1]
+  simp only [StateT.run_mk, Functor.map_map]
+  rfl
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateContextGame_mass_le_spent
+
+/-- info: 'SphincsSecurity.Concrete.simulateQ_certificateCountedProposalImpl_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.simulateQ_certificateCountedProposalImpl_project
+
+/-- info: 'SphincsSecurity.Concrete.simulateQ_certificateCountedProposalImpl_raw' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.simulateQ_certificateCountedProposalImpl_raw
+
+/-- info: 'SphincsSecurity.Concrete.countedAdversaryPMFImpl_query_count' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.countedAdversaryPMFImpl_query_count
