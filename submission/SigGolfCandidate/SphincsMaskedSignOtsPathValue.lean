@@ -443,4 +443,47 @@ theorem path_complete (location : Fin 5) (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms path_complete
 
+/-- A completed lower-layer subtree feeds its exact certified authentication path. -/
+theorem subtree_root_path (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (selected : LeafIndex)
+    (pc : s.pc=0x111c+chainDelta location)
+    (counter : s.getMem 0x43020=0)
+    (ctx : SphincsMaskedSignOtsParents.KeyContext s parameter seed (signerLayer location) treeIdx)
+    (selectedMem : s.getMem 0x430a8=BitVec.ofNat 64 selected.val)
+    (selectedBound : selected.val<Levels.width location 0) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s
+      (41220*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        124*Levels.totalNodes location (Levels.height location)+
+        (24+70*Levels.height location))
+      (44683*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        139*Levels.totalNodes location (Levels.height location)+
+        (24+70*Levels.height location))
+      (417*SphincsMaskedSignOtsTree.Finish.width location+
+        Levels.totalNodes location (Levels.height location))
+      (485*SphincsMaskedSignOtsTree.Finish.width location+
+        2*Levels.totalNodes location (Levels.height location)) t ∧
+      t.pc=0x1a50+delta location ∧
+      ∀ j : Fin (Levels.height location),
+        let pathLevel : Fin (layerHeight (signerLayer location)) :=
+          ⟨j.val,by rw [←signerLayer_height]; exact j.isLt⟩
+        Words20 t (pathPointer location+20*j.val)
+          (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+            (Seeded.treePath parameter (signerLayer location) treeIdx seed selected :
+              OracleComp SphincsSecurity.HashSpec
+                (Fin (layerHeight (signerLayer location)) → Digest)) pathLevel) := by
+  obtain ⟨mid,rootTrace,midPc,_,_,cache,retained⟩ :=
+    subtree_root location hash s parameter seed treeIdx pc counter ctx
+  have midSelected : mid.getMem 0x430a8=BitVec.ofNat 64 selected.val := by
+    rw [retained 0x430a8 (by simp [SphincsMaskedSignOtsTree.Frame.Retained,
+      SphincsMaskedSignOtsTree.Frame.controls]) (by decide) (by decide) (by decide)]
+    exact selectedMem
+  obtain ⟨t,pathTrace,endPc,values⟩ := path_complete location hash mid parameter seed treeIdx
+    selected midPc midSelected selectedBound cache
+  refine ⟨t,?_,endPc,values⟩
+  exact rootTrace.trans pathTrace.trace
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.subtree_root_path' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms subtree_root_path
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
