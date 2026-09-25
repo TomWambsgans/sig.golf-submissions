@@ -69,13 +69,19 @@ private theorem copyRoot_pc_general (s : MachineState) :
   simp [copyRootState, copyWord_pc_general]
   bv_decide
 
-theorem leafAnswerCopy_pc (s : MachineState) (pc : s.pc = 0x2a74) :
-    (leafAnswerCopyState s).pc = 0x2aac := by
-  have pointerPc : (runSchedule leafAnswerPointersSchedule s).pc = 0x2a84 := by
+theorem leafAnswerCopy_pc_general (s : MachineState) :
+    (leafAnswerCopyState s).pc = s.pc + 56 := by
+  have pointerPc : (runSchedule leafAnswerPointersSchedule s).pc = s.pc + 16 := by
     simp [leafAnswerPointersSchedule, leafAnswerCopySchedule,
-      runSchedule, execInstrBr, pc]
+      runSchedule, execInstrBr]
+    bv_decide
   rw [leafAnswerCopyState, leafAnswer_split, runSchedule_append,
     leafAnswerWords_eq, copyRoot_pc_general, pointerPc]
+  bv_decide
+
+theorem leafAnswerCopy_pc (s : MachineState) (pc : s.pc = 0x2a74) :
+    (leafAnswerCopyState s).pc = 0x2aac := by
+  rw [leafAnswerCopy_pc_general, pc]
   decide
 
 theorem leafAnswerCopy_word (s : MachineState) (slot : Fin 5) :
