@@ -1894,4 +1894,40 @@ theorem retryRejectJump_pc (location : Fin 5) (s : MachineState)
   simp [retryRejectJump,execInstrBr,signExtend21,pc,retryRejectImm]
   fin_cases location <;> decide
 
+/-- A successful checksum takes the entire emitted digit decoder and its
+    branch, with an exact instruction count. -/
+theorem signer_encoding_good (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x1bc4 + delta location)
+    (good : answerSum 52 (sumInit s) = 194) :
+    OrdinarySteps SphincsMaskedImages.sign s 499
+      (sumTest (signerDecoderRun 52 (sumInit s))) ∧
+    (sumTest (signerDecoderRun 52 (sumInit s))).pc =
+      0x23cc + delta location := by
+  obtain ⟨digits, decodedPc, decodedSum⟩ := sumInit_digits location s pc
+  have checked := sumTest_block location _ decodedPc
+  have goodRegister :
+      (signerDecoderRun 52 (sumInit s)).getReg .x15 = 194 :=
+    decodedSum.trans good
+  exact ⟨by simpa using digits.append checked,
+    sumTest_good_pc location _ decodedPc goodRegister⟩
+
+/-- A rejected WOTS encoding reaches the retry counter after the same decoder. -/
+theorem signer_encoding_bad (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x1bc4 + delta location)
+    (bad : answerSum 52 (sumInit s) ≠ 194) :
+    OrdinarySteps SphincsMaskedImages.sign s 500
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))) ∧
+    (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).pc =
+      0x2394 + delta location := by
+  obtain ⟨digits, decodedPc, decodedSum⟩ := sumInit_digits location s pc
+  have checked := sumTest_block location _ decodedPc
+  have badRegister :
+      (signerDecoderRun 52 (sumInit s)).getReg .x15 ≠ 194 := by
+    intro h
+    exact bad (decodedSum.symm.trans h)
+  have rejectedPc := sumTest_bad_pc location _ decodedPc badRegister
+  have jumped := sumFailureJump_block location _ rejectedPc
+  exact ⟨by simpa using (digits.append checked).append jumped,
+    sumFailureJump_pc location _ rejectedPc⟩
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
