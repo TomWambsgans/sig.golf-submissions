@@ -1,0 +1,18 @@
+name: phony
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phony:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - run: echo "phony job on $(uname -a), $(nproc) vCPUs"
