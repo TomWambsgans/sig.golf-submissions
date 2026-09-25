@@ -16,6 +16,19 @@ theorem runWith_cost (hash : Hash) (secretKey : SecretKey) :
       (SphincsSubmission.admissible.2 .keygen) rfl rfl rfl
   rw [hrun]
 
+theorem runWith_termination (hash : Hash) (secretKey : SecretKey) :
+    let result := SphincsSubmission.submission.runWith hash .keygen secretKey
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  obtain ⟨cache, hrun, _, _⟩ :=
+    SphincsMaskedKeygenPadding.keygen_runWith_canonical
+      SphincsSubmission.submission hash secretKey rfl
+      (SphincsSubmission.admissible.2 .keygen) rfl rfl rfl
+  rw [hrun]
+  change true = true ∧ 92369576 < CYCLE_LIMIT
+  constructor
+  · rfl
+  · decide
+
 
 theorem honest_cost (hash : Hash) (secretKey : SecretKey)
     (message : Message) :
@@ -45,6 +58,10 @@ theorem exponential_cost_le_two :
 /-- info: 'SigGolfCandidate.SphincsKeygenCost.runWith_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms runWith_cost
+
+/-- info: 'SigGolfCandidate.SphincsKeygenCost.runWith_termination' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms runWith_termination
 
 /-- info: 'SigGolfCandidate.SphincsKeygenCost.honest_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

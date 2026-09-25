@@ -21,6 +21,16 @@ theorem honest_cost (hash : Hash) (secretKey : SecretKey) (message : Message) :
     · simp [recordCost]
   · simp [recordCost]
 
+theorem runWith_termination (hash : Hash)
+    (input : Input SphincsSubmission.submission.sizes .expand) :
+    let result := SphincsSubmission.submission.runWith hash .expand input
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  have h := Sphincs.Expansion.run_bound hash input
+  dsimp at h ⊢
+  refine ⟨h.1, ?_⟩
+  rw [h.2.2.1]
+  decide
+
 theorem support_cost (secretKey : SecretKey) (result : HonestResult)
     (mem : result ∈ support (SphincsSubmission.submission.honestWorkload secretKey)) :
     result.costs .expand = 0 := by
@@ -45,6 +55,9 @@ theorem compression_bound (secretKey : SecretKey) :
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.honest_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms honest_cost
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.runWith_termination' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms runWith_termination
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.support_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms support_cost
