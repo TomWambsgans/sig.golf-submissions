@@ -823,3 +823,187 @@ theorem segment_interior_trans (hash : Hash)
 #print axioms segment_interior_trans
 
 end SigGolfCandidate.SphincsVerifierWotsStepTrace
+
+namespace SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+/-- Minimum number of WOTS instructions before reaching the segment exit,
+    when branches are allowed either outcome. -/
+def rank (pc : Nat) : Nat :=
+  if 0x2710 ≤ pc ∧ pc < 0x2ad4 ∧ pc % 4 = 0 then
+    if pc < 0x2788 then (0x2784 - pc) / 4 + 123
+    else if pc < 0x28ec then (0x28e8 - pc) / 4 + 128
+    else (0x2ad4 - pc) / 4
+  else 0
+
+theorem rank_positive_inside (pc : Nat) (positive : 0 < rank pc) :
+    0x2710 ≤ pc ∧ pc < 0x2ad4 ∧ pc % 4 = 0 := by
+  by_contra outside
+  simp [rank, outside] at positive
+
+def edgeRank (pc : Word) : Instr → Prop
+  | .BEQ _ _ offset | .BNE _ _ offset =>
+      rank pc.toNat ≤ rank (pc + 4).toNat + 1 ∧
+      rank pc.toNat ≤ rank (pc + signExtend13 offset).toNat + 1
+  | .JAL _ offset =>
+      rank pc.toNat ≤ rank (pc + signExtend21 offset).toNat + 1
+  | _ => rank pc.toNat ≤ rank (pc + 4).toNat + 1
+
+instance (pc : Word) (instruction : Instr) : Decidable (edgeRank pc instruction) := by
+  cases instruction <;> unfold edgeRank <;> infer_instance
+
+private def edgeCheck (i : Nat) : Bool :=
+  let pc := 0x2710 + 4 * i
+  match SphincsImages.verify.code[1476 + i]?.bind decodeInstruction with
+  | some (.base instruction) =>
+      decide (VerifierSupported instruction ∧
+        edgeRank (BitVec.ofNat 64 pc) instruction)
+  | _ => false
+
+theorem edgeCheck_all : (List.range 241).all edgeCheck = true := by decide
+
+
+end SigGolfCandidate.SphincsVerifierWotsRank
+
+namespace SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsMaskedSignOtsShift
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem edgeRank_exec (state : MachineState) (instruction : Instr)
+    (supported : VerifierSupported instruction)
+    (edge : edgeRank state.pc instruction) :
+    rank state.pc.toNat ≤ rank (execInstrBr state instruction).pc.toNat + 1 := by
+  rcases supported with h | ⟨offset, rfl⟩
+  · cases instruction <;> simp_all [Supported, edgeRank, execInstrBr]
+    all_goals split_ifs <;> tauto
+  · simpa [edgeRank, execInstrBr] using edge
+
+theorem edgeRank_ordinary (state next : MachineState) (instruction : Instr)
+    (supported : VerifierSupported instruction)
+    (edge : edgeRank state.pc instruction)
+    (step : ordinaryStep state (.base instruction) = some next) :
+    rank state.pc.toNat ≤ rank next.pc.toNat + 1 := by
+  have eqNext := ordinaryStep_result state next instruction step
+  subst next
+  exact edgeRank_exec state instruction supported edge
+
+end SigGolfCandidate.SphincsVerifierWotsRank
+
+namespace SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+open SigGolfCandidate.SphincsVerifierMessageCopy
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem edgeRank_fetched (state : MachineState)
+    (instruction : Instruction)
+    (inside : InSegment state)
+    (fetched : fetch SphincsImages.verify state = some instruction) :
+    ∃ base, instruction = .base base ∧
+      VerifierSupported base ∧ edgeRank state.pc base := by
+  dsimp [InSegment] at inside
+  let i : Fin 241 := ⟨(state.pc.toNat - 0x2710) / 4, by omega⟩
+  have pc : state.pc = BitVec.ofNat 64 (0x2710 + 4 * i.val) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp [i]; omega)]
+    dsimp [i]
+    omega
+  have codePc : state.pc = BitVec.ofNat 64 (0x1000 + 4 * (1476 + i.val)) := by
+    rw [pc]
+    congr 1
+    omega
+  rw [fetch_index SphincsImages.verify state (1476 + i.val)
+    (by omega) codePc] at fetched
+  have checked := List.all_eq_true.mp edgeCheck_all i.val
+    (List.mem_range.mpr i.isLt)
+  unfold edgeCheck at checked
+  cases hc : SphincsImages.verify.code[1476 + i.val]?.bind decodeInstruction with
+  | none => simp [hc] at fetched
+  | some result =>
+      rw [hc] at checked fetched
+      cases result with
+      | base base =>
+          have both : VerifierSupported base ∧
+              edgeRank (BitVec.ofNat 64 (0x2710 + 4 * i.val)) base :=
+            of_decide_eq_true (by simpa [hc] using checked)
+          exact ⟨base, by cases fetched; rfl,
+            both.1, by simpa [← pc] using both.2⟩
+      | word op rd rs1 rs2 => simp at checked
+      | sraiw rd rs shift => simp at checked
+
+theorem ordinary_rank_step (state next : MachineState)
+    (instruction : Instruction)
+    (inside : InSegment state)
+    (fetched : fetch SphincsImages.verify state = some instruction)
+    (step : ordinaryStep state instruction = some next) :
+    rank state.pc.toNat ≤ rank next.pc.toNat + 1 := by
+  obtain ⟨base, rfl, supported, edge⟩ :=
+    edgeRank_fetched state instruction inside fetched
+  exact edgeRank_ordinary state next base supported edge step
+
+end SigGolfCandidate.SphincsVerifierWotsRank
+
+namespace SigGolfCandidate.SphincsVerifierWotsRank
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsRelocationTrace
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem trace_inside_of_rank (hash : Hash)
+    {state final : MachineState} {steps cycles calls blocks : Nat}
+    (trace : Trace hash SphincsImages.verify state steps cycles calls blocks final)
+    (short : steps ≤ rank state.pc.toNat) :
+    SegmentInterior hash trace := by
+  induction trace with
+  | refl state => exact SegmentInterior.refl state
+  | ordinary state next final instruction steps cycles calls blocks
+      fetched step tail ih =>
+      have positive : 0 < rank state.pc.toNat := by omega
+      have inside : InSegment state := rank_positive_inside _ positive
+      have edge := ordinary_rank_step state next instruction inside fetched step
+      have rest : steps ≤ rank next.pc.toNat := by omega
+      exact SegmentInterior.ordinary state next final instruction
+        steps cycles calls blocks fetched step tail inside (ih rest)
+  | hash state final steps cycles calls blocks fetched service valid tail ih =>
+      have positive : 0 < rank state.pc.toNat := by omega
+      have inside : InSegment state := rank_positive_inside _ positive
+      obtain ⟨base, eqBase, supported, edge⟩ :=
+        edgeRank_fetched state (.base .ECALL) inside fetched
+      have isEcall : base = .ECALL := by
+        injection eqBase with h
+        exact h.symm
+      subst base
+      have nextPc :
+          (writeHash state (hash (hashInput state))).pc = state.pc + 4 := rfl
+      have edge' : rank state.pc.toNat ≤
+          rank (writeHash state (hash (hashInput state))).pc.toNat + 1 := by
+        simpa [edgeRank, nextPc] using edge
+      have rest : steps ≤
+          rank (writeHash state (hash (hashInput state))).pc.toNat := by omega
+      exact SegmentInterior.hash state final steps cycles calls blocks
+        fetched service valid tail inside (ih rest)
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRank.edgeCheck_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms edgeCheck_all
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRank.edgeRank_fetched' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms edgeRank_fetched
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsRank.trace_inside_of_rank' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms trace_inside_of_rank
+
+end SigGolfCandidate.SphincsVerifierWotsRank
