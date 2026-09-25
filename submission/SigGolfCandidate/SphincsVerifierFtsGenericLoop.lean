@@ -38,10 +38,43 @@ theorem parent_loopBack_generic (state : MachineState) (level : Nat)
     levelBranch_pc_repeat checked checkedPc unequal,
     by rw [levelBranch_mem, levelCheck_mem]; exact advancedLevel⟩
 
+theorem parent_loopDone (state : MachineState)
+    (pc : state.pc = 0x1b54)
+    (levelValue : state.getMem 0x43048 = 8) :
+    let advanced := advanceLevelState state
+    let checked := levelCheckState advanced
+    let branched := levelBranchState checked
+    OrdinarySteps SphincsImages.verify state 12 branched ∧
+      branched.pc = 0x1b84 ∧
+      branched.getMem 0x43048 = 9 := by
+  let advanced := advanceLevelState state
+  let checked := levelCheckState advanced
+  let branched := levelBranchState checked
+  have first := advanceLevel_block state pc
+  have nextPc := advanceLevel_pc state pc
+  have second := levelCheck_block advanced nextPc
+  have checkedPc := levelCheck_pc advanced nextPc
+  have values := levelCheck_values advanced
+  have advancedLevel : advanced.getMem 0x43048 = 9 := by
+    rw [advanceLevel_cell, levelValue]
+    decide
+  have equal : checked.getReg .x6 = checked.getReg .x7 := by
+    rw [values.1, values.2, advancedLevel]
+  have third := levelBranch_block checked checkedPc
+  exact ⟨(first.append second).append third,
+    levelBranch_pc_done checked checkedPc equal,
+    by rw [levelBranch_mem, levelCheck_mem]; exact advancedLevel⟩
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericLoop.parent_loopBack_generic' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms parent_loopBack_generic
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericLoop.parent_loopDone' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms parent_loopDone
 
 end SigGolfCandidate.SphincsVerifierFtsGenericLoop
