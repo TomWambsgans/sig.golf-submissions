@@ -3,6 +3,8 @@ import SigGolfCandidate.SphincsMaskedSignRootValue
 namespace SigGolfCandidate.SphincsMaskedSignForestEntry
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsVerifierFtsGenericBytes
+open SphincsMaskedChainDomain
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -169,6 +171,150 @@ theorem leafSecretCopy (s : MachineState) (pc : s.pc = 0x1d54) :
   · intro i hi
     rw [data i hi, leafSetup_secretWord s ⟨i, hi⟩]
 
+/-- Prepare the 72-byte FORS secret derivation query. -/
+def leafHashSchedule : List (Word × Instr) := [
+  (0x1da4, .LUI .x6 1),
+  (0x1da8, .ADDI .x6 .x6 (-2047)),
+  (0x1dac, .LUI .x28 67),
+  (0x1db0, .ADDI .x28 .x28 0),
+  (0x1db4, .LD .x7 .x28 0),
+  (0x1db8, .SLLI .x7 .x7 16),
+  (0x1dbc, .ADD .x6 .x6 .x7),
+  (0x1dc0, .LUI .x7 64),
+  (0x1dc4, .ADDI .x7 .x7 0),
+  (0x1dc8, .SW .x7 .x6 0),
+  (0x1dcc, .LUI .x28 67),
+  (0x1dd0, .ADDI .x28 .x28 16),
+  (0x1dd4, .LD .x6 .x28 0),
+  (0x1dd8, .SW .x7 .x6 4),
+  (0x1ddc, .LUI .x28 67),
+  (0x1de0, .ADDI .x28 .x28 8),
+  (0x1de4, .LD .x6 .x28 0),
+  (0x1de8, .SD .x7 .x6 8),
+  (0x1dec, .LUI .x28 67),
+  (0x1df0, .ADDI .x28 .x28 24),
+  (0x1df4, .LD .x6 .x28 0),
+  (0x1df8, .SW .x7 .x6 16),
+  (0x1dfc, .ADDI .x6 .x0 116),
+  (0x1e00, .LUI .x7 64),
+  (0x1e04, .ADDI .x7 .x7 20),
+  (0x1e08, .LWU .x13 .x6 0),
+  (0x1e0c, .SW .x7 .x13 0),
+  (0x1e10, .LWU .x13 .x6 4),
+  (0x1e14, .SW .x7 .x13 4),
+  (0x1e18, .LWU .x13 .x6 8),
+  (0x1e1c, .SW .x7 .x13 8),
+  (0x1e20, .LWU .x13 .x6 12),
+  (0x1e24, .SW .x7 .x13 12),
+  (0x1e28, .LWU .x13 .x6 16),
+  (0x1e2c, .SW .x7 .x13 16),
+  (0x1e30, .LUI .x10 64),
+  (0x1e34, .ADDI .x10 .x10 0),
+  (0x1e38, .ADDI .x11 .x0 576),
+  (0x1e3c, .LUI .x12 66),
+  (0x1e40, .ADDI .x12 .x12 0),
+  (0x1e44, .ADDI .x5 .x0 1)]
+
+def leafHashReady (s : MachineState) : MachineState :=
+  runSchedule leafHashSchedule s
+
+theorem leafHash_code : ∀ e ∈ leafHashSchedule,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  decide
+
+theorem leafHash_checked (s : MachineState) (pc : s.pc = 0x1da4) :
+    Checked leafHashSchedule s := by
+  simp [Checked, leafHashSchedule, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, MachineState.setWord32,
+    MachineState.getWord32, alignToDword, byteOffset, pc]
+
+theorem leafHash_block (s : MachineState) (pc : s.pc = 0x1da4) :
+    OrdinarySteps SphincsMaskedImages.sign s 41 (leafHashReady s) := by
+  exact checked_sound _ leafHashSchedule leafHash_code s
+    (leafHash_checked s pc)
+
+theorem leafHash_pc (s : MachineState) (pc : s.pc = 0x1da4) :
+    (leafHashReady s).pc = 0x1e48 := by
+  simp [leafHashReady, runSchedule, leafHashSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+theorem leafHash_registers (s : MachineState) :
+    (leafHashReady s).getReg .x10 = 0x40000 ∧
+    (leafHashReady s).getReg .x11 = 576 ∧
+    (leafHashReady s).getReg .x12 = 0x42000 ∧
+    (leafHashReady s).getReg .x5 = 1 := by
+  simp [leafHashReady, runSchedule, leafHashSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+
+def leafHeaderWord (s : MachineState) (i : Fin 10) : BitVec 32 :=
+  if i.val = 0 then (2049#64 + (s.getMem 0x43000 <<< 16)).setWidth 32
+  else if i.val = 1 then (s.getMem 0x43010).setWidth 32
+  else if i.val = 2 then extractWord32 (s.getMem 0x43008) 0
+  else if i.val = 3 then extractWord32 (s.getMem 0x43008) 1
+  else if i.val = 4 then (s.getMem 0x43018).setWidth 32
+  else s.getWord32 (BitVec.ofNat 64 (0x74 + 4 * (i.val - 5)))
+
+theorem leafHash_headerWord (s : MachineState) (i : Fin 10) :
+    (leafHashReady s).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * i.val)) = leafHeaderWord s i := by
+  fin_cases i <;>
+    simp [leafHashReady, runSchedule, leafHashSchedule, leafHeaderWord,
+      execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, MachineState.setWord32,
+      MachineState.getWord32, alignToDword, byteOffset,
+      SphincsMaskedChainStep.extract_replace_low,
+      SphincsMaskedChainStep.extract_replace_high,
+      SphincsMaskedChainStep.extract_replace_low_other,
+      SphincsMaskedChainStep.extract_replace_high_other]
+
+theorem leafHash_seedWord (s : MachineState) (i : Fin 4) :
+    (leafHashReady s).getMem (wordAddress 0x40028 i.val) =
+      s.getMem (wordAddress 0x40028 i.val) := by
+  fin_cases i <;>
+    simp [leafHashReady, runSchedule, leafHashSchedule, wordAddress,
+      execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, MachineState.setWord32,
+      MachineState.getWord32, alignToDword, byteOffset]
+
+theorem leafHash_trace (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1da4) :
+    Trace hash SphincsMaskedImages.sign s 42 57 1 2
+      (writeHash (leafHashReady s) (hash (hashInput (leafHashReady s)))) := by
+  obtain ⟨src, bits, dst, service⟩ := leafHash_registers s
+  have hfetch : fetch SphincsMaskedImages.sign (leafHashReady s) =
+      some (.base .ECALL) := by
+    rw [fetch_at, leafHash_pc s pc]
+    decide
+  have valid : hashArgumentsValid (leafHashReady s) = true := by
+    simp [hashArgumentsValid, src, bits, dst, accessValid, rangeValid,
+      MEMORY_BYTES]
+  have len : (hashInput (leafHashReady s)).1 = 576 := by
+    simp [hashInput, bits]
+  have step := Trace.hash (hash := hash)
+    (image := SphincsMaskedImages.sign)
+    (leafHashReady s) _ 0 0 0 0 hfetch service valid (Trace.refl _)
+  simp only [len] at step
+  exact (leafHash_block s pc).trace.trans step
+
+/-- The first FORS secret derivation reaches a valid HASH with a 72-byte input. -/
+theorem firstForestHash (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1cc8) :
+    ∃ final, Trace hash SphincsMaskedImages.sign s 115 130 1 2 final := by
+  let entered := entryState s
+  obtain ⟨copied, copyTrace, copiedPC, _⟩ :=
+    leafSecretCopy entered (entry_pc s pc)
+  let final := writeHash (leafHashReady copied)
+    (hash (hashInput (leafHashReady copied)))
+  refine ⟨final, ?_⟩
+  have first := (entry_block s pc).trace (hash := hash)
+  have middle := copyTrace.trace (hash := hash)
+  have last := leafHash_trace hash copied copiedPC
+  simpa [final, Execution.charge] using (first.trans middle).trans last
+
 /-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.entry_block' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms entry_block
@@ -192,5 +338,25 @@ theorem leafSecretCopy (s : MachineState) (pc : s.pc = 0x1d54) :
 /-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.leafSecretCopy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms leafSecretCopy
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.leafHash_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leafHash_block
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.leafHash_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leafHash_trace
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.leafHash_headerWord' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leafHash_headerWord
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.leafHash_seedWord' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leafHash_seedWord
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignForestEntry.firstForestHash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms firstForestHash
 
 end SigGolfCandidate.SphincsMaskedSignForestEntry
