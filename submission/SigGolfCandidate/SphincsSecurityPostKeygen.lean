@@ -1032,6 +1032,72 @@ theorem fixedReferenceWorld_evalSPMF {α : Type}
           simp only [SphincsSecurity.Concrete.fixedHashWorld, fixedReferenceWorld,
             QueryImpl.add_apply_inr, ← PMF.monad_pure_eq_pure, evalSPMF_pure]
 
+theorem fixedReferenceStop_law {α : Type}
+    (f : QueryImpl SphincsSecurity.HashSpec Id)
+    (program : OracleComp SphincsSecurity.OracleWorld α) (Q : Nat) :
+    𝒮[simulateQ (SphincsSecurity.Concrete.fixedHashWorld f)
+      (SphincsSecurity.QueryCap.run referenceHashCall program Q)] =
+    (SphincsSecurity.QueryCap.finish Q) <$>
+      𝒮[simulateQ (SphincsSecurity.Concrete.fixedHashWorld f)
+        (SphincsSecurity.QueryCap.counted referenceHashCall program)] := by
+  rw [fixedReferenceWorld_evalSPMF f, fixedReferenceWorld_evalSPMF f]
+  rw [SphincsSecurity.QueryCap.run_eq_counted referenceHashCall
+    (fixedReferenceWorld f) program Q]
+  rw [← PMF.monad_map_eq_map, evalSPMF_map]
+
+/-- The whole-game cutoff has the exact budgeted-event law under the lazy
+random oracle, not only under an eagerly fixed hash function. -/
+theorem referenceStop_rom_law {α : Type}
+    (program : OracleComp SphincsSecurity.OracleWorld α) (Q : Nat) :
+    𝒮[(simulateQ SphincsSecurity.romImpl
+      (SphincsSecurity.QueryCap.run referenceHashCall program Q)).run' ∅] =
+    (SphincsSecurity.QueryCap.finish Q) <$>
+      𝒮[(simulateQ SphincsSecurity.romImpl
+        (SphincsSecurity.QueryCap.counted referenceHashCall program)).run' ∅] := by
+  let inputs := SphincsSecurity.Concrete.hashInputs
+      (SphincsSecurity.QueryCap.run referenceHashCall program Q) ∪
+    SphincsSecurity.Concrete.hashInputs
+      (SphincsSecurity.QueryCap.counted referenceHashCall program)
+  have hrun := SphincsSecurity.Concrete.evalSPMF_romRun_eq_finiteHash
+    (SphincsSecurity.QueryCap.run referenceHashCall program Q) inputs
+    (Finset.subset_union_left) (∅ : QueryCache SphincsSecurity.HashSpec)
+  have hcount := SphincsSecurity.Concrete.evalSPMF_romRun_eq_finiteHash
+    (SphincsSecurity.QueryCap.counted referenceHashCall program) inputs
+    (Finset.subset_union_right) (∅ : QueryCache SphincsSecurity.HashSpec)
+  rw [hrun, hcount]
+  simp only [evalSPMF_bind]
+  rw [map_bind]
+  apply bind_congr
+  intro table
+  exact fixedReferenceStop_law
+    (SphincsSecurity.Concrete.finiteHashAnswer ∅ inputs table) program Q
+
+theorem stoppedReferenceGame_lazy_budget_event
+    (adversary : SphincsSecurity.Adversary) (Q : Nat) :
+    Pr[fun result => ∃ remaining, result = some (true, remaining) |
+      (simulateQ SphincsSecurity.romImpl
+        (stoppedReferenceGame adversary Q)).run' ∅] =
+    Pr[fun result => result.1 = true ∧ result.2 ≤ Q |
+      (simulateQ SphincsSecurity.romImpl
+        (SphincsSecurity.countHashQueries
+          (SphincsSecurity.gameCore SphincsSecurity.Seeded.scheme adversary))).run' ∅] := by
+  conv_lhs => rw [← probEvent_evalSPMF]
+  conv_rhs => rw [← probEvent_evalSPMF]
+  rw [stoppedReferenceGame, SphincsSecurity.countHashQueries]
+  rw [referenceStop_rom_law, probEvent_map]
+  have hpred :
+      ((fun result => ∃ remaining, result = some (true, remaining)) ∘
+        SphincsSecurity.QueryCap.finish Q) =
+      (fun result : Bool × Nat => result.1 = true ∧ result.2 ≤ Q) := by
+    funext result
+    apply propext
+    simp only [Function.comp_def, SphincsSecurity.QueryCap.finish]
+    split_ifs with hbudget
+    · simp [hbudget]
+    · simp [hbudget]
+  rw [hpred]
+  rfl
+
 
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
@@ -1130,3 +1196,11 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.fixedReferenceWorld_evalSPMF' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.fixedReferenceWorld_evalSPMF
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.referenceStop_rom_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.referenceStop_rom_law
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_lazy_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.stoppedReferenceGame_lazy_budget_event

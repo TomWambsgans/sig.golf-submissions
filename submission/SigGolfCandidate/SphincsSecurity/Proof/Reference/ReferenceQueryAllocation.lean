@@ -47,16 +47,29 @@ def ReferenceRecordedResult.messageCalls (result : ReferenceRecordedResult) : Na
 noncomputable def ReferenceRecordedResult.remainingCalls (dummy : OtsReferenceWords) (result : ReferenceRecordedResult) : Nat :=
   result.encodingCalls + result.otherCalls dummy + result.messageCalls
 
-theorem referenceRecordedGame_joint_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (result : ReferenceRecordedResult)
+theorem referenceRecordedGame_joint_budget_of_result_cost
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (result : ReferenceRecordedResult)
     (hresult : result ∈ support (referenceRecordedGame (canonicalGraphGameInputs adversary)
-      (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)) :
+      (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary))
+    (hbudget : result.2.2.1.2.hashCalls ≤ q) :
     result.prefixCalls dummy + result.remainingCalls dummy ≤ q := by
   have hpartition := QueryClass.allocation_calls result.1 (referenceFamilyWords result.2.1 dummy) result.2.2.2
   have hslots := referenceRecordedGame_nonmessage_le _ _ dummy adversary result hresult
-  have hbudget := referenceRecordedGame_hashCalls_le dummy adversary q hbound result hresult
   dsimp only [ReferenceRecordedResult.prefixCalls, ReferenceRecordedResult.remainingCalls,
     ReferenceRecordedResult.encodingCalls, ReferenceRecordedResult.otherCalls, ReferenceRecordedResult.messageCalls]
   omega
 
+theorem referenceRecordedGame_joint_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hbound : HasHashQueryBound scheme adversary q) (result : ReferenceRecordedResult)
+    (hresult : result ∈ support (referenceRecordedGame (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)) :
+    result.prefixCalls dummy + result.remainingCalls dummy ≤ q :=
+  referenceRecordedGame_joint_budget_of_result_cost dummy adversary q result hresult
+    (referenceRecordedGame_hashCalls_le dummy adversary q hbound result hresult)
+
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceRecordedGame_joint_budget_of_result_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceRecordedGame_joint_budget_of_result_cost
