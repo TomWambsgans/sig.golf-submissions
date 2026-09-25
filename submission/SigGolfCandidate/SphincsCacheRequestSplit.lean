@@ -257,6 +257,103 @@ theorem sign_runWith_failure_of_execution (hash : Hash)
     execution hsteps
   simp [hrun]
 
+theorem sign_runWith_termination_of_execution (hash : Hash)
+    (secretKey : SigGolf.SecretKey) (cache : Cache) (message : SigGolf.Message)
+    (steps cycles calls compressions : Nat)
+    (finalState : RiscvZkvm.Rv64.MachineState)
+    (execution : Executes hash (SphincsSubmission.submission.image .sign)
+      (SphincsMaskedSignPrefix.entryState secretKey cache message)
+      steps ⟨.failure, finalState, cycles, calls, compressions⟩)
+    (hsteps : steps ≤ CYCLE_LIMIT) (hcycles : cycles < CYCLE_LIMIT) :
+    let result := SphincsSubmission.submission.runWith hash .sign
+      (secretKey, cache, message)
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  have hrun := runWith_of_executes SphincsSubmission.submission hash .sign
+    (secretKey, cache, message)
+    (SphincsMaskedSignPrefix.entryState secretKey cache message)
+    steps _
+    (SphincsMaskedSignPrefix.entry_loaded secretKey cache message)
+    execution hsteps
+  simp [hrun, hcycles]
+
+theorem parameter_comparison_mismatch_terminates (hash : Hash)
+    (secretKey : SigGolf.SecretKey) (cache : Cache) (message : SigGolf.Message)
+    (parameterMismatch : ¬∀ i : Fin 5,
+      (SphincsMaskedSignPrefix.afterHashState hash
+        (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+        secretKey).getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+      (SphincsMaskedSignPrefix.afterHashState hash
+        (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+        secretKey).getWord32 (BitVec.ofNat 64 (0x74 + 4 * i.val))) :
+    let result := SphincsSubmission.submission.runWith hash .sign
+      (secretKey, cache, message)
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  let s := SphincsMaskedSignPrefix.afterHashState hash
+    (SphincsMaskedSignPrefix.afterJumpState secretKey cache message) secretKey
+  obtain ⟨i, prior, different⟩ := first_mismatch
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)))
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x74 + 4 * i.val)))
+    (by simpa only [s] using parameterMismatch)
+  have execution := SphincsMaskedSignReject.loaded_parameter_mismatch_rejects
+    hash secretKey cache message i prior different
+  have himage : SphincsSubmission.submission.image .sign =
+      SphincsMaskedImages.sign := rfl
+  rw [← himage] at execution
+  apply sign_runWith_termination_of_execution hash secretKey cache message
+    (83 + 3 * i.val) (98 + 3 * i.val) 1 2 _ execution
+  · have := i.isLt
+    norm_num [CYCLE_LIMIT] at *
+    omega
+  · have := i.isLt
+    norm_num [CYCLE_LIMIT] at *
+    omega
+
+theorem tag_comparison_mismatch_terminates (hash : Hash)
+    (secretKey : SigGolf.SecretKey) (cache : Cache) (message : SigGolf.Message)
+    (parameterEqual : ∀ j : Fin 5,
+      (SphincsMaskedSignPrefix.afterHashState hash
+        (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+        secretKey).getWord32 (BitVec.ofNat 64 (0x42000 + 4 * j.val)) =
+      (SphincsMaskedSignPrefix.afterHashState hash
+        (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+        secretKey).getWord32 (BitVec.ofNat 64 (0x74 + 4 * j.val)))
+    (tagMismatch : ¬∀ i : Fin 5,
+      (SphincsMaskedMacTrace.result hash 0x1144
+        (SphincsMaskedSignParameterCheck.afterComparison
+          (SphincsMaskedSignPrefix.afterHashState hash
+            (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+            secretKey))).getWord32 (BitVec.ofNat 64 (0x84000 + 4 * i.val)) =
+      (SphincsMaskedMacTrace.result hash 0x1144
+        (SphincsMaskedSignParameterCheck.afterComparison
+          (SphincsMaskedSignPrefix.afterHashState hash
+            (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+            secretKey))).getWord32 (BitVec.ofNat 64 (0x2004c + 4 * i.val))) :
+    let result := SphincsSubmission.submission.runWith hash .sign
+      (secretKey, cache, message)
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  let s := SphincsMaskedMacTrace.result hash 0x1144
+    (SphincsMaskedSignParameterCheck.afterComparison
+      (SphincsMaskedSignPrefix.afterHashState hash
+        (SphincsMaskedSignPrefix.afterJumpState secretKey cache message)
+        secretKey))
+  obtain ⟨i, prior, different⟩ := first_mismatch
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x84000 + 4 * i.val)))
+    (fun i : Fin 5 => s.getWord32 (BitVec.ofNat 64 (0x2004c + 4 * i.val)))
+    (by simpa only [s] using tagMismatch)
+  have execution := SphincsMaskedSignReject.loaded_tag_mismatch_rejects
+    hash secretKey cache message i parameterEqual prior different
+  have himage : SphincsSubmission.submission.image .sign =
+      SphincsMaskedImages.sign := rfl
+  rw [← himage] at execution
+  apply sign_runWith_termination_of_execution hash secretKey cache message
+    (338 + 3 * i.val) (16744 + 3 * i.val) 2 2051 _ execution
+  · have := i.isLt
+    norm_num [CYCLE_LIMIT] at *
+    omega
+  · have := i.isLt
+    norm_num [CYCLE_LIMIT] at *
+    omega
+
 theorem tag_comparison_mismatch_rejects (hash : Hash)
     (secretKey : SigGolf.SecretKey) (cache : Cache) (message : SigGolf.Message)
     (parameterEqual : ∀ j : Fin 5,
@@ -490,6 +587,21 @@ theorem altered_prefix_no_mac_hit_rejects (hash : Hash)
   · exact ⟨htag.2.2.1, by rw [htag.2.2.2]⟩
   · exact False.elim (hmiss hhit.2)
 
+theorem authentication_failure_terminates (hash : Hash)
+    (secretKey : SigGolf.SecretKey) (cache : Cache) (message : SigGolf.Message)
+    (hfail : ¬ParameterPass hash secretKey cache message ∨
+      ¬TagPass hash secretKey cache) :
+    let result := SphincsSubmission.submission.runWith hash .sign
+      (secretKey, cache, message)
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  classical
+  by_cases hp : ParameterPass hash secretKey cache message
+  · have ht : ¬TagPass hash secretKey cache := hfail.resolve_left (fun h => h hp)
+    have hfield := parameter_equal_implies_cache_field hash secretKey cache message hp
+    exact tag_comparison_mismatch_terminates hash secretKey cache message hp
+      (wrong_tag_detected hash secretKey cache message hfield hp ht)
+  · exact parameter_comparison_mismatch_terminates hash secretKey cache message hp
+
 end SigGolfCandidate.SphincsCacheRequestSplit
 
 /-- info: 'SigGolfCandidate.SphincsCacheRequestSplit.cache_three_way' depends on axioms: [propext, Quot.sound] -/
@@ -519,3 +631,7 @@ end SigGolfCandidate.SphincsCacheRequestSplit
 /-- info: 'SigGolfCandidate.SphincsCacheRequestSplit.altered_prefix_no_mac_hit_rejects' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsCacheRequestSplit.altered_prefix_no_mac_hit_rejects
+
+/-- info: 'SigGolfCandidate.SphincsCacheRequestSplit.authentication_failure_terminates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsCacheRequestSplit.authentication_failure_terminates
