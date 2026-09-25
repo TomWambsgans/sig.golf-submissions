@@ -2,6 +2,8 @@ import SigGolfCandidate.SphincsVerifierWotsChainSetup
 import SigGolfCandidate.SphincsVerifierFtsCopyAccess
 import SigGolfCandidate.SphincsVerifierCopyMemory
 
+import SigGolfCandidate.SphincsMaskedKeygenPrefix
+
 namespace SigGolfCandidate.SphincsVerifierWotsChainEntry
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 open SigGolfCandidate.SphincsVerifierMessageCopy
@@ -324,3 +326,99 @@ theorem chainEntry_step (state : MachineState) (chain : Fin 52)
 #print axioms chainEntry_step
 
 end SigGolfCandidate.SphincsVerifierWotsChainEntry
+
+namespace SigGolfCandidate.SphincsVerifierWotsChainEntryGeneral
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsChainEntry
+open SigGolfCandidate.SphincsVerifierFtsCopyAccess
+open SigGolfCandidate.SphincsVerifierMessageCopy
+open SigGolfCandidate.SphincsMaskedKeygenPrefix
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+def pointerSchedule : List (Word × Instr) := [
+  (0x2710, .LUI .x28 0x43),
+  (0x2714, .ADDI .x28 .x28 40),
+  (0x2718, .LD .x6 .x28 0),
+  (0x271c, .LUI .x7 0x45),
+  (0x2720, .ADDI .x7 .x7 (-1280))]
+
+theorem pointer_code : ∀ e ∈ pointerSchedule,
+    SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify e.1 =
+      some (.base e.2) := by decide
+
+theorem pointer_checked (s : MachineState) (pc : s.pc = 0x2710) :
+    Checked pointerSchedule s := by
+  simp [Checked, pointerSchedule, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc] <;> bv_decide
+
+theorem pointer_state_eq (s : MachineState) :
+    runSchedule pointerSchedule s = chainValuePointers s := by
+  rfl
+
+theorem pointer_block (s : MachineState) (pc : s.pc = 0x2710) :
+    OrdinarySteps SphincsImages.verify s 5 (chainValuePointers s) := by
+  have h := checked_sound SphincsImages.verify pointerSchedule
+    pointer_code s (pointer_checked s pc)
+  rw [pointer_state_eq] at h
+  simpa [pointerSchedule] using h
+
+theorem pointer_pc (s : MachineState) (pc : s.pc = 0x2710) :
+    (chainValuePointers s).pc = 0x2724 := by
+  simp [chainValuePointers, execInstrBr, pc]
+
+theorem pointer_source (s : MachineState) (sourceBase : Nat)
+    (pointer : s.getMem 0x43028 = BitVec.ofNat 64 sourceBase) :
+    (chainValuePointers s).getReg .x6 = BitVec.ofNat 64 sourceBase := by
+  simpa [chainValuePointers, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne] using pointer
+
+theorem pointer_destination (s : MachineState) :
+    (chainValuePointers s).getReg .x7 = 0x44b00 := by
+  simp [chainValuePointers, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq]
+
+theorem chainValueCopied_block_general (s : MachineState)
+    (sourceBase : Nat) (small : sourceBase + 20 ≤ 0x40000)
+    (aligned : sourceBase % 4 = 0)
+    (pc : s.pc = 0x2710)
+    (pointer : s.getMem 0x43028 = BitVec.ofNat 64 sourceBase) :
+    OrdinarySteps SphincsImages.verify s 15 (chainValueCopied s) ∧
+      (chainValueCopied s).pc = 0x274c := by
+  have pre := pointer_block s pc
+  have copy := copy20_block_general SphincsImages.verify 1481
+    chain_value_copy_code (chainValuePointers s) sourceBase 0x44b00
+    (by simpa using pointer_pc s pc)
+    (pointer_source s sourceBase pointer) (pointer_destination s)
+    aligned (by dsimp [MEMORY_BYTES]; omega)
+    (by decide) (by decide) (by decide)
+  refine ⟨by simpa only [chainValueCopied] using pre.append copy, ?_⟩
+  exact copy20_final_pc (chainValuePointers s) 1481
+    (by simpa using pointer_pc s pc)
+
+theorem chainEntry_block_general (s : MachineState) (chain : Fin 52)
+    (sourceBase : Nat) (small : sourceBase + 20 ≤ 0x40000)
+    (aligned : sourceBase % 4 = 0)
+    (pc : s.pc = 0x2710)
+    (pointer : s.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (counter : s.getMem 0x43050 = BitVec.ofNat 64 chain.val) :
+    OrdinarySteps SphincsImages.verify s 25 (chainEntryState s) ∧
+      (chainEntryState s).pc = 0x2774 := by
+  have copy := chainValueCopied_block_general s sourceBase small aligned pc pointer
+  have counter' : (chainValueCopied s).getMem 0x43050 =
+      BitVec.ofNat 64 chain.val :=
+    (chainValueCopied_counter s).trans counter
+  have digit := chainDigit_block (chainValueCopied s) chain copy.2 counter'
+  refine ⟨?_, digit.2⟩
+  simpa [chainEntryState] using copy.1.append digit.1
+
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsChainEntryGeneral.chainEntry_block_general' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms chainEntry_block_general
+
+end SigGolfCandidate.SphincsVerifierWotsChainEntryGeneral

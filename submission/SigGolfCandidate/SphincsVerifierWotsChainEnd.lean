@@ -515,3 +515,34 @@ theorem chainEnd_pointer (state : MachineState) (chain : Fin 52)
 #print axioms chainEnd_pointer
 
 end SigGolfCandidate.SphincsVerifierWotsChainEnd
+
+namespace SigGolfCandidate.SphincsVerifierWotsChainEndGeneral
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.SphincsVerifierWotsChainEnd
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
+
+theorem chainEnd_pointer_general (state : MachineState) (chain : Fin 52)
+    (sourceBase : Nat)
+    (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : state.getMem 0x43028 =
+      BitVec.ofNat 64 (sourceBase + 20 * chain.val)) :
+    (chainEndState state).getMem 0x43028 =
+      BitVec.ofNat 64 (sourceBase + 20 * (chain.val + 1)) := by
+  have frame := endpointCopied_controlFrame state chain counter
+  rw [chainEndState, (chainBranch_controlFrame _).2,
+    chainAdvance_pointerFrame, pointerAdvance_cell, frame.2, pointer]
+  change BitVec.ofNat 64 (sourceBase + 20 * chain.val) +
+    BitVec.ofNat 64 20 =
+    BitVec.ofNat 64 (sourceBase + 20 * (chain.val + 1))
+  rw [← BitVec.ofNat_add]
+  congr 1
+
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsChainEndGeneral.chainEnd_pointer_general' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms chainEnd_pointer_general
+
+end SigGolfCandidate.SphincsVerifierWotsChainEndGeneral
