@@ -254,4 +254,63 @@ theorem path_step (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms path_step
 
+abbrev OtsPathRetained (a : Word) : Prop := 0x40000≤a.toNat ∧ a∉controlWrites
+
+theorem pathNext_frame (location : Fin 5) (s : MachineState) (level bit pointer : Nat)
+    (ctrl : PathControls location s level bit pointer) (pointerBound : pointer+20≤0x40000)
+    (a : Word) (ha : OtsPathRetained a) :
+    (pathNext location s).getMem a=s.getMem a := by
+  rw [pathNext,finish_frame location _ a ha.2]
+  have regs := setup_regs location s level bit pointer ctrl
+  rw [SphincsMaskedSignForestTail.copy_memory_frame _ pointer 0 0x40000 regs.2
+    (by decide) (by omega) pointerBound (by decide) a (Or.inr ha.1)]
+  exact setup_frame location s a
+
+theorem divided_selector_bound (location : Fin 5) (selected : Nat)
+    (small : selected<Levels.width location 0) :
+    ∀ level : Fin (Levels.height location),
+      selected/2^level.val<Levels.width location level.val := by
+  fin_cases location <;> intro level <;> fin_cases level <;>
+    simp [Levels.width,Levels.height] at * <;> omega
+
+theorem paths_execution (location : Fin 5) (s : MachineState) (selected pointer : Nat)
+    (pc : s.pc=0x1938+delta location)
+    (ctrl : PathControls location s 0 selected pointer)
+    (selectedBound : selected<Levels.width location 0)
+    (pointerBound : pointer+20*Levels.height location≤0x40000)
+    (aligned : pointer%4=0)
+    (n : Nat) (bound : n≤Levels.height location) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s (70*n) t ∧
+      PathControls location t n (selected/2^n) (pointer+20*n) ∧
+      t.pc=(if n=Levels.height location then 0x1a50+delta location
+        else 0x1938+delta location) ∧
+      ∀ a, OtsPathRetained a → t.getMem a=s.getMem a := by
+  induction n with
+  | zero =>
+      have positive : 0<Levels.height location := by fin_cases location <;> decide
+      refine ⟨s,OrdinarySteps.refl _,?_,?_,?_⟩
+      · simpa using ctrl
+      · simpa only [if_neg (show 0≠Levels.height location by omega)] using pc
+      · intro _ _;rfl
+  | succ n ih =>
+      obtain ⟨mid,first,midCtrl,midPc,frame⟩ := ih (by omega)
+      have here : mid.pc=0x1938+delta location := by
+        simpa only [if_neg (show n≠Levels.height location by omega)] using midPc
+      let level : Fin (Levels.height location) := ⟨n,by omega⟩
+      have bitBound := divided_selector_bound location selected selectedBound level
+      obtain ⟨step,done,loc⟩ := path_step location mid level (selected/2^n)
+        (pointer+20*n) here midCtrl bitBound (by omega) (by omega)
+      refine ⟨pathNext location mid,?_,?_,loc,?_⟩
+      · simpa only [Nat.mul_add,Nat.mul_one,Nat.add_comm] using first.append step
+      · convert done using 1
+        · simp [level,Nat.pow_succ,Nat.div_div_eq_div_mul]
+        · omega
+      · intro a ha
+        rw [pathNext_frame location mid n (selected/2^n) (pointer+20*n)
+          midCtrl (by omega) a ha,frame a ha]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathFinish.paths_execution' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms paths_execution
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathFinish
