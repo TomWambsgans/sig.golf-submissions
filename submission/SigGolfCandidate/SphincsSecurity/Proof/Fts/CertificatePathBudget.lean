@@ -86,4 +86,68 @@ theorem certificateProposal_run_cost_le {α : Type} (key : SecretKey) (budget : 
   rw [← PMF.monad_map_eq_map, hprojection] at hm
   exact certificateLength_run_cost_le key budget required stopAfter computation q state.2 hbound _ hm
 
+theorem originalProposalRecord_counted (key : SecretKey)
+    (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec) :
+    (fun record : ProposalExecutionRecord input =>
+      ((record.output, record.trace.hashCalls), record.cache)) <$>
+      originalProposalRecord key input cache =
+    (liftM ((simulateQ romImpl (countHashQueries (expandedAdversaryImpl key input))).run cache) : PMF _) := by
+  let f : ((OracleWorld + SigningSpec).Range input × SigningBoundaryTrace) × QueryCache HashSpec →
+      ((OracleWorld + SigningSpec).Range input × Nat) × QueryCache HashSpec :=
+    fun result => ((result.1.1, result.1.2.hashCalls), result.2)
+  calc
+    _ = f <$> ((fun record : ProposalExecutionRecord input =>
+        ((record.output, record.trace), record.cache)) <$> originalProposalRecord key input cache) := by
+      simp only [Functor.map_map, f]
+    _ = f <$> (liftM (boundaryRun key.parameter (expandedAdversaryImpl key input) cache) : PMF _) := by
+      exact congrArg (Functor.map f) (originalProposalRecord_boundary key input cache)
+    _ = _ := by
+      rw [← liftM_map (m := ProbComp) (n := PMF)]
+      rw [boundaryRun_count]
+
+theorem certificateMonitorUpdate_mass_le_spent (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
+    (length : Nat) (record : ProposalExecutionRecord input)
+    (hpre : state.2.creationMass ≤ (state.2.spent : ENNReal))
+    (hr : record ∈ (originalProposalRecord key input state.1).support) :
+    (certificateMonitorUpdate key budget required stopAfter input state length record).creationMass ≤
+      ((certificateMonitorUpdate key budget required stopAfter input state length record).spent : ENNReal) := by
+  by_cases hactive : CertificateMonitorActive key budget input state
+  · simp only [certificateMonitorUpdate, if_pos hactive]
+    rw [Nat.cast_add]
+    exact add_le_add hpre (targetCreationMultiplier_le_record_hashCalls key input state.1 record hr)
+  · simpa only [certificateMonitorUpdate, if_neg hactive] using hpre
+
+theorem certificateLength_run_mass_le_spent {α : Type} (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateMonitorState)
+    (hpre : state.2.creationMass ≤ (state.2.spent : ENNReal))
+    (result : α × CertificateMonitorState)
+    (hr : result ∈ ((simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state).support) :
+    result.2.2.creationMass ≤ (result.2.2.spent : ENNReal) := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+      subst result
+      exact hpre
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, hrecord, rfl⟩ :=
+        certificateLengthImpl_support key budget required stopAfter input state middle hmiddle
+      exact ih record.output _
+        (certificateMonitorUpdate_mass_le_spent key budget required stopAfter input state length record hpre hrecord)
+        result hr
+
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.certificateLength_run_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateLength_run_mass_le_spent
+
+/-- info: 'SphincsSecurity.Concrete.originalProposalRecord_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalProposalRecord_counted
