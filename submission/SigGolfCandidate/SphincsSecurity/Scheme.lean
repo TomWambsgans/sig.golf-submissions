@@ -80,7 +80,7 @@ def heightAbove (lay : Layer) : Nat := ∑ j : Layer, if j.val < lay.val then la
 /-- `sum_{j > lay} h_j`, the index bits below layer `lay`. -/
 def heightBelow (lay : Layer) : Nat := totalHeight - heightAbove lay - layerHeight lay
 
-/-- Keep the first 128 output bits, the low bits of the little-endian bit vector. -/
+/-- Keep the first 160 output bits, the low bits of the little-endian bit vector. -/
 def truncateHash (output : HashOutput) : Digest :=
   output.extractLsb' 0 digestBits
 
