@@ -319,3 +319,32 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear_of_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_linear_of_charge
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+theorem realRun_contact_cost_budget_le_linear
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hchargeRun : ∀ result ∈
+      (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)).support, result.2.1.2 ≤ cost result.2.1.1) :
+    Pr[fun result => Contact result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+      (2 / Fintype.card State) * (budget : ENNReal) := by
+  apply (realRun_observed_cost_budget_le_cap auxiliary computation
+    (fun trace endpoint => Contact trace endpoint) cost budget hchargeRun).trans
+  have h := realRun_contact_le auxiliary
+    (fun endpoint => QueryCap.run IsPrefixQuery (computation endpoint) budget)
+  exact h.trans (mul_le_mul' le_rfl
+    (idealRun_capped_count_expectation_le_budget auxiliary computation budget))
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_contact_cost_budget_le_linear' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_contact_cost_budget_le_linear

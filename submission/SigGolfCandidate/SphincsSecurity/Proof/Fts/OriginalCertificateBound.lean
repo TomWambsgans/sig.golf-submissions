@@ -644,6 +644,7 @@ theorem simulateQ_certificateCountedLengthImpl_project {α : Type} (key : Secret
   map_run_simulateQ_eq_of_query_map_eq _ _ certificateCountedProject
     (certificateCountedLengthImpl_project key budget required stopAfter) computation state
 
+set_option maxHeartbeats 800000
 theorem certificateCountedLength_run_calls_monotone {α : Type} (key : SecretKey)
     (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α)
@@ -968,6 +969,100 @@ theorem certificateCountedContextGame_full_count (adversary : Adversary) (q : Na
     hspent hcache (keygen_cache_message_none (generated.1.1, generated.2) hg)
     output houtput hcost hvalid hclean input hcertificate
 
+def OriginalBudgetedFullCertificate (q : Nat)
+    (result : OriginalCertificateResult × Nat) : Prop :=
+  OriginalFullCertificate result.1 ∧ result.2 ≤ q
+
+noncomputable def CertificateCountedWeightedBank (q : Nat)
+    (result : CertificateCountedContextResult) : ENNReal :=
+  if result.originalCost.2 ≤ q then
+    (certificateBankCount result.2.2.2.2.1.1.bank : ENNReal) else 0
+
+def CertificateCountedBudgetExceptional (q : Nat)
+    (result : CertificateCountedContextResult) : Prop :=
+  CertificateGameExceptional result.project.2 ∧ result.originalCost.2 ≤ q
+
+private theorem probEvent_probComp_lift {α : Type} (source : ProbComp α)
+    (event : α → Prop) :
+    Pr[event | (liftM source : PMF α)] = Pr[event | source] := by
+  simp only [probEvent_eq_tsum_ite]
+  rfl
+
+private theorem probEvent_cover_le_weighted {α : Type} (law : SPMF α)
+    (main good bad : α → Prop) (weight : α → ENNReal)
+    (hcover : ∀ value, main value → good value ∨ bad value)
+    (hgood : ∀ value ∈ law.support, good value → 1 ≤ weight value) :
+    Pr[main | law] ≤
+      (∑' value, Pr[= value | law] * weight value) + Pr[bad | law] := by
+  refine (probEvent_mono (q := fun value => good value ∨ bad value)
+    (fun value _ h => hcover value h)).trans
+    ((probEvent_or_le law _ _).trans (add_le_add ?_ le_rfl))
+  exact probEvent_le_tsum_probOutput_mul_cost_of_mem_support law good weight hgood
+
+set_option maxHeartbeats 50000
+theorem originalCertificateCountedSource_full_budget_le_count_add_exception
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] ≤
+      (∑' result, Pr[= result | certificateCountedContextGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false] *
+        CertificateCountedWeightedBank q result) +
+      Pr[CertificateCountedBudgetExceptional q |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] := by
+  let law : SPMF CertificateCountedContextResult :=
+    liftM (certificateCountedContextGame adversary q Finset.univ
+      (fun _ => proposalPrefixStop) false)
+  have hsource : Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] =
+      Pr[fun result => OriginalBudgetedFullCertificate q result.originalCost | law] := by
+    have h := congrArg (fun source : PMF (OriginalCertificateResult × Nat) =>
+      Pr[OriginalBudgetedFullCertificate q | source])
+      (certificateCountedContextGame_originalCost adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false)
+    rw [probEvent_map] at h
+    calc
+      _ = Pr[OriginalBudgetedFullCertificate q |
+          (liftM (originalCertificateCountedSource adversary) : PMF _)] := by
+            exact (probEvent_probComp_lift _ _).symm
+      _ = Pr[fun result => OriginalBudgetedFullCertificate q result.originalCost |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] := by
+            simpa only [Function.comp_def] using h.symm
+      _ = _ := by simp only [law, SPMF.probEvent_liftM]
+  rw [hsource]
+  unfold OriginalBudgetedFullCertificate CertificateCountedWeightedBank
+  change Pr[fun result => OriginalFullCertificate result.originalCost.1 ∧
+      result.originalCost.2 ≤ q | law] ≤
+    (∑' result, Pr[= result | law] *
+      if result.originalCost.2 ≤ q then
+        (certificateBankCount result.2.2.2.2.1.1.bank : ENNReal) else 0) +
+    Pr[fun result => CertificateGameExceptional result.project.2 ∧
+      result.originalCost.2 ≤ q | law]
+  refine probEvent_cover_le_weighted law
+    (fun result => OriginalFullCertificate result.originalCost.1 ∧
+      result.originalCost.2 ≤ q)
+    (fun result => OriginalFullCertificate result.originalCost.1 ∧
+      result.originalCost.2 ≤ q ∧
+      ¬ CertificateGameExceptional result.project.2)
+    (fun result => CertificateGameExceptional result.project.2 ∧
+      result.originalCost.2 ≤ q)
+    (fun result => if result.originalCost.2 ≤ q then
+      (certificateBankCount result.2.2.2.2.1.1.bank : ENNReal) else 0)
+    ?_ ?_
+  · intro result h
+    by_cases hc : CertificateGameExceptional result.project.2
+    · exact Or.inr ⟨hc, h.2⟩
+    · exact Or.inl ⟨h.1, h.2, hc⟩
+  intro result hr h
+  have hsupport : result ∈ (certificateCountedContextGame adversary q Finset.univ
+      (fun _ => proposalPrefixStop) false).support := by
+    simpa only [law, SPMF.support_eq_support, SPMF.support_liftM] using hr
+  have hcount := certificateCountedContextGame_full_count adversary q hbudget result
+    hsupport h.1 h.2.2 h.2.1
+  simp only [if_pos h.2.1]
+  exact_mod_cast hcount
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1017,3 +1112,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_full_count' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedContextGame_full_count
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificateCountedSource_full_budget_le_count_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificateCountedSource_full_budget_le_count_add_exception
