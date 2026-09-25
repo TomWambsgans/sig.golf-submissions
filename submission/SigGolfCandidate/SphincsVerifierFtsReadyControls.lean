@@ -20,6 +20,8 @@ open SigGolfCandidate.SphincsVerifierLastLeaf
 open SigGolfCandidate.SphincsVerifierFtsEntry
 open SigGolfCandidate.SphincsVerifierFtsTreeHeader
 open SigGolfCandidate.SphincsVerifierFtsCopyPointers
+open SigGolfCandidate.SphincsVerifierHashBytes
+open SigGolfCandidate.SphincsVerifierFtsWitnessFrame
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
@@ -81,8 +83,7 @@ theorem messageReady_firstFts_controls (state : MachineState)
       have h := (SphincsSecurity.Concrete.digestLeaves
         (SphincsSecurity.truncateMessageDigest answer)
         ⟨0, by decide⟩).isLt
-      simp only [SphincsSecurity.FtsLeaf,
-        SphincsSecurity.ftsTreeHeight] at h
+      simp only [SphincsSecurity.ftsTreeHeight] at h
       omega
     simp only [BitVec.toNat_ofNat]
     exact (Nat.mod_eq_of_lt small).symm
@@ -106,10 +107,37 @@ theorem messageReady_firstFts_controls (state : MachineState)
       (by intro offset; fin_cases offset <;> decide)]
     exact index
 
+theorem firstFtsHashReady_prefix (state : MachineState)
+    (answer : BitVec 256) (pk : SphincsSecurity.PublicKey)
+    (destination : state.getReg .x12 = 0x42000)
+    (hprefix : WitnessPrefix state pk) :
+    WitnessPrefix
+      (ftsHashReadyState
+        (ftsAdvanceState
+          (SphincsVerifierCopy.copyRootState
+            (firstFtsPointers state answer)))) pk := by
+  constructor
+  · intro i hi
+    exact (firstFtsHashReady_allWitness_frame state answer i (by
+      rw [SphincsWire.signatureBytes_eq]
+      omega) destination).trans (hprefix.root i hi)
+  · intro i hi
+    have frame := firstFtsHashReady_allWitness_frame state answer
+      (20 + i) (by rw [SphincsWire.signatureBytes_eq]; omega) destination
+    have address : 0x22ca0 + (20 + i) = 0x22cb4 + i := by omega
+    rw [address] at frame
+    exact frame.trans (hprefix.parameter i hi)
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsReadyControls.messageReady_firstFts_controls' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms messageReady_firstFts_controls
+
+/-- info: 'SigGolfCandidate.SphincsVerifierFtsReadyControls.firstFtsHashReady_prefix' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms firstFtsHashReady_prefix
 
 end SigGolfCandidate.SphincsVerifierFtsReadyControls
