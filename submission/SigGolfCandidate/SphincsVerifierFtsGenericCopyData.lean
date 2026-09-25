@@ -161,6 +161,39 @@ theorem copyRoot_data_belowHash (original : MachineState)
     sourceBase destinationBase small supported 4 after3
   exact after4.2.2.2 index (by have := index.isLt; omega)
 
+theorem copyRoot_source_frame (state : MachineState)
+    (sourceBase destinationBase : Nat)
+    (small : sourceBase + 20 ≤ 0x40000)
+    (supported : destinationBase = 0x40028 ∨ destinationBase = 0x4003c)
+    (destination : state.getReg .x7 = BitVec.ofNat 64 destinationBase)
+    (index : Fin 5) :
+    (copyRootState state).getWord32
+      (BitVec.ofNat 64 (sourceBase + 4 * index.val)) =
+        state.getWord32
+          (BitVec.ofNat 64 (sourceBase + 4 * index.val)) := by
+  simp only [MachineState.getWord32]
+  apply congrArg (fun value : Word =>
+    extractWord32 value (byteOffset
+      (BitVec.ofNat 64 (sourceBase + 4 * index.val)) / 4))
+  apply copyRoot_mem_frame
+  intro offset
+  rw [destination]
+  have cell : alignToDword
+      (BitVec.ofNat 64 (sourceBase + 4 * index.val)) ≠
+        alignToDword
+          (BitVec.ofNat 64 (destinationBase + 4 * offset.val)) :=
+    source_dest_cells_disjoint sourceBase destinationBase small supported
+      offset index
+  have equal : alignToDword
+      (BitVec.ofNat 64 destinationBase + signExtend12
+        (4#12 * BitVec.ofNat 12 offset.val)) =
+        alignToDword
+          (BitVec.ofNat 64 (destinationBase + 4 * offset.val)) := by
+    rcases supported with h | h <;> subst destinationBase <;>
+      fin_cases offset <;> decide
+  rw [equal]
+  exact cell
+
 /-- info: 'SigGolfCandidate.SphincsVerifierFtsGenericCopyData.copyRoot_data_belowHash' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
