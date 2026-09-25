@@ -165,6 +165,25 @@ theorem realRun_twoEdge_cost_budget_le_counted
       (fun _ _ => none)) result = 0 := not_not.mp hr
     simp [hz]
 
+omit hcharge hreal in
+theorem realRun_twoEdge_cost_budget_le_cap_counted_cost
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hchargeRun : ∀ result ∈
+      (realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)).support, result.2.1.2 ≤ cost result.2.1.1) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+      (((3 / 2 : ENNReal) + 4 * ((budget : ENNReal) / Fintype.card State) +
+        2 * ((budget : ENNReal) / Fintype.card State)^2) / Fintype.card State) *
+          ∑' result, idealRun auxiliary
+            (fun endpoint => QueryCap.counted IsPrefixQuery
+              (QueryCap.run IsPrefixQuery (computation endpoint) budget))
+            (fun _ _ => none) result * (result.2.1.2 : ENNReal) := by
+  exact (realRun_twoEdge_cost_budget_le_counted auxiliary computation cost budget hchargeRun).trans
+    (counted_twoEdge_budget_le_cap_counted_cost auxiliary computation budget)
+
 end SphincsSecurity.Concrete.PartialChainEndpoint
 
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -178,3 +197,7 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_counted
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_cap_counted_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdge_cost_budget_le_cap_counted_cost
