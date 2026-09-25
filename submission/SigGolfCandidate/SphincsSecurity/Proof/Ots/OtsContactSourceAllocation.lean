@@ -4,6 +4,8 @@ namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec
 set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 8192
+set_option maxHeartbeats 2000000
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] canonicalGraphInputs canonicalEncodingInputs canonicalGraphGameInputs OtsContactTrace.contacts
 
@@ -54,4 +56,70 @@ theorem referenceContactGame_restart_allocation (dummy : OtsReferenceWords) (adv
       · simp only [if_pos hm, mul_comm, law]
       · simp only [if_neg hm, mul_zero]
 
+theorem referenceContactGame_restart_allocation_budget
+    (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) :
+    let law := referenceContactGame (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
+    (∑ address : OtsPrefix.ChainAddress, ∑' result : InstrumentedResult ContactResult,
+      Pr[= result | law] *
+        (if result.2.2.output.2.hashCalls ≤ budget then
+          (result.2.2.restartCharge result.1 (referenceFamilyWords result.2.1 dummy) address : ENNReal)
+        else 0)) ≤
+      ((2 * budget : Nat) : ENNReal) *
+        Pr[fun result => result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) ∧
+          result.2.2.output.2.hashCalls ≤ budget | law] := by
+  dsimp only
+  let law := referenceContactGame (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
+  calc
+    _ = ∑' result : InstrumentedResult ContactResult, Pr[= result | law] *
+        (if result.2.2.output.2.hashCalls ≤ budget then
+          ((∑ address : OtsPrefix.ChainAddress,
+            result.2.2.restartCharge result.1 (referenceFamilyWords result.2.1 dummy) address : Nat) : ENNReal)
+        else 0) := by
+      rw [← tsum_fintype (L := SummationFilter.unconditional OtsPrefix.ChainAddress), ENNReal.tsum_comm]
+      apply tsum_congr
+      intro result
+      by_cases hb : result.2.2.output.2.hashCalls ≤ budget
+      · simp only [hb, if_true, tsum_fintype, Nat.cast_sum, Finset.mul_sum]
+        rfl
+      · simp only [hb, if_false, mul_zero, tsum_zero]
+    _ ≤ ∑' result : InstrumentedResult ContactResult, Pr[= result | law] *
+        (if result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) ∧
+          result.2.2.output.2.hashCalls ≤ budget then ((2 * budget : Nat) : ENNReal) else 0) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hr : result ∈ support law
+      · apply mul_le_mul' le_rfl
+        by_cases hb : result.2.2.output.2.hashCalls ≤ budget
+        · have hcost := (referenceContactGame_cost _ _ dummy adversary result hr).trans hb
+          have hn := ContactResult.restartCharge_sum_le result.1
+            (referenceFamilyWords result.2.1 dummy) result.2.2 budget hcost
+          by_cases hm : result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy)
+          · simpa only [hb, hm, and_true, and_false, if_true, if_false] using (by exact_mod_cast hn :
+              ((∑ address : OtsPrefix.ChainAddress,
+                result.2.2.restartCharge result.1 (referenceFamilyWords result.2.1 dummy) address : Nat) : ENNReal) ≤
+                if result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) then
+                  ((2 * budget : Nat) : ENNReal) else 0)
+          · simpa only [hb, hm, and_true, and_false, if_true, if_false] using (by exact_mod_cast hn :
+              ((∑ address : OtsPrefix.ChainAddress,
+                result.2.2.restartCharge result.1 (referenceFamilyWords result.2.1 dummy) address : Nat) : ENNReal) ≤
+                if result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) then
+                  ((2 * budget : Nat) : ENNReal) else 0)
+        · simp only [hb, if_false, and_false, le_refl]
+      · rw [probOutput_eq_zero_of_not_mem_support hr, zero_mul, zero_mul]
+    _ = _ := by
+      rw [probEvent_eq_tsum_ite, ← ENNReal.tsum_mul_left]
+      apply tsum_congr
+      intro result
+      by_cases he : result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) ∧
+          result.2.2.output.2.hashCalls ≤ budget
+      · simp only [he, true_and, if_true, mul_comm]
+        rfl
+      · simp only [he, if_false, mul_zero]
+
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceContactGame_restart_allocation_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceContactGame_restart_allocation_budget
