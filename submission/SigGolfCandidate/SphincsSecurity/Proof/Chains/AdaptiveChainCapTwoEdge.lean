@@ -4,6 +4,9 @@ namespace SphincsSecurity.Concrete.PartialChainEndpoint
 
 open _root_.OracleComp OracleSpec
 set_option backward.isDefEq.respectTransparency false
+set_option maxHeartbeats 2000000
+set_option maxRecDepth 8192
+attribute [local instance] Classical.propDecidable
 
 variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
   {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
@@ -63,4 +66,57 @@ theorem realRun_twoEdgeEvent_le_cap_cost {depth : Nat} (auxiliary : State → Qu
       | zero => simp only [TwoEdgeEvent, probEvent_eq_tsum_ite, if_false, tsum_zero]; exact bot_le
       | succ depth => exact realRun_twoEdge_le_cap_cost auxiliary computation cost budget hcharge hreal hsmall
 
+omit hcharge hreal in
+theorem counted_twoEdge_budget_le_cap
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec (n + 2) State) Result)
+    (budget : Nat) :
+    Pr[fun result => TwoEdge result.2.2 result.1 ∧ result.2.1.2 ≤ budget |
+      realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint))
+        (fun _ _ => none)] ≤
+    Pr[fun result => TwoEdge result.2.2 result.1 |
+      realRun auxiliary (fun endpoint => QueryCap.run IsPrefixQuery (computation endpoint) budget)
+        (fun _ _ => none)] := by
+  let observed : Fin (n + 2) → State → Option State := fun _ _ => none
+  let p : Option (State × ((Result × Nat) × (Fin (n + 2) → State → Option State))) → Prop :=
+    fun opt => ∃ result, opt = some result ∧ TwoEdge result.2.2 result.1
+  have hlaw := realRun_cap_finish_counted auxiliary computation observed budget
+  have hprob := congrArg (fun law : PMF (Option (State × ((Result × Nat) × (Fin (n + 2) → State → Option State)))) =>
+    Pr[p | law]) hlaw
+  simp only [← PMF.monad_map_eq_map, probEvent_map, Function.comp_def] at hprob
+  calc
+    _ = Pr[fun result => p ((QueryCap.finish budget result.2.1).map
+        (fun finished => (result.1, finished, result.2.2))) |
+        realRun auxiliary (fun endpoint => QueryCap.counted IsPrefixQuery (computation endpoint)) observed] := by
+      simp only [probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+      apply tsum_congr
+      intro result
+      by_cases hb : result.2.1.2 ≤ budget
+      · simp [p, QueryCap.finish, hb, observed]
+      · simp [p, QueryCap.finish, hb]
+    _ = Pr[fun result => p (result.2.1.map
+        (fun finished => (result.1, finished, result.2.2))) |
+        realRun auxiliary (fun endpoint => QueryCap.run IsPrefixQuery (computation endpoint) budget) observed] := hprob.symm
+    _ ≤ _ := by
+      simp only [probEvent_eq_tsum_ite, PMF.probOutput_eq_apply]
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hp : p (result.2.1.map (fun finished => (result.1, finished, result.2.2)))
+      · have htwo : TwoEdge result.2.2 result.1 := by
+          dsimp [p] at hp
+          obtain ⟨witness, hw, htwo⟩ := hp
+          cases hopt : result.2.1 with
+          | none =>
+              simp [hopt] at hw
+          | some pair =>
+              simp [hopt] at hw
+              cases hw
+              exact htwo
+        simp [hp, htwo, observed]
+      · simp [hp]
+
 end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.counted_twoEdge_budget_le_cap
