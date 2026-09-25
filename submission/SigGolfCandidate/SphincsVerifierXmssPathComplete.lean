@@ -220,3 +220,57 @@ theorem finish_executes (hash : Hash) (s : MachineState)
 #print axioms finish_executes
 
 end SigGolfCandidate.SphincsVerifierXmssFinish
+
+
+namespace SigGolfCandidate.SphincsVerifierRightCount
+open SphincsSecurity
+
+/-- Number of right-child branches among the first `height` levels. -/
+def rightCount (height value : Nat) : Nat :=
+  ∑ level ∈ Finset.range height, if value.testBit level then 1 else 0
+
+theorem rightCount_le_height (height value : Nat) :
+    rightCount height value ≤ height := by
+  unfold rightCount
+  calc
+    (∑ level ∈ Finset.range height, if value.testBit level then 1 else 0)
+        ≤ ∑ _level ∈ Finset.range height, 1 := by
+            apply Finset.sum_le_sum
+            intro level hlevel
+            split <;> omega
+    _ = height := by simp
+
+def totalRights (ftsLeaves : FtsTree → FtsLeaf)
+    (xmssLeaves : (lay : Layer) → LeafIndex) : Nat :=
+  (∑ tree : FtsTree, rightCount ftsTreeHeight (ftsLeaves tree).val) +
+    ∑ lay : Layer, rightCount (layerHeight lay) (xmssLeaves lay).val
+
+theorem fts_heights_sum : (∑ _tree : FtsTree, ftsTreeHeight) = 192 := by decide
+
+theorem xmss_heights_sum : (∑ lay : Layer, layerHeight lay) = 34 := by decide
+
+theorem totalRights_le_226 (ftsLeaves : FtsTree → FtsLeaf)
+    (xmssLeaves : (lay : Layer) → LeafIndex) :
+    totalRights ftsLeaves xmssLeaves ≤ 226 := by
+  unfold totalRights
+  have hf : (∑ tree : FtsTree, rightCount ftsTreeHeight (ftsLeaves tree).val) ≤ 192 := by
+    calc
+      _ ≤ ∑ _tree : FtsTree, ftsTreeHeight := by
+        apply Finset.sum_le_sum
+        intro tree htree
+        exact rightCount_le_height _ _
+      _ = 192 := fts_heights_sum
+  have hx : (∑ lay : Layer, rightCount (layerHeight lay) (xmssLeaves lay).val) ≤ 34 := by
+    calc
+      _ ≤ ∑ lay : Layer, layerHeight lay := by
+        apply Finset.sum_le_sum
+        intro lay hlay
+        exact rightCount_le_height _ _
+      _ = 34 := xmss_heights_sum
+  omega
+
+/-- info: 'SigGolfCandidate.SphincsVerifierRightCount.totalRights_le_226' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms totalRights_le_226
+
+end SigGolfCandidate.SphincsVerifierRightCount
