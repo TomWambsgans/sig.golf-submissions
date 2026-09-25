@@ -6,7 +6,7 @@ open SigGolfCandidate.SphincsVerifierMessageCopy
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
-private def zeroLayer (state : MachineState) : MachineState :=
+def zeroLayer (state : MachineState) : MachineState :=
   let s1 := execInstrBr state (.ADDI .x6 .x0 0)
   let s2 := execInstrBr s1 (.LUI .x28 0x43)
   let s3 := execInstrBr s2 (.ADDI .x28 .x28 0)
@@ -41,7 +41,7 @@ private theorem zeroLayer_block (state : MachineState)
       MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
   exact OrdinarySteps.refl _
 
-private def zeroTree (state : MachineState) : MachineState :=
+def zeroTree (state : MachineState) : MachineState :=
   let s1 := execInstrBr state (.ADDI .x6 .x0 0)
   let s2 := execInstrBr s1 (.LUI .x28 0x43)
   let s3 := execInstrBr s2 (.ADDI .x28 .x28 8)
@@ -77,7 +77,7 @@ private theorem zeroTree_block (state : MachineState)
   exact OrdinarySteps.refl _
 
 
-private def zeroPosition (state : MachineState) : MachineState :=
+def zeroPosition (state : MachineState) : MachineState :=
   let s1 := execInstrBr state (.ADDI .x6 .x0 0)
   let s2 := execInstrBr s1 (.LUI .x28 0x43)
   let s3 := execInstrBr s2 (.ADDI .x28 .x28 16)
@@ -113,7 +113,7 @@ private theorem zeroPosition_block (state : MachineState)
   exact OrdinarySteps.refl _
 
 
-private def zeroIndex (state : MachineState) : MachineState :=
+def zeroIndex (state : MachineState) : MachineState :=
   let s1 := execInstrBr state (.ADDI .x6 .x0 0)
   let s2 := execInstrBr s1 (.LUI .x28 0x43)
   let s3 := execInstrBr s2 (.ADDI .x28 .x28 24)
@@ -148,7 +148,7 @@ private theorem zeroIndex_block (state : MachineState)
       MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
   exact OrdinarySteps.refl _
 
-private def clearHeaderState (state : MachineState) : MachineState :=
+def clearHeaderState (state : MachineState) : MachineState :=
   zeroIndex (zeroPosition (zeroTree (zeroLayer state)))
 
 private theorem clearHeader_block (state : MachineState)
@@ -172,7 +172,7 @@ private theorem clearHeader_pc (state : MachineState) :
     execInstrBr, BitVec.add_assoc]
 
 
-private def copySetupState (state : MachineState) : MachineState :=
+def copySetupState (state : MachineState) : MachineState :=
   let s1 := execInstrBr state (.LUI .x28 0x43)
   let s2 := execInstrBr s1 (.ADDI .x28 .x28 120)
   let s3 := execInstrBr s2 (.LD .x6 .x28 0)
