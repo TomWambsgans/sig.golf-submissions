@@ -1,7 +1,9 @@
 import SigGolfCandidate.SphincsSecurityJointSetup
+import SigGolfCandidate.SphincsTypedInteractionPlan
 
 /-! Transport exact setup laws through a probabilistic adaptive continuation. -/
 namespace SigGolfCandidate.SphincsSecurityPostKeygen
+set_option maxHeartbeats 2000000
 open SigGolf SphincsSecurity
 open SigGolfCandidate.SphincsSecurityJointSetup
 open SigGolfCandidate.SphincsOrganizerFiniteHash
@@ -625,6 +627,112 @@ theorem organizerContinuation_service_refinement
     (submission.signingOracle seed) sign
     (submission.checkForgery row.1) check hsign hcheck]
 
+/-- A joint trace with identical good-event outcomes transfers any predicate
+on the complete organizer result, including a hash-call cutoff. -/
+theorem coupled_good_event_le
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool))
+    (actual reference : SPMF SigGolf.AttackResult)
+    (event : SigGolf.AttackResult → Prop)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hgood : ∀ z ∈ support joint, z.2.2 = false → z.1 = z.2.1) :
+    Pr[event | actual] ≤
+      Pr[event | reference] + Pr[fun z => z.2.2 = true | joint] := by
+  have hstep : Pr[fun z => event z.1 | joint] ≤
+      Pr[fun z => event z.2.1 ∨ z.2.2 = true | joint] := by
+    apply probEvent_mono
+    intro z hz hevent
+    cases hflag : z.2.2 with
+    | true => exact Or.inr rfl
+    | false =>
+        exact Or.inl (by simpa only [hgood z hz hflag] using hevent)
+  calc
+    Pr[event | actual] = Pr[fun z => event z.1 | joint] := by
+      rw [← hactual, probEvent_map]
+      rfl
+    _ ≤ Pr[fun z => event z.2.1 ∨ z.2.2 = true | joint] := hstep
+    _ ≤ Pr[fun z => event z.2.1 | joint] +
+        Pr[fun z => z.2.2 = true | joint] := probEvent_or_le _ _ _
+    _ = Pr[event | reference] +
+        Pr[fun z => z.2.2 = true | joint] := by
+          rw [← hreference, probEvent_map]
+          rfl
+
+/-- The existing 160-bit cache MAC first-hit price is below one 127-bit
+security unit per charged query. -/
+theorem mac_first_hit_rate_le_127 (Q : Nat) :
+    (Q : ENNReal) * (Fintype.card SphincsSecurity.Digest : ENNReal)⁻¹ ≤
+      (Q : ENNReal) / 2 ^ 127 := by
+  have hcard : Fintype.card SphincsSecurity.Digest = 2 ^ 160 := by
+    change Fintype.card (BitVec 160) = 2 ^ 160
+    rw [Fintype.card_bitVec]
+  rw [hcard]
+  simp only [div_eq_mul_inv]
+  gcongr
+  norm_num
+
+/-- Once a full-result coupling identifies bad traces with the existing
+first-hit experiment, altered-cache hits add at most `Q / 2^127` to the
+organizer win event. The two remaining obligations are precisely the missing
+real-game trace coupling and the reference service refinement. -/
+theorem coupled_good_event_mac_le
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool))
+    (actual reference : SPMF SigGolf.AttackResult) (Q : Nat)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hgood : ∀ z ∈ support joint, z.2.2 = false → z.1 = z.2.1)
+    (hfirst : Pr[fun z => z.2.2 = true | joint] ≤
+      (Q : ENNReal) * (Fintype.card SphincsSecurity.Digest : ENNReal)⁻¹) :
+    Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | actual] ≤
+      Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | reference] +
+        (Q : ENNReal) / 2 ^ 127 := by
+  exact (coupled_good_event_le joint actual reference
+    (fun result => result.won = true ∧ result.hashCalls ≤ Q)
+    hactual hreference hgood).trans
+    (add_le_add le_rfl (hfirst.trans (mac_first_hit_rate_le_127 Q)))
+
+/-- Instantiate the good-event inequality with the proved adaptive
+first-hit bound for the concrete cache-MAC test plan. The remaining `hflag`
+obligation is the full-result coupling of the organizer interaction to that
+stopped trace, not a probabilistic assumption about the MAC. -/
+theorem coupled_good_event_plan_le
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool))
+    (actual reference : SPMF SigGolf.AttackResult)
+    (adversary : SigGolf.Adversary SphincsSubmission.submission.sizes)
+    (canonical : SigGolf.Cache)
+    (nonalignedAnswer : SphincsAlignedQuery.NonalignedQuery → BitVec 256)
+    (wire : SphincsSecurity.Signature →
+      SigGolf.Bytes SphincsSubmission.submission.sizes.signature)
+    (secretKey : SphincsSecurity.Seeded.SecretKey)
+    (material : SphincsSecurity.Seeded.KeyMaterial)
+    (seed : SphincsSecurity.MasterSeed)
+    (pads : List (BitVec 32 × SphincsSecurity.HashOutput))
+    (macAnswer : SphincsSecurity.HashOutput)
+    (Q rounds : Nat) (state : adversary.State)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hgood : ∀ z ∈ support joint, z.2.2 = false → z.1 = z.2.1)
+    (hflag : Pr[fun z => z.2.2 = true | joint] ≤
+      Pr[fun result => result.2 = true |
+        StateT.run' (simulateQ SphincsSecurity.romImpl
+          (SphincsCacheMacCompiledGame.compiledFailureFlag secretKey
+            (SphincsCacheMacCompiledGame.stopBeforeAttack seed
+              (SphincsCacheMacTypedGame.encodeTyped material.1 seed
+                (SphincsCacheRequestSplit.ciphertext canonical)
+                (SphincsTypedInteractionPlan.plan adversary canonical
+                  nonalignedAnswer wire Q rounds state 0)))))
+          (SphincsMaskedCacheProgramming.maskedMaterialCache material seed pads
+            (List.ofFn (SphincsCacheRequestSplit.ciphertext canonical))
+            macAnswer)]) :
+    Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | actual] ≤
+      Pr[fun result => result.won = true ∧ result.hashCalls ≤ Q | reference] +
+        (Q : ENNReal) / 2 ^ 127 := by
+  apply coupled_good_event_mac_le joint actual reference Q
+    hactual hreference hgood
+  exact hflag.trans (SphincsTypedInteractionPlan.plan_real_first_hit_le
+    adversary canonical nonalignedAnswer wire secretKey material seed pads
+    macAnswer Q rounds state)
+
 end SigGolfCandidate.SphincsSecurityPostKeygen
 
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.bind_fresh_setup' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -682,3 +790,11 @@ end SigGolfCandidate.SphincsSecurityPostKeygen
 /-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.organizerContinuation_service_refinement' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsSecurityPostKeygen.organizerContinuation_service_refinement
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_mac_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_mac_le
+
+/-- info: 'SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_plan_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsSecurityPostKeygen.coupled_good_event_plan_le
