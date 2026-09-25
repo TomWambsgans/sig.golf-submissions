@@ -183,6 +183,28 @@ theorem generated_cache_authenticates (hash : Hash) (seed : MasterSeed)
     SphincsMaskedSignPrefix.entry_loaded seed cache message,
     honest_authenticated hash seed cache message sem⟩
 
+/-- The actual keygen cache makes the signer write the abstract top root to
+the first 20 signature bytes. -/
+theorem generated_signature_prefix (hash : Hash) (seed : MasterSeed)
+    (message : SigGolf.Message) :
+    ∃ (cache : SigGolf.Cache) (entry final : MachineState),
+      SphincsSubmission.submission.runWith hash .keygen seed =
+        ⟨some (publicKey hash seed,cache),true,92369576,860161,1007616⟩ ∧
+      SphincsMaskedKeygenPadding.CacheZeroPadding cache ∧
+      initialState SphincsSubmission.submission .sign (seed,cache,message) = some entry ∧
+      Trace hash SphincsMaskedImages.sign entry 485 16906 3 2053 final ∧
+      final.pc = 0x1510 ∧
+      ∀ i : Fin 5,
+        final.getWord32 (BitVec.ofNat 64 (0x20060 + 4*i.val)) =
+          (root hash seed).extractLsb' (32*i.val) 32 := by
+  obtain ⟨cache,entry,middle,keygen,padding,loaded,first,pc,masked,par,key⟩ :=
+    generated_cache_authenticates hash seed message
+  obtain ⟨second,donePc,rootWords⟩ :=
+    honest_signature_root hash middle pc (parameter hash seed) seed
+      (root hash seed) par key masked
+  refine ⟨cache,entry,_,keygen,padding,loaded,?_,donePc,rootWords⟩
+  simpa only [Nat.reduceAdd] using first.trans second
+
 /-- info: 'SigGolfCandidate.SphincsMaskedSignHonestAuthentication.honest_checks' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms honest_checks
@@ -194,5 +216,9 @@ theorem generated_cache_authenticates (hash : Hash) (seed : MasterSeed)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignHonestAuthentication.generated_cache_authenticates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms generated_cache_authenticates
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignHonestAuthentication.generated_signature_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms generated_signature_prefix
 
 end SigGolfCandidate.SphincsMaskedSignHonestAuthentication

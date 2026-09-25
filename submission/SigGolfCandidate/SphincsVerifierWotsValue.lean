@@ -296,12 +296,34 @@ theorem stepPrefix_controlCell (state : MachineState) (address : Word)
           address =
         (SphincsVerifierWotsStepBody.stepValueCopied state).getMem
           address := by
+    have outside : address ≠ (274448#64) := by
+      simpa using positionOutside
     simp [SphincsVerifierWotsStepBody.stepPositionState,
       execInstrBr, signExtend12,
       MachineState.getReg_setReg_eq,
       MachineState.getReg_setReg_ne,
-      MachineState.getMem_setMem_ne, positionOutside]
+      MachineState.getMem_setMem_ne, outside]
   exact position.trans copied
+
+theorem stepValueCopied_controlCell (state : MachineState)
+    (address : Word)
+    (payloadOutside : ∀ offset : Fin 5,
+      address ≠ alignToDword
+        (0x40028 + signExtend12
+          (4#12 * BitVec.ofNat 12 offset.val))) :
+    (SphincsVerifierWotsStepBody.stepValueCopied state).getMem address =
+      state.getMem address := by
+  let pointers := SphincsVerifierWotsStepBody.stepValuePointers state
+  have destination : pointers.getReg .x7 = 0x40028 := by
+    simp [pointers, SphincsVerifierWotsStepBody.stepValuePointers,
+      execInstrBr, signExtend12, MachineState.getReg_setReg_eq]
+  change (copyRootState pointers).getMem address = _
+  rw [copyRoot_mem_frame pointers address (by
+    intro offset
+    rw [destination]
+    exact payloadOutside offset)]
+  simp [pointers, SphincsVerifierWotsStepBody.stepValuePointers,
+    execInstrBr]
 
 theorem stepPosition_payloadFrame (state : MachineState)
     (index : Fin 5) :
@@ -845,6 +867,7 @@ theorem stepReady_chainQuery (state : MachineState)
       have address : 0x40014 + (i - 20) = 0x40000 + i := by omega
       rw [address] at joined
       exact joined
+
     · have smaller : i - 40 < 20 := by omega
       have split : 40 + (i - 40) = i := by omega
       have actual := (stepReady_payloadBytes state (i - 40) smaller).trans
@@ -856,6 +879,62 @@ theorem stepReady_chainQuery (state : MachineState)
       have address : 0x40028 + (i - 40) = 0x40000 + i := by omega
       rw [address] at joined
       exact joined
+
+theorem stepReady_chainQuery_from_state (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (step : ChainStep) (value : Digest)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (chainCell : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (stepCell : state.getMem 0x43058 = BitVec.ofNat 64 step.val)
+    (parameterEncoded : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (valueEncoded : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+        value.extractLsb' (8 * i) 8) :
+    hashInput (stepReady state) =
+      toQuery (chainInput pk.parameter layer tree leaf chain step value) := by
+  have prefixLayer :
+      (SphincsVerifierWotsStepBody.stepHashPrefixState state).getMem
+        0x43000 = BitVec.ofNat 64 layer.val := by
+    rw [stepPrefix_controlCell state 0x43000
+      (by decide) (by intro offset; fin_cases offset <;> decide)]
+    exact layerCell
+  have prefixTree :
+      (SphincsVerifierWotsStepBody.stepHashPrefixState state).getMem
+        0x43008 = BitVec.ofNat 64 tree.val := by
+    rw [stepPrefix_controlCell state 0x43008
+      (by decide) (by intro offset; fin_cases offset <;> decide)]
+    exact treeCell
+  have prefixLeaf :
+      (SphincsVerifierWotsStepBody.stepHashPrefixState state).getMem
+        0x43018 = BitVec.ofNat 64 leaf.val := by
+    rw [stepPrefix_controlCell state 0x43018
+      (by decide) (by intro offset; fin_cases offset <;> decide)]
+    exact leafCell
+  have copiedChain :
+      (SphincsVerifierWotsStepBody.stepValueCopied state).getMem
+        0x43050 = BitVec.ofNat 64 chain.val := by
+    rw [stepValueCopied_controlCell state 0x43050
+      (by intro offset; fin_cases offset <;> decide)]
+    exact chainCell
+  have copiedStep :
+      (SphincsVerifierWotsStepBody.stepValueCopied state).getMem
+        0x43058 = BitVec.ofNat 64 step.val := by
+    rw [stepValueCopied_controlCell state 0x43058
+      (by intro offset; fin_cases offset <;> decide)]
+    exact stepCell
+  have prefixPosition :
+      (SphincsVerifierWotsStepBody.stepHashPrefixState state).getMem
+        0x43010 = BitVec.ofNat 64
+          (chainLength * chain.val + step.val) := by
+    exact stepPosition_value
+      (SphincsVerifierWotsStepBody.stepValueCopied state)
+      chain step copiedChain copiedStep
+  exact stepReady_chainQuery state pk layer tree leaf chain step value
+    prefixLayer prefixPosition prefixTree prefixLeaf parameterEncoded
+    valueEncoded
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsValue.stepNext_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
@@ -994,5 +1073,11 @@ theorem stepReady_chainQuery (state : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms stepReady_chainQuery
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsValue.stepReady_chainQuery_from_state' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms stepReady_chainQuery_from_state
 
 end SigGolfCandidate.SphincsVerifierWotsValue
