@@ -585,4 +585,709 @@ theorem treeValue_succ (hash : Hash) (parameter : PublicParameter) (seed : Maste
 #guard_msgs (whitespace := lax) in
 #print axioms treeValue_succ
 
+namespace Levels
+open SphincsMaskedSignOtsTree
+
+def height (location : Fin 5) : Nat := if location.val<3 then 5 else 4
+def width (location : Fin 5) (level : Nat) : Nat := if level ≤ height location then 2^(height location-level) else 0
+def cacheBase (location : Fin 5) (level : Nat) : Nat := 0x50000+20*(2^(height location+1)-2^(height location+1-level))
+def totalNodes (location : Fin 5) (levels : Nat) : Nat := 2^(height location)-2^(height location-levels)
+
+def initSchedule (location : Fin 5) : List (Word × Instr) := [
+  (0x15c8, .ADDI .x6 .x0 1),
+  (0x15cc, .LUI .x28 67),
+  (0x15d0, .ADDI .x28 .x28 72),
+  (0x15d4, .SD .x28 .x6 0),
+  (0x15d8, .LUI .x6 80),
+  (0x15dc, .ADDI .x6 .x6 0),
+  (0x15e0, .LUI .x28 67),
+  (0x15e4, .ADDI .x28 .x28 104),
+  (0x15e8, .SD .x28 .x6 0),
+  (0x15ec, .LUI .x6 80),
+  (0x15f0, .ADDI .x6 .x6 (BitVec.ofNat 12 (20*width location 0))),
+  (0x15f4, .LUI .x28 67),
+  (0x15f8, .ADDI .x28 .x28 128),
+  (0x15fc, .SD .x28 .x6 0),
+  (0x1600, .ADDI .x6 .x0 (BitVec.ofNat 12 (width location 1))),
+  (0x1604, .LUI .x28 67),
+  (0x1608, .ADDI .x28 .x28 144),
+  (0x160c, .SD .x28 .x6 0)]
+
+
+def init (location : Fin 5) (s : MachineState) := runSchedule (initSchedule location) s
+
+def finishSchedule (location : Fin 5) : List (Word × Instr) := [
+  (0x1810, .LUI .x28 67),
+  (0x1814, .ADDI .x28 .x28 (128)),
+  (0x1818, .LD .x6 .x28 (0)),
+  (0x181c, .LUI .x28 67),
+  (0x1820, .ADDI .x28 .x28 (104)),
+  (0x1824, .SD .x28 .x6 (0)),
+  (0x1828, .LUI .x28 67),
+  (0x182c, .ADDI .x28 .x28 (144)),
+  (0x1830, .LD .x7 .x28 (0)),
+  (0x1834, .SLLI .x10 .x7 (2)),
+  (0x1838, .SLLI .x11 .x7 (4)),
+  (0x183c, .ADD .x10 .x10 .x11),
+  (0x1840, .ADD .x6 .x6 .x10),
+  (0x1844, .LUI .x28 67),
+  (0x1848, .ADDI .x28 .x28 (128)),
+  (0x184c, .SD .x28 .x6 (0)),
+  (0x1850, .LUI .x28 67),
+  (0x1854, .ADDI .x28 .x28 (144)),
+  (0x1858, .LD .x6 .x28 (0)),
+  (0x185c, .SRLI .x6 .x6 (1)),
+  (0x1860, .LUI .x28 67),
+  (0x1864, .ADDI .x28 .x28 (144)),
+  (0x1868, .SD .x28 .x6 (0)),
+  (0x186c, .LUI .x28 67),
+  (0x1870, .ADDI .x28 .x28 (72)),
+  (0x1874, .LD .x6 .x28 (0)),
+  (0x1878, .ADDI .x6 .x6 (1)),
+  (0x187c, .LUI .x28 67),
+  (0x1880, .ADDI .x28 .x28 (72)),
+  (0x1884, .SD .x28 .x6 (0)),
+  (0x1888, .LUI .x28 67),
+  (0x188c, .ADDI .x28 .x28 (72)),
+  (0x1890, .LD .x6 .x28 (0)),
+  (0x1894, .ADDI .x7 .x0 (BitVec.ofNat 12 (height location+1))),
+  (0x1898, .BNE .x6 .x7 (-648))]
+
+
+def finish (location : Fin 5) (s : MachineState) := runSchedule (finishSchedule location) s
+
+theorem init_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (370+offset location) (initSchedule location) := by
+  fin_cases location <;> rfl
+
+theorem init_encoded (location : Fin 5) : ∀ e∈initSchedule location,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (370+offset location) _ _ (init_image location)
+  · have := offset_bound location
+    change 370+offset location+18 ≤ 11000;omega
+  · intro i
+    have addr : ∀ i : Fin (initSchedule location).length,
+        (initSchedule location)[i.val].1=BitVec.ofNat 64 (0x1000+4*(370+i.val)) := by
+      change ∀ i : Fin 18,_
+      intro i;fin_cases i <;> rfl
+    rw [addr i,delta,←BitVec.ofNat_add]
+    congr 1;omega
+
+theorem init_checked (location : Fin 5) (s : MachineState) (pc : s.pc=0x15c8) :
+    Checked (initSchedule location) s := by
+  simp [initSchedule,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,signExtend13,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem init_block (location : Fin 5) (s : MachineState) (pc : s.pc=0x15c8) :
+    OrdinarySteps SphincsMaskedImages.sign (shift (delta location) s) 18
+      (shift (delta location) (init location s)) := by
+  apply block_shift _ _ (initSchedule location) _ (init_encoded location) s (init_checked location s pc)
+  simp [initSchedule,Supported]
+
+theorem entry_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (388+offset location) (levelEntrySchedule) := by
+  fin_cases location <;> rfl
+
+theorem entry_encoded (location : Fin 5) : ∀ e∈levelEntrySchedule,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (388+offset location) _ _ (entry_image location)
+  · have := offset_bound location
+    change 388+offset location+4 ≤ 11000;omega
+  · intro i
+    have addr : ∀ i : Fin (levelEntrySchedule).length,
+        (levelEntrySchedule)[i.val].1=BitVec.ofNat 64 (0x1000+4*(388+i.val)) := by
+      change ∀ i : Fin 4,_
+      intro i;fin_cases i <;> rfl
+    rw [addr i,delta,←BitVec.ofNat_add]
+    congr 1;omega
+
+theorem entry_block (location : Fin 5) (s : MachineState) (pc : s.pc=0x1610) :
+    OrdinarySteps SphincsMaskedImages.sign (shift (delta location) s) 4
+      (shift (delta location) (levelEntry s)) := by
+  apply block_shift _ _ (levelEntrySchedule) _ (entry_encoded location) s (levelEntry_checked s pc)
+  simp [levelEntrySchedule,Supported]
+
+theorem finish_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (516+offset location) (finishSchedule location) := by
+  fin_cases location <;> rfl
+
+theorem finish_encoded (location : Fin 5) : ∀ e∈finishSchedule location,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (516+offset location) _ _ (finish_image location)
+  · have := offset_bound location
+    change 516+offset location+35 ≤ 11000;omega
+  · intro i
+    have addr : ∀ i : Fin (finishSchedule location).length,
+        (finishSchedule location)[i.val].1=BitVec.ofNat 64 (0x1000+4*(516+i.val)) := by
+      change ∀ i : Fin 35,_
+      intro i;fin_cases i <;> rfl
+    rw [addr i,delta,←BitVec.ofNat_add]
+    congr 1;omega
+
+theorem finish_checked (location : Fin 5) (s : MachineState) (pc : s.pc=0x1810) :
+    Checked (finishSchedule location) s := by
+  simp [finishSchedule,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,signExtend13,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem finish_block (location : Fin 5) (s : MachineState) (pc : s.pc=0x1810) :
+    OrdinarySteps SphincsMaskedImages.sign (shift (delta location) s) 35
+      (shift (delta location) (finish location s)) := by
+  apply block_shift _ _ (finishSchedule location) _ (finish_encoded location) s (finish_checked location s pc)
+  simp [finishSchedule,Supported]
+
+theorem init_pc (location : Fin 5) (s : MachineState) (pc : s.pc=0x15c8) :
+    (init location s).pc=0x1610 := by
+  simp [init,initSchedule,runSchedule,execInstrBr,pc]
+
+structure LevelControls (location : Fin 5) (s : MachineState) (k : Nat) : Prop where
+  base : s.getMem 0x43068=BitVec.ofNat 64 (cacheBase location k)
+  target : s.getMem 0x43080=BitVec.ofNat 64 (cacheBase location (k+1))
+  level : s.getMem 0x43048=BitVec.ofNat 64 (k+1)
+  count : s.getMem 0x43090=BitVec.ofNat 64 (width location (k+1))
+
+def loopWrites : List Word := [0x43048#64,0x43068#64,0x43080#64,0x43088#64,0x43090#64]
+
+theorem init_controls (location : Fin 5) (s : MachineState) : LevelControls location (init location s) 0 := by
+  constructor <;> fin_cases location <;>
+    simp [init,initSchedule,runSchedule,execInstrBr,signExtend12,
+      MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,cacheBase,width,height]
+
+theorem init_frame (location : Fin 5) (s : MachineState) (a : Word) (outside : a∉loopWrites) :
+    (init location s).getMem a=s.getMem a := by
+  simp only [loopWrites,List.mem_cons,List.not_mem_nil,not_or] at outside
+  obtain ⟨h0,h1,h2,h3,h4⟩:=outside
+  simp [init,initSchedule,runSchedule,execInstrBr,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,h0,h1,h2,h3,h4]
+
+theorem finish_frame (location : Fin 5) (s : MachineState) (a : Word) (outside : a∉loopWrites) :
+    (finish location s).getMem a=s.getMem a := by
+  simp only [loopWrites,List.mem_cons,List.not_mem_nil,not_or] at outside
+  obtain ⟨h0,h1,h2,h3,h4⟩:=outside
+  simp [finish,finishSchedule,runSchedule,execInstrBr,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,h0,h1,h2,h3,h4]
+
+theorem layout (location : Fin 5) : ∀ k : Fin (height location),
+    cacheBase location k.val+40*width location (k.val+1)=cacheBase location (k.val+1) ∧
+    cacheBase location (k.val+1)+20*width location (k.val+1)=cacheBase location (k.val+2) ∧
+    cacheBase location (k.val+2) ≤ 0x53000 ∧
+    cacheBase location k.val%4=0 ∧ cacheBase location (k.val+1)%4=0 ∧
+    0x50000 ≤ cacheBase location k.val ∧ 0x50000 ≤ cacheBase location (k.val+1) ∧
+    0<width location (k.val+1) ∧ width location (k.val+1)<2048 ∧
+    2*width location (k.val+1)=width location k.val ∧
+    width location (k.val+1)/2=width location (k.val+2) ∧
+    totalNodes location (k.val+1)=totalNodes location k.val+width location (k.val+1) := by
+  fin_cases location <;> decide
+
+theorem earlier_layout (location : Fin 5) : ∀ (k : Fin (height location)) (l : Fin (height location+1)),l.val ≤ k.val →
+    cacheBase location l.val+20*width location l.val ≤ cacheBase location (k.val+1) ∧
+    cacheBase location l.val%4=0 ∧ 0x50000 ≤ cacheBase location l.val := by
+  fin_cases location <;> decide
+
+theorem entry_controls (location : Fin 5) (s : MachineState) (k : Nat) (ctx : LevelControls location s k) :
+    Controls (levelEntry s) (cacheBase location k) (cacheBase location (k+1)) (k+1) (width location (k+1)) 0 := by
+  refine ⟨?_,?_,?_,?_,?_⟩
+  · exact (SphincsMaskedParentLevels.levelEntry_frame s _ (by decide)).trans ctx.base
+  · exact (SphincsMaskedParentLevels.levelEntry_frame s _ (by decide)).trans ctx.target
+  · exact (SphincsMaskedParentLevels.levelEntry_frame s _ (by decide)).trans ctx.level
+  · exact (SphincsMaskedParentLevels.levelEntry_frame s _ (by decide)).trans ctx.count
+  · simp [levelEntry,runSchedule,levelEntrySchedule,execInstrBr,signExtend12,
+      MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+
+theorem finish_controls (location : Fin 5) (s : MachineState) (k : Fin (height location))
+    (ctx : Controls s (cacheBase location k.val) (cacheBase location (k.val+1)) (k.val+1)
+      (width location (k.val+1)) (width location (k.val+1))) :
+    LevelControls location (finish location s) (k.val+1) := by
+  have target:=ctx.target
+  have count:=ctx.count
+  have level:=ctx.level
+  change s.getMem 0x43080#64=_ at target
+  change s.getMem 0x43090#64=_ at count
+  change s.getMem 0x43048#64=_ at level
+  constructor <;>
+    simp [finish,finishSchedule,runSchedule,execInstrBr,signExtend12,
+      MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,target,count,level]
+  all_goals fin_cases location <;> fin_cases k <;> decide
+
+theorem finish_pc (location : Fin 5) (s : MachineState) (k : Fin (height location))
+    (pc : s.pc=0x1810) (level : s.getMem 0x43048=BitVec.ofNat 64 (k.val+1)) :
+    (finish location s).pc=if k.val+1=height location then 0x189c else 0x1610 := by
+  change s.getMem 0x43048#64=_ at level
+  simp [finish,finishSchedule,runSchedule,execInstrBr,signExtend12,signExtend13,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc,level]
+  fin_cases location <;> fin_cases k <;> decide
+
+
+theorem loop_key (s t : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (ctx : KeyContext s parameter seed lay treeIdx)
+    (frame : ∀ a,a∉loopWrites → t.getMem a=s.getMem a) : KeyContext t parameter seed lay treeIdx := by
+  obtain ⟨layer,tree,par,key⟩:=ctx
+  refine ⟨(frame _ (by decide)).trans layer,(frame _ (by decide)).trans tree,?_,?_⟩
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame _ (by fin_cases i <;> decide)]
+    exact par i
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame _ (by fin_cases i <;> decide)]
+    exact key i
+
+theorem entry_frame (s : MachineState) (a : Word) (outside : a∉loopWrites) :
+    (levelEntry s).getMem a=s.getMem a := by
+  apply SphincsMaskedParentLevels.levelEntry_frame
+  intro eq;apply outside;simp [loopWrites,eq]
+
+theorem word_frame (s t : MachineState) (frame : ∀ a,a∉loopWrites → t.getMem a=s.getMem a)
+    (address : Nat) (lower : 0x50000 ≤ address) (upper : address<0x60000) :
+    t.getWord32 (BitVec.ofNat 64 address)=s.getWord32 (BitVec.ofNat 64 address) :=
+  SphincsMaskedSignForestParents.cache_word_frame s t frame address lower upper
+
+theorem level_contract (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (k : Fin (height location)) (pc : s.pc=0x1610) (ctx : KeyContext s parameter seed lay treeIdx)
+    (ctrl : LevelControls location s k.val)
+    (source : ∀ node,node<width location k.val → Words20 s (cacheBase location k.val+20*node)
+      (treeValue hash parameter seed lay treeIdx k.val node)) :
+    ∃ final,Trace hash SphincsMaskedImages.sign (shift (delta location) s)
+      (39+124*width location (k.val+1)) (39+139*width location (k.val+1))
+      (width location (k.val+1)) (2*width location (k.val+1)) (shift (delta location) final) ∧
+      LevelControls location final (k.val+1) ∧ KeyContext final parameter seed lay treeIdx ∧
+      final.pc=(if k.val+1=height location then 0x189c else 0x1610) ∧
+      (∀ node,node<width location (k.val+1) → Words20 final (cacheBase location (k.val+1)+20*node)
+        (treeValue hash parameter seed lay treeIdx (k.val+1) node)) ∧
+      (∀ address,0x50000 ≤ address → address<cacheBase location (k.val+1) → address%4=0 →
+        final.getWord32 (BitVec.ofNat 64 address)=s.getWord32 (BitVec.ofNat 64 address)) ∧
+      (∀ a,a.toNat<0x50000 → a∉preWrites → a∉loopWrites → final.getMem a=s.getMem a) := by
+  obtain ⟨sourceEnd,targetEnd,targetBound,baseAlign,targetAlign,baseAbove,targetAbove,positive,small,twice,half,total⟩:=layout location k
+  have entryKey:=loop_key s (levelEntry s) parameter seed lay treeIdx ctx (entry_frame s)
+  have entryValues : ∀ j,j<2*width location (k.val+1) → Words20 (levelEntry s)
+      (cacheBase location k.val+20*j) (treeValue hash parameter seed lay treeIdx k.val j) := by
+    intro j hj i
+    rw [word_frame s _ (entry_frame s) _ (by omega) (by omega)]
+    exact source j (by omega) i
+  obtain ⟨nodeTrace,nodeCtrl,nodeKey,nodePc,values,frame,lowFrame⟩:=nodes_contract location hash (levelEntry s)
+    parameter seed lay treeIdx (cacheBase location k.val) (cacheBase location (k.val+1)) (k.val+1)
+    (width location (k.val+1)) (treeValue hash parameter seed lay treeIdx k.val)
+    (levelEntry_pc s pc) entryKey (entry_controls location s k.val ctrl) entryValues
+    (by omega) (by omega) baseAlign targetAlign baseAbove positive small (width location (k.val+1)) (by omega)
+  let mid:=nodes hash (width location (k.val+1)) (levelEntry s)
+  have midPc : mid.pc=0x1810 := by simpa using nodePc
+  refine ⟨finish location mid,?_,finish_controls location mid k nodeCtrl,
+    loop_key mid _ parameter seed lay treeIdx nodeKey (finish_frame location mid),
+    finish_pc location mid k midPc nodeCtrl.level,?_,?_,?_⟩
+  · have trace:=(entry_block location s pc).trace.trans (nodeTrace.trans (finish_block location mid midPc).trace)
+    convert trace using 1 <;> omega
+  · intro node hn i
+    rw [word_frame mid _ (finish_frame location mid) _ (by omega) (by omega),treeValue_succ]
+    exact values node hn i
+  · intro address lower upper align
+    rw [word_frame mid _ (finish_frame location mid) address lower (by omega),frame address lower upper align,
+      word_frame s _ (entry_frame s) address lower (by omega)]
+  · intro a low outside loop
+    rw [finish_frame location mid a loop,lowFrame a low outside (by intro eq;apply loop;simp [loopWrites,eq]),entry_frame s a loop]
+
+theorem levels_contract (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (pc : s.pc=0x1610) (ctx : KeyContext s parameter seed lay treeIdx) (ctrl : LevelControls location s 0)
+    (leaves : ∀ node,node<width location 0 → Words20 s (cacheBase location 0+20*node)
+      (treeValue hash parameter seed lay treeIdx 0 node))
+    (n : Nat) (hn : n ≤ height location) :
+    ∃ final,Trace hash SphincsMaskedImages.sign (shift (delta location) s)
+      (39*n+124*totalNodes location n) (39*n+139*totalNodes location n)
+      (totalNodes location n) (2*totalNodes location n) (shift (delta location) final) ∧
+      LevelControls location final n ∧ KeyContext final parameter seed lay treeIdx ∧
+      final.pc=(if n=height location then 0x189c else 0x1610) ∧
+      (∀ level,level ≤ n → ∀ node,node<width location level → Words20 final (cacheBase location level+20*node)
+        (treeValue hash parameter seed lay treeIdx level node)) ∧
+      (∀ a,a.toNat<0x50000 → a∉preWrites → a∉loopWrites → final.getMem a=s.getMem a) := by
+  have positive : 0<height location := by fin_cases location <;> decide
+  induction n with
+  | zero =>
+    refine ⟨s,?_,ctrl,ctx,?_,?_,by intro a _ _ _;rfl⟩
+    · simpa [totalNodes] using (Trace.refl (hash:=hash) (image:=SphincsMaskedImages.sign) (shift (delta location) s))
+    · simpa only [if_neg (by omega : 0≠height location)] using pc
+    · intro level hl node hn
+      have eq : level=0 := by omega
+      subst level;exact leaves node hn
+  | succ n ih =>
+    obtain ⟨mid,first,midCtrl,midKey,midPc,old,firstFrame⟩:=ih (by omega)
+    have npc : mid.pc=0x1610 := by rw [midPc,if_neg (by omega)]
+    let k : Fin (height location):=⟨n,by omega⟩
+    obtain ⟨final,last,finalCtrl,finalKey,finalPc,new,frame,lastFrame⟩:=
+      level_contract location hash mid parameter seed lay treeIdx k npc midKey midCtrl (old n (by omega))
+    refine ⟨final,?_,finalCtrl,finalKey,finalPc,?_,?_⟩
+    · have total : totalNodes location (n+1)=totalNodes location n+width location (n+1) :=
+        (layout location k).2.2.2.2.2.2.2.2.2.2.2
+      have trace:=first.trans last
+      dsimp [k] at trace
+      rw [total]
+      convert trace using 1 <;> omega
+    · intro level hl node hnode
+      by_cases eq : level=n+1
+      · subst level;exact new node hnode
+      · have le : level ≤ n := by omega
+        have before:=earlier_layout location k ⟨level,by omega⟩ le
+        change cacheBase location level+20*width location level ≤ cacheBase location (n+1) ∧
+          cacheBase location level%4=0 ∧ 0x50000 ≤ cacheBase location level at before
+        dsimp only [k] at frame
+        intro i
+        rw [frame _ (by omega) (by omega) (by omega)]
+        exact old level le node hnode i
+    · intro a low outside loop
+      exact (lastFrame a low outside loop).trans (firstFrame a low outside loop)
+
+
+theorem leafValue_treeValue (hash : Hash) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : Fin 32) :
+    SphincsMaskedSignOtsTree.leafValue hash parameter seed lay treeIdx (subtreeLeaf leaf)=
+      treeValue hash parameter seed lay treeIdx 0 leaf.val := by
+  have leafEq : Concrete.leafOfNat leaf.val=subtreeLeaf leaf := by
+    apply Fin.ext
+    exact Nat.mod_eq_of_lt (by change leaf.val<2048;omega)
+  simp only [treeValue,Seeded.treeNode,leafEq,SphincsMaskedSignOtsTree.leafValue]
+
+theorem key_shift (d : Word) (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (ctx : KeyContext s parameter seed lay treeIdx) :
+    KeyContext (shift d s) parameter seed lay treeIdx := by
+  obtain ⟨layer,tree,par,key⟩:=ctx
+  refine ⟨by simpa using layer,by simpa using tree,?_,?_⟩
+  · intro i;rw [shift_word];exact par i
+  · intro i;rw [shift_word];exact key i
+
+/-- Actual signer parent loop from the leaf-cache exit to the root-copy entry.
+    It retains every cached level, so subsequent authentication-path reads are covered. -/
+theorem parents_contract (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (pc : s.pc=0x15cc+chainDelta location) (ctx : KeyContext s parameter seed lay treeIdx)
+    (leaves : ∀ leaf : Fin 32,leaf.val<Finish.width location → Words20 s (0x50000+20*leaf.val)
+      (SphincsMaskedSignOtsTree.leafValue hash parameter seed lay treeIdx (subtreeLeaf leaf))) :
+    ∃ final,Trace hash SphincsMaskedImages.sign s
+      (18+39*height location+124*totalNodes location (height location))
+      (18+39*height location+139*totalNodes location (height location))
+      (totalNodes location (height location)) (2*totalNodes location (height location)) final ∧
+      final.pc=0x189c+delta location ∧
+      final.getMem 0x43068=BitVec.ofNat 64 (cacheBase location (height location)) ∧
+      KeyContext final parameter seed lay treeIdx ∧
+      (∀ level,level ≤ height location → ∀ node,node<width location level →
+        Words20 final (cacheBase location level+20*node) (treeValue hash parameter seed lay treeIdx level node)) ∧
+      (∀ a,a.toNat<0x50000 → a∉preWrites → a∉loopWrites → final.getMem a=s.getMem a) := by
+  let v:=s.setPC 0x15c8
+  have entryPc : s.pc=0x15c8+delta location := by
+    rw [pc];fin_cases location <;> decide
+  have vctx : KeyContext v parameter seed lay treeIdx := ctx
+  have widthEq : width location 0=Finish.width location := by fin_cases location <;> decide
+  have widthBound : width location 0 ≤ 32 := by fin_cases location <;> decide
+  have baseZero : cacheBase location 0=0x50000 := by simp [cacheBase]
+  have key:=loop_key v (init location v) parameter seed lay treeIdx vctx (init_frame location v)
+  have initial : ∀ node,node<width location 0 → Words20 (init location v) (cacheBase location 0+20*node)
+      (treeValue hash parameter seed lay treeIdx 0 node) := by
+    intro node hn i
+    let leaf : Fin 32:=⟨node,by omega⟩
+    have val:=leaves leaf (by simpa only [widthEq] using hn) i
+    rw [leafValue_treeValue] at val
+    rw [word_frame v _ (init_frame location v) _ (by rw [baseZero];omega) (by rw [baseZero];omega),baseZero]
+    exact val
+  obtain ⟨final,trace,ctrl,key,loc,values,frame⟩:=levels_contract location hash (init location v)
+    parameter seed lay treeIdx (init_pc location v rfl) key (init_controls location v) initial (height location) (by omega)
+  have first:=(init_block location v rfl).trace (hash:=hash)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s entryPc] at first
+  refine ⟨shift (delta location) final,?_,?_,?_,key_shift _ _ parameter seed lay treeIdx key,?_,?_⟩
+  · convert first.trans trace using 1 <;> omega
+  · rw [shift_pc,loc,if_pos rfl]
+  · rw [shift_mem];exact ctrl.base
+  · intro level hl node hn i
+    rw [shift_word];exact values level hl node hn i
+  · intro a low outside loop
+    rw [shift_mem,frame a low outside loop,init_frame location v a loop]
+    rfl
+
+/-- Each concrete subtree root has the abstract seeded tree-node value. -/
+theorem parents_root (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (pc : s.pc=0x15cc+chainDelta location) (ctx : KeyContext s parameter seed lay treeIdx)
+    (leaves : ∀ leaf : Fin 32,leaf.val<Finish.width location → Words20 s (0x50000+20*leaf.val)
+      (SphincsMaskedSignOtsTree.leafValue hash parameter seed lay treeIdx (subtreeLeaf leaf))) :
+    ∃ final,Trace hash SphincsMaskedImages.sign s
+      (18+39*height location+124*totalNodes location (height location))
+      (18+39*height location+139*totalNodes location (height location))
+      (totalNodes location (height location)) (2*totalNodes location (height location)) final ∧
+      final.pc=0x189c+delta location ∧ KeyContext final parameter seed lay treeIdx ∧
+      Words20 final (cacheBase location (height location))
+        (treeValue hash parameter seed lay treeIdx (height location) 0) := by
+  obtain ⟨final,trace,loc,base,key,values,frame⟩:=parents_contract location hash s parameter seed lay treeIdx pc ctx leaves
+  refine ⟨final,trace,loc,key,?_⟩
+  simpa using values (height location) (by omega) 0 (by simp [width])
+
+end Levels
+
+namespace RootCopy
+open SphincsMaskedSignOtsTree
+
+def code : List (Word × Instr) := [
+  (0x189c,.LUI .x28 67),(0x18a0,.ADDI .x28 .x28 104),(0x18a4,.LD .x6 .x28 0),
+  (0x18a8,.LUI .x7 83),(0x18ac,.ADDI .x7 .x7 0)]
+def setup (s : MachineState) := runSchedule code s
+def state (s : MachineState) := copyRootState (setup s)
+
+theorem image (location : Fin 5) : DecodedBlock SphincsMaskedImages.sign (551+offset location) code := by
+  fin_cases location <;> rfl
+
+theorem encoded (location : Fin 5) : ∀ e∈code,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (551+offset location) _ _ (image location)
+  · have := offset_bound location
+    change 551+offset location+5 ≤ 11000;omega
+  · intro i
+    have addr : ∀ i : Fin code.length,code[i.val].1=BitVec.ofNat 64 (0x1000+4*(551+i.val)) := by decide
+    rw [addr i,delta,←BitVec.ofNat_add]
+    congr 1;omega
+
+theorem checked (s : MachineState) (pc : s.pc=0x189c) : Checked code s := by
+  simp [code,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem setup_block (location : Fin 5) (s : MachineState) (pc : s.pc=0x189c) :
+    OrdinarySteps SphincsMaskedImages.sign (shift (delta location) s) 5 (shift (delta location) (setup s)) :=
+  block_shift _ _ code (by decide) (encoded location) s (checked s pc)
+
+theorem registers (s : MachineState) (base : Nat) (hb : s.getMem 0x43068=BitVec.ofNat 64 base) :
+    (setup s).getReg .x6=BitVec.ofNat 64 base ∧ (setup s).getReg .x7=0x53000 := by
+  change s.getMem 0x43068#64=_ at hb
+  simp [setup,code,runSchedule,execInstrBr,signExtend12,MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne,hb]
+
+theorem setup_pc (s : MachineState) (pc : s.pc=0x189c) : (setup s).pc=0x18b0 := by
+  simp [setup,code,runSchedule,execInstrBr,pc]
+
+theorem setup_frame (s : MachineState) (a : Word) : (setup s).getMem a=s.getMem a := by
+  simp [setup,code,runSchedule,execInstrBr]
+
+theorem copy_image (location : Fin 5) :
+    (SphincsMaskedImages.sign.code.drop (556+offset location)).take 10=
+      (SphincsMaskedImages.keygen.code.drop 492).take 10 := by
+  fin_cases location <;> rfl
+
+theorem copy_word (location : Fin 5) (i : Fin 10) :
+    SphincsMaskedImages.sign.code[556+offset location+i.val]?=
+      SphincsMaskedImages.keygen.code[492+i.val]? := by
+  have eq:=congrArg (fun words : List (BitVec 32) => words[i.val]?) (copy_image location)
+  simpa only [List.getElem?_take_of_lt i.isLt,List.getElem?_drop] using eq
+
+theorem copy_code (location : Fin 5) : Copy20Code SphincsMaskedImages.sign (556+offset location) := by
+  constructor
+  · intro i
+    rw [copy_word location ⟨2*i.val,by omega⟩]
+    exact SphincsMaskedParentNode.store_code.load i
+  · intro i
+    rw [show 556+offset location+2*i.val+1=556+offset location+(2*i.val+1) by omega,
+      copy_word location ⟨2*i.val+1,by omega⟩]
+    convert SphincsMaskedParentNode.store_code.store i using 1 <;> congr 2 <;> omega
+
+theorem block (location : Fin 5) (s : MachineState) (base : Nat) (pc : s.pc=0x189c)
+    (hb : s.getMem 0x43068=BitVec.ofNat 64 base) (align : base%4=0) (bound : base+20 ≤ 0x53000) :
+    OrdinarySteps SphincsMaskedImages.sign (shift (delta location) s) 15
+      (shift (delta location) (state s)) := by
+  have regs:=registers s base hb
+  have loc : (shift (delta location) (setup s)).pc=BitVec.ofNat 64 (0x1000+4*(556+offset location)) := by
+    rw [shift_pc,setup_pc s pc,delta]
+    change BitVec.ofNat 64 0x18b0+BitVec.ofNat 64 (4*offset location)=_
+    rw [←BitVec.ofNat_add]
+    congr 1;omega
+  have copied:=copy20_block_general SphincsMaskedImages.sign (556+offset location) (copy_code location)
+    (shift (delta location) (setup s)) base 0x53000 loc
+    (by simpa using regs.1) (by simpa using regs.2) align (by dsimp [MEMORY_BYTES];omega)
+    (by decide) (by decide) (by have := offset_bound location;omega)
+  rw [copyRoot_shift] at copied
+  exact ordinary_trans _ _ _ _ 5 10 (setup_block location s pc) copied
+
+theorem value (s : MachineState) (base : Nat) (hb : s.getMem 0x43068=BitVec.ofNat 64 base)
+    (align : base%4=0) (bound : base+20 ≤ 0x53000) (i : Fin 5) :
+    (state s).getWord32 (BitVec.ofNat 64 (0x53000+4*i.val))=
+      s.getWord32 (BitVec.ofNat 64 (base+4*i.val)) := by
+  have regs:=registers s base hb
+  rw [state,SphincsMaskedSignForestParents.copy_data _ base 0x53000
+    (by omega) (by decide) align (by decide) (Or.inl bound) regs.1 regs.2 i]
+  simp only [MachineState.getWord32,setup_frame]
+
+theorem frame (s : MachineState) (a : Word)
+    (outside : a≠0x53000#64 ∧ a≠0x53008#64 ∧ a≠0x53010#64) :
+    (state s).getMem a=s.getMem a := by
+  rw [state,copyRoot_mem_frame]
+  · exact setup_frame s a
+  · intro i
+    have dst : (setup s).getReg .x7=0x53000 := by
+      simp [setup,code,runSchedule,execInstrBr,signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+    rw [dst]
+    fin_cases i <;> simp_all [signExtend12,alignToDword]
+
+theorem pc (s : MachineState) (loc : s.pc=0x189c) : (state s).pc=0x18d8 := by
+  rw [state,SphincsMaskedParentNode.copyRoot_pc,setup_pc s loc];rfl
+
+end RootCopy
+
+namespace RootCopy
+
+theorem key_context (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (ctx : KeyContext s parameter seed lay treeIdx) :
+    KeyContext (state s) parameter seed lay treeIdx := by
+  obtain ⟨layer,tree,par,key⟩:=ctx
+  refine ⟨(frame s _ (by decide)).trans layer,(frame s _ (by decide)).trans tree,?_,?_⟩
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame s _ (by fin_cases i <;> decide)]
+    exact par i
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame s _ (by fin_cases i <;> decide)]
+    exact key i
+
+theorem word_frame (s : MachineState) (address : Nat) (bound : address<0x53000) :
+    (state s).getWord32 (BitVec.ofNat 64 address)=s.getWord32 (BitVec.ofNat 64 address) := by
+  have upper : (alignToDword (BitVec.ofNat 64 address)).toNat<0x53000 := by
+    simp only [alignToDword,BitVec.toNat_and,BitVec.toNat_ofNat,Nat.mod_eq_of_lt (by omega : address<2^64)]
+    exact lt_of_le_of_lt Nat.and_le_left bound
+  simp only [MachineState.getWord32]
+  rw [frame]
+  constructor
+  · intro eq;rw [eq] at upper;contradiction
+  constructor
+  · intro eq;rw [eq] at upper;contradiction
+  · intro eq;rw [eq] at upper;contradiction
+
+end RootCopy
+
+/-- The tree-height parameter selected by each lower-layer bytecode block. -/
+def signerLayer (location : Fin 5) : Layer := ⟨location.val+1,by change location.val+1<6;omega⟩
+
+theorem signerLayer_height (location : Fin 5) : Levels.height location=layerHeight (signerLayer location) := by
+  fin_cases location <;> decide
+
+/-- All lower-layer parent nodes and the root copy, with the exact cache values
+    retained for the subsequent authentication-path serialization. -/
+theorem parents_root_copy (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (pc : s.pc=0x15cc+chainDelta location) (ctx : KeyContext s parameter seed lay treeIdx)
+    (leaves : ∀ leaf : Fin 32,leaf.val<SphincsMaskedSignOtsTree.Finish.width location →
+      Words20 s (0x50000+20*leaf.val)
+        (SphincsMaskedSignOtsTree.leafValue hash parameter seed lay treeIdx (SphincsMaskedSignOtsTree.subtreeLeaf leaf))) :
+    ∃ final,Trace hash SphincsMaskedImages.sign s
+      (33+39*Levels.height location+124*Levels.totalNodes location (Levels.height location))
+      (33+39*Levels.height location+139*Levels.totalNodes location (Levels.height location))
+      (Levels.totalNodes location (Levels.height location)) (2*Levels.totalNodes location (Levels.height location)) final ∧
+      final.pc=0x18d8+delta location ∧ KeyContext final parameter seed lay treeIdx ∧
+      Words20 final 0x53000 (treeValue hash parameter seed lay treeIdx (Levels.height location) 0) ∧
+      (∀ level,level ≤ Levels.height location → ∀ node,node<Levels.width location level →
+        Words20 final (Levels.cacheBase location level+20*node) (treeValue hash parameter seed lay treeIdx level node)) ∧
+      (∀ a,a.toNat<0x50000 → a∉preWrites → a∉Levels.loopWrites → final.getMem a=s.getMem a) := by
+  obtain ⟨mid,parents,midPc,base,key,values,firstFrame⟩:=Levels.parents_contract location hash s parameter seed lay treeIdx pc ctx leaves
+  have bounds : ∀ level : Fin (Levels.height location+1),
+      Levels.cacheBase location level.val+20*Levels.width location level.val ≤ 0x53000 := by
+    fin_cases location <;> decide
+  have rootWidth : Levels.width location (Levels.height location)=1 := by simp [Levels.width]
+  have rootBound : Levels.cacheBase location (Levels.height location)+20 ≤ 0x53000 := by
+    have h:=bounds ⟨Levels.height location,by omega⟩
+    simpa only [rootWidth,Nat.mul_one] using h
+  have rootAlign : Levels.cacheBase location (Levels.height location)%4=0 := by fin_cases location <;> decide
+  let v:=mid.setPC 0x189c
+  have copied:=RootCopy.block location v (Levels.cacheBase location (Levels.height location)) rfl base rootAlign rootBound
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ mid midPc] at copied
+  let final:=shift (delta location) (RootCopy.state v)
+  refine ⟨final,?_,?_,Levels.key_shift _ _ parameter seed lay treeIdx (RootCopy.key_context v parameter seed lay treeIdx key),?_,?_,?_⟩
+  · convert parents.trans copied.trace using 1 <;> omega
+  · rw [shift_pc,RootCopy.pc v rfl]
+  · intro i
+    rw [shift_word,RootCopy.value v _ base rootAlign rootBound i,SphincsMaskedSignOtsTree.word_setPC]
+    simpa using values (Levels.height location) (by omega) 0 (by rw [rootWidth];omega) i
+  · intro level hlevel node hnode i
+    have h:=bounds ⟨level,by omega⟩
+    change Levels.cacheBase location level+20*Levels.width location level ≤ 0x53000 at h
+    rw [shift_word,RootCopy.word_frame v _ (by omega),SphincsMaskedSignOtsTree.word_setPC]
+    exact values level hlevel node hnode i
+  · intro a low outside loop
+    have separate : a≠0x53000#64 ∧ a≠0x53008#64 ∧ a≠0x53010#64 := by
+      constructor
+      · intro eq;rw [eq] at low;contradiction
+      constructor
+      · intro eq;rw [eq] at low;contradiction
+      · intro eq;rw [eq] at low;contradiction
+    rw [shift_mem,RootCopy.frame v a separate,MachineState.getMem_setPC]
+    exact firstFrame a low outside loop
+
+/-- At the matching layer, the root is exactly the abstract seeded treeRoot. -/
+theorem parents_abstract_root (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (pc : s.pc=0x15cc+chainDelta location) (ctx : KeyContext s parameter seed (signerLayer location) treeIdx)
+    (leaves : ∀ leaf : Fin 32,leaf.val<SphincsMaskedSignOtsTree.Finish.width location →
+      Words20 s (0x50000+20*leaf.val)
+        (SphincsMaskedSignOtsTree.leafValue hash parameter seed (signerLayer location) treeIdx (SphincsMaskedSignOtsTree.subtreeLeaf leaf))) :
+    ∃ final,Trace hash SphincsMaskedImages.sign s
+      (33+39*Levels.height location+124*Levels.totalNodes location (Levels.height location))
+      (33+39*Levels.height location+139*Levels.totalNodes location (Levels.height location))
+      (Levels.totalNodes location (Levels.height location)) (2*Levels.totalNodes location (Levels.height location)) final ∧
+      final.pc=0x18d8+delta location ∧ Words20 final 0x53000
+        (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+          (Seeded.treeRoot parameter (signerLayer location) treeIdx seed : OracleComp SphincsSecurity.HashSpec Digest)) := by
+  obtain ⟨final,trace,loc,key,value,cache,frame⟩:=parents_root_copy location hash s parameter seed (signerLayer location) treeIdx pc ctx leaves
+  refine ⟨final,trace,loc,?_⟩
+  simpa only [treeValue,Seeded.treeRoot,signerLayer_height] using value
+
+
+/-- Complete subtree construction from the exact leaf-loop entry through the
+    root-copy exit. It requires only the live key context and zero leaf counter. -/
+theorem subtree_root (location : Fin 5) (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (treeIdx : TreeIndex)
+    (pc : s.pc=0x111c+chainDelta location) (counter : s.getMem 0x43020=0)
+    (ctx : KeyContext s parameter seed (signerLayer location) treeIdx) :
+    ∃ final,Trace hash SphincsMaskedImages.sign s
+      (41220*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        124*Levels.totalNodes location (Levels.height location))
+      (44683*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        139*Levels.totalNodes location (Levels.height location))
+      (417*SphincsMaskedSignOtsTree.Finish.width location+Levels.totalNodes location (Levels.height location))
+      (485*SphincsMaskedSignOtsTree.Finish.width location+2*Levels.totalNodes location (Levels.height location)) final ∧
+      final.pc=0x18d8+delta location ∧ KeyContext final parameter seed (signerLayer location) treeIdx ∧
+      Words20 final 0x53000
+        (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+          (Seeded.treeRoot parameter (signerLayer location) treeIdx seed : OracleComp SphincsSecurity.HashSpec Digest)) ∧
+      (∀ level,level ≤ Levels.height location → ∀ node,node<Levels.width location level →
+        Words20 final (Levels.cacheBase location level+20*node)
+          (treeValue hash parameter seed (signerLayer location) treeIdx level node)) ∧
+      (∀ a,SphincsMaskedSignOtsTree.Frame.Retained a → a.toNat<0x50000 → a∉preWrites → a∉Levels.loopWrites →
+        final.getMem a=s.getMem a) := by
+  obtain ⟨mid,leaves,midPc,count,key,values,firstFrame⟩:=SphincsMaskedSignOtsTree.all_leaves location hash s
+    parameter seed (signerLayer location) treeIdx ctx pc counter
+  obtain ⟨final,parents,finalPc,finalKey,root,cache,lastFrame⟩:=parents_root_copy location hash mid
+    parameter seed (signerLayer location) treeIdx midPc key values
+  refine ⟨final,?_,finalPc,finalKey,?_,cache,?_⟩
+  · convert leaves.trans parents using 1 <;> omega
+  · simpa only [treeValue,Seeded.treeRoot,signerLayer_height] using root
+  · intro a retained low outside loop
+    exact (lastFrame a low outside loop).trans (firstFrame a retained)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.Levels.levels_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms Levels.levels_contract
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.Levels.parents_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms Levels.parents_contract
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.RootCopy.block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms RootCopy.block
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.parents_root_copy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms parents_root_copy
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.parents_abstract_root' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms parents_abstract_root
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsParents.subtree_root' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms subtree_root
+
 end SigGolfCandidate.SphincsMaskedSignOtsParents
