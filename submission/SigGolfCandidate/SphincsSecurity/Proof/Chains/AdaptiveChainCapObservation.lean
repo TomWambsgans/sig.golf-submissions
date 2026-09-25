@@ -135,3 +135,89 @@ theorem realRun_contact_le_cap_cost (hsmall : budget < Fintype.card State) :
   exact realRun_cap_contact_le auxiliary computation cost budget hcharge hreal hsmall
 
 end SphincsSecurity.Concrete.PartialChainEndpoint
+
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {n : Nat} {Result : Type}
+
+private theorem finish_succ (budget : Nat) (result : Result × Nat) :
+    QueryCap.finish (budget + 1) (result.1, 1 + result.2) =
+      QueryCap.finish budget result := by
+  simp [QueryCap.finish, Nat.add_comm]
+
+private theorem finish_zero_succ (result : Result × Nat) :
+    QueryCap.finish 0 (result.1, 1 + result.2) = none := by
+  simp [QueryCap.finish]
+
+omit [Fintype State] [Nonempty State] in
+theorem observedRun_cap_finish_counted
+    (auxiliary : QueryImpl auxSpec PMF) (tables : Fin n → State → State)
+    (computation : OracleComp (auxSpec + PrefixSpec n State) Result)
+    (observed : Fin n → State → Option State) (budget : Nat) :
+    (fun result => result.1.map (fun finished => (finished, result.2))) <$>
+      observedRun auxiliary tables (QueryCap.run IsPrefixQuery computation budget) observed =
+    (fun result => (QueryCap.finish budget result.1).map (fun finished => (finished, result.2))) <$>
+      observedRun auxiliary tables (QueryCap.counted IsPrefixQuery computation) observed := by
+  induction computation using OracleComp.inductionOn generalizing observed budget with
+  | pure value =>
+      simp only [QueryCap.run_pure, QueryCap.counted_pure, observedRun_pure,
+        PMF.monad_map_eq_map, PMF.map, PMF.pure_bind, Function.comp_apply, QueryCap.finish]
+      simp
+  | query_bind input next ih =>
+      rw [QueryCap.run_query_bind, QueryCap.counted_query_bind]
+      by_cases hselected : IsPrefixQuery input
+      · rw [if_pos hselected]
+        cases budget with
+        | zero =>
+            simp only [observedRun_pure, hselected, if_true, PMF.monad_map_eq_map,
+              PMF.map, PMF.pure_bind, Function.comp_apply, Option.map_none]
+            have hmap (answer : (auxSpec + PrefixSpec n State).Range input)
+                (seen : Fin n → State → Option State) :
+                observedRun auxiliary tables
+                  (do
+                    let result ← QueryCap.counted IsPrefixQuery (next answer)
+                    pure (result.1, 1 + result.2)) seen =
+                  (observedRun auxiliary tables
+                    (QueryCap.counted IsPrefixQuery (next answer)) seen).map
+                    (fun result => ((result.1.1, 1 + result.1.2), result.2)) := by
+              simpa only [bind_pure_comp] using
+                (observedRun_map auxiliary tables
+                  (QueryCap.counted IsPrefixQuery (next answer))
+                  (fun result => (result.1, 1 + result.2)) seen)
+            simp only [observedRun_query_bind, hmap, PMF.bind_bind,
+              PMF.bind_map, Function.comp_def, finish_zero_succ,
+              Option.map_none, PMF.bind_const]
+        | succ budget =>
+            simp only [observedRun_query_bind, hselected, if_true,
+              PMF.monad_map_eq_map, PMF.map_bind]
+            have hmap (answer : (auxSpec + PrefixSpec n State).Range input)
+                (seen : Fin n → State → Option State) :
+                observedRun auxiliary tables
+                  (do
+                    let result ← QueryCap.counted IsPrefixQuery (next answer)
+                    pure (result.1, 1 + result.2)) seen =
+                  (observedRun auxiliary tables
+                    (QueryCap.counted IsPrefixQuery (next answer)) seen).map
+                    (fun result => ((result.1.1, 1 + result.1.2), result.2)) := by
+              simpa only [bind_pure_comp] using
+                (observedRun_map auxiliary tables
+                  (QueryCap.counted IsPrefixQuery (next answer))
+                  (fun result => (result.1, 1 + result.2)) seen)
+            simp only [hmap, PMF.map_comp, Function.comp_def, finish_succ]
+            exact congrArg ((observedImpl auxiliary tables input).run observed).bind
+              (funext fun answer => ih answer.1 answer.2 budget)
+      · rw [if_neg hselected]
+        simp only [observedRun_query_bind, hselected, if_false, Nat.zero_add,
+          Prod.mk.eta, bind_pure, PMF.monad_map_eq_map, PMF.map_bind]
+        exact congrArg ((observedImpl auxiliary tables input).run observed).bind
+          (funext fun answer => ih answer.1 answer.2 budget)
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.observedRun_cap_finish_counted
