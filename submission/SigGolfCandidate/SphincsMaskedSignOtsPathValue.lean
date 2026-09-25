@@ -832,4 +832,196 @@ theorem ots_encoding_hash_low_word (location : Fin 5) (s : MachineState)
   exact h1.trans h2
 
 
+def otsPaddingFirstCode : List (Word × Instr) := [
+ (0x1b94,.LUI .x6 0x42),
+ (0x1b98,.ADDI .x6 .x6 0),
+ (0x1b9c,.LBU .x10 .x6 9),
+ (0x1ba0,.ANDI .x10 .x10 0xc0),
+ (0x1ba4,.BEQ .x10 .x0 8)]
+
+def otsPaddingFirstState (s : MachineState) : MachineState :=
+  runSchedule otsPaddingFirstCode s
+
+def otsPaddingFirst (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (otsPaddingFirstState (s.setPC 0x1b94))
+
+theorem otsPaddingFirst_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (741+offset location) otsPaddingFirstCode := by
+  fin_cases location <;> rfl
+
+theorem otsPaddingFirst_encoded (location : Fin 5) : ∀ e∈otsPaddingFirstCode,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (741+offset location) _ _ (otsPaddingFirst_image location)
+  · have h := SphincsMaskedSignOtsParents.offset_bound location
+    change 741+offset location+5≤11000
+    omega
+  · intro i
+    have h : ∀ i : Fin otsPaddingFirstCode.length,
+        otsPaddingFirstCode[i.val].1=BitVec.ofNat 64 (0x1b94+4*i.val) := by
+      intro j
+      fin_cases j <;> rfl
+    rw [h i,delta,←BitVec.ofNat_add]
+    congr 1
+    omega
+
+theorem otsPaddingFirst_supported : ∀ e∈otsPaddingFirstCode,Supported e.2 := by decide
+
+theorem otsPaddingFirst_checked (s : MachineState) (pc : s.pc=0x1b94) :
+    Checked otsPaddingFirstCode s := by
+  simp [otsPaddingFirstCode,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem otsPaddingFirst_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1b94+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 5 (otsPaddingFirst location s) := by
+  have trace := block_shift SphincsMaskedImages.sign (delta location) otsPaddingFirstCode
+    otsPaddingFirst_supported (otsPaddingFirst_encoded location) (s.setPC 0x1b94)
+    (otsPaddingFirst_checked (s.setPC 0x1b94) rfl)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s pc] at trace
+  have len : otsPaddingFirstCode.length=5 := rfl
+  simpa only [otsPaddingFirst,otsPaddingFirstState,len] using trace
+
+theorem otsPaddingFirst_register (location : Fin 5) (s : MachineState) :
+    (otsPaddingFirst location s).getReg .x10 =
+      (((s.getByte 0x42009).setWidth 64) &&& 0xc0) := by
+  simp [otsPaddingFirst,otsPaddingFirstState,otsPaddingFirstCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getByte,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
+
+theorem otsPaddingFirst_good_pc (location : Fin 5) (s : MachineState)
+    (good : (otsPaddingFirst location s).getReg .x10 = 0) :
+    (otsPaddingFirst location s).pc=0x1bac+delta location := by
+  simp [otsPaddingFirst,otsPaddingFirstState,otsPaddingFirstCode,runSchedule,execInstrBr,
+    signExtend12,signExtend13,MachineState.getByte,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne] at good ⊢
+  exact good
+
+theorem otsPaddingFirst_bad_pc (location : Fin 5) (s : MachineState)
+    (bad : (otsPaddingFirst location s).getReg .x10 ≠ 0) :
+    (otsPaddingFirst location s).pc=0x1ba8+delta location := by
+  simp [otsPaddingFirst,otsPaddingFirstState,otsPaddingFirstCode,runSchedule,execInstrBr,
+    signExtend12,signExtend13,MachineState.getByte,MachineState.getReg_setReg_eq] at bad ⊢
+  exact bad
+
+def otsPaddingSecondCode : List (Word × Instr) := [
+ (0x1bac,.LUI .x6 0x42),
+ (0x1bb0,.ADDI .x6 .x6 0),
+ (0x1bb4,.LBU .x10 .x6 19),
+ (0x1bb8,.ANDI .x10 .x10 0xc0),
+ (0x1bbc,.BEQ .x10 .x0 8)]
+
+def otsPaddingSecondState (s : MachineState) : MachineState :=
+  runSchedule otsPaddingSecondCode s
+
+def otsPaddingSecond (location : Fin 5) (s : MachineState) : MachineState :=
+  shift (delta location) (otsPaddingSecondState (s.setPC 0x1bac))
+
+theorem otsPaddingSecond_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (747+offset location) otsPaddingSecondCode := by
+  fin_cases location <;> rfl
+
+theorem otsPaddingSecond_encoded (location : Fin 5) : ∀ e∈otsPaddingSecondCode,
+    instructionAt SphincsMaskedImages.sign (e.1+delta location)=some (.base e.2) := by
+  apply encoded_of_block _ (747+offset location) _ _ (otsPaddingSecond_image location)
+  · have h := SphincsMaskedSignOtsParents.offset_bound location
+    change 747+offset location+5≤11000
+    omega
+  · intro i
+    have h : ∀ i : Fin otsPaddingSecondCode.length,
+        otsPaddingSecondCode[i.val].1=BitVec.ofNat 64 (0x1bac+4*i.val) := by
+      intro j
+      fin_cases j <;> rfl
+    rw [h i,delta,←BitVec.ofNat_add]
+    congr 1
+    omega
+
+theorem otsPaddingSecond_supported : ∀ e∈otsPaddingSecondCode,Supported e.2 := by decide
+
+theorem otsPaddingSecond_checked (s : MachineState) (pc : s.pc=0x1bac) :
+    Checked otsPaddingSecondCode s := by
+  simp [otsPaddingSecondCode,Checked,execInstrBr,ordinaryStep,memoryArgumentsValid,
+    accessValid,rangeValid,MEMORY_BYTES,signExtend12,
+    MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne,pc]
+
+theorem otsPaddingSecond_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bac+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 5 (otsPaddingSecond location s) := by
+  have trace := block_shift SphincsMaskedImages.sign (delta location) otsPaddingSecondCode
+    otsPaddingSecond_supported (otsPaddingSecond_encoded location) (s.setPC 0x1bac)
+    (otsPaddingSecond_checked (s.setPC 0x1bac) rfl)
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s pc] at trace
+  have len : otsPaddingSecondCode.length=5 := rfl
+  simpa only [otsPaddingSecond,otsPaddingSecondState,len] using trace
+
+theorem otsPaddingSecond_register (location : Fin 5) (s : MachineState) :
+    (otsPaddingSecond location s).getReg .x10 =
+      (((s.getByte 0x42013).setWidth 64) &&& 0xc0) := by
+  simp [otsPaddingSecond,otsPaddingSecondState,otsPaddingSecondCode,runSchedule,execInstrBr,
+    signExtend12,MachineState.getByte,MachineState.getReg_setReg_eq]
+
+theorem otsPaddingSecond_good_pc (location : Fin 5) (s : MachineState)
+    (good : (otsPaddingSecond location s).getReg .x10 = 0) :
+    (otsPaddingSecond location s).pc=0x1bc4+delta location := by
+  simp [otsPaddingSecond,otsPaddingSecondState,otsPaddingSecondCode,runSchedule,execInstrBr,
+    signExtend12,signExtend13,MachineState.getByte,MachineState.getReg_setReg_eq] at good ⊢
+  exact good
+
+theorem otsPaddingSecond_bad_pc (location : Fin 5) (s : MachineState)
+    (bad : (otsPaddingSecond location s).getReg .x10 ≠ 0) :
+    (otsPaddingSecond location s).pc=0x1bc0+delta location := by
+  simp [otsPaddingSecond,otsPaddingSecondState,otsPaddingSecondCode,runSchedule,execInstrBr,
+    signExtend12,signExtend13,MachineState.getByte,MachineState.getReg_setReg_eq] at bad ⊢
+  exact bad
+
+
+def otsPaddingRetryFirstCode : List (Word × Instr) :=
+  [(0x1ba8,.JAL .x0 0x7ec)]
+
+def otsPaddingRetrySecondCode : List (Word × Instr) :=
+  [(0x1bc0,.JAL .x0 0x7d4)]
+
+theorem otsPaddingRetryFirst_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (746+offset location) otsPaddingRetryFirstCode := by
+  fin_cases location <;> rfl
+
+theorem otsPaddingRetrySecond_image (location : Fin 5) :
+    DecodedBlock SphincsMaskedImages.sign (752+offset location) otsPaddingRetrySecondCode := by
+  fin_cases location <;> rfl
+
+theorem otsPaddingRetryFirst_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1ba8+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (execInstrBr s (.JAL .x0 0x7ec)) := by
+  have fetched : fetch SphincsMaskedImages.sign s = some (.base (.JAL .x0 0x7ec)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.JAL .x0 0x7ec)) =
+      some (execInstrBr s (.JAL .x0 0x7ec)) := by simp [ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem otsPaddingRetrySecond_block (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bc0+delta location) :
+    OrdinarySteps SphincsMaskedImages.sign s 1 (execInstrBr s (.JAL .x0 0x7d4)) := by
+  have fetched : fetch SphincsMaskedImages.sign s = some (.base (.JAL .x0 0x7d4)) := by
+    rw [fetch_at,pc]
+    fin_cases location <;> decide
+  have stepped : ordinaryStep s (.base (.JAL .x0 0x7d4)) =
+      some (execInstrBr s (.JAL .x0 0x7d4)) := by simp [ordinaryStep,memoryArgumentsValid]
+  exact OrdinarySteps.step s _ _ _ 0 fetched stepped (OrdinarySteps.refl _)
+
+theorem otsPaddingRetryFirst_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1ba8+delta location) :
+    (execInstrBr s (.JAL .x0 0x7ec)).pc=0x2394+delta location := by
+  simp [execInstrBr,signExtend21,pc]
+  calc
+    _ = (7080#64+2028#64)+delta location := by ac_rfl
+    _ = 9108#64+delta location := by congr 1
+
+theorem otsPaddingRetrySecond_pc (location : Fin 5) (s : MachineState)
+    (pc : s.pc=0x1bc0+delta location) :
+    (execInstrBr s (.JAL .x0 0x7d4)).pc=0x2394+delta location := by
+  simp [execInstrBr,signExtend21,pc]
+  calc
+    _ = (7104#64+2004#64)+delta location := by ac_rfl
+    _ = 9108#64+delta location := by congr 1
+
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
