@@ -59,4 +59,24 @@ theorem run_recover_count (impl : QueryImpl spec PMF) (computation : OracleComp 
   congr 2
   exact Nat.sub_sub_self (hbound result hresult)
 
+/-- An event within the query budget has exactly the same probability in the
+    stopped and counted executions. The stopped run retains its remaining budget. -/
+theorem run_budget_event (impl : QueryImpl spec PMF)
+    (computation : OracleComp spec Result) (budget : Nat) (event : Result → Prop) :
+    Pr[fun result => ∃ value remaining,
+      result = some (value, remaining) ∧ event value |
+      simulateQ impl (run selected computation budget)] =
+    Pr[fun result => result.2 ≤ budget ∧ event result.1 |
+      simulateQ impl (counted selected computation)] := by
+  rw [run_eq_counted, ← PMF.monad_map_eq_map, probEvent_map]
+  congr 1
+  funext result
+  by_cases hbudget : result.2 ≤ budget
+  · simp [finish, hbudget]
+  · simp [finish, hbudget]
+
+/-- info: 'SphincsSecurity.QueryCap.run_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms run_budget_event
+
 end SphincsSecurity.QueryCap
