@@ -277,4 +277,117 @@ theorem retry_full_failed_attempts (location : Fin 5) (hash : Hash) (s : Machine
 #guard_msgs (whitespace := lax) in
 #print axioms retry_full_failed_attempts
 
+/-- The state after an accepted checksum, at the WOTS chain-signing entry. -/
+def encodingSuccessState (location : Fin 5) (s : MachineState) : MachineState :=
+  let second := otsPaddingSecond location (otsPaddingFirst location s)
+  sumTest (signerDecoderRun 52 (sumInit second))
+
+/-- The successful post-HASH encoding path checks both padding bytes, emits all
+    52 WOTS digits, and exits the checksum branch with no further HASH calls. -/
+theorem encoding_success_after_hash (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1b94 + delta location)
+    (padding1 : (otsPaddingFirst location s).getReg .x10 = 0)
+    (padding2 : (otsPaddingSecond location (otsPaddingFirst location s)).getReg .x10 = 0)
+    (good : answerSum 52
+      (sumInit (otsPaddingSecond location (otsPaddingFirst location s))) = 194) :
+    Trace hash SphincsMaskedImages.sign s 509 509 0 0 (encodingSuccessState location s) ∧
+      (encodingSuccessState location s).pc = 0x23cc + delta location := by
+  let first := otsPaddingFirst location s
+  let second := otsPaddingSecond location first
+  have firstTrace := (otsPaddingFirst_block location s pc).trace (hash := hash)
+  have firstPc : first.pc = 0x1bac + delta location :=
+    otsPaddingFirst_good_pc location s padding1
+  have secondTrace := (otsPaddingSecond_block location first firstPc).trace (hash := hash)
+  have secondPc : second.pc = 0x1bc4 + delta location :=
+    otsPaddingSecond_good_pc location first padding2
+  obtain ⟨goodTrace, goodPc⟩ := signer_encoding_good location second secondPc good
+  refine ⟨?_, ?_⟩
+  · simpa only [first, second, encodingSuccessState, Nat.reduceAdd] using
+      firstTrace.trans (secondTrace.trans (goodTrace.trace (hash := hash)))
+  · exact goodPc
+
+/-- After any bounded sequence of failed encodings, an accepted checksum reaches
+    WOTS chain signing with exact cumulative costs. -/
+theorem encoding_success_after_retries (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1b94 + delta location) (n : Nat)
+    (failed : ∀ j, j < n →
+      let st := fullRetryStates location hash s j
+      (otsPaddingFirst location st).getReg .x10 = 0 ∧
+      (otsPaddingSecond location (otsPaddingFirst location st)).getReg .x10 = 0 ∧
+      answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location st))) ≠ 194 ∧
+      st.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word))
+    (padding1 : (otsPaddingFirst location (fullRetryStates location hash s n)).getReg .x10 = 0)
+    (padding2 : (otsPaddingSecond location
+      (otsPaddingFirst location (fullRetryStates location hash s n))).getReg .x10 = 0)
+    (good : answerSum 52 (sumInit (otsPaddingSecond location
+      (otsPaddingFirst location (fullRetryStates location hash s n)))) = 194) :
+    Trace hash SphincsMaskedImages.sign s (594 * n + 509) (601 * n + 509) n n
+      (encodingSuccessState location (fullRetryStates location hash s n)) ∧
+      (encodingSuccessState location (fullRetryStates location hash s n)).pc =
+        0x23cc + delta location := by
+  obtain ⟨retries, endPc, _⟩ := retry_full_failed_attempts location hash s pc n failed
+  obtain ⟨finish, successPc⟩ := encoding_success_after_hash location hash _
+    endPc padding1 padding2 good
+  exact ⟨by simpa only [Nat.add_zero] using retries.trans finish, successPc⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_success_after_retries' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_success_after_retries
+
+/-- Concrete state after the first encoding HASH at the WOTS entry. -/
+def initialEncodingState (location : Fin 5) (hash : Hash) (s : MachineState) : MachineState :=
+  let prep := otsHashPrep location (otsPrelude location s)
+  writeHash prep (hash (hashInput prep))
+
+theorem initial_encoding_hash_exact (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1a50 + delta location) :
+    Trace hash SphincsMaskedImages.sign s 81 88 1 1 (initialEncodingState location hash s) ∧
+      (initialEncodingState location hash s).pc = 0x1b94 + delta location := by
+  let mid := otsPrelude location s
+  let prep := otsHashPrep location mid
+  have first := (otsPrelude_block location s pc).trace (hash := hash)
+  have second := (otsHashPrep_block location mid (otsPrelude_pc location s)).trace (hash := hash)
+  have third := otsHashPrep_hash_step location hash mid
+  refine ⟨?_, ?_⟩
+  · simpa only [initialEncodingState, mid, prep, Nat.reduceAdd] using
+      first.trans (second.trans third)
+  · simp [initialEncodingState, prep, writeHash, otsHashPrep_pc]
+    bv_omega
+
+/-- The full accepted encoding, including its first HASH and all bounded
+    retries, reaches the WOTS signing entry with exact costs. -/
+theorem encoding_success_from_entry (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1a50 + delta location) (n : Nat)
+    (failed : ∀ j, j < n →
+      let st := fullRetryStates location hash (initialEncodingState location hash s) j
+      (otsPaddingFirst location st).getReg .x10 = 0 ∧
+      (otsPaddingSecond location (otsPaddingFirst location st)).getReg .x10 = 0 ∧
+      answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location st))) ≠ 194 ∧
+      st.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word))
+    (padding1 : (otsPaddingFirst location
+      (fullRetryStates location hash (initialEncodingState location hash s) n)).getReg .x10 = 0)
+    (padding2 : (otsPaddingSecond location (otsPaddingFirst location
+      (fullRetryStates location hash (initialEncodingState location hash s) n))).getReg .x10 = 0)
+    (good : answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location
+      (fullRetryStates location hash (initialEncodingState location hash s) n)))) = 194) :
+    Trace hash SphincsMaskedImages.sign s (594 * n + 590) (601 * n + 597) (n + 1) (n + 1)
+      (encodingSuccessState location
+        (fullRetryStates location hash (initialEncodingState location hash s) n)) ∧
+      (encodingSuccessState location
+        (fullRetryStates location hash (initialEncodingState location hash s) n)).pc =
+          0x23cc + delta location := by
+  obtain ⟨first, firstPc⟩ := initial_encoding_hash_exact location hash s pc
+  obtain ⟨rest, endPc⟩ := encoding_success_after_retries location hash
+    (initialEncodingState location hash s) firstPc n failed padding1 padding2 good
+  have combined := first.trans rest
+  have stepsEq : 81 + (594 * n + 509) = 594 * n + 590 := by omega
+  have cyclesEq : 88 + (601 * n + 509) = 601 * n + 597 := by omega
+  have callsEq : 1 + n = n + 1 := by omega
+  rw [stepsEq, cyclesEq, callsEq] at combined
+  exact ⟨combined, endPc⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_success_from_entry' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_success_from_entry
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue

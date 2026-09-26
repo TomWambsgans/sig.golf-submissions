@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsVerifierXmssTransition
 import SigGolfCandidate.SphincsMaskedKeygenPadding
+import SigGolfCandidate.SphincsWireEncoding
 
 namespace SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
@@ -1350,6 +1351,27 @@ theorem pathWitness_of_low_frame (initial final : MachineState)
     frame address low]
   exact witness.bytes level hlevel i hi
 
+theorem pathWitness_of_low_byte_frame (initial final : MachineState)
+    (signature : SphincsSecurity.Signature) (lay : Layer)
+    (pointer : Word)
+    (bound : pointer.toNat + 20 * layerHeight lay ≤ 0x40000)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address)
+    (witness : SphincsVerifierXmssPathControl.PathWitness
+      initial signature lay pointer) :
+    SphincsVerifierXmssPathControl.PathWitness
+      final signature lay pointer := by
+  constructor
+  intro level hlevel i hi
+  let address : Word := BitVec.ofNat 64 (pointer.toNat + 20 * level + i)
+  have low : address.toNat < 0x40000 := by
+    simp only [address, BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega :
+      pointer.toNat + 20 * level + i < 2 ^ 64)]
+    omega
+  rw [frame address low]
+  exact witness.bytes level hlevel i hi
+
 theorem upper_path_pointer_bound (target : Fin 5) :
     (BitVec.ofNat 64
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
@@ -1364,6 +1386,78 @@ theorem upper_path_pointer_aligned (target : Fin 5) :
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
         20 * 52)).toNat % 4 = 0 := by
   fin_cases target <;> decide
+
+/-- The relocated WOTS block ends exactly where the encoded XMSS path begins. -/
+theorem upper_path_source_address (target : Fin 5) :
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+      20 * 52 =
+    0x22ca0 + SigGolfCandidate.SphincsWireEncoding.layerOffset
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) +
+      SigGolfCandidate.SphincsWire.counterBytes +
+      SphincsSecurity.numChains * SigGolfCandidate.SphincsWire.digestBytes := by
+  fin_cases target <;> decide
+
+/-- The freshly loaded verifier memory contains every upper-layer XMSS sibling. -/
+theorem loaded_upper_path_witness (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some state) :
+    SphincsVerifierXmssPathControl.PathWitness state signature
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target)
+      (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52)) := by
+  constructor
+  intro level hlevel i hi
+  let lay := SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target
+  let typedLevel : Fin (layerHeight lay) := ⟨level, hlevel⟩
+  have pointerSmall :
+      SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * 52 < 2 ^ 64 := by
+    fin_cases target <;> decide
+  have address :
+      (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52)).toNat + 20 * level + i =
+      0x22ca0 + SigGolfCandidate.SphincsWireEncoding.layerOffset lay +
+        SigGolfCandidate.SphincsWire.counterBytes +
+        SphincsSecurity.numChains * SigGolfCandidate.SphincsWire.digestBytes +
+        level * SigGolfCandidate.SphincsWire.digestBytes + i := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt pointerSmall]
+    rw [upper_path_source_address target]
+    simp only [lay, SigGolfCandidate.SphincsWire.digestBytes]
+    omega
+  rw [address]
+  have loadedPath := SigGolfCandidate.SphincsWireEncoding.loaded_honest_layerPath
+    publicKey message pk signature state loaded lay typedLevel i hi
+  simpa [lay, typedLevel, SphincsSecurity.Concrete.signaturePath, hlevel]
+    using loadedPath
+
+/-- Any verifier prefix that preserves low bytes preserves the loaded path. -/
+theorem loaded_upper_path_witness_after_frame (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial final : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address) :
+    SphincsVerifierXmssPathControl.PathWitness final signature
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target)
+      (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52)) := by
+  exact pathWitness_of_low_byte_frame initial final signature
+    (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target)
+    (BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * 52)) (upper_path_pointer_bound target) frame
+    (loaded_upper_path_witness target publicKey message pk signature initial loaded)
 
 theorem upper_path_node_pc (target : Fin 5) :
     SphincsVerifierXmssParity.nodePc
@@ -1478,7 +1572,7 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
         (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
           20 * chain.val + j)) =
         (values chain).extractLsb' (8 * j) 8)
-    (siblings : SphincsVerifierXmssPathControl.PathWitness ready signature layer
+    (siblings : SphincsVerifierXmssPathControl.PathWitness state signature layer
       (BitVec.ofNat 64
         (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
           20 * 52))) :
@@ -1514,7 +1608,9 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
                     (digits chain) (values chain)))))
             (layerHeight layer)).extractLsb' (8 * i) 8) ∧
       SphincsVerifierXmssPathControl.pathCycles hash layer
-        (layerHeight layer) final ≤ 141 * layerHeight layer := by
+        (layerHeight layer) final ≤ 141 * layerHeight layer ∧
+      (∀ address, address.toNat < 0x40000 →
+        doneState.getByte address = state.getByte address) := by
   let pointer : Word := BitVec.ofNat 64
     (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
       20 * 52)
@@ -1523,6 +1619,21 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
       (fun chain => evalWithAnswerFn (adaptOracle hash)
         (Concrete.recoverChain pk.parameter layer tree leaf chain
           (digits chain) (values chain))))
+  have readySiblings : SphincsVerifierXmssPathControl.PathWitness
+      ready signature layer pointer := by
+    constructor
+    intro level hlevel i hi
+    let address : Word := BitVec.ofNat 64 (pointer.toNat + 20 * level + i)
+    have bound : pointer.toNat + 20 * layerHeight layer ≤ 0x40000 := by
+      rw [layerEq]
+      exact upper_path_pointer_bound target
+    have low : address.toNat < 0x40000 := by
+      simp only [address, BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega :
+        pointer.toNat + 20 * level + i < 2 ^ 64)]
+      omega
+    rw [readyEq, upper_ready_low_byte_frame target state address low]
+    exact siblings.bytes level hlevel i hi
   obtain ⟨final, steps, cycles, calls, blocks, run, done, pointerCell,
     layerFinal, treeFinal, current, level, bit, prefixFinal, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
@@ -1539,7 +1650,7 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
   have finalSiblings : SphincsVerifierXmssPathControl.PathWitness
       final signature layer pointer :=
     pathWitness_of_low_frame ready final signature layer pointer bound
-      lowFrame siblings
+      lowFrame readySiblings
   have path := SphincsVerifierXmssPathComplete.complete_path
     hash layer final pk tree leaf signature first pointer finalPc
     pointerCell bound aligned layerFinal treeFinal level
@@ -1562,8 +1673,23 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
         tailSteps result tail
     simpa [Execution.charge, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
       using run.then_executes suffix
+  have endFrame (address : Word) (low : address.toNat < 0x40000) :
+      (SphincsVerifierXmssPathControl.pathState hash layer
+        (layerHeight layer) final).getByte address = state.getByte address := by
+    have pathFrame := SphincsVerifierWotsSemanticAllChains.lowByteFrame
+      final (SphincsVerifierXmssPathControl.pathState hash layer
+        (layerHeight layer) final)
+        (fun read small =>
+          SphincsVerifierXmssPathControl.path_low_mem hash layer
+            (layerHeight layer) final read small) address low
+    have leafFrame := SphincsVerifierWotsSemanticAllChains.lowByteFrame
+      ready final lowFrame address low
+    exact pathFrame.trans (leafFrame.trans (by
+      rw [readyEq]
+      exact upper_ready_low_byte_frame target state address low))
   exact ⟨final, steps, cycles, calls, blocks, run,
-    stepBound, cycleBound, callBound, blockBound, continuation, path⟩
+    stepBound, cycleBound, callBound, blockBound, continuation,
+    path.1, path.2.1, path.2.2, endFrame⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
@@ -1575,6 +1701,20 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms pathWitness_of_low_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_path_witness' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_upper_path_witness
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.pathWitness_of_low_byte_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms pathWitness_of_low_byte_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_path_witness_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_upper_path_witness_after_frame
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_pointer_bound' depends on axioms: [propext,
  Classical.choice,

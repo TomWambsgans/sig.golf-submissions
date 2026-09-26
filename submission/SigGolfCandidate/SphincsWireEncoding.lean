@@ -304,6 +304,47 @@ theorem layerEncoding_pathByte (signature : Signature) (lay : Layer)
   simp only [indexEq]
   exact digestVectorBytes_byte (signature.layers lay).path level i hi
 
+private theorem layer_path_index_lt (lay : Layer)
+    (level : Fin (layerHeight lay)) (i : Nat) (hi : i < digestBytes) :
+    counterBytes + numChains * digestBytes + level.val * digestBytes + i <
+      layerBytes lay := by
+  have hlevel := level.isLt
+  have hi20 : i < 20 := by simpa [digestBytes] using hi
+  simp only [layerBytes, counterBytes, numChains, digestBytes]
+  omega
+
+/-- Locate a layer path once the signature list is split at that layer. -/
+private theorem wire_path_of_split (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (lay : Layer) (offset : Nat)
+    (before after : List Byte)
+    (split : encodeBytes pk signature =
+      before ++ ((layerEncoding signature lay).map UInt8.toBitVec) ++ after)
+    (beforeLength : before.length = offset)
+    (level : Fin (layerHeight lay)) (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (offset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers lay).path level).extractLsb' (8 * i) 8 := by
+  let j := counterBytes + numChains * digestBytes + level.val * digestBytes + i
+  have jBound : j < ((layerEncoding signature lay).map UInt8.toBitVec).length := by
+    simpa only [j, List.length_map, layerEncoding_length] using
+      layer_path_index_lt lay level i hi
+  have full : offset + j < SphincsWire.signatureBytes := by
+    rw [← encodeBytes_length pk signature, split]
+    simp only [List.length_append, List.length_map, beforeLength]
+    simp only [List.length_map] at jBound
+    omega
+  have indexEq : offset + counterBytes + numChains * digestBytes +
+      level.val * digestBytes + i = offset + j := by
+    dsimp [j]
+    omega
+  rw [indexEq, wire_byte pk signature (offset + j) full]
+  simp only [split, List.append_assoc]
+  rw [List.getElem_append_right (by rw [beforeLength]; omega)]
+  simp only [beforeLength, Nat.add_sub_cancel_left]
+  rw [List.getElem_append_left (by exact jBound)]
+  simpa only [j] using layerEncoding_pathByte signature lay level i hi
+
 /-- The top XMSS authentication path occupies its fixed slot in the witness. -/
 theorem wire_topPath (pk : SphincsSecurity.PublicKey)
     (signature : Signature) (level : Fin (layerHeight topLayer))
@@ -384,6 +425,222 @@ theorem loaded_honest_topPath (publicKey : SigGolf.PublicKey)
   rw [addressEq, SphincsVerifierLoader.loaded_witness publicKey message
     (wire inner signature) state loaded _ full]
   exact wire_topPath inner signature level i hi
+
+/-- The next layer's path follows the top layer in the same fixed wire image. -/
+theorem wire_middlePath (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight middleLayer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (middleOffset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers middleLayer).path level).extractLsb' (8 * i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec
+  let after : List Byte :=
+    (layerEncoding signature middle2Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc]
+  have beforeLength : before.length = middleOffset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature),
+      layerEncoding_length]
+    simp [prefixBytes, bytesLE, middleOffset, topOffset, ftsOffset,
+      randomizerOffset, parameterOffset, rootOffset, ftsOpeningBytes,
+      ftsTrees, digestBytes, layerBytes, numChains, counterBytes,
+      layerHeight, maxLayerHeight]
+  exact wire_path_of_split pk signature middleLayer middleOffset before after
+    split beforeLength level i hi
+
+theorem wire_middle2Path (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight middle2Layer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (middle2Offset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers middle2Layer).path level).extractLsb' (8 * i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec
+  let after : List Byte :=
+    (layerEncoding signature middle3Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc]
+  have beforeLength : before.length = middle2Offset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp only [layerEncoding_length]
+    simp [prefixBytes, bytesLE, middle2Offset, middleOffset, topOffset,
+      ftsOffset, randomizerOffset, parameterOffset, rootOffset,
+      ftsOpeningBytes, ftsTrees, digestBytes, layerBytes, numChains,
+      counterBytes, layerHeight, maxLayerHeight]
+  exact wire_path_of_split pk signature middle2Layer middle2Offset before after
+    split beforeLength level i hi
+
+theorem wire_middle3Path (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight middle3Layer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (middle3Offset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers middle3Layer).path level).extractLsb' (8 * i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec
+  let after : List Byte :=
+    (layerEncoding signature middle4Layer).map UInt8.toBitVec ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc]
+  have beforeLength : before.length = middle3Offset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp only [layerEncoding_length]
+    simp [prefixBytes, bytesLE, middle3Offset, middle2Offset,
+      middleOffset, topOffset, ftsOffset, randomizerOffset,
+      parameterOffset, rootOffset, ftsOpeningBytes, ftsTrees,
+      digestBytes, layerBytes, numChains, counterBytes,
+      layerHeight, maxLayerHeight]
+  exact wire_path_of_split pk signature middle3Layer middle3Offset before after
+    split beforeLength level i hi
+
+theorem wire_middle4Path (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight middle4Layer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (middle4Offset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers middle4Layer).path level).extractLsb' (8 * i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec
+  let after : List Byte :=
+    (layerEncoding signature bottomLayer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc]
+  have beforeLength : before.length = middle4Offset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp only [layerEncoding_length]
+    simp [prefixBytes, bytesLE, middle4Offset, middle3Offset,
+      middle2Offset, middleOffset, topOffset, ftsOffset, randomizerOffset,
+      parameterOffset, rootOffset, ftsOpeningBytes, ftsTrees,
+      digestBytes, layerBytes, numChains, counterBytes,
+      layerHeight, maxLayerHeight]
+  exact wire_path_of_split pk signature middle4Layer middle4Offset before after
+    split beforeLength level i hi
+
+theorem wire_bottomPath (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight bottomLayer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (bottomOffset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers bottomLayer).path level).extractLsb' (8 * i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec ++ [] := by
+    rw [encodeBytes_prefix]
+    simp only [before, restBytes, List.map_append, List.append_assoc,
+      List.append_nil]
+  have beforeLength : before.length = bottomOffset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp only [layerEncoding_length]
+    simp [prefixBytes, bytesLE, bottomOffset, middle4Offset,
+      middle3Offset, middle2Offset, middleOffset, topOffset, ftsOffset,
+      randomizerOffset, parameterOffset, rootOffset,
+      ftsOpeningBytes, ftsTrees, digestBytes, layerBytes, numChains,
+      counterBytes, layerHeight, maxLayerHeight]
+  exact wire_path_of_split pk signature bottomLayer bottomOffset before []
+    split beforeLength level i hi
+
+/-- Start of the encoded counter, WOTS values, and path for each layer. -/
+def layerOffset (lay : Layer) : Nat :=
+  if lay.val = 0 then topOffset
+  else if lay.val = 1 then middleOffset
+  else if lay.val = 2 then middle2Offset
+  else if lay.val = 3 then middle3Offset
+  else if lay.val = 4 then middle4Offset
+  else bottomOffset
+
+/-- Every XMSS sibling digest in the abstract signature occupies its wire slot. -/
+theorem wire_layerPath (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (lay : Layer)
+    (level : Fin (layerHeight lay)) (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (layerOffset lay + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers lay).path level).extractLsb' (8 * i) 8 := by
+  fin_cases lay
+  · simpa [layerOffset, topLayer] using wire_topPath pk signature level i hi
+  · simpa [layerOffset, middleLayer] using wire_middlePath pk signature level i hi
+  · simpa [layerOffset, middle2Layer] using wire_middle2Path pk signature level i hi
+  · simpa [layerOffset, middle3Layer] using wire_middle3Path pk signature level i hi
+  · simpa [layerOffset, middle4Layer] using wire_middle4Path pk signature level i hi
+  · simpa [layerOffset, bottomLayer, numLayers] using
+      wire_bottomPath pk signature level i hi
+
+theorem layer_path_offset_lt (lay : Layer)
+    (level : Fin (layerHeight lay)) (i : Nat) (hi : i < digestBytes) :
+    layerOffset lay + counterBytes + numChains * digestBytes +
+      level.val * digestBytes + i < SphincsWire.signatureBytes := by
+  have inner := layer_path_index_lt lay level i hi
+  have outer : layerOffset lay + layerBytes lay ≤
+      SphincsWire.signatureBytes := by
+    fin_cases lay <;> decide
+  omega
+
+/-- All honestly encoded XMSS siblings are present after the verifier loader. -/
+theorem loaded_honest_layerPath (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (lay : Layer) (level : Fin (layerHeight lay))
+    (i : Nat) (hi : i < digestBytes) :
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + layerOffset lay + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) =
+      ((signature.layers lay).path level).extractLsb' (8 * i) 8 := by
+  have full := layer_path_offset_lt lay level i hi
+  have addressEq : 0x22ca0 + layerOffset lay + counterBytes +
+      numChains * digestBytes + level.val * digestBytes + i =
+      0x22ca0 + (layerOffset lay + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i) := by omega
+  rw [addressEq, SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded _ full]
+  exact wire_layerPath inner signature lay level i hi
 
 /-- Every byte of every FORS opening occupies its declared wire slot. -/
 theorem wire_ftsOpeningByte (pk : SphincsSecurity.PublicKey)
@@ -624,5 +881,15 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_topPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms loaded_honest_topPath
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_layerPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms wire_layerPath
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_layerPath' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_layerPath
 
 end SigGolfCandidate.SphincsWireEncoding
