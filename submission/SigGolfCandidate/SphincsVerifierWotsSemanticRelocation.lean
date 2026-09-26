@@ -2382,6 +2382,74 @@ theorem first_upper_hash_prefix (hash : Hash) (state : MachineState)
     readyPc source bits destination service
   simpa using (ordinary.trace (hash := hash)).trans hashed
 
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_hash_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_hash_prefix
+
+private def firstUpperPaddingSchedule : List (Word × Instr) := [
+  (0x6de8, .LUI .x6 0x42),
+  (0x6dec, .ADDI .x6 .x6 0),
+  (0x6df0, .LBU .x10 .x6 9),
+  (0x6df4, .ANDI .x10 .x10 192),
+  (0x6df8, .BEQ .x10 .x0 8),
+  (0x6e00, .LUI .x6 0x42),
+  (0x6e04, .ADDI .x6 .x6 0),
+  (0x6e08, .LBU .x10 .x6 19),
+  (0x6e0c, .ANDI .x10 .x10 192),
+  (0x6e10, .BEQ .x10 .x0 8),
+  (0x6e18, .ADDI .x15 .x0 0)]
+
+private theorem firstUpperPadding_code :
+    ∀ entry ∈ firstUpperPaddingSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def firstUpperPaddingState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule firstUpperPaddingSchedule state
+
+private theorem firstUpperPadding_checked (state : MachineState)
+    (pc : state.pc = 0x6de8)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    SphincsMaskedKeygenPrefix.Checked firstUpperPaddingSchedule state := by
+  have first' : BitVec.setWidth 64 (state.getByte (270345#64)) &&& (192#64) = (0#64) := first
+  have second' : BitVec.setWidth 64 (state.getByte (270355#64)) &&& (192#64) = (0#64) := second
+  simp only [MachineState.getByte] at first' second'
+  simp [SphincsMaskedKeygenPrefix.Checked, firstUpperPaddingSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq,
+    MachineState.getByte, MachineState.getMem_setPC,
+    MachineState.getMem_setReg, pc, first', second']
+
+theorem first_upper_padding_block (state : MachineState)
+    (pc : state.pc = 0x6de8)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    OrdinarySteps SphincsImages.verify state 11
+      (firstUpperPaddingState state) := by
+  simpa only [firstUpperPaddingState, firstUpperPaddingSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      firstUpperPaddingSchedule firstUpperPadding_code state
+      (firstUpperPadding_checked state pc first second)
+
+theorem first_upper_padding_ready (state : MachineState)
+    (pc : state.pc = 0x6de8)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    (firstUpperPaddingState state).pc = 0x6e1c ∧
+    (firstUpperPaddingState state).getReg .x15 = 0 := by
+  have first' : BitVec.setWidth 64 (state.getByte (270345#64)) &&& (192#64) = (0#64) := first
+  have second' : BitVec.setWidth 64 (state.getByte (270355#64)) &&& (192#64) = (0#64) := second
+  simp only [MachineState.getByte] at first' second'
+  simp [firstUpperPaddingState, firstUpperPaddingSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    signExtend13, MachineState.getReg_setReg_eq,
+    MachineState.getByte,
+    MachineState.getMem_setPC, MachineState.getMem_setReg,
+    pc, first', second']
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_handoff_control_cells
