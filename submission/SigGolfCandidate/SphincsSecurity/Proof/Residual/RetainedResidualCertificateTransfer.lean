@@ -438,3 +438,58 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.observedInitialSource_budget_success' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.observedInitialSource_budget_success
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+private theorem probEvent_budget_denotation {Result : Type} (computation : ProbComp Result) (event : Result → Prop) :
+    Pr[event | 𝒮[computation]] = Pr[event | computation] := rfl
+
+private theorem probEvent_bind_budget_compare {A B C : Type} (law : SPMF A)
+    (left : A → SPMF B) (right : A → SPMF C) (before : B → Prop) (after : C → Prop)
+    (h : ∀ value, law value ≠ 0 → Pr[before | left value] ≤ Pr[after | right value]) :
+    Pr[before | law >>= left] ≤ Pr[after | law >>= right] := by
+  simp only [probEvent_bind_eq_tsum, SPMF.probOutput_eq_apply]
+  apply ENNReal.tsum_le_tsum
+  intro value
+  by_cases hvalue : law value = 0
+  · simp only [hvalue, zero_mul, le_refl]
+  exact mul_le_mul' le_rfl (h value hvalue)
+
+theorem originalGame_budget_le_sourceGame (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ budget |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+      Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true) (forgetState result) ∧
+        result.2.memory.external.hashCalls ≤ budget |
+        sourceGame dummy adversary] := by
+  rw [originalGame_budget_eq_prefixPrior dummy adversary budget]
+  rw [referencePrefixJointPriorGame, sourceGame]
+  apply probEvent_bind_budget_compare
+  intro parameter _
+  apply probEvent_bind_budget_compare
+  intro encoding hencoding
+  have hencoding' : encoding ∈ referenceEncodingAuxiliarySample.support := by
+    apply (PMF.mem_support_iff _ _).mpr
+    simpa only [PMF.evalSPMF_eq, SPMF.liftM_apply] using hencoding
+  apply probEvent_bind_budget_compare
+  intro high _
+  apply probEvent_bind_budget_compare
+  intro exposed _
+  rw [← run_erasure _ _ (initialState (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) exposed)
+    (initialAllowed_nonempty _ exposed)]
+  apply probEvent_bind_budget_compare
+  intro labels hlabels
+  apply probEvent_bind_budget_compare
+  intro seed _
+  simp only [bind_pure_comp, probEvent_map, Function.comp_def, probEvent_budget_denotation]
+  exact observedInitialSource_budget_success parameter (gameInputs adversary)
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary parameter) encoding hencoding' seed dummy exposed high labels
+    hlabels adversary budget (sourceInputs_unlogged_subset_gameInputs adversary)
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_sourceGame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_sourceGame
