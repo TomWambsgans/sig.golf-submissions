@@ -9309,3 +9309,101 @@ theorem signer_emit_body (hash : Hash) (s : MachineState)
 
 #print axioms signer_emit_body
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+open SphincsSecurity SphincsMaskedChainDomain
+open SphincsBridge
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_signed_chain_body (hash : Hash) (s : MachineState)
+    (outputBase : Nat) (aligned : outputBase % 4 = 0)
+    (bound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (digit : Digit)
+    (pc : s.pc = 0x3b20)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
+    (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (outputBase + 20 * chain.val))
+    (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val) :
+    SignerBodyTrace hash s (91 + 95 * digit.val)
+      (106 + 102 * digit.val) (1 + digit.val) (2 + digit.val)
+      (firstBottomSignedChain hash s digit) := by
+  let initial := truncateHash (hash (toQuery
+    (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))
+  let afterSecret := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+  have secret := first_bottom_secret_initial_value hash s parameter seed lay
+    treeIdx leaf chain pc ctx
+  have secretBody := signer_secret_initial_body hash s pc
+  have carried := first_bottom_secret_initial_fixed_context_base hash s outputBase
+    parameter seed lay treeIdx leaf chain ctx chainControl pointer
+  have digitAt : afterSecret.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val := by
+    simp only [MachineState.getByte]
+    rw [first_bottom_secret_initial_mem_frame hash s _
+      (Or.inr (by fin_cases chain <;> decide))
+      (by fin_cases chain <;> decide)
+      (by fin_cases chain <;> decide)
+      (by fin_cases chain <;> decide)]
+    exact digitByte
+  have decodedBody := signer_digit_body hash afterSecret chain secret.2.1
+    carried.1.2.2.2.1
+  have controls := first_bottom_chain_digit_controls_any afterSecret chain
+    secret.2.1 carried.1.2.2.2.1
+  have pointerDigit : (firstBottomChainDigit afterSecret).getMem 0x430a0 =
+      BitVec.ofNat 64 (outputBase + 20 * chain.val) := by
+    rw [first_bottom_chain_digit_mem_frame afterSecret 0x430a0
+      (by decide) (by decide)]
+    exact carried.2.2.1
+  by_cases hd : digit.val = 0
+  · have zero : afterSecret.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0 := by
+      rw [digitAt, hd]
+      rfl
+    have decodedPc : (firstBottomChainDigit afterSecret).pc = 0x3db0 := by
+      rw [controls.2.2, zero]
+      decide
+    have emitted := signer_emit_body hash (firstBottomChainDigit afterSecret)
+      outputBase aligned bound chain decodedPc pointerDigit
+    have joined := (secretBody.trans decodedBody).trans emitted
+    simpa [firstBottomSignedChain, afterSecret, hd] using joined
+  · have positive : 0 < digit.val := Nat.pos_of_ne_zero hd
+    have notZero : afterSecret.getByte
+        (BitVec.ofNat 64 (0x44000 + chain.val)) ≠ 0 := by
+      rw [digitAt]
+      have small : digit.val < 8 := by
+        simpa [chainLength, winternitzBits] using digit.isLt
+      bv_omega
+    have entryPc : (firstBottomChainDigit afterSecret).pc = 0x3c50 := by
+      rw [controls.2.2, if_neg notZero]
+    have entryDigit : (firstBottomChainDigit afterSecret).getMem 0x430c8 =
+        BitVec.ofNat 64 digit.val := by
+      rw [controls.1, digitAt]
+      have small : digit.val < 8 := by
+        simpa [chainLength, winternitzBits] using digit.isLt
+      bv_omega
+    have entryContext := first_bottom_chain_digit_context_weak afterSecret
+      parameter initial lay treeIdx leaf chain secret.2.1 carried.1 secret.2.2
+    have walked := signer_chain_walk_body hash (firstBottomChainDigit afterSecret)
+      parameter initial lay treeIdx leaf chain digit entryPc entryContext
+      entryDigit digit.val (le_refl _)
+    have walkedPc := (first_bottom_chain_positive_weak hash afterSecret
+      parameter initial lay treeIdx leaf chain digit secret.2.1
+      carried.1 secret.2.2 digitAt positive).2.1
+    have walkedPointer := first_bottom_chain_walk_pointer_any hash
+      (firstBottomChainDigit afterSecret) parameter initial lay treeIdx leaf
+      chain digit entryPc entryContext entryDigit
+      (BitVec.ofNat 64 (outputBase + 20 * chain.val)) pointerDigit
+      digit.val (le_refl _)
+    have emitted := signer_emit_body hash
+      (firstBottomChainWalk hash digit.val (firstBottomChainDigit afterSecret))
+      outputBase aligned bound chain walkedPc walkedPointer
+    have joined := ((secretBody.trans decodedBody).trans walked).trans emitted
+    simp only [firstBottomSignedChain, if_neg hd]
+    convert joined using 1 <;> omega
+
+#print axioms signer_signed_chain_body
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
