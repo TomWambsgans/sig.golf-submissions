@@ -9,6 +9,7 @@ open SphincsMaskedSignOtsPathSetup SphincsMaskedSignOtsPathSibling SphincsMasked
 open SphincsMaskedSignOtsShift SphincsMaskedKeygenPrefix
 open SphincsSecurity SphincsBridge SphincsVerifierCopy SphincsVerifierFtsRootCopy SphincsMaskedChainDomain
 open SphincsVerifierWotsDecode SphincsVerifierWotsDecodeData SphincsVerifierMessageCopy
+open SphincsVerifierWotsEndpointCopy SphincsVerifierFtsCopyAccess
 set_option maxRecDepth 65536
 set_option maxHeartbeats 6000000
 
@@ -3493,5 +3494,154 @@ theorem first_bottom_chain_positive (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_positive' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_positive
+
+def firstBottomEmitSetupCode : List (Word × Instr) := [
+  (0x3db0, .LUI .x6 0x45),
+  (0x3db4, .ADDI .x6 .x6 0xb00),
+  (0x3db8, .LUI .x28 0x43),
+  (0x3dbc, .ADDI .x28 .x28 0xa0),
+  (0x3dc0, .LD .x7 .x28 0)]
+
+def firstBottomEmitSetup (s : MachineState) : MachineState :=
+  runSchedule firstBottomEmitSetupCode s
+
+theorem first_bottom_emit_setup_code :
+    ∀ e ∈ firstBottomEmitSetupCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_emit_setup_checked (s : MachineState)
+    (pc : s.pc = 0x3db0) : Checked firstBottomEmitSetupCode s := by
+  simp [firstBottomEmitSetupCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne, pc]
+
+theorem first_bottom_emit_setup_trace (s : MachineState)
+    (pc : s.pc = 0x3db0) :
+    OrdinarySteps SphincsMaskedImages.sign s 5 (firstBottomEmitSetup s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomEmitSetupCode
+    first_bottom_emit_setup_code s (first_bottom_emit_setup_checked s pc)
+  simpa [firstBottomEmitSetup, firstBottomEmitSetupCode] using run
+
+theorem first_bottom_emit_setup_controls (s : MachineState)
+    (pc : s.pc = 0x3db0) :
+    (firstBottomEmitSetup s).pc = 0x3dc4 ∧
+    (firstBottomEmitSetup s).getReg .x6 = 0x44b00 ∧
+    (firstBottomEmitSetup s).getReg .x7 = s.getMem 0x430a0 := by
+  simp [firstBottomEmitSetup, firstBottomEmitSetupCode, runSchedule,
+    execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_setup_trace' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_setup_trace
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_setup_controls' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_setup_controls
+
+theorem first_bottom_emit_copy_code :
+    Copy20Code SphincsMaskedImages.sign 2929 := by
+  constructor <;> intro offset <;> fin_cases offset <;> decide
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_copy_code' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_copy_code
+
+def firstBottomEmitCopy (s : MachineState) : MachineState :=
+  copyRootState (firstBottomEmitSetup s)
+
+theorem first_bottom_emit_setup_word_frame (s : MachineState) (address : Word) :
+    (firstBottomEmitSetup s).getWord32 address = s.getWord32 address := by
+  simp [firstBottomEmitSetup, firstBottomEmitSetupCode, runSchedule,
+    execInstrBr, MachineState.getWord32]
+
+theorem first_bottom_emit_disjoint (chain : Fin 52) :
+    ∀ i j : Fin 5,
+      alignToDword (SphincsVerifierWotsEndpointCopy.word 0x44b00 j) ≠
+        alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) := by
+  intro i j
+  have destNat : (alignToDword
+      (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i)).toNat < 0x40000 := by
+    have wordNat : (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i).toNat =
+        0x20060 + 20 * chain.val + 4 * i.val := by
+      simp only [SphincsVerifierWotsEndpointCopy.word, BitVec.toNat_ofNat]
+      have hi := i.isLt
+      have hc := chain.isLt
+      omega
+    have alignedLe : (alignToDword
+        (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i)).toNat ≤
+        (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i).toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    have hi := i.isLt
+    have hc := chain.isLt
+    omega
+  have sourceNat : (alignToDword (SphincsVerifierWotsEndpointCopy.word 0x44b00 j)).toNat ≥ 0x40000 := by
+    fin_cases j <;> decide
+  intro equal
+  have same := congrArg BitVec.toNat equal
+  omega
+
+theorem first_bottom_emit_lanes (chain : Fin 52) (i j : Fin 5)
+    (different : i ≠ j) :
+    alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) ≠
+      alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) j) ∨
+    byteOffset (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) / 4 ≠
+      byteOffset (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) j) / 4 := by
+  fin_cases chain <;> fin_cases i <;> fin_cases j <;>
+    first | exact (different rfl).elim | decide
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_disjoint' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_disjoint
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_lanes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_lanes
+
+theorem first_bottom_emit_copy_trace_generic (s : MachineState) (chain : Fin 52)
+    (pc : s.pc = 0x3db0)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+    OrdinarySteps SphincsMaskedImages.sign s 15 (firstBottomEmitCopy s) := by
+  have controls := first_bottom_emit_setup_controls s pc
+  have copy := copy20_block_general SphincsMaskedImages.sign 2929
+    first_bottom_emit_copy_code (firstBottomEmitSetup s)
+    0x44b00 (0x20060 + 20 * chain.val)
+    (by simpa using controls.1)
+    (by simpa using controls.2.1)
+    (controls.2.2.trans pointer)
+    (by decide) (by decide) (by omega)
+    (by have := chain.isLt; dsimp [MEMORY_BYTES]; omega) (by decide)
+  simpa [firstBottomEmitCopy] using
+    ordinary_trans _ _ _ _ 5 10 (first_bottom_emit_setup_trace s pc) copy
+
+theorem first_bottom_emit_copy_words_generic (s : MachineState) (chain : Fin 52)
+    (pc : s.pc = 0x3db0)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+    (value : BitVec 160) (initial : Words20 s 0x44b00 value) :
+    Words20 (firstBottomEmitCopy s) (0x20060 + 20 * chain.val) value := by
+  have controls := first_bottom_emit_setup_controls s pc
+  intro i
+  have copied := copy20_data (firstBottomEmitSetup s)
+    0x44b00 (0x20060 + 20 * chain.val)
+    (by simpa using controls.2.1)
+    (controls.2.2.trans pointer)
+    (first_bottom_emit_disjoint chain)
+    (first_bottom_emit_lanes chain) i
+  simpa [firstBottomEmitCopy, SphincsVerifierWotsEndpointCopy.word,
+    first_bottom_emit_setup_word_frame] using
+    copied.trans (initial i)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_copy_trace_generic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_copy_trace_generic
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_copy_words_generic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_emit_copy_words_generic
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
