@@ -3018,4 +3018,77 @@ theorem first_bottom_chain_iteration_value (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_iteration_value
 
+/-- A nonfinal signer chain step preserves the context required by the next HASH. -/
+theorem first_bottom_chain_next_context (hash : Hash) (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (nextBound : step.val + 1 < chainLength - 1)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step)
+    (notDone : s.getMem 0x430c8 ≠ BitVec.ofNat 64 (step.val + 1)) :
+    let nextValue := truncateHash (hash (toQuery
+      (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+        (bytesLE 20 value))))
+    SphincsMaskedSignOtsDomain.Chain.Context (firstBottomChainIteration hash s)
+      parameter nextValue lay treeIdx leaf chain ⟨step.val + 1, nextBound⟩ ∧
+    (firstBottomChainIteration hash s).pc = 0x3c50 := by
+  rcases ctx with ⟨hLay, hTree, hLeaf, hChain, hStep, hPar, hValue⟩
+  have frame (a : Word) (hp : a ∉ SphincsMaskedChainStep.prepareWrites)
+      (h0 : a ≠ (0x42000#64)) (h8 : a ≠ (0x42008#64))
+      (h16 : a ≠ (0x42010#64)) (h24 : a ≠ (0x42018#64))
+      (c0 : a ≠ (0x44b00#64)) (c8 : a ≠ (0x44b08#64))
+      (c16 : a ≠ (0x44b10#64)) (ctr : a ≠ (0x43058#64)) :=
+    first_bottom_chain_iteration_frame hash s pc a hp h0 h8 h16 h24 c0 c8 c16 ctr
+  have frameLayer : (firstBottomChainIteration hash s).getMem 0x43000#64 =
+      s.getMem 0x43000#64 := frame _ (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+  have frameTree : (firstBottomChainIteration hash s).getMem 0x43008#64 =
+      s.getMem 0x43008#64 := frame _ (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+  have frameLeaf : (firstBottomChainIteration hash s).getMem 0x43018#64 =
+      s.getMem 0x43018#64 := frame _ (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+  have frameChain : (firstBottomChainIteration hash s).getMem 0x43050#64 =
+      s.getMem 0x43050#64 := frame _ (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+  have frameParameter (i : Fin 5) :
+      (firstBottomChainIteration hash s).getWord32
+        (BitVec.ofNat 64 (0x74 + 4 * i.val)) =
+      s.getWord32 (BitVec.ofNat 64 (0x74 + 4 * i.val)) := by
+    simp only [MachineState.getWord32]
+    have memFrame :
+        (firstBottomChainIteration hash s).getMem
+          (alignToDword (BitVec.ofNat 64 (0x74 + 4 * i.val))) =
+        s.getMem (alignToDword (BitVec.ofNat 64 (0x74 + 4 * i.val))) := by
+      apply frame
+      all_goals fin_cases i <;> decide
+    rw [memFrame]
+  have ctl := first_bottom_chain_iteration_controls hash s pc
+  have nextCounter : (firstBottomChainIteration hash s).getMem 0x43058#64 =
+      BitVec.ofNat 64 (step.val + 1) := by
+    rw [show (firstBottomChainIteration hash s).getMem 0x43058#64 =
+        s.getMem 0x43058#64 + 1 from by simpa using ctl.1,
+      hStep]
+    simp [← BitVec.ofNat_add]
+  have nextValue := first_bottom_chain_iteration_value hash s parameter value
+    lay treeIdx leaf chain step pc ⟨hLay,hTree,hLeaf,hChain,hStep,hPar,hValue⟩
+  have nextPc : (firstBottomChainIteration hash s).pc = 0x3c50 := by
+    have hStep' : s.getMem 0x43058 = BitVec.ofNat 64 step.val := by
+      simpa using hStep
+    rw [ctl.2, hStep']
+    have notDone' : s.getMem 0x430c8#64 ≠
+        BitVec.ofNat 64 (step.val + 1) := by simpa using notDone
+    have ne : BitVec.ofNat 64 step.val + 1#64 ≠ s.getMem 0x430c8#64 := by
+      simpa [← BitVec.ofNat_add] using Ne.symm notDone'
+    simp [ne]
+  refine ⟨?_, nextPc⟩
+  exact ⟨frameLayer.trans hLay, frameTree.trans hTree,
+    frameLeaf.trans hLeaf, frameChain.trans hChain, nextCounter,
+    (fun i => (frameParameter i).trans (hPar i)), nextValue⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_next_context' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_next_context
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
