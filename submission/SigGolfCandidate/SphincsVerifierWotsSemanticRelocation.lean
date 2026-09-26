@@ -5963,4 +5963,82 @@ theorem ready_control_cell (target : Fin 5) (state : MachineState)
 
 #print axioms ready_layer_cell
 
+
+theorem first_upper_padding_mem (state : MachineState) (read : Word) :
+    (firstUpperPaddingState state).getMem read = state.getMem read := by
+  simp [firstUpperPaddingState, firstUpperPaddingSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
+
+theorem upper_prehash_control_cell (target : Fin 5) (state : MachineState)
+    (read : Word) (lo : 0x43000 ≤ read.toNat) (hi : read.toNat < 0x44000) :
+    (upperPrehashState target state).getMem read = state.getMem read := by
+  let counter := upperCounterState target state
+  let header := firstUpperHeaderState counter
+  let pointers := firstUpperParamPointerState header
+  have outside (offset : Fin 5) :
+      read ≠ alignToDword
+        (pointers.getReg .x7 +
+          signExtend12 (4#12 * BitVec.ofNat 12 offset.val)) := by
+    intro equal
+    have dst : pointers.getReg .x7 = 0x40014 :=
+      (firstUpperParamPointer_regs header).2
+    rw [dst] at equal
+    have bound :
+        (alignToDword
+          (0x40014 + signExtend12
+            (4#12 * BitVec.ofNat 12 offset.val))).toNat < 0x43000 := by
+      fin_cases offset <;> decide
+    have same := congrArg BitVec.toNat equal
+    omega
+  have paramFrame : (firstUpperParamState header).getMem read =
+      header.getMem read := by
+    rw [firstUpperParamState,
+      SphincsVerifierCopyMemory.copyRoot_mem_frame pointers read outside,
+      first_upper_param_pointers_mem]
+  have counterFrame : counter.getMem read = state.getMem read := by
+    apply upper_counter_mem_frame
+    intro equal
+    have same := congrArg BitVec.toNat equal
+    have bound : (0x40038 : Word).toNat < 0x43000 := by decide
+    omega
+  calc
+    (upperPrehashState target state).getMem read = header.getMem read := by
+      rw [upperPrehashState, first_upper_service_mem, paramFrame]
+    _ = counter.getMem read := by
+      apply first_upper_header_mem_frame
+      right
+      omega
+    _ = state.getMem read := counterFrame
+
+theorem upper_decoder_start_control_cell (target : Fin 5) (hash : Hash)
+    (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (read : Word) (lo : 0x43000 ≤ read.toNat) (hi : read.toNat < 0x44000) :
+    (firstUpperPaddingState
+      (writeHash (upperPrehashState target state)
+        (hash (hashInput (upperPrehashState target state))))).getMem read =
+      state.getMem read := by
+  let ready := upperPrehashState target state
+  let answer := hash (hashInput ready)
+  obtain ⟨_run, _readyPc, _source, _bits, destination, _service⟩ :=
+    upper_prehash_block target state pc small
+  have outside (high : Word) (highBound : high.toNat < 0x43000) :
+      read ≠ high := by
+    intro equal
+    have same := congrArg BitVec.toNat equal
+    omega
+  have hashFrame : (writeHash ready answer).getMem read = ready.getMem read :=
+    SphincsVerifierFtsLevelInit.writeHash_mem_frame ready answer destination
+      read (outside 0x42000 (by decide)) (outside 0x42008 (by decide))
+        (outside 0x42010 (by decide)) (outside 0x42018 (by decide))
+  calc
+    _ = (writeHash ready answer).getMem read := first_upper_padding_mem _ _
+    _ = ready.getMem read := hashFrame
+    _ = state.getMem read := upper_prehash_control_cell target state read lo hi
+
+#print axioms upper_prehash_control_cell
+#print axioms upper_decoder_start_control_cell
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
