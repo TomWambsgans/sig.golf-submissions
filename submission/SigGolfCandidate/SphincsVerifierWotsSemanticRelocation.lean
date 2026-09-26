@@ -2281,6 +2281,104 @@ private theorem firstUpperCounter_code :
       SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
         some (.base entry.2) := by decide
 
+/-- The five upper counter prefixes differ only in the source-address load. -/
+private def upperPrefixPc (target : Fin 5) : Word :=
+  BitVec.ofNat 64 (0x6d1c - 0xfcc * target.val)
+
+private def upperCounterSource (target : Fin 5) : Word :=
+  BitVec.ofNat 64 (0x22ca0 +
+    SphincsWireEncoding.layerOffset
+      (SphincsVerifierXmssTransition.targetLayer target))
+
+private theorem upperCounterSource_num (target : Fin 5) :
+    upperCounterSource target = BitVec.ofNat 64 (match target.val with
+      | 0 => 0x23dbc | 1 => 0x242ac | 2 => 0x24724
+      | 3 => 0x24b9c | _ => 0x25014) := by
+  fin_cases target <;> decide
+
+private def upperCounterLui (target : Fin 5) : BitVec 20 :=
+  if target.val < 3 then 0x24 else 0x25
+
+private def upperCounterAddi (target : Fin 5) : BitVec 12 :=
+  match target.val with
+  | 0 => -580
+  | 1 => 684
+  | 2 => 1828
+  | 3 => -1124
+  | _ => 20
+
+private def upperCounterSchedule (target : Fin 5) : List (Word × Instr) :=
+  let pc := upperPrefixPc target
+  [ (pc, .LUI .x6 (upperCounterLui target)),
+    (pc + 4, .ADDI .x6 .x6 (upperCounterAddi target)),
+    (pc + 8, .LWU .x10 .x6 0),
+    (pc + 12, .SRLI .x11 .x10 20),
+    (pc + 16, .BEQ .x11 .x0 8),
+    (pc + 24, .LUI .x7 0x40),
+    (pc + 28, .ADDI .x7 .x7 0),
+    (pc + 32, .SW .x7 .x10 60) ]
+
+private theorem upperCounter_code (target : Fin 5) :
+    ∀ entry ∈ upperCounterSchedule target,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by
+  fin_cases target <;> decide
+
+private def upperCounterState (target : Fin 5)
+    (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule (upperCounterSchedule target) state
+
+private theorem upperCounter_checked (target : Fin 5)
+    (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0) :
+    SphincsMaskedKeygenPrefix.Checked (upperCounterSchedule target) state := by
+  fin_cases target <;>
+    simp [SphincsMaskedKeygenPrefix.Checked, upperCounterSchedule,
+      upperPrefixPc, upperCounterSource_num, upperCounterLui,
+      upperCounterAddi,
+      execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES,
+      signExtend12, signExtend13,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.setWord32, alignToDword, byteOffset, pc] at small ⊢
+  all_goals simp [small]
+
+theorem upper_counter_block (target : Fin 5) (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0) :
+    OrdinarySteps SphincsImages.verify state 8
+      (upperCounterState target state) := by
+  simpa only [upperCounterState, upperCounterSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+      SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+        (upperCounterSchedule target) (upperCounter_code target) state
+        (upperCounter_checked target state pc small)
+
+theorem upper_counter_pc (target : Fin 5) (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0) :
+    (upperCounterState target state).pc = upperPrefixPc target + 36 := by
+  fin_cases target <;>
+    simp [upperCounterState, upperCounterSchedule, upperPrefixPc,
+      upperCounterSource_num, upperCounterLui, upperCounterAddi,
+      SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+      signExtend12, signExtend13,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      pc] at small ⊢
+  all_goals simp [small]
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_counter_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_counter_block
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_counter_pc' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_counter_pc
+
 private def firstUpperCounterState (state : MachineState) : MachineState :=
   SphincsMaskedKeygenPrefix.runSchedule firstUpperCounterSchedule state
 
