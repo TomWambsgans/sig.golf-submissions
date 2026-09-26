@@ -16,7 +16,8 @@ theorem index_refines_full (hash : Hash) (s : MachineState) (message : Message) 
     (pc : s.pc = 0x10fc)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8*i) 8)
-    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x20060 + i)) = r.extractLsb' (8*i) 8) :
+    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x20060 + i)) = r.extractLsb' (8*i) 8)
+    (hscratch : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0) :
     ∃ final, Trace hash sign s 121 136 1 2 final ∧ final.pc = 0x1220 ∧
       StoredIndex final ((Reference.indexOf hash message r).zeroExtend 192) ∧
       final.getReg .x2 = s.getReg .x2 ∧
@@ -27,6 +28,7 @@ theorem index_refines_full (hash : Hash) (s : MachineState) (message : Message) 
   subst ready'
   obtain ⟨final, trace, finalpc, low, high, traceFrame, finalSP⟩ := index_trace_full hash ready readypc
   have query := index_query s ready message r hzero hmessage hr words
+    (index_padding s ready prepareFrame hscratch)
   refine ⟨final,prepare.trace.trans trace,finalpc,?_,finalSP.trans readySP,?_⟩
   · have stored := stored_index_of_answer final _ low high
     rw [query] at stored
@@ -37,7 +39,8 @@ theorem index_refines_full (hash : Hash) (s : MachineState) (message : Message) 
 theorem randomizer_refines_full (hash : Hash) (s : MachineState) (secretKey : SecretKey) (message : Message)
     (pc : s.pc = 0x1000)
     (hsecretKey : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x20+i)) = secretKey.extractLsb' (8*i) 8)
-    (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8*i) 8) :
+    (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8*i) 8)
+    (hscratch : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x80060 + i)) = 0) :
     ∃ final, Trace hash sign s 117 132 1 2 final ∧ final.pc = 0x10fc ∧
       (∀ i : Fin 4, final.getMem (wordAddress 0x20060 i.val) =
         (Reference.randomizer hash secretKey message).extractLsb' (64*i.val) 64) ∧
@@ -49,6 +52,7 @@ theorem randomizer_refines_full (hash : Hash) (s : MachineState) (secretKey : Se
   obtain ⟨ready,prepare,rpc,words,prepareFrame,mode,pointer,readySP⟩ := randomizer_prepare_full s pc
   obtain ⟨final,run,fpc,output,frame,finalSP⟩ := randomizer_trace_full hash ready rpc
   have query := randomizer_query s ready secretKey message hsecretKey hmessage words
+    (randomizer_padding s ready prepareFrame hscratch)
   refine ⟨final,prepare.trace.trans run,fpc,?_,?_,?_,finalSP.trans readySP,?_⟩
   · intro i; rw [output i,query]; rfl
   · rw [frame _ (by intro i; fin_cases i <;> decide) (by intro i; fin_cases i <;> decide)]; exact mode
@@ -75,14 +79,16 @@ theorem entry_full (hash : Hash) (s : MachineState) (secretKey : SecretKey) (mes
     (pc : s.pc = 0x1000)
     (hsecretKey : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x20+i)) = secretKey.extractLsb' (8*i) 8)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50+i)) = 0)
-    (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8*i) 8) :
+    (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8*i) 8)
+    (hscratch : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x80060 + i)) = 0) :
     ∃ final, Trace hash sign s 238 268 2 4 final ∧ final.pc = 0x1220 ∧
       StoredIndex final ((Reference.indexOf hash message (Reference.randomizer hash secretKey message)).zeroExtend 192) ∧
       (∀ i : Fin 4, final.getMem (wordAddress 0x20060 i.val) =
         (Reference.randomizer hash secretKey message).extractLsb' (64*i.val) 64) ∧
       final.getMem 0x80440 = 1 ∧ final.getMem 0x80448 = 0x20080 ∧ final.getReg .x2 = s.getReg .x2 ∧
       (∀ a, OutsidePrefix a → final.getMem a = s.getMem a) := by
-  obtain ⟨randomized,pre,rpc,randomWords,mode,pointer,rsp,rframe⟩ := randomizer_refines_full hash s secretKey message pc hsecretKey hmessage
+  obtain ⟨randomized,pre,rpc,randomWords,mode,pointer,rsp,rframe⟩ :=
+    randomizer_refines_full hash s secretKey message pc hsecretKey hmessage hscratch
   have lowFrame (a : Word) (low : a.toNat < 0x20060) : randomized.getMem a = s.getMem a := by
     have outside := outside_prefix_low a low
     exact rframe a outside.1.1 outside.1.2.1 outside.2.1 outside.2.2.1 outside.2.2.2
@@ -94,8 +100,19 @@ theorem entry_full (hash : Hash) (s : MachineState) (secretKey : SecretKey) (mes
     have eq := low_words_byte s randomized lowFrame 0 i (by decide) (by omega)
     simp only [Nat.zero_add] at eq
     rw [eq]; exact hmessage i hi
+  have scratchBytes : ∀ i, i < 16 → randomized.getByte (BitVec.ofNat 64 (0x80070+i)) = 0 := by
+    intro i hi
+    have same := bytes_eq_of_words s randomized 0x80070 0x80070 16 (by decide) (by decide)
+      (by decide) (by decide) (fun j hj => rframe _ (by intro k; interval_cases j <;> fin_cases k <;> decide)
+        (by intro k; interval_cases j <;> fin_cases k <;> decide)
+        (by intro k; interval_cases j <;> fin_cases k <;> decide)
+        (by interval_cases j <;> decide) (by interval_cases j <;> decide)) i hi
+    rw [same]
+    have h := hscratch (16+i) (by omega)
+    rwa [show 0x80060+(16+i) = 0x80070+i by omega] at h
   obtain ⟨final,run,fpc,index,fsp,frame⟩ := index_refines_full hash randomized message (Reference.randomizer hash secretKey message)
     rpc zeroBytes msgBytes (bytes_of_answer_words randomized 0x20060 _ (by decide) (by decide) randomWords)
+    scratchBytes
   refine ⟨final,pre.trans run,fpc,index,?_,?_,?_,fsp.trans rsp,?_⟩
   · intro i
     rw [frame _ (by unfold OutsideIndexWork; fin_cases i <;> decide)]

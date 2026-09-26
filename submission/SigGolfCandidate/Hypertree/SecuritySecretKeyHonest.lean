@@ -64,7 +64,7 @@ theorem Safe.lift {α : Type} (secretKey : SecretKey) {program : OracleComp Spli
 
 @[simp] theorem chainHash (level tree : Nat) (side : Bool) (chain : Chain) (step : Nat) (value : Digest) :
     Safe (fun query => ¬SecretKeyEligible query) (SecurityReference.chainHash level tree side chain step value) :=
-  (ask 2 level tree (sideNumber side) chain.val step (bytes value) (by decide) (by decide)).map truncate
+  (ask 2 level tree (sideNumber side) chain.val step (chainPayload value) (by decide) (by decide)).map truncate
 
 @[simp] theorem compressLeaf (level tree : Nat) (side : Bool) (values : Chain → Digest) :
     Safe (fun query => ¬SecretKeyEligible query) (SecurityReference.compressLeaf level tree side values) :=

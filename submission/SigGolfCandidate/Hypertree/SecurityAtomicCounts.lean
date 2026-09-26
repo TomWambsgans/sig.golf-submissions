@@ -50,7 +50,7 @@ theorem Queries.fixedCost {α : Type} {program : OracleComp SplitWorld α} {cost
 
 @[simp] theorem chainHash (level tree : Nat) (side : Bool) (chain : Chain) (step : Nat) (value : Digest) :
     Queries (SecurityReference.chainHash level tree side chain step value) 1 :=
-  (ask 2 level tree (sideNumber side) chain.val step (bytes value)).map truncate
+  (ask 2 level tree (sideNumber side) chain.val step (chainPayload value)).map truncate
 
 @[simp] theorem compressLeaf (level tree : Nat) (side : Bool) (values : Chain → Digest) :
     Queries (SecurityReference.compressLeaf level tree side values) 1 :=

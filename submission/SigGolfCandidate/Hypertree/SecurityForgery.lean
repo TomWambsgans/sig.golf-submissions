@@ -31,7 +31,7 @@ def ForgeryPathFault (hash : Hash) (secretKey : SecretKey) (message : Message) (
 theorem indexInput_pair_injective :
     Function.Injective (fun pair : Message × Bytes 32 => indexInput pair.1 pair.2) := by
   intro first second same
-  have payload := packed_injective same
+  have payload := packed_injective same (by simp [bytes])
   have tails : bytes first.1 ++ bytes first.2 = bytes second.1 ++ bytes second.2 := by
     simp only [indexInput, addressedInput, List.append_assoc] at payload
     exact List.append_cancel_left (List.append_cancel_left (List.append_cancel_left payload))

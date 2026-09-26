@@ -19,7 +19,7 @@ inductive Executes (hash : Hash) (image : Image) : MachineState → Nat → Exec
       (hs : state.getReg .x5 = 0) (hv : hashArgumentsValid state = true)
       (tail : Executes hash image (writeHash state (hash (hashInput state))) steps result) :
       Executes hash image state (steps + 1)
-        (result.charge (8 * compressions (hashInput state).1) 1 (compressions (hashInput state).1))
+        (result.charge (8 * (hashInput state).blocks) 1 (hashInput state).blocks)
 
 /-- Every instruction the image can fetch costs one cycle: the image has no multiplication or division. -/
 def UnitCost (image : Image) : Prop :=

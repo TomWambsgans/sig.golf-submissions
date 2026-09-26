@@ -15,13 +15,15 @@ theorem index_refines_frame (hash : Hash) (s : MachineState) (message : Message)
     (pc : s.pc = 0x1024)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
-    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
+    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
+    (hscratch : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0) :
     ∃ final, Trace hash verify s 121 136 1 2 final ∧ final.pc = 0x1148 ∧
       StoredIndex final ((Reference.indexOf hash message r).zeroExtend 192) ∧
       (∀ a, OutsideIndexPrefix a → final.getMem a = s.getMem a) := by
   obtain ⟨ready, prepare, readypc, words, prepareFrame⟩ := index_prepare s pc
   obtain ⟨final, trace, finalpc, low, high, traceFrame⟩ := index_trace_frame hash ready readypc
   have query := index_query s ready message r hzero hmessage hr words
+    (Signing.index_padding s ready prepareFrame hscratch)
   refine ⟨final, prepare.trace.trans trace, finalpc, ?_, ?_⟩
   · have stored := stored_index_of_answer final _ low high
     rw [query] at stored
@@ -34,7 +36,8 @@ theorem entry_index_frame (hash : Hash) (s : MachineState) (message : Message) (
     (pc : s.pc = 0x1000)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
-    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
+    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
+    (hscratch : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0) :
     ∃ final, Trace hash verify s 130 145 1 2 final ∧ final.pc = 0x1148 ∧
       StoredIndex final ((Reference.indexOf hash message r).zeroExtend 192) ∧
       final.getMem 0x80440 = 0 ∧ final.getMem 0x80448 = 0x3d3d0 ∧
@@ -45,6 +48,7 @@ theorem entry_index_frame (hash : Hash) (s : MachineState) (message : Message) (
     (fun i hi => (by simpa only [Nat.zero_add] using initializeState_byte s 0 i (by decide) (by omega) :
       (initializeState s).getByte (BitVec.ofNat 64 i) = s.getByte (BitVec.ofNat 64 i)).trans (hmessage i hi))
     (fun i hi => (initializeState_byte s 0x3d3b0 i (by decide) (by omega)).trans (hr i hi))
+    (fun i hi => (initializeState_byte s 0x80070 i (by decide) (by omega)).trans (hscratch i hi))
   refine ⟨final, (initializeState_block s pc).trace.trans trace, finalpc, index, ?_, ?_, ?_⟩
   · rw [frame 0x80440 (by unfold OutsideIndexPrefix; decide), initializeState_mem]; simp
   · rw [frame 0x80448 (by unfold OutsideIndexPrefix; decide), initializeState_mem]; simp

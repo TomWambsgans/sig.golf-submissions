@@ -251,7 +251,7 @@ theorem randomizerHeaderState_mem (s : MachineState) (a : Word) :
   simp [randomizerHeaderState, execInstrBr, signExtend12, Expansion.mem_setMem,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
-/-- The twelve words of the precise 96-byte tag6/secret key/message query. -/
+/-- The twelve words of the 96-byte tag6/secret key/message input, which is followed by 32 zero padding bytes. -/
 def randomizerInputWord (s : MachineState) (i : Fin 12) : Word :=
   if i.val = 0 then 6 else if i.val < 4 then 0 else
     if i.val < 8 then s.getMem (wordAddress 0x20 (i.val - 4))

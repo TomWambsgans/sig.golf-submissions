@@ -10,7 +10,7 @@ def endpointAddress (chain word : Nat) : Word := BitVec.ofNat 64 (0x80800 + 16*c
 theorem store_endpoint (image : Image) (base : Word) (offset : BitVec 13) (code : Code image base offset)
     (s : MachineState) (chain : Reference.Chain) (value : Reference.Digest)
     (pc : s.pc = base) (counter : s.getMem 0x80430 = BitVec.ofNat 64 chain.val)
-    (valueWords : ∀ i : Fin 2, s.getMem (wordAddress 0x80510 i.val) = value.extractLsb' (64*i.val) 64) :
+    (valueWords : ∀ i : Fin 2, s.getMem (wordAddress 0x80030 i.val) = value.extractLsb' (64*i.val) 64) :
     ∃ final, OrdinarySteps image s 21 final ∧
       final.pc = (if chain.val+1 = 46 then base+84 else base+80+signExtend13 offset) ∧
       final.getMem 0x80430 = BitVec.ofNat 64 (chain.val+1) ∧

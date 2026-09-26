@@ -23,31 +23,34 @@ def randomizerInput (secretKey : SecretKey) (message : Message) : Query :=
 def indexInput (message : Message) (r : Bytes 32) : Query :=
   addressedInput 5 0 0 0 0 0 (bytes (0 : Bytes 16) ++ bytes message ++ bytes r)
 
+/-- The block count of an addressed input: its 32-byte header and payload, zero-padded. -/
 @[simp] theorem addressedInput_length (tag level tree leaf chain step : Nat)
     (payload : List Byte) :
-    (addressedInput tag level tree leaf chain step payload).1 = 8 * (32 + payload.length) := by
-  simp [addressedInput, packed, bytes, Nat.add_assoc]
+    (addressedInput tag level tree leaf chain step payload).1 = (31 + payload.length) / 64 := by
+  simp [addressedInput, packed, bytes]
   omega
 
 @[simp] theorem randomizerInput_length (secretKey : SecretKey) (message : Message) :
-    (randomizerInput secretKey message).1 = 768 := by simp [randomizerInput, bytes]
+    (randomizerInput secretKey message).1 = 1 := by simp [randomizerInput, bytes]
 
 @[simp] theorem indexInput_length (message : Message) (r : Bytes 32) :
-    (indexInput message r).1 = 896 := by simp [indexInput, bytes]
+    (indexInput message r).1 = 1 := by simp [indexInput, bytes]
 
-/-- Separation holds for the actual bit-string oracle inputs, including their lengths. -/
+/-- Both inputs are two zero-padded blocks; their first header bytes, the domain tags 5 and 6,
+keep them apart. -/
 theorem indexInput_ne_randomizerInput (message other : Message)
     (r : Bytes 32) (secretKey : SecretKey) :
     indexInput message r ≠ randomizerInput secretKey other := by
   intro h
-  have := congrArg Sigma.fst h
-  simp at this
+  simp only [indexInput, randomizerInput, addressedInput, List.append_assoc] at h
+  have headers := SecurityPacking.bytes_injective 8 (SecurityPacking.packed_prefix h (by simp [bytes]))
+  simp at headers
 
 /-- At a fixed message, one index input names exactly one randomizer. -/
 theorem indexInput_randomizer_injective (message : Message) :
     Function.Injective (indexInput message) := by
   intro first second h
-  have hp := SecurityPacking.packed_injective h
+  have hp := SecurityPacking.packed_injective h (by simp [bytes])
   have hb : bytes first = bytes second := by
     simpa [indexInput, addressedInput, List.append_assoc] using hp
   exact SecurityPacking.bytes_injective 32 hb
@@ -56,7 +59,7 @@ theorem indexInput_randomizer_injective (message : Message) :
 theorem randomizerInput_secretKey_injective (message : Message) :
     Function.Injective (fun secretKey => randomizerInput secretKey message) := by
   intro first second h
-  have hp := SecurityPacking.packed_injective h
+  have hp := SecurityPacking.packed_injective h (by simp [bytes])
   have hb : bytes first = bytes second := by
     simpa [randomizerInput, addressedInput, List.append_assoc] using hp
   exact SecurityPacking.bytes_injective 32 hb
@@ -73,6 +76,13 @@ theorem eval_randomizedIndex (hash : Hash) (secretKey : SecretKey) (message : Me
       (Reference.randomizer hash secretKey message,
         Reference.indexOf hash message (Reference.randomizer hash secretKey message)) := rfl
 
+/-- One fresh random-oracle query samples a uniform answer and caches it. Stating it for an
+arbitrary input keeps the kernel from deciding equalities between concrete inputs. -/
+theorem run_fresh (q : Query) (cache : QueryCache HashSpec) (fresh : cache q = none) :
+    (randomOracle (spec := HashSpec) q).run cache =
+      ($ᵗ BitVec 256 >>= fun u => pure (u, cache.cacheQuery q u)) := by
+  rw [randomOracle.run_eq, fresh]
+
 /-- Exact lazy-sampling law when the secret randomizer input has not yet been queried.
 The index lookup remains a cache lookup: this theorem does not silently assume it fresh. -/
 theorem run_randomizedIndex_fresh_randomizer (secretKey : SecretKey) (message : Message)
@@ -86,8 +96,8 @@ theorem run_randomizedIndex_fresh_randomizer (secretKey : SecretKey) (message : 
   simp only [randomizedIndex, simulateQ_bind, simulateQ_query, simulateQ_pure,
     OracleQuery.input_query, OracleQuery.cont_query, id_map,
     StateT.run_bind, StateT.run_pure]
-  rw [randomOracle.run_eq, fresh]
-  simp
+  rw [run_fresh _ _ fresh]
+  simp only [bind_assoc, pure_bind]
 
 /-- A fresh randomizer query cannot itself populate the index query's cache entry. -/
 theorem index_cache_after_randomizer (secretKey : SecretKey) (message : Message)
@@ -111,8 +121,8 @@ theorem run_randomizedIndex_fresh (secretKey : SecretKey) (message : Message)
   rw [run_randomizedIndex_fresh_randomizer secretKey message cache fresh]
   apply bind_congr
   intro r
-  rw [randomOracle.run_eq, index_cache_after_randomizer, indexFresh]
-  simp
+  rw [run_fresh _ _ (by rw [index_cache_after_randomizer, indexFresh])]
+  simp only [bind_assoc, pure_bind]
 
 /-- The value marginal of the exact prefix under the two freshness conditions. -/
 theorem run'_randomizedIndex_fresh (secretKey : SecretKey) (message : Message)
@@ -157,7 +167,7 @@ theorem prob_index_mem_le (secretKey : SecretKey) (message : Message)
       intro r _ notQueried
       have indexFresh : cache (indexInput message r) = none := by
         simpa [prequeriedRandomizers] using notQueried
-      rw [randomOracle.run_eq, index_cache_after_randomizer, indexFresh]
+      rw [run_fresh _ _ (by rw [index_cache_after_randomizer, indexFresh])]
       simpa only [bind_assoc, pure_bind, ← map_eq_pure_bind, probEvent_map,
         Function.comp_def] using (SecurityUniform.prob_extract_mem 96 160 targets).le)
   rw [SecurityUniform.prob_randomizer_mem] at bound

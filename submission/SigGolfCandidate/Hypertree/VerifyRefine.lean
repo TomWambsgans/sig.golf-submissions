@@ -74,8 +74,9 @@ theorem initializeState_mem (s : MachineState) (a : Word) :
   simp [initializeState, execInstrBr, signExtend12, Expansion.mem_setMem,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
+/-- Initialization writes only the mode and pointer words, so every byte below them is unchanged. -/
 theorem initializeState_byte (s : MachineState) (base i : Nat)
-    (aligned : base % 8 = 0) (bound : base + i < 0x80000) :
+    (aligned : base % 8 = 0) (bound : base + i < 0x80440) :
     (initializeState s).getByte (BitVec.ofNat 64 (base + i)) = s.getByte (BitVec.ofNat 64 (base + i)) := by
   rw [getByte_word _ base i aligned (by omega), getByte_word s base i aligned (by omega), initializeState_mem]
   have small : base + 8 * (i / 8) < 2 ^ 64 := by omega
@@ -113,13 +114,16 @@ theorem prepared_index_bytes (original ready : MachineState)
   exact congrArg (fun word => extractByte word (i.val % 8))
     (words ⟨i.val / 8, by have := i.isLt; omega⟩)
 
+/-- The verifier's index oracle input is exactly the reference tag5 query: 112 bytes and 16 zero
+bytes of padding. -/
 theorem index_query (original ready : MachineState) (message : Message) (r : Bytes 32)
     (hzero : ∀ i, i < 16 → original.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
     (hr : ∀ i, i < 32 → original.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
-    (words : ∀ i : Fin 14, ready.getMem (wordAddress 0x80000 i.val) = indexInputWord original i) :
+    (words : ∀ i : Fin 14, ready.getMem (wordAddress 0x80000 i.val) = indexInputWord original i)
+    (hpad : ∀ i, 112 ≤ i → i < 128 → ready.getByte (BitVec.ofNat 64 (0x80000 + i)) = 0) :
     hashInput (indexHashState ready) = Reference.packed (indexPayload message r) := by
-  apply Serialization.hashInput_of_list (indexHashState ready) 0x80000 (indexPayload message r)
+  apply Serialization.hashInput_of_padded (indexHashState ready) 0x80000 (indexPayload message r)
   · exact (indexHashState_regs ready).2.1
   · rw [(indexHashState_regs ready).2.2.1, indexPayload_length]; rfl
   · intro i hi
@@ -133,17 +137,23 @@ theorem index_query (original ready : MachineState) (message : Message) (r : Byt
     · rw [hzero (i - 32) (by omega)]; simp
     · exact hmessage (i - 48) (by omega)
     · exact hr (i - 80) (by omega)
+  · intro i low high
+    rw [indexPayload_length] at low high
+    rw [indexHashState_byte]
+    exact hpad i low (by omega)
 
 theorem index_refines (hash : Hash) (s : MachineState) (message : Message) (r : Bytes 32)
     (pc : s.pc = 0x1024)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
-    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
+    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
+    (hscratch : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0) :
     ∃ final, Trace hash verify s 121 136 1 2 final ∧ final.pc = 0x1148 ∧
       readBuffer final 0x80408 20 = Reference.indexOf hash message r := by
-  obtain ⟨ready, prepare, readypc, words, _⟩ := index_prepare s pc
+  obtain ⟨ready, prepare, readypc, words, prepareFrame⟩ := index_prepare s pc
   obtain ⟨final, trace, finalpc, low, high⟩ := index_trace hash ready readypc
   have query := index_query s ready message r hzero hmessage hr words
+    (Signing.index_padding s ready prepareFrame hscratch)
   refine ⟨final, prepare.trace.trans trace, finalpc, ?_⟩
   rw [read_index_words final _ low high, query]
   rfl
@@ -153,7 +163,8 @@ theorem entry_index_refines (hash : Hash) (s : MachineState) (message : Message)
     (pc : s.pc = 0x1000)
     (hzero : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x50 + i)) = 0)
     (hmessage : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 i) = message.extractLsb' (8 * i) 8)
-    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8) :
+    (hr : ∀ i, i < 32 → s.getByte (BitVec.ofNat 64 (0x3d3b0 + i)) = r.extractLsb' (8 * i) 8)
+    (hscratch : ∀ i, i < 16 → s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0) :
     ∃ final, Trace hash verify s 130 145 1 2 final ∧ final.pc = 0x1148 ∧
       readBuffer final 0x80408 20 = Reference.indexOf hash message r := by
   have initpc : (initializeState s).pc = 0x1024 := by simp [initializeState_pc, pc]
@@ -162,6 +173,7 @@ theorem entry_index_refines (hash : Hash) (s : MachineState) (message : Message)
     (fun i hi => (by simpa only [Nat.zero_add] using initializeState_byte s 0 i (by decide) (by omega) :
       (initializeState s).getByte (BitVec.ofNat 64 i) = s.getByte (BitVec.ofNat 64 i)).trans (hmessage i hi))
     (fun i hi => (initializeState_byte s 0x3d3b0 i (by decide) (by omega)).trans (hr i hi))
+    (fun i hi => (initializeState_byte s 0x80070 i (by decide) (by omega)).trans (hscratch i hi))
   exact ⟨final, (initializeState_block s pc).trace.trans trace, finalpc, value⟩
 
 /-- info: 'SigGolfCandidate.Hypertree.Verifying.entry_index_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/

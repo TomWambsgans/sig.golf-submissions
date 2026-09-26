@@ -55,8 +55,8 @@ theorem captureUpperTail_pc (s : MachineState) : (captureUpperTailState s).pc = 
 
 theorem captureUpperTail_mem (s : MachineState) (a : Word) :
     (captureUpperTailState s).getMem a = if CaptureDigitMatches s then
-      if a = s.getReg .x7 + (s.getMem 0x80430 <<< 4) + 8 then s.getMem 0x80518 else
-      if a = s.getReg .x7 + (s.getMem 0x80430 <<< 4) then s.getMem 0x80510 else s.getMem a
+      if a = s.getReg .x7 + (s.getMem 0x80430 <<< 4) + 8 then s.getMem 0x80038 else
+      if a = s.getReg .x7 + (s.getMem 0x80430 <<< 4) then s.getMem 0x80030 else s.getMem a
     else s.getMem a := by
   unfold captureUpperTailState
   split <;> simp only [captureWrite_mem, capturePosition_reg, captureDigit_regs,
@@ -161,8 +161,8 @@ theorem captureUpper_pc (s : MachineState) : (captureUpperState s).pc = s.pc + 1
 theorem captureUpper_mem (s : MachineState) (a : Word) :
     (captureUpperState s).getMem a =
       if s.getMem 0x80440 ≠ 0 ∧ s.getMem 0x80428 = s.getMem 0x80420 ∧ CaptureDigitMatches s then
-        if a = s.getMem 0x80448 + (s.getMem 0x80430 <<< 4) + 8 then s.getMem 0x80518 else
-        if a = s.getMem 0x80448 + (s.getMem 0x80430 <<< 4) then s.getMem 0x80510 else s.getMem a
+        if a = s.getMem 0x80448 + (s.getMem 0x80430 <<< 4) + 8 then s.getMem 0x80038 else
+        if a = s.getMem 0x80448 + (s.getMem 0x80430 <<< 4) then s.getMem 0x80030 else s.getMem a
       else s.getMem a := by
   unfold captureUpperState
   split

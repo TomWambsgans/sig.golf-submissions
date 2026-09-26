@@ -19,7 +19,7 @@ theorem load_safe (s : MachineState) (base : Nat)
 
 theorem load_value (s : MachineState) (tree : Nat) (side : Bool) (base : Nat) (value : Reference.Digest)
     (data : Data s tree side base value) (i : Fin 2) :
-    (KeygenVerifyBottomLoad.state s).getMem (wordAddress 0x80510 i.val) = value.extractLsb' (64*i.val) 64 := by
+    (KeygenVerifyBottomLoad.state s).getMem (wordAddress 0x80030 i.val) = value.extractLsb' (64*i.val) 64 := by
   fin_cases i
   · rw [KeygenVerifyBottomLoad.mem, if_neg (by decide), if_pos (by decide), data.pointerEq]
     exact data.valueEq 0
@@ -39,7 +39,7 @@ theorem body (hash : Hash) (s : MachineState) (tree : Nat) (side : Bool) (base :
   have pre := KeygenVerifyBottomLoad.block verify 0x17a4 KeygenVerifyBottomLoad.code s pc safe.1 safe.2
   let loaded := KeygenVerifyBottomLoad.state s
   have loadedPC : loaded.pc = 0x17d0 := by rw [KeygenVerifyBottomLoad.pc, pc]; rfl
-  have keep (a : Word) (h0 : a ≠ 0x80510) (h1 : a ≠ 0x80518) : loaded.getMem a = s.getMem a := by
+  have keep (a : Word) (h0 : a ≠ 0x80030) (h1 : a ≠ 0x80038) : loaded.getMem a = s.getMem a := by
     rw [KeygenVerifyBottomLoad.mem, if_neg h1, if_neg h0]
   have levelEq : loaded.getMem 0x80400 = BitVec.ofNat 64 0 := by
     rw [keep _ (by decide) (by decide)]; exact data.levelEq

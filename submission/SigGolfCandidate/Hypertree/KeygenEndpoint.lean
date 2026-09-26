@@ -17,10 +17,10 @@ def Code (image : Image) (p : Word) (offset : BitVec 13) : Prop :=
   instructionAt image (p + 20) = some (.base (.ADDI .x10 .x10 2048)) ∧
   instructionAt image (p + 24) = some (.base (.ADD .x7 .x7 .x10)) ∧
   instructionAt image (p + 28) = some (.base (.LUI .x28 128)) ∧
-  instructionAt image (p + 32) = some (.base (.ADDI .x28 .x28 1296)) ∧
+  instructionAt image (p + 32) = some (.base (.ADDI .x28 .x28 48)) ∧
   instructionAt image (p + 36) = some (.base (.LD .x10 .x28 0)) ∧
   instructionAt image (p + 40) = some (.base (.LUI .x28 128)) ∧
-  instructionAt image (p + 44) = some (.base (.ADDI .x28 .x28 1304)) ∧
+  instructionAt image (p + 44) = some (.base (.ADDI .x28 .x28 56)) ∧
   instructionAt image (p + 48) = some (.base (.LD .x11 .x28 0)) ∧
   instructionAt image (p + 52) = some (.base (.SD .x7 .x10 0)) ∧
   instructionAt image (p + 56) = some (.base (.SD .x7 .x11 8)) ∧
@@ -43,10 +43,10 @@ def state (s : MachineState) (offset : BitVec 13) : MachineState :=
   let s := execInstrBr s (.ADDI .x10 .x10 2048)
   let s := execInstrBr s (.ADD .x7 .x7 .x10)
   let s := execInstrBr s (.LUI .x28 128)
-  let s := execInstrBr s (.ADDI .x28 .x28 1296)
+  let s := execInstrBr s (.ADDI .x28 .x28 48)
   let s := execInstrBr s (.LD .x10 .x28 0)
   let s := execInstrBr s (.LUI .x28 128)
-  let s := execInstrBr s (.ADDI .x28 .x28 1304)
+  let s := execInstrBr s (.ADDI .x28 .x28 56)
   let s := execInstrBr s (.LD .x11 .x28 0)
   let s := execInstrBr s (.SD .x7 .x10 0)
   let s := execInstrBr s (.SD .x7 .x11 8)
@@ -73,10 +73,10 @@ theorem block (image : Image) (p : Word) (offset : BitVec 13) (code : Code image
   let s6 := execInstrBr s5 (.ADDI .x10 .x10 2048)
   let s7 := execInstrBr s6 (.ADD .x7 .x7 .x10)
   let s8 := execInstrBr s7 (.LUI .x28 128)
-  let s9 := execInstrBr s8 (.ADDI .x28 .x28 1296)
+  let s9 := execInstrBr s8 (.ADDI .x28 .x28 48)
   let s10 := execInstrBr s9 (.LD .x10 .x28 0)
   let s11 := execInstrBr s10 (.LUI .x28 128)
-  let s12 := execInstrBr s11 (.ADDI .x28 .x28 1304)
+  let s12 := execInstrBr s11 (.ADDI .x28 .x28 56)
   let s13 := execInstrBr s12 (.LD .x11 .x28 0)
   let s14 := execInstrBr s13 (.SD .x7 .x10 0)
   let s15 := execInstrBr s14 (.SD .x7 .x11 8)
@@ -119,7 +119,7 @@ theorem block (image : Image) (p : Word) (offset : BitVec 13) (code : Code image
   · have hp : s7.pc = p + 28 := by simp [s1, s2, s3, s4, s5, s6, s7, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c7
   · rfl
-  apply OrdinarySteps.step s8 s9 _ (.base (.ADDI .x28 .x28 1296)) 12
+  apply OrdinarySteps.step s8 s9 _ (.base (.ADDI .x28 .x28 48)) 12
   · have hp : s8.pc = p + 32 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c8
   · rfl
@@ -132,7 +132,7 @@ theorem block (image : Image) (p : Word) (offset : BitVec 13) (code : Code image
   · have hp : s10.pc = p + 40 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c10
   · rfl
-  apply OrdinarySteps.step s11 s12 _ (.base (.ADDI .x28 .x28 1304)) 9
+  apply OrdinarySteps.step s11 s12 _ (.base (.ADDI .x28 .x28 56)) 9
   · have hp : s11.pc = p + 44 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c11
   · rfl
@@ -186,8 +186,8 @@ theorem pc (s : MachineState) (offset : BitVec 13) :
 
 theorem mem (s : MachineState) (offset : BitVec 13) (a : Word) :
     (state s offset).getMem a = if a = 0x80430 then s.getMem 0x80430+1 else
-      if a = address s+8 then s.getMem 0x80518 else
-      if a = address s then s.getMem 0x80510 else s.getMem a := by
+      if a = address s+8 then s.getMem 0x80038 else
+      if a = address s then s.getMem 0x80030 else s.getMem a := by
   simp [state,address,execInstrBr,signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
   rfl
 

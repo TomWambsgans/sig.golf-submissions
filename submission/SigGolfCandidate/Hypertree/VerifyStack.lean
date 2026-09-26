@@ -44,8 +44,8 @@ private theorem hash_index_stack (hash : Hash) (s : MachineState) (pc : s.pc = 0
   have hpc : hs.pc = 0x10f8 := by simp [hs, indexHashState_pc, pc]
   obtain ⟨service, src, len, dst⟩ := indexHashState_regs s
   have hf : fetch verify hs = some (.base .ECALL) := by simp only [fetch, hpc]; decide
-  have hv : hashArgumentsValid hs = true := hash_arguments hs 112 src len dst (by decide)
-  have hlen : (hashInput hs).1 = 896 := by simp [hashInput, hs, len]
+  have hv : hashArgumentsValid hs = true := hash_arguments hs 128 src len dst (by decide)
+  have hlen : (hashInput hs).1 = 1 := by simp [hashInput, hs, len]
   let answer := hash (hashInput hs)
   let out := writeHash hs answer
   have outpc : out.pc = 0x10fc := by simp [out, hash_pc, hpc]
@@ -54,7 +54,7 @@ private theorem hash_index_stack (hash : Hash) (s : MachineState) (pc : s.pc = 0
     (by decide) (by decide) (by decide) (by decide) (by decide)
   have copypc : copied.pc = 0x1128 := by simpa [CopyInvariant] using inv.2.2.1
   have call : Trace hash verify hs 1 16 1 2 out := by
-    simpa [out, hlen, compressions] using Trace.hash hs out 0 0 0 0 hf service hv (Trace.refl out)
+    simpa [out, hlen, Query.blocks] using Trace.hash hs out 0 0 0 0 hf service hv (Trace.refl out)
   refine ⟨indexStoreState copied, ?_, ?_⟩
   · exact ((((indexHashState_block s pc).trace.trans call).trans
       (indexCopyState_block out outpc).trace).trans loop.trace).trans

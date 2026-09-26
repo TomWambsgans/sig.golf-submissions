@@ -5,7 +5,7 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp Keygen
 set_option maxRecDepth 4096
 
 def Code (image : Image) (p : Word) : Prop :=
-  CopySetupCode image p 0x510 0x20 2 ∧ CopyCode image (p+20) ∧
+  CopySetupCode image p 0x30 0x20 2 ∧ CopyCode image (p+20) ∧
   KeygenChainHeader.Code image (p+44) ∧
   instructionAt image (p+236) = some (.base .ECALL) ∧
   KeygenSavePublic.Code image (p+240)
@@ -23,7 +23,7 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : Code image p)
     (hstep : s.getMem 0x80438 = BitVec.ofNat 64 step)
     (hindex : ∀ i : Fin 3, s.getMem (Signing.wordAddress 0x80408 i.val) =
       (BitVec.ofNat 192 tree).extractLsb' (64*i.val) 64)
-    (hvalue : ∀ i : Fin 2, s.getMem (Signing.wordAddress 0x80510 i.val) =
+    (hvalue : ∀ i : Fin 2, s.getMem (Signing.wordAddress 0x80030 i.val) =
       value.extractLsb' (64*i.val) 64) :
     ∃ final, Trace hash image s 81 88 1 1 final ∧ final.pc = p+300 ∧
       (∀ i : Fin 2, final.getMem (KeygenSavePublic.wordAddress side i.val) =
@@ -34,7 +34,7 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : Code image p)
         (∀ i : Fin 2, a ≠ KeygenSavePublic.wordAddress side i.val) →
         final.getMem a = s.getMem a) := by
   obtain ⟨copied,pre,cpc,content,cra,csp,cframe⟩ :=
-    copy_two image p 0x510 0x20 0x80510 0x80020 code.1 code.2.1
+    copy_two image p 0x30 0x20 0x80030 0x80020 code.1 code.2.1
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) s pc
   have levelEq : copied.getMem 0x80400 = BitVec.ofNat 64 level := by
     rw [cframe _ (by intro i; fin_cases i <;> decide)]; exact hlevel
@@ -51,13 +51,18 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : Code image p)
     exact hindex i
   have valueEq : ∀ i : Fin 2, copied.getMem (Signing.wordAddress 0x80020 i.val) =
       value.extractLsb' (64*i.val) 64 := by intro i; rw [content i]; exact hvalue i
+  have valueKept : ∀ i : Fin 2, copied.getMem (Signing.wordAddress 0x80030 i.val) =
+      value.extractLsb' (64*i.val) 64 := by
+    intro i
+    rw [cframe _ (by intro j; fin_cases i <;> fin_cases j <;> decide)]
+    exact hvalue i
   let prepared := KeygenChainHeader.state copied
   have headTrace := KeygenChainHeader.block image (p+44) code.2.2.1 copied cpc
   have hpc : prepared.pc = p+236 := by
     simp only [prepared,KeygenChainHeader.pc,cpc]; simp [BitVec.add_assoc]
   obtain ⟨service,source,bits,destination⟩ := KeygenChainHeader.regs copied
   have words := KeygenChainHeader.words copied level tree (Reference.sideNumber side) chain.val step value
-    levelEq leafEq chainEq stepEq indexEq valueEq
+    levelEq leafEq chainEq stepEq indexEq valueEq valueKept
   have hf : fetch image prepared = some (.base .ECALL) := by
     simpa only [fetch_at,hpc] using code.2.2.2.1
   let hashed := writeHash prepared (hash (hashInput prepared))

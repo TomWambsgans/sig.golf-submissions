@@ -11,12 +11,12 @@ structure ChainData (s : MachineState) (level tree : Nat) (side : Bool) (chain :
   chainEq : s.getMem 0x80430 = BitVec.ofNat 64 chain.val
   stepEq : s.getMem 0x80438 = BitVec.ofNat 64 step
   indexEq : ∀ i : Fin 3, s.getMem (wordAddress 0x80408 i.val) = (BitVec.ofNat 192 tree).extractLsb' (64*i.val) 64
-  valueEq : ∀ i : Fin 2, s.getMem (wordAddress 0x80510 i.val) = value.extractLsb' (64*i.val) 64
+  valueEq : ∀ i : Fin 2, s.getMem (wordAddress 0x80030 i.val) = value.extractLsb' (64*i.val) 64
 
 def OutsideChainWork (a : Word) : Prop :=
   (∀ i : Fin 8, a ≠ wordAddress 0x80000 i.val) ∧
   (∀ i : Fin 4, a ≠ wordAddress 0x80300 i.val) ∧
-  (∀ i : Fin 2, a ≠ wordAddress 0x80510 i.val) ∧ a ≠ 0x80438
+  (∀ i : Fin 2, a ≠ wordAddress 0x80030 i.val) ∧ a ≠ 0x80438
 
 theorem ChainData.check (s : MachineState) (level tree : Nat) (side : Bool) (chain : Reference.Chain)
     (step : Nat) (value : Reference.Digest) (data : ChainData s level tree side chain step value) :
@@ -53,7 +53,7 @@ theorem chain_step (hash : Hash) (s : MachineState) (level tree step : Nat)
   have keep (a : Word)
       (hi : ∀ i : Fin 6, a ≠ wordAddress 0x80000 i.val)
       (ha : ∀ i : Fin 4, a ≠ wordAddress 0x80300 i.val)
-      (hv : ∀ i : Fin 2, a ≠ wordAddress 0x80510 i.val) : hashed.getMem a = s.getMem a := by
+      (hv : ∀ i : Fin 2, a ≠ wordAddress 0x80030 i.val) : hashed.getMem a = s.getMem a := by
     rw [frame a hi ha hv, check_mem]
   have nextLevel : hashed.getMem 0x80400 = s.getMem 0x80400 := keep _ (by decide) (by decide) (by decide)
   have nextLeaf : hashed.getMem 0x80428 = s.getMem 0x80428 := keep _ (by decide) (by decide) (by decide)

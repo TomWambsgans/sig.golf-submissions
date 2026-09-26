@@ -8,13 +8,13 @@ open scoped Classical
 
 /-- Exact chain-hash input as a function of its 128-bit predecessor. -/
 def chainInput (address : ChainAddress) (step : Fin 7) (point : Digest) : Query :=
-  (Position.chain address step).address.input (bytes point)
+  (Position.chain address step).address.input (chainPayload point)
 
 theorem chainInput_injective (address : ChainAddress) (step : Fin 7) :
     Function.Injective (chainInput address step) := by
   intro first second equal
-  apply bytes_injective 16
-  exact addressedInput_payload_injective _ _ _ _ _ _ equal
+  apply chainPayload_injective
+  exact addressedInput_payload_injective _ _ _ _ _ _ (by simp) equal
 
 /-- Guessing a fresh hidden chain predecessor has probability at most 2^-128,
 even for a malformed or wrong-address query. -/

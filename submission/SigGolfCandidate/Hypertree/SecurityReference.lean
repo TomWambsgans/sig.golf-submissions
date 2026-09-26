@@ -36,7 +36,7 @@ def secret (secretKey : SecretKey) (level tree : Nat) (side : Bool) (chain : Cha
 
 def chainHash (level tree : Nat) (side : Bool) (chain : Chain) (step : Nat) (value : Digest) :
     OracleComp HashSpec Digest :=
-  Reference.truncate <$> ask 2 level tree (sideNumber side) chain.val step (bytes value)
+  Reference.truncate <$> ask 2 level tree (sideNumber side) chain.val step (chainPayload value)
 
 def walk {α : Type} (hash : Nat → α → OracleComp HashSpec α) (start : Nat) : Nat → α → OracleComp HashSpec α
   | 0, value => pure value

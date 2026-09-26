@@ -7,7 +7,7 @@ set_option maxRecDepth 4096
 def OutsideBottomWork (side : Bool) (a : Word) : Prop :=
   (∀ i : Fin 8, a ≠ wordAddress 0x80000 i.val) ∧
   (∀ i : Fin 4, a ≠ wordAddress 0x80300 i.val) ∧
-  (∀ i : Fin 2, a ≠ wordAddress 0x80510 i.val) ∧
+  (∀ i : Fin 2, a ≠ wordAddress 0x80030 i.val) ∧
   ∀ i : Fin 2, a ≠ KeygenSavePublic.wordAddress side i.val
 
 theorem low_outside_bottom (side : Bool) (a : Word) (low : a.toNat < 0x80000) : OutsideBottomWork side a := by

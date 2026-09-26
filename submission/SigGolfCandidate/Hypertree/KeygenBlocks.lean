@@ -64,10 +64,10 @@ theorem copy_next_pc (s : MachineState) :
     Expansion.loop_body_pc, Expansion.loop_body_count, Expansion.reg_zero, signExtend13]
   simp [decrement, BitVec.add_assoc]
 
-/-- The HASH service accepts exactly the fixed buffers used by all four images: whole words of input bytes. -/
+/-- The HASH service accepts exactly the fixed buffers used by all four images: whole 64-byte blocks of input. -/
 theorem hash_arguments (s : MachineState) (bytes : Nat)
     (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bytes)
-    (dst : s.getReg .x12 = 0x80300) (bound : bytes % 8 = 0 ∧ bytes ≤ 768) :
+    (dst : s.getReg .x12 = 0x80300) (bound : 0 < bytes ∧ bytes % 64 = 0 ∧ bytes ≤ 768) :
     hashArgumentsValid s = true := by
   have small : bytes < 2 ^ 64 := by omega
   simp [hashArgumentsValid, src, len, dst, accessValid, rangeValid,
@@ -86,14 +86,15 @@ theorem hash_then (image : Image) (hash : Hash) (s : MachineState) (bytes : Nat)
     (code : instructionAt image s.pc = some (.base .ECALL))
     (service : s.getReg .x5 = 0)
     (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bytes)
-    (dst : s.getReg .x12 = 0x80300) (bound : bytes % 8 = 0 ∧ bytes ≤ 768)
+    (dst : s.getReg .x12 = 0x80300) (bound : 0 < bytes ∧ bytes % 64 = 0 ∧ bytes ≤ 768)
     (steps : Nat) (result : Execution)
     (tail : Executes hash image (writeHash s (hash (hashInput s))) steps result) :
     Executes hash image s (steps + 1)
-      (result.charge (8 * compressions (8 * bytes)) 1 (compressions (8 * bytes))) := by
+      (result.charge (8 * (bytes / 64)) 1 (bytes / 64)) := by
   have small : bytes < 2 ^ 64 := by omega
-  have input_len : (hashInput s).1 = 8 * bytes := by
-    simp only [hashInput, len, BitVec.toNat_ofNat, Nat.mod_eq_of_lt small]
+  have input_len : (hashInput s).blocks = bytes / 64 := by
+    simp only [Query.blocks, hashInput, len, BitVec.toNat_ofNat, Nat.mod_eq_of_lt small]
+    omega
   simpa only [input_len] using Executes.hash s steps result code service
     (hash_arguments s bytes src len dst bound) tail
 

@@ -37,7 +37,7 @@ theorem endpoint_outside_work (chain : Reference.Chain) (i : Fin 2) :
   · intro j eq
     have hj := j.isLt
     have h := congrArg BitVec.toNat eq
-    change (0x80800+16*chain.val+8*i.val)%2^64=(0x80510+8*j.val)%2^64 at h
+    change (0x80800+16*chain.val+8*i.val)%2^64=(0x80030+8*j.val)%2^64 at h
     omega
 
 theorem endpoint_ne_chain (chain : Reference.Chain) (i : Fin 2) :

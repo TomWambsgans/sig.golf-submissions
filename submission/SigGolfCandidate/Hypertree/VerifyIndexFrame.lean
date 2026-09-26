@@ -38,13 +38,13 @@ theorem index_trace_frame (hash : Hash) (s : MachineState) (pc : s.pc = 0x10e0) 
   have hpc : hs.pc = 0x10f8 := by simp [hs, indexHashState_pc, pc]
   obtain ⟨service, src, len, dst⟩ := indexHashState_regs s
   have hf : fetch verify hs = some (.base .ECALL) := by simp only [fetch, hpc]; decide
-  have hv : hashArgumentsValid hs = true := hash_arguments hs 112 src len dst (by decide)
-  have hlen : (hashInput hs).1 = 896 := by simp [hashInput, hs, len]
+  have hv : hashArgumentsValid hs = true := hash_arguments hs 128 src len dst (by decide)
+  have hlen : (hashInput hs).1 = 1 := by simp [hashInput, hs, len]
   let answer := hash (hashInput hs)
   have outpc : (writeHash hs answer).pc = 0x10fc := by simp [hash_pc, hpc]
   obtain ⟨copied, copy, copypc, words, upper, frame⟩ := index_copy_frame (writeHash hs answer) outpc
   have call : Trace hash verify hs 1 16 1 2 (writeHash hs answer) := by
-    simpa [hlen, compressions] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
+    simpa [hlen, Query.blocks] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
       (Trace.refl (writeHash hs answer))
   refine ⟨indexStoreState copied, ?_, ?_, ?_, ?_, ?_⟩
   · exact (((indexHashState_block s pc).trace.trans call).trans copy.trace).trans

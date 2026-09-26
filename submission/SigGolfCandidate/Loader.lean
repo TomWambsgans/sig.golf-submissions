@@ -69,4 +69,29 @@ theorem sign_zeroSlot (submission : Submission) (valid : (submission.image .sign
 #guard_msgs in
 #print axioms sign_zeroSlot
 
+/-- Scratch memory above every input buffer is never loaded, so signing sees it as zero. The HASH buffer's
+zero padding after the 96-byte randomizer and 112-byte index inputs lies there. -/
+theorem sign_scratch (submission : Submission) (valid : (submission.image .sign).Valid submission.sizes submission.layout)
+    (standard : submission.layout = standardLayout submission.sizes)
+    (noData : (submission.image .sign).data = [])
+    (secretKey : SecretKey) (cache : Cache) (message : Message) (s : MachineState)
+    (loaded : initialState submission .sign (secretKey, cache, message) = some s)
+    (i : Nat) (hi : i < 32) :
+    s.getByte (BitVec.ofNat 64 (0x80060 + i)) = 0 := by
+  unfold initialState at loaded
+  rw [if_pos valid] at loaded
+  cases Option.some.inj loaded
+  rw [standard]
+  dsimp only [inputBuffers, standardLayout, List.foldl_cons, List.foldl_nil]
+  rw [Memory.getByte_setReg]
+  rw [Memory.write_preserves_byte _ 0 (bytes message) 0x80060 i (by decide) (by simp) (by omega) (by right; simp)]
+  rw [Memory.write_preserves_byte _ 0x60 (bytes cache) 0x80060 i (by decide) (by rw [Memory.bytes_length (n := CACHE_BYTES)]; decide) (by omega) (by right; rw [Memory.bytes_length (n := CACHE_BYTES)]; decide)]
+  rw [Memory.write_preserves_byte _ 0x20 (bytes secretKey) 0x80060 i (by decide) (by simp) (by omega) (by right; simp)]
+  rw [noData, MachineState.writeBytesAsWords_nil]
+  simp [MachineState.getByte, MachineState.getMem, extractByte]
+
+/-- info: 'SigGolfCandidate.Loader.sign_scratch' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms sign_scratch
+
 end SigGolfCandidate.Loader

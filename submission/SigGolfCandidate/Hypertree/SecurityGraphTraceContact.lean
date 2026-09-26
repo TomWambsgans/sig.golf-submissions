@@ -58,15 +58,15 @@ theorem layer_collision_logged (factors : Factors) (base : Hash) (level : Fin 16
     · rw [if_pos bottom] at other
       have adapted : CollisionAt (programmed (privateTable factors) (labels factors) base)
           2 level.val tree.toNat (sideNumber side) 0 0
-          (bytes (chainPoint (privateTable factors) (labels factors) ⟨level, tree, side, 0⟩ 0))
-          (bytes (signature.values 0)) := by
+          (chainPayload (chainPoint (privateTable factors) (labels factors) ⟨level, tree, side, 0⟩ 0))
+          (chainPayload (signature.values 0)) := by
         rw [bottom]
         exact other
       have contact := payload_collision factors base (.chain ⟨level, tree, side, 0⟩ 0)
-        (bytes (chainPoint (privateTable factors) (labels factors) ⟨level, tree, side, 0⟩ 0))
-        (bytes (signature.values 0)) (canonical_chain_input factors ⟨level, tree, side, 0⟩ 0) adapted
+        (chainPayload (chainPoint (privateTable factors) (labels factors) ⟨level, tree, side, 0⟩ 0))
+        (chainPayload (signature.values 0)) (canonical_chain_input factors ⟨level, tree, side, 0⟩ 0) adapted
       refine ⟨_, mem_recoverLayer_leaf _ _ _ _ _ _ _ ?_, contact⟩
-      change addressedInput 2 level.val tree.toNat (sideNumber side) 0 0 (bytes (signature.values 0)) ∈ _
+      change addressedInput 2 level.val tree.toNat (sideNumber side) 0 0 (chainPayload (signature.values 0)) ∈ _
       rw [bottom]
       exact mem_recoverLeaf_bottom
         (programmed (privateTable factors) (labels factors) base) tree.toNat side message signature
@@ -110,9 +110,9 @@ theorem upper_point_logged (factors : Factors) (signed : Finset (BitVec 160)) (b
   simp only [Nat.add_zero, Hypertree.walk] at member
   refine ⟨_, member, address, step, hidden, ?_⟩
   change addressedInput 2 level.val (index / 2) (sideNumber (index % 2 == 1)) chain.val
-    (digit message chain).val (bytes (signature.values chain)) =
+    (digit message chain).val (chainPayload (signature.values chain)) =
     addressedInput 2 level.val (BitVec.ofNat 192 (index / 2)).toNat (sideNumber (index % 2 == 1)) chain.val
-      (digit message chain).val (bytes (truncate (factors.1 (pathAddress level index chain, digit message chain))))
+      (digit message chain).val (chainPayload (truncate (factors.1 (pathAddress level index chain, digit message chain))))
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt half, value]
 
 end SigGolfCandidate.Hypertree.SecurityGraphTraceContact

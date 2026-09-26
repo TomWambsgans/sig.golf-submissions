@@ -4,11 +4,12 @@ import SigGolfCandidate.Hypertree.Encoding
 namespace SigGolfCandidate.Hypertree.SecurityExtraction
 open SigGolf Reference SecurityRandomOracle SecurityPacking SignatureEncoding
 
-/-- At one fixed address, the exact public H input determines its entire payload. -/
-theorem addressedInput_payload_injective (tag level tree leaf chain step : Nat) :
-    Function.Injective (addressedInput tag level tree leaf chain step) := by
-  intro first second same
-  exact List.append_cancel_left (packed_injective same)
+/-- At one fixed address, the exact public H input determines each payload of a fixed length. -/
+theorem addressedInput_payload_injective (tag level tree leaf chain step : Nat) {first second : List Byte}
+    (length : first.length = second.length)
+    (same : addressedInput tag level tree leaf chain step first =
+      addressedInput tag level tree leaf chain step second) : first = second :=
+  List.append_cancel_left (packed_injective same (by simp [bytes, length]))
 
 /-- A real 128-bit target collision at one serialized address, not global hash injectivity. -/
 def CollisionAt (hash : Hash) (tag level tree leaf chain step : Nat)
@@ -19,11 +20,11 @@ def CollisionAt (hash : Hash) (tag level tree leaf chain step : Nat)
       truncate (query hash tag level tree leaf chain step expected)
 
 theorem collisionAt_of_payload_ne (hash : Hash) (tag level tree leaf chain step : Nat)
-    (expected actual : List Byte) (different : actual ≠ expected)
+    (expected actual : List Byte) (length : actual.length = expected.length) (different : actual ≠ expected)
     (same : truncate (query hash tag level tree leaf chain step actual) =
       truncate (query hash tag level tree leaf chain step expected)) :
     CollisionAt hash tag level tree leaf chain step expected actual :=
-  ⟨fun h => different (addressedInput_payload_injective tag level tree leaf chain step h), same⟩
+  ⟨fun h => different (addressedInput_payload_injective tag level tree leaf chain step length h), same⟩
 
 /-- Two unequal walks ending at one value must merge at a concrete step. -/
 theorem walk_merge {α : Type} (f : Nat → α → α) (start steps : Nat) (expected actual : α)
@@ -53,9 +54,9 @@ theorem changed_fragment_collision (hash : Hash) (secretKey : SecretKey) (level 
       (7 - (digit message chain).val) fragment = endpoint hash secretKey level tree side chain) :
     ∃ offset, offset < 7 - (digit message chain).val ∧
       CollisionAt hash 2 level tree (sideNumber side) chain.val ((digit message chain).val + offset)
-        (bytes (walk (chainHash hash level tree side chain) 0 ((digit message chain).val + offset)
+        (chainPayload (walk (chainHash hash level tree side chain) 0 ((digit message chain).val + offset)
           (secret hash secretKey level tree side chain)))
-        (bytes (walk (chainHash hash level tree side chain) (digit message chain).val offset fragment)) := by
+        (chainPayload (walk (chainHash hash level tree side chain) (digit message chain).val offset fragment)) := by
   have canonical := recover_chain (chainHash hash level tree side chain)
     (secret hash secretKey level tree side chain) (digit message chain)
   obtain ⟨offset, bound, ne, eq⟩ := walk_merge (chainHash hash level tree side chain)
@@ -67,8 +68,8 @@ theorem changed_fragment_collision (hash : Hash) (secretKey : SecretKey) (level 
     (secret hash secretKey level tree side chain)
   simp only [Nat.zero_add] at splitWalk
   rw [splitWalk]
-  exact collisionAt_of_payload_ne hash 2 level tree (sideNumber side) chain.val _ _ _
-    (fun h => ne (bytes_injective 16 h)) eq
+  exact collisionAt_of_payload_ne hash 2 level tree (sideNumber side) chain.val _ _ _ (by simp)
+    (fun h => ne (chainPayload_injective h)) eq
 
 /-- A leaf-compression collision is the only alternative to all recovered WOTS
 endpoints equalling their designated canonical endpoints. -/
@@ -91,7 +92,8 @@ theorem upper_leaf_binding (hash : Hash) (secretKey : SecretKey) (level tree : N
     have values := flatMap_injective (bytes (n := 16)) 16 (by decide) (fun _ => by simp)
       (bytes_injective 16) equalPayload
     exact congrFun (List.ofFn_injective values)
-  · exact Or.inr (collisionAt_of_payload_ne hash 3 level tree (sideNumber side) 0 0 _ _ equalPayload same)
+  · exact Or.inr (collisionAt_of_payload_ne hash 3 level tree (sideNumber side) 0 0 _ _
+      (by simp [bytes]) equalPayload same)
 
 /-- Root equality binds both ordered children unless the actual tag-4 node query
 hits the canonical node target with a different input. -/
@@ -105,7 +107,7 @@ theorem node_binding (hash : Hash) (level tree : Nat)
   by_cases payload : bytes actualLeft ++ bytes actualRight = bytes left ++ bytes right
   · exact Or.inl ⟨bytes_injective 16 (List.append_inj_left payload (by simp)),
       bytes_injective 16 (List.append_inj_right payload (by simp))⟩
-  · exact Or.inr (collisionAt_of_payload_ne hash 4 level tree 0 0 0 _ _ payload same)
+  · exact Or.inr (collisionAt_of_payload_ne hash 4 level tree 0 0 0 _ _ (by simp [bytes]) payload same)
 
 /-- Each accepted layer either binds its selected leaf and sibling, or identifies
 a concrete collision against that layer's designated canonical root. -/
@@ -131,12 +133,12 @@ theorem bottom_leaf_binding (hash : Hash) (secretKey : SecretKey) (tree : Nat) (
     (same : recoverLeaf hash 0 tree side message signature = leafRoot hash secretKey 0 tree side) :
     signature.values 0 = secret hash secretKey 0 tree side 0 ∨
       CollisionAt hash 2 0 tree (sideNumber side) 0 0
-        (bytes (secret hash secretKey 0 tree side 0)) (bytes (signature.values 0)) := by
+        (chainPayload (secret hash secretKey 0 tree side 0)) (chainPayload (signature.values 0)) := by
   classical
   by_cases equal : signature.values 0 = secret hash secretKey 0 tree side 0
   · exact Or.inl equal
-  · refine Or.inr (collisionAt_of_payload_ne hash 2 0 tree (sideNumber side) 0 0 _ _
-      (fun h => equal (bytes_injective 16 h)) ?_)
+  · refine Or.inr (collisionAt_of_payload_ne hash 2 0 tree (sideNumber side) 0 0 _ _ (by simp)
+      (fun h => equal (chainPayload_injective h)) ?_)
     simpa only [recoverLeaf, leafRoot, ↓reduceIte, chainHash, Fin.val_zero] using same
 
 /-- When a changed message has only canonical recovered fragments, the checksum
@@ -165,7 +167,7 @@ def LayerTargetCollision (hash : Hash) (secretKey : SecretKey) (level tree : Nat
       else bytes (recoverLeaf hash level tree side message signature) ++ bytes signature.sibling) ∨
   (if level = 0 then
     CollisionAt hash 2 0 tree (sideNumber side) 0 0
-      (bytes (secret hash secretKey 0 tree side 0)) (bytes (signature.values 0))
+      (chainPayload (secret hash secretKey 0 tree side 0)) (chainPayload (signature.values 0))
   else
     CollisionAt hash 3 level tree (sideNumber side) 0 0
       ((List.ofFn (endpoint hash secretKey level tree side)).flatMap bytes)
@@ -173,9 +175,9 @@ def LayerTargetCollision (hash : Hash) (secretKey : SecretKey) (level tree : Nat
         (7 - (digit message chain).val) (signature.values chain))).flatMap bytes) ∨
     ∃ chain offset, offset < 7 - (digit message chain).val ∧
       CollisionAt hash 2 level tree (sideNumber side) chain.val ((digit message chain).val + offset)
-        (bytes (walk (chainHash hash level tree side chain) 0 ((digit message chain).val + offset)
+        (chainPayload (walk (chainHash hash level tree side chain) 0 ((digit message chain).val + offset)
           (secret hash secretKey level tree side chain)))
-        (bytes (walk (chainHash hash level tree side chain) (digit message chain).val offset
+        (chainPayload (walk (chainHash hash level tree side chain) (digit message chain).val offset
           (signature.values chain))))
 
 /-- Equality of precisely the layer data serialized on the wire. -/

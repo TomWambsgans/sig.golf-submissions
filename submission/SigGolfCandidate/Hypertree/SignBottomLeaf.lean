@@ -51,7 +51,7 @@ theorem sign_bottom_leaf_body (hash : Hash) (s : MachineState) (secretKey : Secr
     intro i
     rw [keep _ (by fin_cases i <;> unfold OutsideBottomWork <;> cases side <;> decide) (by fin_cases i <;> decide)]
     exact data.indexEq i
-  have valueEq : ∀ i : Fin 2, captured.getMem (wordAddress 0x80510 i.val) =
+  have valueEq : ∀ i : Fin 2, captured.getMem (wordAddress 0x80030 i.val) =
       (Reference.secret hash secretKey 0 tree side 0).extractLsb' (64*i.val) 64 := by
     intro i
     rw [ captureBottom_high_frame secret pointer valid secretPtr _ (by fin_cases i <;> decide)]
@@ -92,8 +92,8 @@ theorem sign_bottom_leaf_body (hash : Hash) (s : MachineState) (secretKey : Secr
       secretKeep _ (by unfold OutsideBottomWork; cases side <;> decide),
       secretKeep _ (by unfold OutsideBottomWork; cases side <;> decide),
       secretKeep _ (by unfold OutsideBottomWork; cases side <;> decide), secretPtr,
-      show secret.getMem 0x80518 = (Reference.secret hash secretKey 0 tree side 0).extractLsb' 64 64 from secretWords 1,
-      show secret.getMem 0x80510 = (Reference.secret hash secretKey 0 tree side 0).extractLsb' 0 64 from secretWords 0,
+      show secret.getMem 0x80038 = (Reference.secret hash secretKey 0 tree side 0).extractLsb' 64 64 from secretWords 1,
+      show secret.getMem 0x80030 = (Reference.secret hash secretKey 0 tree side 0).extractLsb' 0 64 from secretWords 0,
       secretKeep a outside]
 
 end SigGolfCandidate.Hypertree.Signing

@@ -102,48 +102,52 @@ theorem recover_bottom (hash : Hash) (tree : Nat) (side : Bool) (message : Diges
       recoverLayer hash 0 tree side message signature := by
   simp [recoverLayer, recoverLeaf]
 
-private theorem packed_cast_injective {n : Nat} (first second : List Byte)
-    (hfirst : first.length = n) (hsecond : second.length = n)
-    (same : ((Reference.packed first).2.cast (by
-      change 8 * first.length = 8 * n
-      rw [hfirst]) : Bytes n) =
-      ((Reference.packed second).2.cast (by
-        change 8 * second.length = 8 * n
-        rw [hsecond]) : Bytes n)) : first = second := by
-  apply SecurityPacking.packed_injective
-  apply Serialization.query_eq
-  · change 8 * first.length = 8 * second.length
-    rw [hfirst, hsecond]
-  · have hv := congrArg BitVec.toNat same
-    simpa only [BitVec.toNat_cast] using hv
+/-- Little-endian packing of a byte string at its own width. -/
+def packBytes (data : List Byte) : Bytes data.length := BitVec.ofNat (8 * data.length) (packValue data)
 
-private theorem packed_cast_bytes {n : Nat} (data : List Byte) (h : data.length = n) :
-    bytes ((Reference.packed data).2.cast (by
-      change 8 * data.length = 8 * n
-      rw [h]) : Bytes n) = data := by
-  apply SecurityPacking.packed_injective
-  rw [Serialization.packed_bytes]
-  apply Serialization.query_eq
-  · change 8 * n = 8 * data.length
-    rw [h]
-  · simp only [BitVec.toNat_cast]
+theorem packBytes_toNat (data : List Byte) : (packBytes data).toNat = packValue data := by
+  unfold packBytes
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (SecurityPacking.packValue_lt data)]
+
+private theorem packValue_bytes {n : Nat} (value : Bytes n) : packValue (bytes value) = value.toNat := by
+  unfold packValue
+  rw [Serialization.zipIdx_eq_range, List.foldl_map, Memory.bytes_length]
+  have same : (List.range n).foldl (fun acc i => acc + (RiscvZkvm.Rv64.getByteAt (bytes value) i).toNat * 2 ^ (8 * i)) 0 =
+      (List.range n).foldl (fun acc i => acc + (value.toNat / 2 ^ (8 * i) % 2 ^ 8) * 2 ^ (8 * i)) 0 := by
+    apply Memory.foldl_eq_on
+    intro i hi acc
+    have index : i < n := by simpa using hi
+    simp [RiscvZkvm.Rv64.getByteAt, bytes, index, Nat.shiftRight_eq_div_pow]
+  rw [same, Memory.digit_fold]
+  simp
+
+private theorem packBytes_cast_injective {n : Nat} (first second : List Byte)
+    (hfirst : first.length = n) (hsecond : second.length = n)
+    (same : ((packBytes first).cast (by rw [hfirst]) : Bytes n) =
+      ((packBytes second).cast (by rw [hsecond]) : Bytes n)) : first = second := by
+  apply SecurityPacking.packValue_injective (hfirst.trans hsecond.symm)
+  have hv := congrArg BitVec.toNat same
+  simpa only [BitVec.toNat_cast, packBytes_toNat] using hv
+
+private theorem packBytes_cast_bytes {n : Nat} (data : List Byte) (h : data.length = n) :
+    bytes ((packBytes data).cast (by rw [h]) : Bytes n) = data := by
+  apply SecurityPacking.packValue_injective (by rw [Memory.bytes_length, h])
+  rw [packValue_bytes, BitVec.toNat_cast, packBytes_toNat]
 
 /-- The submitted fixed-width object, with no padding or unused encoded fields. -/
 def Compact.wire (signature : Compact) (valid : signature.Valid) : Bytes signatureBytes :=
-  (Reference.packed signature.encode).2.cast (by
-    change 8 * signature.encode.length = 8 * signatureBytes
-    rw [signature.valid_length valid])
+  (packBytes signature.encode).cast (by rw [signature.valid_length valid])
 
 theorem Compact.wire_injective (first second : Compact) (hfirst : first.Valid) (hsecond : second.Valid)
     (same : first.wire hfirst = second.wire hsecond) : first = second := by
   apply Compact.encode_injective
-  exact packed_cast_injective first.encode second.encode
+  exact packBytes_cast_injective first.encode second.encode
     (first.valid_length hfirst) (second.valid_length hsecond) (by
       simpa only [Compact.wire] using same)
 
 theorem Compact.wire_bytes (signature : Compact) (valid : signature.Valid) :
     bytes (signature.wire valid) = signature.encode := by
-  exact packed_cast_bytes signature.encode (signature.valid_length valid)
+  exact packBytes_cast_bytes signature.encode (signature.valid_length valid)
 
 /-- Drop the bottom-layer fields that are never serialized or read by verification. -/
 def Compact.ofReference (signature : Signature) (valid : signature.layers.length = 160) : Compact where

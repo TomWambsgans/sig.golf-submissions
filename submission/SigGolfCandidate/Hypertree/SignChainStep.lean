@@ -33,7 +33,7 @@ theorem chain_core_step (hash : Hash) (s : MachineState) (level tree step : Nat)
   have keep (a : Word)
       (hi : ∀ i : Fin 6, a ≠ wordAddress 0x80000 i.val)
       (ha : ∀ i : Fin 4, a ≠ wordAddress 0x80300 i.val)
-      (hv : ∀ i : Fin 2, a ≠ wordAddress 0x80510 i.val) : hashed.getMem a = s.getMem a := by
+      (hv : ∀ i : Fin 2, a ≠ wordAddress 0x80030 i.val) : hashed.getMem a = s.getMem a := by
     rw [frame a hi ha hv, check_mem]
   have nextLevel : hashed.getMem 0x80400 = s.getMem 0x80400 := keep _ (by decide) (by decide) (by decide)
   have nextLeaf : hashed.getMem 0x80428 = s.getMem 0x80428 := keep _ (by decide) (by decide) (by decide)

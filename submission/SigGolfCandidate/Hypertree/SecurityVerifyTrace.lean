@@ -50,7 +50,7 @@ theorem queries_length {α : Type} (hash : Hash) (program : OracleComp HashSpec 
 @[simp] theorem queries_chainHash (hash : Hash) (level tree : Nat) (side : Bool)
     (chain : Chain) (step : Nat) (value : Digest) :
     queries hash (SecurityReference.chainHash level tree side chain step value) =
-      [addressedInput 2 level tree (sideNumber side) chain.val step (bytes value)] := by
+      [addressedInput 2 level tree (sideNumber side) chain.val step (chainPayload value)] := by
   simp [SecurityReference.chainHash]
 
 @[simp] theorem queries_compressLeaf (hash : Hash) (level tree : Nat) (side : Bool) (values : Chain → Digest) :
@@ -78,7 +78,7 @@ theorem mem_sequenceFin {α : Type} (hash : Hash) (n : Nat) (body : Fin n → Or
 theorem mem_walk (hash : Hash) (level tree : Nat) (side : Bool) (chain : Chain)
     (start count offset : Nat) (value : Digest) (within : offset < count) :
     addressedInput 2 level tree (sideNumber side) chain.val (start + offset)
-      (bytes (Hypertree.walk (chainHash hash level tree side chain) start offset value)) ∈
+      (chainPayload (Hypertree.walk (chainHash hash level tree side chain) start offset value)) ∈
     queries hash (SecurityReference.walk (SecurityReference.chainHash level tree side chain) start count value) := by
   induction count generalizing start offset value with
   | zero => omega
@@ -94,7 +94,7 @@ theorem mem_walk (hash : Hash) (level tree : Nat) (side : Bool) (chain : Chain)
 
 theorem mem_recoverLeaf_bottom (hash : Hash) (tree : Nat) (side : Bool)
     (message : Digest) (signature : LayerSignature) :
-    addressedInput 2 0 tree (sideNumber side) 0 0 (bytes (signature.values 0)) ∈
+    addressedInput 2 0 tree (sideNumber side) 0 0 (chainPayload (signature.values 0)) ∈
       queries hash (SecurityVerify.recoverLeaf 0 tree side message signature) := by
   simp [SecurityVerify.recoverLeaf]
 
@@ -112,7 +112,7 @@ theorem mem_recoverLeaf_chain (hash : Hash) (level tree : Nat) (side : Bool)
     (message : Digest) (signature : LayerSignature) (upper : level ≠ 0) (chain : Chain)
     (offset : Nat) (within : offset < 7 - (digit message chain).val) :
     addressedInput 2 level tree (sideNumber side) chain.val ((digit message chain).val + offset)
-      (bytes (Hypertree.walk (chainHash hash level tree side chain) (digit message chain).val offset
+      (chainPayload (Hypertree.walk (chainHash hash level tree side chain) (digit message chain).val offset
         (signature.values chain))) ∈ queries hash (SecurityVerify.recoverLeaf level tree side message signature) := by
   simp only [SecurityVerify.recoverLeaf, upper, if_false, queries_bind, List.mem_append]
   exact Or.inl (mem_sequenceFin hash 46 _ chain _ (mem_walk hash level tree side chain _ _ offset _ within))

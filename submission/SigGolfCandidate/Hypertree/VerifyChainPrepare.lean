@@ -19,10 +19,10 @@ def chainValueState (s : MachineState) : MachineState :=
   let s := execInstrBr s (.LD .x10 .x7 0)
   let s := execInstrBr s (.LD .x11 .x7 8)
   let s := execInstrBr s (.LUI .x28 0x80)
-  let s := execInstrBr s (.ADDI .x28 .x28 0x510)
+  let s := execInstrBr s (.ADDI .x28 .x28 0x30)
   let s := execInstrBr s (.SD .x28 .x10 0)
   let s := execInstrBr s (.LUI .x28 0x80)
-  let s := execInstrBr s (.ADDI .x28 .x28 0x518)
+  let s := execInstrBr s (.ADDI .x28 .x28 0x38)
   execInstrBr s (.SD .x28 .x11 0)
 
 theorem chainValueState_block (s : MachineState) (pc : s.pc = 0x1490)
@@ -39,10 +39,10 @@ theorem chainValueState_block (s : MachineState) (pc : s.pc = 0x1490)
   let s9 := execInstrBr s8 (.LD .x10 .x7 0)
   let s10 := execInstrBr s9 (.LD .x11 .x7 8)
   let s11 := execInstrBr s10 (.LUI .x28 0x80)
-  let s12 := execInstrBr s11 (.ADDI .x28 .x28 0x510)
+  let s12 := execInstrBr s11 (.ADDI .x28 .x28 0x30)
   let s13 := execInstrBr s12 (.SD .x28 .x10 0)
   let s14 := execInstrBr s13 (.LUI .x28 0x80)
-  let s15 := execInstrBr s14 (.ADDI .x28 .x28 0x518)
+  let s15 := execInstrBr s14 (.ADDI .x28 .x28 0x38)
   let s16 := execInstrBr s15 (.SD .x28 .x11 0)
   apply OrdinarySteps.step s s1 _ (.base (.LUI .x28 0x80)) 15
   · have hp : s.pc = 0x1490 := by simp [execInstrBr, pc, BitVec.add_assoc]
@@ -88,7 +88,7 @@ theorem chainValueState_block (s : MachineState) (pc : s.pc = 0x1490)
   · have hp : s10.pc = 0x14b8 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, execInstrBr, pc, BitVec.add_assoc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s11 s12 _ (.base (.ADDI .x28 .x28 0x510)) 4
+  apply OrdinarySteps.step s11 s12 _ (.base (.ADDI .x28 .x28 0x30)) 4
   · have hp : s11.pc = 0x14bc := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, execInstrBr, pc, BitVec.add_assoc]
     simp only [fetch, hp]; decide
   · rfl
@@ -100,7 +100,7 @@ theorem chainValueState_block (s : MachineState) (pc : s.pc = 0x1490)
   · have hp : s13.pc = 0x14c4 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, execInstrBr, pc, BitVec.add_assoc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s14 s15 _ (.base (.ADDI .x28 .x28 0x518)) 1
+  apply OrdinarySteps.step s14 s15 _ (.base (.ADDI .x28 .x28 0x38)) 1
   · have hp : s14.pc = 0x14c8 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, execInstrBr, pc, BitVec.add_assoc]
     simp only [fetch, hp]; decide
   · rfl
@@ -160,8 +160,8 @@ theorem chainDigitState_block (s : MachineState) (pc : s.pc = 0x14d0)
   exact OrdinarySteps.refl _
 
 theorem chainValueState_mem (s : MachineState) (a : Word) :
-    (chainValueState s).getMem a = if a = 0x80518 then s.getMem (chainSource s + 8) else
-      if a = 0x80510 then s.getMem (chainSource s) else s.getMem a := by
+    (chainValueState s).getMem a = if a = 0x80038 then s.getMem (chainSource s + 8) else
+      if a = 0x80030 then s.getMem (chainSource s) else s.getMem a := by
   simp [chainValueState, chainSource, execInstrBr, signExtend12, Expansion.mem_setMem,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 

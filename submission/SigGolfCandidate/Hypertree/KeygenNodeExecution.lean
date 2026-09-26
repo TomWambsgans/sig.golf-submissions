@@ -35,10 +35,10 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : BodyCode image 
   let hashed := writeHash prepared (hash (hashInput prepared))
   have hashTrace : Trace hash image prepared 1 8 1 1 hashed := by
     have valid := hash_arguments prepared 64 source bits destination (by decide)
-    have len : (hashInput prepared).1 = 512 := by simp [hashInput,bits]
+    have len : (hashInput prepared).1 = 0 := by simp [hashInput,bits]
     have hf : fetch image prepared = some (.base .ECALL) := by
       simpa only [fetch_at,hpc] using code.2.1
-    simpa [len,compressions] using
+    simpa [len,Query.blocks] using
       Trace.hash prepared hashed 0 0 0 0 hf service valid (Trace.refl _)
   have hashedPC : hashed.pc = p + 180 := by
     simp only [hashed,hash_pc,hpc]

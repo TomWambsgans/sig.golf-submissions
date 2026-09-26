@@ -42,6 +42,41 @@ theorem loaded_zeroSlot (pk : PublicKey) (message : Message) (witness : Bytes si
   rw [show verify.data = [] by rfl, MachineState.writeBytesAsWords_nil]
   simp [MachineState.getByte, MachineState.getMem, extractByte]
 
+/-- Scratch memory starts at zero, beyond every verifier input. -/
+theorem loaded_scratch (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
+    (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
+    (a : Word) (high : 0x80000 ≤ a.toNat) : s.getMem a = 0 := by
+  unfold initialState at loaded
+  rw [if_pos (admitted.2 .verify)] at loaded
+  cases Option.some.inj loaded
+  dsimp only [submission]
+  dsimp only [inputBuffers, Riscv.standardLayout, Layout.message, Layout.secretKey, Layout.publicKey, Layout.cache, Layout.signature, Layout.witness, List.foldl_cons, List.foldl_nil]
+  rw [MachineState.getMem_setReg]
+  rw [show witnessBase ⟨signatureBytes, signatureBytes⟩ = 0x3d3b0 by decide]
+  rw [Memory.write_preserves _ 0x3d3b0 (bytes witness) a
+    (by rw [Memory.bytes_length (n := signatureBytes)]; decide)
+    (by right; rw [Memory.bytes_length (n := signatureBytes)]; change 370432 ≤ a.toNat; omega)]
+  rw [Memory.write_preserves _ 0x40 (bytes pk) a
+    (by rw [Memory.bytes_length]; decide)
+    (by right; rw [Memory.bytes_length]; omega)]
+  rw [Memory.write_preserves _ 0 (bytes message) a
+    (by rw [Memory.bytes_length]; decide)
+    (by right; rw [Memory.bytes_length]; omega)]
+  rw [show verify.data = [] by rfl, MachineState.writeBytesAsWords_nil]
+  rfl
+
+/-- The index input's 16 bytes of zero padding lie in never-loaded scratch memory. -/
+theorem loaded_padding (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
+    (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
+    (i : Nat) (hi : i < 16) :
+    s.getByte (BitVec.ofNat 64 (0x80070 + i)) = 0 := by
+  rw [Signing.getByte_word s 0x80070 i (by decide) (by omega),
+    loaded_scratch pk message witness s loaded _ (by
+      change 0x80000 ≤ (0x80070 + 8 * (i / 8)) % 2 ^ 64
+      rw [Nat.mod_eq_of_lt (by omega)]
+      omega)]
+  simp [extractByte]
+
 theorem loaded_message (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
     (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
     (i : Nat) (hi : i < 32) :
@@ -92,7 +127,7 @@ theorem loaded_index_refines (hash : Hash) (pk : PublicKey) (message : Message) 
     rw [BitVec.extractLsb'_extractLsb'_of_le (by omega)]
   obtain ⟨final, trace, finalpc, index⟩ := entry_index_refines hash initial message
     (SignatureEncoding.decode witness).randomizer pc (loaded_zeroSlot pk message witness initial loaded)
-    (loaded_message pk message witness initial loaded) randomizer
+    (loaded_message pk message witness initial loaded) randomizer (loaded_padding pk message witness initial loaded)
   exact ⟨initial, final, loaded, trace, finalpc, index⟩
 
 /-- info: 'SigGolfCandidate.Hypertree.Verifying.loaded_index_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/

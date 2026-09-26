@@ -79,7 +79,7 @@ theorem bottom_logged (factors : Factors) (base : Hash) (history : SecurityForge
       HiddenContact factors (Signed factors base history) query := by
   let atIndex := index factors base message signature
   let address := pathAddress 0 atIndex.toNat 0
-  let query := addressedInput 2 0 (atIndex.toNat / 2) (sideNumber (atIndex.toNat % 2 == 1)) 0 0 (bytes signature.bottom)
+  let query := addressedInput 2 0 (atIndex.toNat / 2) (sideNumber (atIndex.toNat % 2 == 1)) 0 0 (chainPayload signature.bottom)
   have bound : atIndex.toNat < 2 ^ 192 := lt_of_lt_of_le atIndex.isLt
     (Nat.pow_le_pow_right (by decide) (by decide))
   have half : atIndex.toNat / 2 < 2 ^ 192 := lt_of_le_of_lt (Nat.div_le_self ..) bound
@@ -91,9 +91,9 @@ theorem bottom_logged (factors : Factors) (base : Hash) (history : SecurityForge
     exact mem_recoverLeaf_bottom _ (atIndex.toNat / 2) (atIndex.toNat % 2 == 1) 0
       ⟨fun chain => if chain = 0 then signature.bottom else 0, signature.sibling⟩
   · change addressedInput 2 0 (atIndex.toNat / 2) (sideNumber (atIndex.toNat % 2 == 1)) 0 0
-      (bytes signature.bottom) = addressedInput 2 0 (BitVec.ofNat 192 (atIndex.toNat / 2)).toNat
+      (chainPayload signature.bottom) = addressedInput 2 0 (BitVec.ofNat 192 (atIndex.toNat / 2)).toNat
         (sideNumber (atIndex.toNat % 2 == 1)) 0 0
-        (bytes (truncate (factors.1 (pathAddress 0 atIndex.toNat 0, 0))))
+        (chainPayload (truncate (factors.1 (pathAddress 0 atIndex.toNat 0, 0))))
     rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt half, bottom.2]
 
 /-- An actual accepted fresh ideal signature produces either index reuse or a

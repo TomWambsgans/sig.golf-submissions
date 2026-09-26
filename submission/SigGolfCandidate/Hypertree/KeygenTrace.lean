@@ -20,8 +20,8 @@ inductive Trace (hash : Hash) (image : Image) :
       (tail : Trace hash image (writeHash state (hash (hashInput state)))
         steps cycles calls blocks final) :
       Trace hash image state (steps + 1)
-        (cycles + 8 * compressions (hashInput state).1)
-        (calls + 1) (blocks + compressions (hashInput state).1) final
+        (cycles + 8 * (hashInput state).blocks)
+        (calls + 1) (blocks + (hashInput state).blocks) final
 
 /-- Prefix composition adds every resource counter exactly. -/
 theorem Trace.trans {hash : Hash} {image : Image} {s t u : MachineState}

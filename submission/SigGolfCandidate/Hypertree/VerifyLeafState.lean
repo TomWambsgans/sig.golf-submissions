@@ -8,7 +8,7 @@ set_option maxRecDepth 4096
 def OutsideLeafWork (a : Word) : Prop :=
   (∀ i : Fin 96, a ≠ wordAddress 0x80000 i.val) ∧
   (∀ i : Fin 4, a ≠ wordAddress 0x80300 i.val) ∧
-  (∀ i : Fin 2, a ≠ wordAddress 0x80510 i.val) ∧
+  (∀ i : Fin 2, a ≠ wordAddress 0x80030 i.val) ∧
   (∀ i : Fin 92, a ≠ wordAddress 0x80800 i.val) ∧ a ≠ 0x80430 ∧ a ≠ 0x80438
 
 theorem outside_leaf_chain (a : Word) (outside : OutsideLeafWork a) : OutsideChainWork a :=
@@ -38,7 +38,7 @@ theorem outside_leaf_of_lt (a : Word) (low : a.toNat < 0x80000) : OutsideLeafWor
     omega
   · intro i eq
     have h := congrArg BitVec.toNat eq
-    change a.toNat = (0x80510+8*i.val) % 2^64 at h
+    change a.toNat = (0x80030+8*i.val) % 2^64 at h
     have := i.isLt
     omega
   · intro i eq

@@ -29,16 +29,14 @@ theorem secretKeyAt_secret (secretKey : SecretKey) (level tree leaf chain : Nat)
     SecretKeyAt (addressedInput 1 level tree leaf chain 0 (bytes secretKey)) secretKey := by
   simpa using secretKeyAt_addressedInput secretKey 1 level tree leaf chain 0 []
 
-/-- One bit-string query can contain at most one secret key at the protected position. -/
+/-- One oracle input can contain at most one secret key at the protected position,
+whatever follows it. -/
 theorem secretKeyAt_unique {input : Query} {first second : SecretKey}
     (hfirst : SecretKeyAt input first) (hsecond : SecretKeyAt input second) : first = second := by
   obtain ⟨header, suffix, plen, hp⟩ := hfirst
   obtain ⟨header', suffix', plen', hp'⟩ := hsecond
-  have heq := packed_injective (hp.trans hp'.symm)
-  rw [List.append_assoc, List.append_assoc] at heq
-  have tails := List.append_inj_right heq (plen.trans plen'.symm)
-  have secretKeys := List.append_inj_left tails (by simp [bytes])
-  exact bytes_injective 32 secretKeys
+  have heq := packed_prefix (hp.trans hp'.symm) (by simp [plen, plen', bytes])
+  exact bytes_injective 32 (List.append_inj_right heq (plen.trans plen'.symm))
 
 /-- A fixed query independent of the uniform 256-bit secret key guesses it with
 probability at most 2^-256. This uses the organizer's actual `sampleSecretKey`. -/

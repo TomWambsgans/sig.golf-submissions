@@ -18,7 +18,7 @@ def LayerCollision (privateAnswers : PrivateTable) (graph : Labels) (base : Hash
       else bytes (recoverLeaf publicHash level.val tree.toNat side message signature) ++ bytes signature.sibling) ∨
   (if level.val = 0 then
     CollisionAt publicHash 2 0 tree.toNat (sideNumber side) 0 0
-      (bytes (chainPoint privateAnswers graph ⟨level, tree, side, 0⟩ 0)) (bytes (signature.values 0))
+      (chainPayload (chainPoint privateAnswers graph ⟨level, tree, side, 0⟩ 0)) (chainPayload (signature.values 0))
   else
     CollisionAt publicHash 3 level.val tree.toNat (sideNumber side) 0 0
       ((List.ofFn fun chain => truncate (graph (.chain ⟨level, tree, side, chain⟩ 6))).flatMap bytes)
@@ -26,9 +26,9 @@ def LayerCollision (privateAnswers : PrivateTable) (graph : Labels) (base : Hash
         (7 - (digit message chain).val) (signature.values chain))).flatMap bytes) ∨
     ∃ chain offset, ∃ within : offset < 7 - (digit message chain).val,
       CollisionAt publicHash 2 level.val tree.toNat (sideNumber side) chain.val ((digit message chain).val + offset)
-        (bytes (chainPoint privateAnswers graph ⟨level, tree, side, chain⟩
+        (chainPayload (chainPoint privateAnswers graph ⟨level, tree, side, chain⟩
           ⟨(digit message chain).val + offset, by have := (digit message chain).isLt; omega⟩))
-        (bytes (walk (chainHash publicHash level.val tree.toNat side chain) (digit message chain).val offset
+        (chainPayload (walk (chainHash publicHash level.val tree.toNat side chain) (digit message chain).val offset
           (signature.values chain))))
 
 theorem collision_public (privateAnswers : PrivateTable) (graph : Labels) (base : Hash)

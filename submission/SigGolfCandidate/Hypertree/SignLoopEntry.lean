@@ -59,6 +59,7 @@ theorem loaded_loop_entry (hash : Hash) (secretKey : SecretKey) (cache : Cache) 
     (Loader.sign_secretKey submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
     (Loader.sign_zeroSlot submission (admitted.2 .sign) (by rfl) (by rfl) secretKey cache message initial loaded)
     (Loader.sign_message submission (admitted.2 .sign) (by rfl) secretKey cache message initial loaded)
+    (Loader.sign_scratch submission (admitted.2 .sign) (by rfl) (by rfl) secretKey cache message initial loaded)
   refine ⟨initial,final,loaded,run,fpc,index,sp.trans (loaded_stack secretKey cache message initial loaded),?_,mode,pointer,?_,?_,randomizer,?_⟩
   · rw [frame _ (by unfold OutsidePrefix OutsideIndexWork; decide)]
     exact loaded_scratch secretKey cache message initial loaded _ (by decide)

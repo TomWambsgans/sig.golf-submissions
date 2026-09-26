@@ -26,7 +26,7 @@ theorem chain_prepare (s : MachineState) (level tree : Nat) (side : Bool)
     ∃ final, OrdinarySteps verify s 23 final ∧ final.pc = 0x14ec ∧
       ChainData final level tree side chain digit.val value ∧
       final.getReg .x1 = s.getReg .x1 ∧ final.getReg .x2 = s.getReg .x2 ∧
-      (∀ a, a ≠ 0x80510 → a ≠ 0x80518 → a ≠ 0x80438 → final.getMem a = s.getMem a) := by
+      (∀ a, a ≠ 0x80030 → a ≠ 0x80038 → a ≠ 0x80438 → final.getMem a = s.getMem a) := by
   have valuePC : (chainValueState s).pc = 0x14d0 := by rw [chainValueState_pc, pc]; rfl
   have digitAddress : (0x80600 : Word) + BitVec.ofNat 64 chain.val = BitVec.ofNat 64 (0x80600 + chain.val) :=
     (BitVec.ofNat_add _ _).symm
@@ -36,7 +36,7 @@ theorem chain_prepare (s : MachineState) (level tree : Nat) (side : Bool)
       decide_true, Bool.and_true, decide_eq_true_eq]
     have := chain.isLt
     omega
-  have memory (a : Word) (notStep : a ≠ 0x80438) (notHigh : a ≠ 0x80518) (notLow : a ≠ 0x80510) :
+  have memory (a : Word) (notStep : a ≠ 0x80438) (notHigh : a ≠ 0x80038) (notLow : a ≠ 0x80030) :
       (chainDigitState (chainValueState s)).getMem a = s.getMem a := by
     rw [chainDigitState_mem, if_neg notStep, chainValueState_mem, if_neg notHigh, if_neg notLow]
   refine ⟨chainDigitState (chainValueState s),
@@ -58,10 +58,10 @@ theorem chain_prepare (s : MachineState) (level tree : Nat) (side : Bool)
       exact indexEq i
     · intro i
       fin_cases i
-      · change (chainDigitState (chainValueState s)).getMem 0x80510 = _
+      · change (chainDigitState (chainValueState s)).getMem 0x80030 = _
         rw [chainDigitState_mem, if_neg (by decide), chainValueState_mem, if_neg (by decide), if_pos rfl]
         exact value0
-      · change (chainDigitState (chainValueState s)).getMem 0x80518 = _
+      · change (chainDigitState (chainValueState s)).getMem 0x80038 = _
         rw [chainDigitState_mem, if_neg (by decide), chainValueState_mem, if_pos rfl]
         exact value8
   · exact (chainDigitState_stack _).1.trans (chainValueState_stack s).1

@@ -72,6 +72,8 @@ theorem query_eq (s : MachineState) (head : Word) (tree : Nat) (values : Referen
   apply Serialization.hashInput_of_list s 0x80000 (payload head tree values)
   · exact source
   · rw [bits,payload_length]; rfl
+  · rw [payload_length]
+  · rw [payload_length]; decide
   · intro i hi
     have bound : i < 768 := by simpa using hi
     rw [Signing.getByte_word s 0x80000 i (by decide) (by omega),words ⟨i/8,by omega⟩]
@@ -106,8 +108,8 @@ theorem hash_trace (image : Image) (hash : Hash) (s : MachineState)
     (destination : s.getReg .x12 = 0x80300) :
     Trace hash image s 1 96 1 12 (writeHash s (hash (hashInput s))) := by
   have valid := Keygen.hash_arguments s 768 source bits destination (by decide)
-  have len : (hashInput s).1 = 6144 := by simp [hashInput,bits]
-  simpa [len,compressions] using Trace.hash s _ 0 0 0 0 code service valid (Trace.refl _)
+  have len : (hashInput s).1 = 11 := by simp [hashInput,bits]
+  simpa [len,Query.blocks] using Trace.hash s _ 0 0 0 0 code service valid (Trace.refl _)
 
 /-- info: 'SigGolfCandidate.Hypertree.KeygenLeaf.answer_words' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

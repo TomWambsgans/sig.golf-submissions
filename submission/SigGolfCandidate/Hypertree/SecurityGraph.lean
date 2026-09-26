@@ -39,8 +39,7 @@ theorem Address.input_eq (address : Address) (payload : List Byte) :
 theorem Address.eq_of_input_eq {first second : Address} {payload payload' : List Byte}
     (same : first.input payload = second.input payload') : first = second := by
   rw [Address.input_eq, Address.input_eq] at same
-  have bytesEq := packed_injective same
-  have prefixEq := List.append_inj_left bytesEq (by simp [bytes])
+  have prefixEq := packed_prefix same (by simp [bytes])
   have headerEq := bytes_injective 8 (List.append_inj_left prefixEq (by simp [bytes]))
   have treeEq := bytes_injective 24 (List.append_inj_right prefixEq (by simp [bytes]))
   have arithmetic := congrArg BitVec.toNat headerEq
@@ -152,7 +151,7 @@ abbrev Labels := Position → BitVec 256
 /-- Inputs are the exact candidate payloads. Canonical outputs can consequently be
 sampled independently and planted at one separated input per position. -/
 def Position.payload (privateAnswers : Slot → BitVec 256) (labels : Labels) : Position → List Byte
-  | .chain address step => bytes (if zero : step.val = 0 then truncate (privateAnswers (.chain address))
+  | .chain address step => chainPayload (if zero : step.val = 0 then truncate (privateAnswers (.chain address))
       else truncate (labels (.chain address ⟨step.val - 1, by omega⟩)))
   | .leaf level tree side =>
       (List.ofFn (fun chain : Chain => truncate (labels (.chain ⟨level, tree, side, chain⟩ 6)))).flatMap bytes

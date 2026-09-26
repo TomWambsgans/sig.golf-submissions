@@ -75,8 +75,8 @@ theorem captureBottom_pc (s : MachineState) : (captureBottomState s).pc = s.pc +
 theorem captureBottom_mem (s : MachineState) (a : Word) :
     (captureBottomState s).getMem a =
       if s.getMem 0x80440 ≠ 0 ∧ s.getMem 0x80428 = s.getMem 0x80420 then
-        if a = s.getMem 0x80448 + 8 then s.getMem 0x80518 else
-        if a = s.getMem 0x80448 then s.getMem 0x80510 else s.getMem a
+        if a = s.getMem 0x80448 + 8 then s.getMem 0x80038 else
+        if a = s.getMem 0x80448 then s.getMem 0x80030 else s.getMem a
       else s.getMem a := by
   unfold captureBottomState
   split

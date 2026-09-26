@@ -73,7 +73,7 @@ theorem chain_step (privateAnswers : PrivateTable) (labels : Labels)
         (chainPoint privateAnswers labels address ⟨step.val, by omega⟩)) =
       pure (chainPoint privateAnswers labels address step.succ) := by
   have input : SecurityReference.ask 2 address.level.val address.tree.toNat (sideNumber address.side)
-      address.chain.val step.val (bytes (chainPoint privateAnswers labels address ⟨step.val, by omega⟩)) =
+      address.chain.val step.val (chainPayload (chainPoint privateAnswers labels address ⟨step.val, by omega⟩)) =
       (liftM (HashSpec.query ((Position.chain address step).input privateAnswers labels))) := rfl
   simp only [SecurityReference.chainHash, publicExecute, simulateQ_map]
   change truncate <$> publicExecute privateAnswers labels _ = _

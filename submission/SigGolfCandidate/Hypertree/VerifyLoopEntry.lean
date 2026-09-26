@@ -5,29 +5,6 @@ namespace SigGolfCandidate.Hypertree.Verifying
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Keygen Signing
 set_option maxRecDepth 8192
 
-/-- Scratch memory starts at zero, beyond every verifier input. -/
-theorem loaded_scratch (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
-    (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s)
-    (a : Word) (high : 0x80000 ≤ a.toNat) : s.getMem a = 0 := by
-  unfold initialState at loaded
-  rw [if_pos (admitted.2 .verify)] at loaded
-  cases Option.some.inj loaded
-  dsimp only [submission]
-  dsimp only [inputBuffers, Riscv.standardLayout, Layout.message, Layout.secretKey, Layout.publicKey, Layout.cache, Layout.signature, Layout.witness, List.foldl_cons, List.foldl_nil]
-  rw [MachineState.getMem_setReg]
-  rw [show witnessBase ⟨signatureBytes, signatureBytes⟩ = 0x3d3b0 by decide]
-  rw [Memory.write_preserves _ 0x3d3b0 (bytes witness) a
-    (by rw [Memory.bytes_length (n := signatureBytes)]; decide)
-    (by right; rw [Memory.bytes_length (n := signatureBytes)]; change 370432 ≤ a.toNat; omega)]
-  rw [Memory.write_preserves _ 0x40 (bytes pk) a
-    (by rw [Memory.bytes_length]; decide)
-    (by right; rw [Memory.bytes_length]; omega)]
-  rw [Memory.write_preserves _ 0 (bytes message) a
-    (by rw [Memory.bytes_length]; decide)
-    (by right; rw [Memory.bytes_length]; omega)]
-  rw [show verify.data = [] by rfl, MachineState.writeBytesAsWords_nil]
-  rfl
-
 theorem loaded_stack (pk : PublicKey) (message : Message) (witness : Bytes signatureBytes)
     (s : MachineState) (loaded : initialState submission .verify (message, pk, witness) = some s) :
     s.getReg .x2 = 0x1000000 := by
@@ -66,7 +43,7 @@ theorem loaded_loop_entry (hash : Hash) (pk : PublicKey) (message : Message) (wi
     rw [BitVec.extractLsb'_extractLsb'_of_le (by omega)]
   obtain ⟨final, trace, finalpc, index, mode, pointer, frame⟩ := entry_index_frame hash initial message
     (SignatureEncoding.decode witness).randomizer pc (loaded_zeroSlot pk message witness initial loaded)
-    (loaded_message pk message witness initial loaded) randomizer
+    (loaded_message pk message witness initial loaded) randomizer (loaded_padding pk message witness initial loaded)
   refine ⟨initial, final, loaded, trace, finalpc, index, ?_, ?_, mode, pointer, ?_, ?_, ?_⟩
   · exact (entry_stack hash initial final pc trace).trans (loaded_stack pk message witness initial loaded)
   · rw [frame 0x80400 (by unfold OutsideIndexPrefix; decide) (by decide) (by decide)]

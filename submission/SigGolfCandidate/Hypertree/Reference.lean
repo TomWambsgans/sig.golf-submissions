@@ -6,10 +6,14 @@ open SigGolf
 abbrev Digest := Bytes 16
 abbrev Chain := Fin 46
 
-/-- Little-endian packing with the length retained in the oracle input. -/
+/-- The little-endian number of a byte string. -/
+def packValue (data : List Byte) : Nat :=
+  data.zipIdx.foldl (fun acc entry => acc + entry.1.toNat * 2 ^ (8 * entry.2)) 0
+
+/-- Little-endian packing into whole 64-byte oracle blocks: the bytes are followed by zero bytes up to
+the next block boundary, with at least one block. The block count is part of the oracle input. -/
 def packed (data : List Byte) : Query :=
-  ⟨8 * data.length, BitVec.ofNat (8 * data.length)
-    (data.zipIdx.foldl (fun acc entry => acc + entry.1.toNat * 2 ^ (8 * entry.2)) 0)⟩
+  ⟨(data.length - 1) / 64, BitVec.ofNat (8 * (64 * ((data.length - 1) / 64 + 1))) (packValue data)⟩
 
 /-- The exact 32-byte domain header used by the bytecode. -/
 def query (hash : Hash) (tag level tree leaf chain step : Nat) (payload : List Byte) : BitVec 256 :=
@@ -32,9 +36,12 @@ def digit (message : Digest) (i : Chain) : Fin 8 :=
 def secret (hash : Hash) (secretKey : SecretKey) (level tree : Nat) (side : Bool) (chain : Chain) : Digest :=
   truncate (query hash 1 level tree (sideNumber side) chain.val 0 (bytes secretKey))
 
+/-- A chain step hashes one 64-byte block: the 32-byte header and the 16-byte value twice. -/
+def chainPayload (value : Digest) : List Byte := bytes value ++ bytes value
+
 def chainHash (hash : Hash) (level tree : Nat) (side : Bool) (chain : Chain)
     (step : Nat) (value : Digest) : Digest :=
-  truncate (query hash 2 level tree (sideNumber side) chain.val step (bytes value))
+  truncate (query hash 2 level tree (sideNumber side) chain.val step (chainPayload value))
 
 def endpoint (hash : Hash) (secretKey : SecretKey) (level tree : Nat) (side : Bool) (chain : Chain) : Digest :=
   walk (chainHash hash level tree side chain) 0 7 (secret hash secretKey level tree side chain)
@@ -133,10 +140,12 @@ theorem roots_after_succ (hash : Hash) (secretKey : SecretKey) (count level inde
     simp [Nat.div_div_eq_div_mul, pow_succ, Nat.add_comm, Nat.add_left_comm,
       Nat.mul_comm]
 
+/-- The 96-byte randomizer input is zero-padded to two blocks. -/
 def randomizer (hash : Hash) (secretKey : SecretKey) (message : Message) : Bytes 32 :=
   query hash 6 0 0 0 0 0 (bytes secretKey ++ bytes message)
 
-/-- Signing never receives the public key, so the index input keeps a 16-byte zero slot before the message. -/
+/-- Signing never receives the public key, so the index input keeps a 16-byte zero slot before the message.
+Its 112 bytes are zero-padded to two blocks. -/
 def indexOf (hash : Hash) (message : Message) (r : Bytes 32) : BitVec 160 :=
   (query hash 5 0 0 0 0 0 (bytes (0 : Bytes 16) ++ bytes message ++ bytes r)).extractLsb' 0 160
 

@@ -58,10 +58,10 @@ def input (secretKey : SecretKey) : Slot → Query
   | .randomizer message => randomizerInput secretKey message
 
 @[simp] theorem chain_input_length (secretKey : SecretKey) (address : ChainAddress) :
-    (input secretKey (.chain address)).1 = 512 := by simp [input, bytes]
+    (input secretKey (.chain address)).1 = 0 := by simp [input, bytes]
 
 @[simp] theorem nonce_input_length (secretKey : SecretKey) (message : Message) :
-    (input secretKey (.randomizer message)).1 = 768 := by simp [input]
+    (input secretKey (.randomizer message)).1 = 1 := by simp [input]
 
 theorem input_secretKeyAt (secretKey : SecretKey) (slot : Slot) : SecretKeyAt (input secretKey slot) secretKey := by
   cases slot with
@@ -84,7 +84,7 @@ theorem input_injective (secretKey : SecretKey) : Function.Injective (input secr
     cases second with
     | chain second =>
       rw [chain_input_eq, chain_input_eq] at same
-      have h := packed_injective same
+      have h := packed_injective same (by simp [bytes])
       have payload := List.append_cancel_right h
       have hh := bytes_injective 8 (List.append_inj_left payload (by simp [bytes]))
       have tree := bytes_injective 24 (List.append_inj_right payload (by simp [bytes]))
@@ -101,7 +101,7 @@ theorem input_injective (secretKey : SecretKey) : Function.Injective (input secr
       have h := congrArg Sigma.fst same
       simp at h
     | randomizer message' =>
-      have h := packed_injective same
+      have h := packed_injective same (by simp [bytes])
       have hb : bytes message = bytes message' := by
         simpa [input, randomizerInput, addressedInput, List.append_assoc] using h
       exact congrArg Slot.randomizer (bytes_injective 32 hb)

@@ -22,7 +22,7 @@ theorem forgetHash_models {a : AbstractState} {s : MachineState} (h : a.Models s
     hd, h.pc, BitVec.add_assoc] using m4.setPC (a.pc + 4)
 
 def hashGuard (source bytes destination : Word) : Bool :=
-  decide (source.toNat % 8 = 0) && decide (bytes.toNat % 8 = 0) && rangeValid source bytes.toNat &&
+  decide (source.toNat % 8 = 0) && decide (0 < bytes.toNat ∧ bytes.toNat % 64 = 0) && rangeValid source bytes.toNat &&
     accessValid destination 8 && rangeValid destination 32
 
 def hashTransfer (a : AbstractState) : Option (AbstractState × Nat) := do
@@ -30,12 +30,12 @@ def hashTransfer (a : AbstractState) : Option (AbstractState × Nat) := do
   let bytes ← a.getReg .x11
   let destination ← a.getReg .x12
   if hashGuard source bytes destination then
-    some (forgetHash a destination, compressions (8 * bytes.toNat))
+    some (forgetHash a destination, bytes.toNat / 64 - 1 + 1)
   else none
 
 theorem hashTransfer_sound {a next : AbstractState} {s : MachineState} {blocks : Nat}
     (h : a.Models s) (step : hashTransfer a = some (next, blocks)) (answer : BitVec 256) :
-    hashArgumentsValid s = true ∧ blocks = compressions (hashInput s).1 ∧
+    hashArgumentsValid s = true ∧ blocks = (hashInput s).blocks ∧
       next.Models (writeHash s answer) := by
   unfold hashTransfer at step
   cases hsrc : a.getReg .x10 with
@@ -55,7 +55,7 @@ theorem hashTransfer_sound {a next : AbstractState} {s : MachineState} {blocks :
           have edst := h.regs .x12 destination hdst
           refine ⟨?_, ?_, forgetHash_models h destination edst answer⟩
           · simpa only [hashArgumentsValid, hashGuard, esrc, ebits, edst] using valid
-          · simp only [hashInput, ebits]
+          · simp only [Query.blocks, hashInput, ebits]
         · simp [hsrc, hbits, hdst, valid] at step
 
 end SigGolfCandidate.Resources

@@ -13,7 +13,7 @@ structure Invariant (level tree step : Nat) (side : Bool) (chain : Reference.Cha
   stepWord : s.getMem 0x80438 = BitVec.ofNat 64 step
   indexWords : ∀ i : Fin 3, s.getMem (Signing.wordAddress 0x80408 i.val) =
     (BitVec.ofNat 192 tree).extractLsb' (64*i.val) 64
-  valueWords : ∀ i : Fin 2, s.getMem (Signing.wordAddress 0x80510 i.val) = value.extractLsb' (64*i.val) 64
+  valueWords : ∀ i : Fin 2, s.getMem (Signing.wordAddress 0x80030 i.val) = value.extractLsb' (64*i.val) 64
   modeWord : s.getMem 0x80440 = 0
 
 theorem Invariant.of_mem_eq {level tree step : Nat} {side : Bool} {chain : Reference.Chain}
@@ -32,7 +32,7 @@ theorem Invariant.of_mem_eq {level tree step : Nat} {side : Bool} {chain : Refer
 def Outside (a : Word) : Prop :=
   a ≠ 0x80438 ∧ (∀ i : Fin 8, a ≠ Signing.wordAddress 0x80000 i.val) ∧
     (∀ i : Fin 4, a ≠ Signing.wordAddress 0x80300 i.val) ∧
-    (∀ i : Fin 2, a ≠ Signing.wordAddress 0x80510 i.val)
+    (∀ i : Fin 2, a ≠ Signing.wordAddress 0x80030 i.val)
 
 instance (a : Word) : Decidable (Outside a) :=
   inferInstanceAs (Decidable (_ ∧ _ ∧ _ ∧ _))
@@ -104,7 +104,7 @@ theorem step (hash : Hash) (s : MachineState) (pc : s.pc = 0x1318)
       rw [increment_mem,if_neg outside.1,metadata _ outside]
       exact inv.indexWords i
     · intro i
-      have ne : Signing.wordAddress 0x80510 i.val ≠ (0x80438:Word) := by fin_cases i <;> decide
+      have ne : Signing.wordAddress 0x80030 i.val ≠ (0x80438:Word) := by fin_cases i <;> decide
       rw [increment_mem,if_neg ne]
       exact words i
     · rw [increment_mem]; simp only [show (0x80440:Word) ≠ 0x80438 by decide,↓reduceIte]

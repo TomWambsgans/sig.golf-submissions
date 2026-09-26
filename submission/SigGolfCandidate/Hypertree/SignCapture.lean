@@ -110,20 +110,20 @@ theorem captureSelector_block (image : Image) (base : Word) (offset : BitVec 13)
 
 def captureWriteInstructions : List Instr := [
   .LUI .x28 0x80,
-  .ADDI .x28 .x28 0x510,
+  .ADDI .x28 .x28 0x30,
   .LD .x10 .x28 0,
   .LUI .x28 0x80,
-  .ADDI .x28 .x28 0x518,
+  .ADDI .x28 .x28 0x38,
   .LD .x11 .x28 0,
   .SD .x7 .x10 0,
   .SD .x7 .x11 8]
 
 def captureWriteState (s : MachineState) : MachineState :=
   let s := execInstrBr s (.LUI .x28 0x80)
-  let s := execInstrBr s (.ADDI .x28 .x28 0x510)
+  let s := execInstrBr s (.ADDI .x28 .x28 0x30)
   let s := execInstrBr s (.LD .x10 .x28 0)
   let s := execInstrBr s (.LUI .x28 0x80)
-  let s := execInstrBr s (.ADDI .x28 .x28 0x518)
+  let s := execInstrBr s (.ADDI .x28 .x28 0x38)
   let s := execInstrBr s (.LD .x11 .x28 0)
   let s := execInstrBr s (.SD .x7 .x10 0)
   execInstrBr s (.SD .x7 .x11 8)
@@ -138,10 +138,10 @@ theorem captureWrite_block (image : Image) (base : Word)
     (safeNext : accessValid (s.getReg .x7 + 8) 8 = true) :
     OrdinarySteps image s 8 (captureWriteState s) := by
   let s1 := execInstrBr s (.LUI .x28 0x80)
-  let s2 := execInstrBr s1 (.ADDI .x28 .x28 0x510)
+  let s2 := execInstrBr s1 (.ADDI .x28 .x28 0x30)
   let s3 := execInstrBr s2 (.LD .x10 .x28 0)
   let s4 := execInstrBr s3 (.LUI .x28 0x80)
-  let s5 := execInstrBr s4 (.ADDI .x28 .x28 0x518)
+  let s5 := execInstrBr s4 (.ADDI .x28 .x28 0x38)
   let s6 := execInstrBr s5 (.LD .x11 .x28 0)
   let s7 := execInstrBr s6 (.SD .x7 .x10 0)
   let s8 := execInstrBr s7 (.SD .x7 .x11 8)
@@ -149,7 +149,7 @@ theorem captureWrite_block (image : Image) (base : Word)
   · apply code _ 0
     simp [execInstrBr, pc, BitVec.add_assoc]
   · rfl
-  apply OrdinarySteps.step s1 s2 _ (.base (.ADDI .x28 .x28 0x510)) 6
+  apply OrdinarySteps.step s1 s2 _ (.base (.ADDI .x28 .x28 0x30)) 6
   · apply code _ 1
     simp [s1, execInstrBr, pc, BitVec.add_assoc]
   · rfl
@@ -161,7 +161,7 @@ theorem captureWrite_block (image : Image) (base : Word)
   · apply code _ 3
     simp [s1, s2, s3, execInstrBr, pc, BitVec.add_assoc]
   · rfl
-  apply OrdinarySteps.step s4 s5 _ (.base (.ADDI .x28 .x28 0x518)) 3
+  apply OrdinarySteps.step s4 s5 _ (.base (.ADDI .x28 .x28 0x38)) 3
   · apply code _ 4
     simp [s1, s2, s3, s4, execInstrBr, pc, BitVec.add_assoc]
   · rfl
@@ -212,8 +212,8 @@ theorem captureWrite_pc (s : MachineState) : (captureWriteState s).pc = s.pc + 3
   simp [captureWriteState, execInstrBr, BitVec.add_assoc]
 
 theorem captureWrite_mem (s : MachineState) (a : Word) :
-    (captureWriteState s).getMem a = if a = s.getReg .x7 + 8 then s.getMem 0x80518 else
-      if a = s.getReg .x7 then s.getMem 0x80510 else s.getMem a := by
+    (captureWriteState s).getMem a = if a = s.getReg .x7 + 8 then s.getMem 0x80038 else
+      if a = s.getReg .x7 then s.getMem 0x80030 else s.getMem a := by
   simp [captureWriteState, execInstrBr, signExtend12, Expansion.mem_setMem,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 

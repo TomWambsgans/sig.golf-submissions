@@ -44,6 +44,8 @@ theorem query_eq (s : MachineState) (level tree : Nat) (left right : Reference.D
   apply Serialization.hashInput_of_list s 0x80000 (payload level tree left right)
   · exact source
   · rw [bits, payload_length]; rfl
+  · rw [payload_length]
+  · rw [payload_length]; decide
   · intro i hi
     have bound : i < 64 := by simpa using hi
     rw [Signing.getByte_word s 0x80000 i (by decide) (by omega), words ⟨i / 8, by omega⟩]
@@ -84,9 +86,9 @@ theorem hashes_node (image : Image) (hash : Hash) (s : MachineState)
         (Reference.node hash level tree left right).extractLsb' (64 * i.val) 64 := by
   let answer := hash (hashInput s)
   have valid := Keygen.hash_arguments s 64 source bits destination (by decide)
-  have len : (hashInput s).1 = 512 := by simp [hashInput, bits]
+  have len : (hashInput s).1 = 0 := by simp [hashInput, bits]
   refine ⟨writeHash s answer, ?_, Keygen.hash_pc _ _, ?_⟩
-  · simpa [len, compressions] using
+  · simpa [len, Query.blocks] using
       Trace.hash s (writeHash s answer) 0 0 0 0 code service valid (Trace.refl _)
   · exact node_answer hash s level tree left right source bits destination words
 

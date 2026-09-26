@@ -11,9 +11,8 @@ theorem addressedInput_header_eq {tag level tree leaf chain step tag' level' tre
       addressedInput tag' level' tree' leaf' chain' step' payload') :
     BitVec.ofNat 64 (tag + level * 2 ^ 8 + leaf * 2 ^ 16 + chain * 2 ^ 24 + step * 2 ^ 32) =
       BitVec.ofNat 64 (tag' + level' * 2 ^ 8 + leaf' * 2 ^ 16 + chain' * 2 ^ 24 + step' * 2 ^ 32) := by
-  have h := packed_injective same
-  have headers := List.append_inj_left h (by simp [bytes])
-  exact bytes_injective 8 (List.append_inj_left headers (by simp [bytes]))
+  simp only [addressedInput, List.append_assoc] at same
+  exact bytes_injective 8 (packed_prefix same (by simp [bytes]))
 
 private theorem header_tag (tag level leaf chain step : Nat) :
     (BitVec.ofNat 64 (tag + level * 2 ^ 8 + leaf * 2 ^ 16 + chain * 2 ^ 24 + step * 2 ^ 32)).toNat % 256 =

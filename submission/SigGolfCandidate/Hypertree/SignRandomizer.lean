@@ -9,7 +9,7 @@ set_option linter.unusedSimpArgs false
 def randomizerHashState (s : MachineState) : MachineState :=
   let s := execInstrBr s (.LUI .x10 0x80)
   let s := execInstrBr s (.ADDI .x10 .x10 0)
-  let s := execInstrBr s (.ADDI .x11 .x0 96)
+  let s := execInstrBr s (.ADDI .x11 .x0 128)
   let s := execInstrBr s (.LUI .x12 0x80)
   let s := execInstrBr s (.ADDI .x12 .x12 0x300)
   execInstrBr s (.ADDI .x5 .x0 0)
@@ -18,7 +18,7 @@ theorem randomizerHashState_block (s : MachineState) (pc : s.pc = 0x10b4) :
     OrdinarySteps sign s 6 (randomizerHashState s) := by
   let s1 := execInstrBr s (.LUI .x10 0x80)
   let s2 := execInstrBr s1 (.ADDI .x10 .x10 0)
-  let s3 := execInstrBr s2 (.ADDI .x11 .x0 96)
+  let s3 := execInstrBr s2 (.ADDI .x11 .x0 128)
   let s4 := execInstrBr s3 (.LUI .x12 0x80)
   let s5 := execInstrBr s4 (.ADDI .x12 .x12 0x300)
   let s6 := execInstrBr s5 (.ADDI .x5 .x0 0)
@@ -30,7 +30,7 @@ theorem randomizerHashState_block (s : MachineState) (pc : s.pc = 0x10b4) :
   · have hp : s1.pc = 0x10b8 := by simp [s1, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s2 s3 _ (.base (.ADDI .x11 .x0 96)) 3
+  apply OrdinarySteps.step s2 s3 _ (.base (.ADDI .x11 .x0 128)) 3
   · have hp : s2.pc = 0x10bc := by simp [s1, s2, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
@@ -87,7 +87,7 @@ theorem randomizerCopyState_block (s : MachineState) (pc : s.pc = 0x10d0) :
 theorem randomizerHashState_regs (s : MachineState) :
     (randomizerHashState s).getReg .x5 = 0 ∧
     (randomizerHashState s).getReg .x10 = 0x80000 ∧
-    (randomizerHashState s).getReg .x11 = 96 ∧
+    (randomizerHashState s).getReg .x11 = 128 ∧
     (randomizerHashState s).getReg .x12 = 0x80300 := by
   simp [randomizerHashState, execInstrBr, signExtend12,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
@@ -139,13 +139,13 @@ theorem randomizer_trace (hash : Hash) (s : MachineState) (pc : s.pc = 0x10b4) :
   have hpc : hs.pc = 0x10cc := by simp [hs, randomizerHashState_pc, pc]
   obtain ⟨service, src, len, dst⟩ := randomizerHashState_regs s
   have hf : fetch sign hs = some (.base .ECALL) := by simp only [fetch, hpc]; decide
-  have hv : hashArgumentsValid hs = true := hash_arguments hs 96 src len dst (by decide)
-  have hlen : (hashInput hs).1 = 768 := by simp [hashInput, hs, len]
+  have hv : hashArgumentsValid hs = true := hash_arguments hs 128 src len dst (by decide)
+  have hlen : (hashInput hs).1 = 1 := by simp [hashInput, hs, len]
   let answer := hash (hashInput hs)
   have outpc : (writeHash hs answer).pc = 0x10d0 := by simp [hash_pc, hpc]
   obtain ⟨final, copied, finalpc, words⟩ := randomizer_copy (writeHash hs answer) outpc
   have call : Trace hash sign hs 1 16 1 2 (writeHash hs answer) := by
-    simpa [hlen, compressions] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
+    simpa [hlen, Query.blocks] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
       (Trace.refl (writeHash hs answer))
   refine ⟨final, ?_, finalpc, ?_⟩
   · exact ((randomizerHashState_block s pc).trace.trans call).trans copied.trace
@@ -183,8 +183,8 @@ theorem randomizer_trace_frame (hash : Hash) (s : MachineState) (pc : s.pc = 0x1
   have hpc : hs.pc = 0x10cc := by simp [hs, randomizerHashState_pc, pc]
   obtain ⟨service, src, len, dst⟩ := randomizerHashState_regs s
   have hf : fetch sign hs = some (.base .ECALL) := by simp only [fetch, hpc]; decide
-  have hv : hashArgumentsValid hs = true := hash_arguments hs 96 src len dst (by decide)
-  have hlen : (hashInput hs).1 = 768 := by simp [hashInput, hs, len]
+  have hv : hashArgumentsValid hs = true := hash_arguments hs 128 src len dst (by decide)
+  have hlen : (hashInput hs).1 = 1 := by simp [hashInput, hs, len]
   let answer := hash (hashInput hs)
   have outpc : (writeHash hs answer).pc = 0x10d0 := by simp [hash_pc, hpc]
   obtain ⟨final, loop, inv, output, frame⟩ := copy_all sign 0x10e4 randomizer_copy_code
@@ -194,7 +194,7 @@ theorem randomizer_trace_frame (hash : Hash) (s : MachineState) (pc : s.pc = 0x1
   have copied : OrdinarySteps sign (writeHash hs answer) 29 final :=
     ordinary_trans sign _ _ final 5 24 (randomizerCopyState_block _ outpc) loop
   have call : Trace hash sign hs 1 16 1 2 (writeHash hs answer) := by
-    simpa [hlen, compressions] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
+    simpa [hlen, Query.blocks] using Trace.hash hs (writeHash hs answer) 0 0 0 0 hf service hv
       (Trace.refl (writeHash hs answer))
   refine ⟨final, ((randomizerHashState_block s pc).trace.trans call).trans copied.trace,
     by simpa [CopyInvariant] using inv.2.2.1, ?_, ?_⟩

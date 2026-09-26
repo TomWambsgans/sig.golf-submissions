@@ -9,7 +9,7 @@ set_option maxRecDepth 4096
 def Code (image : Image) (p : Word) : Prop :=
   KeygenSecretKey.Code image p ∧ KeygenSecretHeader.Code image (p+40) ∧
   instructionAt image (p+212) = some (.base .ECALL) ∧
-  CopySetupCode image (p+216) 0x300 0x510 2 ∧ CopyCode image (p+236)
+  CopySetupCode image (p+216) 0x300 0x30 2 ∧ CopyCode image (p+236)
 
 instance (image : Image) (p : Word) : Decidable (Code image p) :=
   inferInstanceAs (Decidable (_ ∧ _ ∧ _ ∧ _ ∧ _))
@@ -26,12 +26,12 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : Code image p)
     (hsecretKey : ∀ i : Fin 4, s.getMem (Signing.wordAddress 0x20 i.val) =
       secretKey.extractLsb' (64*i.val) 64) :
     ∃ final, Trace hash image s 89 96 1 1 final ∧ final.pc = p+260 ∧
-      (∀ i : Fin 2, final.getMem (Signing.wordAddress 0x80510 i.val) =
+      (∀ i : Fin 2, final.getMem (Signing.wordAddress 0x80030 i.val) =
         (Reference.secret hash secretKey level tree side chain).extractLsb' (64*i.val) 64) ∧
       final.getReg .x1 = s.getReg .x1 ∧ final.getReg .x2 = s.getReg .x2 ∧
       (∀ a, (∀ i : Fin 8, a ≠ Signing.wordAddress 0x80000 i.val) →
         (∀ i : Fin 4, a ≠ Signing.wordAddress 0x80300 i.val) →
-        (∀ i : Fin 2, a ≠ Signing.wordAddress 0x80510 i.val) →
+        (∀ i : Fin 2, a ≠ Signing.wordAddress 0x80030 i.val) →
         final.getMem a = s.getMem a) := by
   obtain ⟨copied,pre,cpc,content,cra,csp,cframe⟩ :=
     KeygenSecretKey.copy image p code.1 s pc
@@ -63,7 +63,7 @@ theorem compute (image : Image) (hash : Hash) (p : Word) (code : Code image p)
   have suffixCode : CopyCode image ((p+216)+20) := by
     simpa [BitVec.add_assoc] using code.2.2.2.2
   obtain ⟨final,post,fpc,result,fra,fsp,fframe⟩ :=
-    copy_two image (p+216) 0x300 0x510 0x80300 0x80510 code.2.2.2.1 suffixCode
+    copy_two image (p+216) 0x300 0x30 0x80300 0x80030 code.2.2.2.1 suffixCode
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) hashed hashPC
   refine ⟨final,pre.trace.trans (headTrace.trace.trans (hashTrace.trans post.trace)),?_,?_,?_,?_,?_⟩
   · simpa [BitVec.add_assoc] using fpc
