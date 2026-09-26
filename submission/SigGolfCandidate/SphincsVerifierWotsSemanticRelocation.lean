@@ -3969,6 +3969,49 @@ theorem upper_answer_sum_decoded (state : MachineState)
       rw [valid]
       decide
 
+theorem upper_decoder_checksum_of_abstract (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (query : hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter lay tree leaf message counter) =
+        some encoding) :
+    let hashed := writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state)))
+    (firstUpperPaddingState hashed).getReg .x15 +
+      SphincsVerifierWotsDecodeData.answerSum 52
+        (firstUpperPaddingState hashed) = 194 := by
+  let ready := upperPrehashState target state
+  let answer := hash (hashInput ready)
+  obtain ⟨_run, _readyPc, _source, _bits, destination, _service⟩ :=
+    upper_prehash_block target state pc small
+  have decoded : TargetSum.decodeDigest (truncateHash answer) =
+      some encoding := by
+    change TargetSum.decodeDigest (truncateHash
+      (hash (hashInput (upperPrehashState target state)))) = some encoding
+    rw [query]
+    exact upper_decode_of_abstract hash pk lay tree leaf message counter
+      encoding honest
+  have prefixResult := upper_decoder_prefix_of_abstract target hash state pk lay
+    tree leaf message counter encoding pc small query honest
+  have zero : (firstUpperPaddingState (writeHash ready answer)).getReg .x15 = 0 :=
+    prefixResult.2.2
+  have sum := upper_answer_sum_decoded ready answer destination encoding decoded
+  change (firstUpperPaddingState (writeHash ready answer)).getReg .x15 +
+    SphincsVerifierWotsDecodeData.answerSum 52
+      (firstUpperPaddingState (writeHash ready answer)) = 194
+  rw [zero, sum]
+  decide
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_checksum_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_checksum_of_abstract
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upperAnswerDigit_eq_encoding
