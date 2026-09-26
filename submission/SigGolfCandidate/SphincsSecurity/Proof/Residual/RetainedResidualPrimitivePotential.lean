@@ -2733,3 +2733,262 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_budget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyRun_worldStep_fault_hashCalls
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (query : (World inputs).Domain) (state after : State inputs)
+    (hresult : lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (liftM ((World inputs).query query)) state (none, after) ≠ 0) :
+    after.memory.external.hashCalls = state.memory.external.hashCalls +
+      WeightedCutoff.residualCharge inputs query := by
+  cases query with
+  | inl control =>
+      cases control with
+      | byte routing input =>
+          cases input with
+          | prepare input =>
+              simp_all [lazyRun, runWith, lazyImpl, environment,
+                ResidualByteFrontend.environment, PMF.pure_map, SPMF.lift_pure]
+          | random input =>
+              simp only [lazyRun, runWith, simulateQ_spec_query, lazyImpl, environment,
+                ResidualByteFrontend.environment, OptionT.run_mk, StateT.run_mk,
+                ← PMF.monad_map_eq_map, liftM_map, bind_map_left] at hresult
+              obtain ⟨sample, _, hpure⟩ := (RetainedObservation.bind_nonzero _ _ _).mp hresult
+              simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hpure
+              cases hpure
+          | account cost =>
+              simp_all [lazyRun, runWith, lazyImpl, environment,
+                ResidualByteFrontend.environment, PMF.pure_map, SPMF.lift_pure]
+          | stop =>
+              simp_all [lazyRun, runWith, simulateQ_spec_query, lazyImpl, environment,
+                ResidualByteFrontend.environment, WeightedCutoff.residualCharge,
+                afterControl, PMF.pure_map, SPMF.lift_pure, project]
+      | routing =>
+          simp only [lazyRun, runWith, simulateQ_spec_query, lazyImpl, environment,
+            OptionT.run_mk, StateT.run_mk, SPMF.lift_pure, pure_bind,
+            ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+          cases hresult
+      | transcript =>
+          simp_all [lazyRun, runWith, lazyImpl, environment,
+            PMF.pure_map, SPMF.lift_pure]
+      | record message result =>
+          simp_all [lazyRun, runWith, lazyImpl, environment,
+            PMF.pure_map, SPMF.lift_pure]
+  | inr action =>
+      cases action with
+      | read input =>
+          simp only [lazyRun, runWith, simulateQ_spec_query, lazyImpl,
+            OptionT.run_mk, StateT.run_mk] at hresult
+          obtain ⟨sample, _, hpure⟩ := (RetainedObservation.bind_nonzero _ _ _).mp hresult
+          simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hpure
+          cases hpure
+      | probe input test =>
+          simp only [lazyRun, runWith, simulateQ_spec_query, lazyImpl,
+            OptionT.run_mk, StateT.run_mk] at hresult
+          cases hrow : state.rows input with
+          | some known =>
+              simp only [hrow, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+              cases hresult
+          | none =>
+              simp only [hrow] at hresult
+              rw [RetainedObservation.observe_nonzero] at hresult
+              rcases hresult with ⟨_, hstop⟩ | ⟨sample, _, hpure⟩
+              · simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hstop
+                cases hstop
+                simp [stoppedState, environment, WeightedCutoff.residualCharge]
+              · simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hpure
+                cases hpure
+      | disclose coordinate =>
+          simp only [lazyRun, runWith, simulateQ_spec_query, lazyImpl,
+            OptionT.run_mk, StateT.run_mk] at hresult
+          obtain ⟨sample, _, hpure⟩ := (RetainedObservation.bind_nonzero _ _ _).mp hresult
+          simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hpure
+          cases hpure
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_worldStep_fault_hashCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_worldStep_fault_hashCalls
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyRun_hashCalls_mono {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (result : Option Result × State inputs)
+    (hresult : lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      program state result ≠ 0) :
+    state.memory.external.hashCalls ≤ result.2.memory.external.hashCalls := by
+  induction program using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [lazyRun, runWith_pure, ne_eq, SPMF.pure_apply_eq_zero_iff,
+        not_not] at hresult
+      cases hresult
+      exact le_rfl
+  | query_bind query next ih =>
+      rw [lazyRun, runWith_query_bind, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨middle, hmiddle, htail⟩ := hresult
+      rcases middle with ⟨option, after⟩
+      cases option with
+      | none =>
+          have hstep := lazyRun_worldStep_fault_hashCalls parameter inputs hencoding
+            words publicReplies selections rows query state after
+            (by simpa only [lazyRun, runWith, simulateQ_spec_query] using hmiddle)
+          simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+            not_not] at htail
+          cases htail
+          rw [hstep]
+          exact Nat.le_add_right _ _
+      | some answer =>
+          have hstep := lazyRun_worldStep_hashCalls parameter inputs hencoding
+            words publicReplies selections rows query state answer after
+            (by simpa only [lazyRun, runWith, simulateQ_spec_query] using hmiddle)
+          simp only [Option.elim_some] at htail
+          have hle : state.memory.external.hashCalls ≤ after.memory.external.hashCalls := by
+            rw [hstep]
+            exact Nat.le_add_right _ _
+          exact hle.trans (ih answer after result htail)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_hashCalls_mono' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_hashCalls_mono
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem lazyRun_query_bind_hashCalls_min {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (query : (World inputs).Domain)
+    (next : (World inputs).Range query → OracleComp (World inputs) Result)
+    (state : State inputs) (result : Option Result × State inputs)
+    (hresult : lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (liftM ((World inputs).query query) >>= next) state result ≠ 0) :
+    state.memory.external.hashCalls + WeightedCutoff.residualCharge inputs query ≤
+      result.2.memory.external.hashCalls := by
+  rw [lazyRun, runWith_query_bind, RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨middle, hmiddle, htail⟩ := hresult
+  rcases middle with ⟨option, after⟩
+  cases option with
+  | none =>
+      have hstep := lazyRun_worldStep_fault_hashCalls parameter inputs hencoding
+        words publicReplies selections rows query state after
+        (by simpa only [lazyRun, runWith, simulateQ_spec_query] using hmiddle)
+      simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+        not_not] at htail
+      cases htail
+      exact hstep.ge
+  | some answer =>
+      have hstep := lazyRun_worldStep_hashCalls parameter inputs hencoding
+        words publicReplies selections rows query state answer after
+        (by simpa only [lazyRun, runWith, simulateQ_spec_query] using hmiddle)
+      simp only [Option.elim_some] at htail
+      rw [← hstep]
+      exact lazyRun_hashCalls_mono parameter inputs hencoding words publicReplies
+        selections rows (next answer) after result htail
+end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyRun_stopped_fault_event_eq_budget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (hremaining : state.memory.external.hashCalls + remaining = budget) :
+    Pr[fun result => result.1 = none |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining) state] =
+    Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        program state] := by
+  induction program using OracleComp.inductionOn generalizing state remaining with
+  | pure value =>
+      simp [WeightedCutoff.run_pure, lazyRun, runWith_pure, probEvent_pure]
+  | query_bind query next ih =>
+      rw [WeightedCutoff.run_query_bind]
+      by_cases allowed : WeightedCutoff.residualCharge inputs query ≤ remaining
+      · rw [if_pos allowed]
+        rw [lazyRun_bind, lazyRun_bind]
+        rw [probEvent_bind_eq_tsum, probEvent_bind_eq_tsum]
+        apply tsum_congr
+        intro middle
+        by_cases hm : Pr[= middle | lazyRun
+            (environment parameter inputs hencoding words publicReplies selections rows)
+            (liftM ((World inputs).query query)) state] = 0
+        · simp [hm]
+        · rcases middle with ⟨option, after⟩
+          cases option with
+          | none =>
+              have hstep := lazyRun_worldStep_fault_hashCalls parameter inputs hencoding
+                words publicReplies selections rows query state after hm
+              have hcost : after.memory.external.hashCalls ≤ budget := by omega
+              simp only [Option.elim_none, probEvent_pure]
+              simp [hcost]
+          | some answer =>
+              have hstep := lazyRun_worldStep_hashCalls parameter inputs hencoding
+                words publicReplies selections rows query state answer after hm
+              have hrem : after.memory.external.hashCalls +
+                  (remaining - WeightedCutoff.residualCharge inputs query) = budget := by omega
+              simp only [Option.elim_some]
+              rw [ih answer after (remaining - WeightedCutoff.residualCharge inputs query) hrem]
+      · rw [if_neg allowed]
+        simp only [lazyRun, runWith_pure, probEvent_pure]
+        have hleft : ¬((some none : Option (Option Result)) = none) := by simp
+        simp only [hleft, ↓reduceIte]
+        rw [probEvent_eq_tsum_ite]
+        symm
+        rw [ENNReal.tsum_eq_zero]
+        intro result
+        by_cases hr : Pr[= result | lazyRun
+            (environment parameter inputs hencoding words publicReplies selections rows)
+            (liftM ((World inputs).query query) >>= next) state] = 0
+        · change Pr[= result | runWith
+            (lazyImpl (environment parameter inputs hencoding words publicReplies selections rows))
+            (liftM ((World inputs).query query) >>= next) state] = 0 at hr
+          rw [hr]
+          split_ifs <;> rfl
+        · have hmin := lazyRun_query_bind_hashCalls_min parameter inputs hencoding
+            words publicReplies selections rows query next state result hr
+          have hover : ¬result.2.memory.external.hashCalls ≤ budget := by omega
+          simp [hover]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_query_bind_hashCalls_min' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_query_bind_hashCalls_min
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_fault_event_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_fault_event_eq_budget
