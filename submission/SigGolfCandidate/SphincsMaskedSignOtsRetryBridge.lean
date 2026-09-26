@@ -6130,4 +6130,34 @@ theorem first_bottom_initial_real_pointer (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_initial_real_pointer
 
+theorem first_bottom_initial_loop_state (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (pc : s.pc = 0x3a8c)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed)
+    (encoded : ∀ j : ChainIndex,
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+        BitVec.ofNat 8 (digits j.val).val) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      FirstBottomLoopState hash t parameter seed lay treeIdx leaf digits
+        ⟨0, by decide⟩ := by
+  obtain ⟨t, run, tpc, ctx, tselected, tchain, tpointer, tdigits⟩ :=
+    first_bottom_initial_real_pointer s parameter seed lay treeIdx leaf pc
+      layer tree selected par key
+  refine ⟨t, run, tpc, ctx, tselected, ?_, ?_, ?_, ?_⟩
+  · simpa using tchain
+  · simpa [FirstBottomLoopState] using tpointer
+  · intro j
+    exact (tdigits j).trans (encoded j)
+  · intro j impossible
+    simp at impossible
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_initial_loop_state' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_initial_loop_state
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
