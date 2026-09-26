@@ -1467,6 +1467,37 @@ theorem loaded_upper_chain_source_after_frame (target : Fin 5)
     (loaded_upper_chain_source target publicKey message pk signature initial
       loaded chain j hj)
 
+/-- The public-key prefix and all later WOTS sources share the same low-byte
+    frame invariant. -/
+theorem loaded_upper_prefix_after_frame
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial final : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address) :
+    SphincsVerifierHashBytes.WitnessPrefix final pk := by
+  have loadedPrefix : SphincsVerifierHashBytes.WitnessPrefix initial pk :=
+    SphincsVerifierLoader.loaded_prefix publicKey message
+      (SigGolfCandidate.SphincsWireEncoding.wire pk signature) pk initial
+      loaded (SigGolfCandidate.SphincsWireEncoding.wire_encodedWitness pk signature)
+  constructor
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22ca0 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22ca0 + i < 2 ^ 64)]
+      omega
+    exact (frame _ low).trans (loadedPrefix.root i hi)
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22cb4 + i < 2 ^ 64)]
+      omega
+    exact (frame _ low).trans (loadedPrefix.parameter i hi)
+
 /-- The freshly loaded verifier memory contains every upper-layer XMSS sibling. -/
 theorem loaded_upper_path_witness (target : Fin 5)
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
@@ -1934,6 +1965,10 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_chain_source_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms loaded_upper_chain_source_after_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_prefix_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_upper_prefix_after_frame
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.pathWitness_of_low_byte_frame' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

@@ -301,6 +301,104 @@ theorem encoding_success_digit (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms encoding_success_digit
 
+private theorem digest_digit_mask (digest : Digest) (start : Nat) :
+    BitVec.ofNat 8 ((digest.extractLsb' start 3).toNat) =
+      (digest >>> start).setWidth 8 &&& 7#8 := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ofNat, BitVec.extractLsb'_toNat,
+    BitVec.toNat_and, BitVec.toNat_setWidth, BitVec.toNat_ushiftRight]
+  rw [show 7 % 256 = 2^3 - 1 by decide, Nat.and_two_pow_sub_one_eq_mod]
+  omega
+
+theorem answerDigit_digestEncoding (s : MachineState) (digest : Digest)
+    (bytes : ∀ j : Fin 20,
+      s.getByte (BitVec.ofNat 64 (0x42000 + j.val)) =
+        digest.extractLsb' (8 * j.val) 8) (i : ChainIndex) :
+    answerDigit i s =
+      BitVec.ofNat 8 ((TargetSum.digestEncoding digest i).val) := by
+  change answerDigit i s =
+    BitVec.ofNat 8 ((digest.extractLsb' (TargetSum.digitOffset i) 3).toNat)
+  rw [digest_digit_mask]
+  have h0 := bytes ⟨0, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h0
+  have h1 := bytes ⟨1, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h1
+  have h2 := bytes ⟨2, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h2
+  have h3 := bytes ⟨3, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h3
+  have h4 := bytes ⟨4, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h4
+  have h5 := bytes ⟨5, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h5
+  have h6 := bytes ⟨6, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h6
+  have h7 := bytes ⟨7, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h7
+  have h8 := bytes ⟨8, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h8
+  have h9 := bytes ⟨9, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h9
+  have h10 := bytes ⟨10, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h10
+  have h11 := bytes ⟨11, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h11
+  have h12 := bytes ⟨12, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h12
+  have h13 := bytes ⟨13, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h13
+  have h14 := bytes ⟨14, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h14
+  have h15 := bytes ⟨15, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h15
+  have h16 := bytes ⟨16, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h16
+  have h17 := bytes ⟨17, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h17
+  have h18 := bytes ⟨18, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h18
+  have h19 := bytes ⟨19, by decide⟩
+  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb] at h19
+  simp at h0 h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15 h16 h17 h18 h19
+  fin_cases i <;>
+    simp [answerDigit, answerWord, digitBit, TargetSum.digitOffset,
+      TargetSum.digitsPerHalf, winternitzBits, numChains] <;>
+    (repeat first | rw [h0] | rw [h1] | rw [h2] | rw [h3] | rw [h4] | rw [h5] | rw [h6] | rw [h7] | rw [h8] | rw [h9] | rw [h10] | rw [h11] | rw [h12] | rw [h13] | rw [h14] | rw [h15] | rw [h16] | rw [h17] | rw [h18] | rw [h19]) <;>
+    apply BitVec.eq_of_toNat_eq <;>
+    simp only [BitVec.toNat_and, BitVec.toNat_setWidth,
+      BitVec.toNat_ushiftRight, BitVec.toNat_ofNat, BitVec.toNat_add] <;>
+    simp only [Nat.shiftRight_eq_div_pow, Nat.shiftLeft_eq] at * <;>
+    norm_num at * <;>
+    simp only [show (7 : Nat) = 2^3 - 1 by decide, Nat.and_two_pow_sub_one_eq_mod] <;>
+    omega
+
+/-- The accepted concrete digit cells are the abstract WOTS encoding digits
+    when the HASH answer bytes encode the abstract digest. -/
+theorem encoding_success_abstract_digit (location : Fin 5) (s : MachineState)
+    (digest : Digest) (encoding : Encoding)
+    (answerBytes : ∀ j : Fin 20,
+      (sumInit (otsPaddingSecond location (otsPaddingFirst location s))).getByte
+        (BitVec.ofNat 64 (0x42000 + j.val)) = digest.extractLsb' (8 * j.val) 8)
+    (decoded : TargetSum.decodeDigest digest = some encoding)
+    (chain : ChainIndex) :
+    (encodingSuccessState location s).getByte
+      (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 (encoding chain).val := by
+  have eqEncoding : encoding = TargetSum.digestEncoding digest := by
+    unfold TargetSum.decodeDigest at decoded
+    split at decoded <;> simp_all
+  subst encoding
+  exact (encoding_success_digit location s chain).trans
+    (answerDigit_digestEncoding _ digest answerBytes chain)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.answerDigit_digestEncoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms answerDigit_digestEncoding
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_success_abstract_digit' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_success_abstract_digit
+
 /-- The successful post-HASH encoding path checks both padding bytes, emits all
     52 WOTS digits, and exits the checksum branch with no further HASH calls. -/
 theorem encoding_success_after_hash (location : Fin 5) (hash : Hash) (s : MachineState)
