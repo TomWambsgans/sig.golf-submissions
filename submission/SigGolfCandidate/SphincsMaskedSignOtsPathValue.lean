@@ -2002,4 +2002,26 @@ theorem signer_encoding_exhausted (location : Fin 5) (s : MachineState)
   exact ⟨by simpa using (rejected.append exhausted).append jump,
     retryRejectJump_pc location _ exhaustedPc⟩
 
+private theorem retryDecision_mem (s : MachineState) (a : Word) :
+    (retryDecision s).getMem a = s.getMem a := by
+  simp [retryDecision, execInstrBr]
+
+private theorem retryRejectJump_mem (location : Fin 5) (s : MachineState) (a : Word) :
+    (retryRejectJump location s).getMem a = s.getMem a := by
+  simp [retryRejectJump, execInstrBr]
+
+/-- Every failed WOTS encoding attempt advances the bounded retry counter. -/
+theorem signer_encoding_retry_counter (location : Fin 5) (s : MachineState) :
+    (retryDecision (retryCounter location
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))))).getMem
+      0x430b8 = s.getMem 0x430b8 + 1 := by
+  rw [retryDecision_mem, retryCounter_value, signer_encoding_counter]
+
+/-- On exhaustion the same counter advance occurs before rejecting. -/
+theorem signer_encoding_exhausted_counter (location : Fin 5) (s : MachineState) :
+    (retryRejectJump location (retryDecision (retryCounter location
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s))))))).getMem
+      0x430b8 = s.getMem 0x430b8 + 1 := by
+  rw [retryRejectJump_mem, signer_encoding_retry_counter]
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
