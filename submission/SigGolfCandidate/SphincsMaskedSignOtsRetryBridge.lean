@@ -2632,4 +2632,109 @@ theorem first_bottom_chain_hash_answer_words (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_hash_answer_words
 
+/-- Setup and five word copies after the first signer chain HASH. -/
+def firstBottomChainAnswerSetupCode : List (Word × Instr) := [
+  (0x3d58, .LUI .x6 0x42),
+  (0x3d5c, .ADDI .x6 .x6 0),
+  (0x3d60, .LUI .x7 0x45),
+  (0x3d64, .ADDI .x7 .x7 (-1280))]
+
+def firstBottomChainAnswerSetup (s : MachineState) : MachineState :=
+  runSchedule firstBottomChainAnswerSetupCode s
+
+def firstBottomChainAnswerCopy (s : MachineState) : MachineState :=
+  copyRootState (firstBottomChainAnswerSetup s)
+
+theorem first_bottom_chain_answer_setup_code :
+    ∀ e ∈ firstBottomChainAnswerSetupCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_chain_answer_setup_checked (s : MachineState)
+    (pc : s.pc = 0x3d58) : Checked firstBottomChainAnswerSetupCode s := by
+  simp [firstBottomChainAnswerSetupCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, pc]
+
+theorem first_bottom_chain_answer_setup (s : MachineState) (pc : s.pc = 0x3d58) :
+    OrdinarySteps SphincsMaskedImages.sign s 4
+      (firstBottomChainAnswerSetup s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomChainAnswerSetupCode
+    first_bottom_chain_answer_setup_code s (first_bottom_chain_answer_setup_checked s pc)
+  simpa [firstBottomChainAnswerSetup, firstBottomChainAnswerSetupCode] using run
+
+theorem first_bottom_chain_answer_setup_registers (s : MachineState)
+    (pc : s.pc = 0x3d58) :
+    (firstBottomChainAnswerSetup s).pc = 0x3d68 ∧
+    (firstBottomChainAnswerSetup s).getReg .x6 = 0x42000 ∧
+    (firstBottomChainAnswerSetup s).getReg .x7 = 0x44b00 := by
+  simp [firstBottomChainAnswerSetup, firstBottomChainAnswerSetupCode,
+    runSchedule, execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_chain_answer_copy_code :
+    Copy20Code SphincsMaskedImages.sign 2906 := by
+  refine ⟨?_, ?_⟩ <;> intro offset <;> fin_cases offset <;> decide
+
+theorem first_bottom_chain_answer_copy (s : MachineState) (pc : s.pc = 0x3d58) :
+    OrdinarySteps SphincsMaskedImages.sign s 14 (firstBottomChainAnswerCopy s) ∧
+    (firstBottomChainAnswerCopy s).pc = 0x3d90 := by
+  let setup := firstBottomChainAnswerSetup s
+  obtain ⟨setupPc, source, destination⟩ :=
+    first_bottom_chain_answer_setup_registers s pc
+  have copied : OrdinarySteps SphincsMaskedImages.sign setup 10
+      (copyRootState setup) :=
+    SphincsVerifierFtsCopyAccess.copy20_block_general
+      SphincsMaskedImages.sign 2906 first_bottom_chain_answer_copy_code
+      setup 0x42000 0x44b00 (by simpa using setupPc) source destination
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+  refine ⟨?_, ?_⟩
+  · simpa only [firstBottomChainAnswerCopy, setup, Nat.reduceAdd] using
+      (first_bottom_chain_answer_setup s pc).append copied
+  · simpa [firstBottomChainAnswerCopy, setup] using
+      SphincsVerifierMessageCopy.copy20_final_pc setup 2906
+        (by simpa using setupPc)
+
+theorem first_bottom_chain_answer_copy_value (hash : Hash) (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step) :
+    let t := firstBottomChainAnswerCopy (firstBottomChainHashAnswer hash s)
+    Trace hash SphincsMaskedImages.sign s 80 87 1 1 t ∧
+    t.pc = 0x3d90 ∧
+    Words20 t 0x44b00
+      (truncateHash (hash (toQuery
+        (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 value))))) := by
+  let answer := firstBottomChainHashAnswer hash s
+  let setup := firstBottomChainAnswerSetup answer
+  have hashStep := first_bottom_chain_hash hash s pc
+  have answerPc := hashStep.2
+  obtain ⟨setupPc, source, destination⟩ :=
+    first_bottom_chain_answer_setup_registers answer answerPc
+  have bytes : Words20 (firstBottomChainAnswerCopy answer) 0x44b00
+      (truncateHash (hash (toQuery
+        (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 value))))) := by
+    intro i
+    change (copyRootState setup).getWord32 _ = _
+    rw [SphincsMaskedSignForestParents.copy_data setup 0x42000 0x44b00
+      (by decide) (by decide) (by decide) (by decide) (Or.inl (by decide))
+      source destination i]
+    have framed : setup.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+        answer.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) := by
+      fin_cases i <;>
+        simp [setup, firstBottomChainAnswerSetup, firstBottomChainAnswerSetupCode,
+          runSchedule, execInstrBr]
+    rw [framed]
+    exact (first_bottom_chain_hash_answer_words hash s parameter value lay
+      treeIdx leaf chain step ctx) i
+  have copyStep := first_bottom_chain_answer_copy answer answerPc
+  exact ⟨by simpa only [Nat.reduceAdd] using hashStep.1.trans copyStep.1.trace,
+    copyStep.2, bytes⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_answer_copy_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_answer_copy_value
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
