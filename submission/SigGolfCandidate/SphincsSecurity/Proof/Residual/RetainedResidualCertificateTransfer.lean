@@ -284,3 +284,42 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_eq_prefixPrior' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_eq_prefixPrior
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem Context.frontierGame_counted {inputs : Finset HashInput} (context : Context inputs)
+    (adversary : Adversary) (hroot : context.key.root = canonicalGraphRoot context.graph) :
+    (fun result => (result.1, result.2.hashCalls)) <$>
+      referenceFamilyFrontierRest context.key context.oracle context.graph
+        context.auxiliary.selections context.dummy adversary =
+    (fun result => (result.1, keygenHashCost + result.2)) <$>
+      simulateQ (fixedHashWorld context.oracle)
+        (countHashQueries
+          (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩ context.key)) := by
+  have hselection : referenceTableSelection context.key context.oracle = context.auxiliary.selections :=
+    referenceTableSelection_prefix context.key inputs context.encoding context.graph context.auxiliary context.auxiliary_valid
+  have hgraph : canonicalGraphLabels context.key.parameter context.key.otsSecret context.key.ftsSecret context.oracle =
+      context.graph := canonicalGraphLabels_programmedHash _ _ _ _ _
+  have hfrontier : referenceFamilyFrontierRest context.key context.oracle context.graph
+      context.auxiliary.selections context.dummy adversary =
+      fixedBoundaryRun context.key.parameter context.oracle
+        (gameAfterSecrets adversary context.key.parameter context.key.otsSecret context.key.ftsSecret) := by
+    rw [← hselection, referenceFamilyFrontierRest_selected, ← hgraph, graphFrontierGameRest_canonical]
+  rw [hfrontier, gameAfterSecrets, fixedBoundaryRun_bind, context.keygen_record hroot, pure_bind]
+  have hkey : (⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩ : SecretKey) = context.key := by
+    cases context.key
+    rfl
+  rw [hkey, ← fixedBoundaryRun_count context.key.parameter context.oracle
+    (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩ context.key)]
+  simp only [Functor.map_map, map_pure]
+  simp only [SigningBoundaryTrace.hashCalls_mul, SigningBoundaryTrace.hashCalls_pow_none]
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_counted
