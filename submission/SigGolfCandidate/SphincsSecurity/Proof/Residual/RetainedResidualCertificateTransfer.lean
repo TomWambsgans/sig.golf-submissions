@@ -493,3 +493,32 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_sourceGame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_sourceGame
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem originalGame_budget_le_source_fault_add_win (dummy : OtsReferenceWords)
+    (adversary : Adversary) (budget : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ budget |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget |
+      sourceGame dummy adversary] +
+    Pr[fun result => (∃ value, result.1 = some value ∧
+        sourceVerdict value result.2.memory.log = true) ∧
+        result.2.memory.external.hashCalls ≤ budget |
+      sourceGame dummy adversary] := by
+  apply (originalGame_budget_le_sourceGame dummy adversary budget).trans
+  apply le_trans _ (probEvent_or_le (sourceGame dummy adversary) _ _)
+  apply probEvent_mono
+  rintro ⟨result, state⟩ _ hresult
+  cases result with
+  | none => exact Or.inl ⟨rfl, hresult.2⟩
+  | some value => exact Or.inr ⟨⟨value, rfl, hresult.1⟩, hresult.2⟩
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_source_fault_add_win' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_source_fault_add_win
