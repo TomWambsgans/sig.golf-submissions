@@ -139,12 +139,13 @@ private theorem leafHashChunk1_pc (s : MachineState) (pc : s.pc = 0x29e4) :
 
 private theorem leafHashChunk1_memory (s : MachineState) (read : Word)
     (pointer : s.getReg .x7 = 0x40000)
-    (outside : 0x40028 ≤ read.toNat) :
+    (outside : read.toNat < 0x40000 ∨ 0x40028 ≤ read.toNat) :
     (runSchedule leafHashChunk1 s).getMem read = s.getMem read := by
   have hne : read ≠ (262144#64) := by
     intro h
     subst read
-    have impossible : ¬ (0x40028 ≤ (262144#64).toNat) := by decide
+    have impossible : ¬ ((262144#64).toNat < 0x40000 ∨
+      0x40028 ≤ (262144#64).toNat) := by decide
     exact impossible outside
   simp [leafHashChunk1, leafHashSchedule, runSchedule, execInstrBr,
     setWord32_eq, pointer, MachineState.getMem_setMem_ne, hne,
@@ -162,15 +163,17 @@ private theorem leafHashChunk2_pc (s : MachineState) (pc : s.pc = 0x2a00) :
 
 private theorem leafHashChunk2_memory (s : MachineState) (read : Word)
     (pointer : s.getReg .x7 = 0x40000)
-    (outside : 0x40028 ≤ read.toNat) :
+    (outside : read.toNat < 0x40000 ∨ 0x40028 ≤ read.toNat) :
     (runSchedule leafHashChunk2 s).getMem read = s.getMem read := by
   have hne8 : read ≠ (262152#64) := by
     intro h; subst read
-    have impossible : ¬ (0x40028 ≤ (0x40008 : Word).toNat) := by decide
+    have impossible : ¬ ((0x40008 : Word).toNat < 0x40000 ∨
+      0x40028 ≤ (0x40008 : Word).toNat) := by decide
     exact impossible outside
   have hne16 : read ≠ (262160#64) := by
     intro h; subst read
-    have impossible : ¬ (0x40028 ≤ (0x40010 : Word).toNat) := by decide
+    have impossible : ¬ ((0x40010 : Word).toNat < 0x40000 ∨
+      0x40028 ≤ (0x40010 : Word).toNat) := by decide
     exact impossible outside
   simp [leafHashChunk2, leafHashSchedule, runSchedule, execInstrBr,
     setWord32_eq, pointer, hne8, hne16,
@@ -240,11 +243,12 @@ private theorem leafHashChunk3_pc (s : MachineState) (pc : s.pc = 0x2a1c) :
     (runSchedule leafHashChunk3 s).pc = 0x2a38 := by
   simp [leafHashChunk3, leafHashSchedule, runSchedule, execInstrBr, pc]
 private theorem leafHashChunk3_memory (s : MachineState) (read : Word)
-    (outside : 0x40028 ≤ read.toNat) :
+    (outside : read.toNat < 0x40000 ∨ 0x40028 ≤ read.toNat) :
     (runSchedule leafHashChunk3 s).getMem read = s.getMem read := by
   have hne : read ≠ (262160#64) := by
     intro h; subst read
-    have impossible : ¬ (0x40028 ≤ (0x40010 : Word).toNat) := by decide
+    have impossible : ¬ ((0x40010 : Word).toNat < 0x40000 ∨
+      0x40028 ≤ (0x40010 : Word).toNat) := by decide
     exact impossible outside
   simp [leafHashChunk3, leafHashSchedule, runSchedule, execInstrBr,
     setWord32_eq, hne, MachineState.getReg_setReg_eq,
@@ -281,15 +285,17 @@ private theorem leafHashChunk4_pc (s : MachineState) (pc : s.pc = 0x2a38) :
   simp [leafHashChunk4, leafHashSchedule, runSchedule, execInstrBr, pc]
 private theorem leafHashChunk4_memory (s : MachineState) (read : Word)
     (pointer : s.getReg .x7 = 0x40014)
-    (outside : 0x40028 ≤ read.toNat) :
+    (outside : read.toNat < 0x40000 ∨ 0x40028 ≤ read.toNat) :
     (runSchedule leafHashChunk4 s).getMem read = s.getMem read := by
   have hne24 : read ≠ (262168#64) := by
     intro h; subst read
-    have impossible : ¬ (0x40028 ≤ (0x40018 : Word).toNat) := by decide
+    have impossible : ¬ ((0x40018 : Word).toNat < 0x40000 ∨
+      0x40028 ≤ (0x40018 : Word).toNat) := by decide
     exact impossible outside
   have hne32 : read ≠ (262176#64) := by
     intro h; subst read
-    have impossible : ¬ (0x40028 ≤ (0x40020 : Word).toNat) := by decide
+    have impossible : ¬ ((0x40020 : Word).toNat < 0x40000 ∨
+      0x40028 ≤ (0x40020 : Word).toNat) := by decide
     exact impossible outside
   simp [leafHashChunk4, leafHashSchedule, runSchedule, execInstrBr,
     setWord32_eq, pointer, hne24, hne32,
@@ -335,8 +341,8 @@ private theorem leafHash_chunks : leafHashSchedule =
     leafHashChunk0 ++ leafHashChunk1 ++ leafHashChunk2 ++
       leafHashChunk3 ++ leafHashChunk4 ++ leafHashChunk5 := by decide
 
-theorem leafHashReady_payload_mem_frame (s : MachineState) (read : Word)
-    (outside : 0x40028 ≤ read.toNat) :
+theorem leafHashReady_mem_frame (s : MachineState) (read : Word)
+    (outside : read.toNat < 0x40000 ∨ 0x40028 ≤ read.toNat) :
     (leafHashReadyState s).getMem read = s.getMem read := by
   let s0 := runSchedule leafHashChunk0 s
   let s1 := runSchedule leafHashChunk1 s0
@@ -356,6 +362,11 @@ theorem leafHashReady_payload_mem_frame (s : MachineState) (read : Word)
   simpa only [leafHashReadyState, leafHash_chunks, runSchedule_append,
     s0, s1, s2, s3, s4] using
     m5.trans (m4.trans (m3.trans (m2.trans (m1.trans m0))))
+
+theorem leafHashReady_payload_mem_frame (s : MachineState) (read : Word)
+    (outside : 0x40028 ≤ read.toNat) :
+    (leafHashReadyState s).getMem read = s.getMem read :=
+  leafHashReady_mem_frame s read (Or.inr outside)
 
 theorem leafHashReady_tree (s : MachineState) :
     (leafHashReadyState s).getMem 0x40008 = s.getMem 0x43008 := by
@@ -483,5 +494,11 @@ theorem leafHashReady_pc (s : MachineState) (pc : s.pc = 0x29c8) :
 #print axioms leafHashReady_tree
 #print axioms leafHashReady_index
 #print axioms leafHashReady_tag_position
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafHashReady.leafHashReady_mem_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leafHashReady_mem_frame
 
 end SigGolfCandidate.SphincsVerifierWotsLeafHashReady

@@ -84,6 +84,33 @@ theorem leafAnswerCopy_pc (s : MachineState) (pc : s.pc = 0x2a74) :
   rw [leafAnswerCopy_pc_general, pc]
   decide
 
+/-- Copying the hash answer does not touch witness bytes or XMSS controls. -/
+theorem leafAnswerCopy_mem_frame (s : MachineState) (read : Word)
+    (below : read.toNat < 0x44a00) :
+    (leafAnswerCopyState s).getMem read = s.getMem read := by
+  let pointers := runSchedule leafAnswerPointersSchedule s
+  have destination : pointers.getReg .x7 = 0x44a00 := by
+    simp [pointers, leafAnswerPointersSchedule, leafAnswerCopySchedule,
+      runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq]
+  have pointerFrame : pointers.getMem read = s.getMem read := by
+    simp [pointers, leafAnswerPointersSchedule, leafAnswerCopySchedule,
+      runSchedule, execInstrBr]
+  have outputBound (slot : Fin 5) :
+      0x44a00 ≤ (alignToDword
+        ((0x44a00 : Word) + signExtend12
+          (4#12 * BitVec.ofNat 12 slot.val))).toNat := by
+    fin_cases slot <;> decide
+  rw [leafAnswerCopyState, leafAnswer_split, runSchedule_append,
+    leafAnswerWords_eq]
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame pointers read]
+  · exact pointerFrame
+  · intro slot equal
+    rw [destination] at equal
+    have value := congrArg BitVec.toNat equal
+    have bound := outputBound slot
+    omega
+
 theorem leafAnswerCopy_word (s : MachineState) (slot : Fin 5) :
     (leafAnswerCopyState s).getWord32 (word 0x44a00 slot) =
       s.getWord32 (word 0x42000 slot) := by
@@ -162,5 +189,11 @@ theorem leafHashNext_byte_of_query (hash : Hash) (s : MachineState)
 #print axioms leafAnswerCopy_pc
 #print axioms leafAnswerCopy_word
 #print axioms leafHashNext_byte_of_query
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsLeafResult.leafAnswerCopy_mem_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leafAnswerCopy_mem_frame
 
 end SigGolfCandidate.SphincsVerifierWotsLeafResult

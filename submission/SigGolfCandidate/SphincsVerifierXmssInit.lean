@@ -49,6 +49,21 @@ theorem xmssInit_level (s : MachineState) :
     signExtend12, MachineState.getReg_setReg_eq,
     MachineState.getReg_setReg_ne]
 
+theorem xmssInit_below_frame (s : MachineState) (read : Word)
+    (below : read.toNat < 0x43048) :
+    (xmssInitState s).getMem read = s.getMem read := by
+  have hlevel : read ≠ (274504#64) := by
+    intro h; subst read
+    have impossible : ¬ ((274504#64).toNat < 0x43048) := by decide
+    exact impossible below
+  have hbit : read ≠ (274544#64) := by
+    intro h; subst read
+    have impossible : ¬ ((274544#64).toNat < 0x43048) := by decide
+    exact impossible below
+  simp [xmssInitState, xmssInitSchedule, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, hlevel, hbit]
+
 theorem xmssInit_current (s : MachineState) (read : Word)
     (inside : 0x44a00 ≤ read.toNat ∧ read.toNat < 0x44a18) :
     (xmssInitState s).getMem read = s.getMem read := by
@@ -67,5 +82,9 @@ theorem xmssInit_current (s : MachineState) (read : Word)
 #print axioms xmssInit_block
 #print axioms xmssInit_bit
 #print axioms xmssInit_level
+
+/-- info: 'SigGolfCandidate.SphincsVerifierXmssInit.xmssInit_below_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms xmssInit_below_frame
 
 end SigGolfCandidate.SphincsVerifierXmssInit
