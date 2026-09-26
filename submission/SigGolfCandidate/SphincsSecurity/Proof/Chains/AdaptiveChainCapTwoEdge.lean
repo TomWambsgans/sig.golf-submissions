@@ -378,3 +378,43 @@ end SphincsSecurity.Concrete.PartialChainEndpoint
 /-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_contact_cost_budget_le_capped_expectation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_contact_cost_budget_le_capped_expectation
+namespace SphincsSecurity.Concrete.PartialChainEndpoint
+open _root_.OracleComp OracleSpec ENNReal
+attribute [local instance] Classical.propDecidable
+
+variable {State : Type} [Fintype State] [DecidableEq State] [Nonempty State]
+  {AuxIndex : Type} {auxSpec : OracleSpec AuxIndex} {Result : Type}
+
+theorem realRun_twoEdgeEvent_cost_budget_le_linear_of_charge {depth : Nat}
+    (auxiliary : State → QueryImpl auxSpec PMF)
+    (computation : State → OracleComp (auxSpec + PrefixSpec depth State) Result)
+    (cost : Result → Nat) (budget : Nat)
+    (hcharge : ∀ endpoint result,
+      result ∈ support (QueryCap.counted IsPrefixQuery
+        (computation endpoint)) →
+      result.2 ≤ cost result.1) :
+    Pr[fun result => TwoEdgeEvent result.2.2 result.1 ∧
+      cost result.2.1 ≤ budget |
+      realRun auxiliary computation (fun _ _ => none)] ≤
+      (((3 / 2 : ENNReal) +
+        4 * ((budget : ENNReal) / Fintype.card State) +
+        2 * ((budget : ENNReal) / Fintype.card State)^2) /
+        Fintype.card State) * budget := by
+  cases depth with
+  | zero =>
+      simp only [TwoEdgeEvent, false_and, probEvent_eq_tsum_ite, if_false, tsum_zero]
+      exact bot_le
+  | succ depth =>
+      cases depth with
+      | zero =>
+          simp only [TwoEdgeEvent, false_and, probEvent_eq_tsum_ite, if_false, tsum_zero]
+          exact bot_le
+      | succ depth =>
+          exact realRun_twoEdge_cost_budget_le_linear_of_charge
+            auxiliary computation cost budget hcharge
+
+end SphincsSecurity.Concrete.PartialChainEndpoint
+
+/-- info: 'SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdgeEvent_cost_budget_le_linear_of_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.PartialChainEndpoint.realRun_twoEdgeEvent_cost_budget_le_linear_of_charge

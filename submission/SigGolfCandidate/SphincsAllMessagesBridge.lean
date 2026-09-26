@@ -377,6 +377,19 @@ theorem submission_complete_of_failure_sum
     simpa only [Bool.not_eq_true] using hfailed
   exact probEvent_one_sub_le_of_compl_le htotal.probFailure_eq_zero hcompl
 
+
+theorem sharedOracle_event_mono {α β : Type}
+    (p : OracleComp HashSpec α) (q : OracleComp HashSpec β)
+    (E : α → Prop) (F : β → Prop)
+    (hpointwise : ∀ hash : Hash,
+      E (evalWithAnswerFn hash p) → F (evalWithAnswerFn hash q)) :
+    Pr[E | SigGolf.withRandomOracle p] ≤
+      Pr[F | SigGolf.withRandomOracle q] := by
+  have h := sharedOracle_union_bound (ι := PUnit) p (fun _ => q)
+    E (fun _ => F) (by
+      intro hash he
+      exact ⟨PUnit.unit, hpointwise hash he⟩)
+  simpa using h
 end SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint
 
 /-- info: 'SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.eagerFootprint_empty' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -483,6 +496,52 @@ theorem randomOracle_toQuery {α : Type}
       (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) p).run' ∅ := by
   exact OracleReindex.randomOracle_reindex toQuery toQuery_injective p
 
+
+def mapAbstractImpl : QueryImpl SphincsSecurity.HashSpec
+    (OracleComp SigGolf.HashSpec) :=
+  fun input => liftM (SigGolf.HashSpec.query (toQuery input))
+
+noncomputable def mappedAbstract {α : Type}
+    (p : OracleComp SphincsSecurity.HashSpec α) :
+    OracleComp SigGolf.HashSpec α :=
+  simulateQ mapAbstractImpl p
+
+theorem mappedAbstract_eval {α : Type}
+    (p : OracleComp SphincsSecurity.HashSpec α) (hash : SigGolf.Hash) :
+    evalWithAnswerFn hash (mappedAbstract p) =
+      evalWithAnswerFn (QueryImpl.ofFn (adaptOracle hash)) p := by
+  change simulateQ hash (simulateQ mapAbstractImpl p) =
+    simulateQ (QueryImpl.ofFn (adaptOracle hash)) p
+  rw [← QueryImpl.simulateQ_compose]
+  congr 1
+
+theorem mappedAbstract_distribution {α : Type}
+    (p : OracleComp SphincsSecurity.HashSpec α) :
+    SigGolf.withRandomOracle (mappedAbstract p) =
+      (simulateQ (randomOracle : QueryImpl SphincsSecurity.HashSpec
+        (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) p).run' ∅ := by
+  change (simulateQ (randomOracle : QueryImpl SigGolf.HashSpec
+      (StateT (QueryCache SigGolf.HashSpec) ProbComp))
+      (simulateQ mapAbstractImpl p)).run' ∅ = _
+  rw [← QueryImpl.simulateQ_compose]
+  have hcomp :
+      ((randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp)) ∘ₛ
+        mapAbstractImpl) =
+      (fun input : SphincsSecurity.HashInput =>
+        (randomOracle : QueryImpl SigGolf.HashSpec
+          (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (toQuery input)) := by
+    funext input
+    change simulateQ
+      (randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp))
+      (liftM (SigGolf.HashSpec.query (toQuery input))) =
+      (randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (toQuery input)
+    exact simulateQ_spec_query _ _
+  rw [hcomp]
+  exact randomOracle_toQuery p
+
 end SigGolfCandidate.SphincsBridge
 
 /-- info: 'SigGolfCandidate.OracleReindex.randomOracle_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -492,3 +551,11 @@ end SigGolfCandidate.SphincsBridge
 /-- info: 'SigGolfCandidate.SphincsBridge.randomOracle_toQuery' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsBridge.randomOracle_toQuery
+
+/-- info: 'SigGolfCandidate.SphincsBridge.mappedAbstract_distribution' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.mappedAbstract_distribution
+
+/-- info: 'SigGolfCandidate.SphincsBridge.mappedAbstract_eval' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.mappedAbstract_eval

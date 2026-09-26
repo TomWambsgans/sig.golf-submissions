@@ -132,3 +132,156 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.referenceContactGame_twoEdge_budget_le_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceContactGame_twoEdge_budget_le_sum
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+attribute [local irreducible] canonicalGraphLabels canonicalEncodingInputs canonicalGraphInputs instFintypePosition Finset.univ
+
+noncomputable def prefixTwoEdgeCostGame (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (hgraph : ∀ parameter, canonicalGraphInputs parameter ⊆ inputs)
+    (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords)
+    (adversary : Adversary) : SPMF (Bool × Nat) := do
+  let parameter ← 𝒮[sampleParameter]
+  let ftsSecret ← 𝒮[sampleFtsSecrets]
+  let selections ← 𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit]
+  let words := referenceFamilyWords selections dummy
+  let segment := OtsPrefix.atAddress parameter words address
+  let other ← 𝒮[PMF.uniformOfFintype segment.ErasedSecrets]
+  let auxiliary ← 𝒮[segment.referenceAuxSeedLaw inputs
+    (hencoding parameter) (hgraph parameter) selections]
+  let result ← 𝒮[PartialChainEndpoint.realRun (fun _ => OtsPrefix.uniformImpl)
+    (fun endpoint => segment.seedGame inputs (hencoding parameter)
+      (hgraph parameter) auxiliary other.val ftsSecret words endpoint adversary)
+    (fun _ _ => none)]
+  pure (decide (PartialChainEndpoint.TwoEdgeEvent result.2.2 result.1),
+    result.2.1.2.hashCalls)
+
+theorem referenceContactGame_twoEdge_cost_law (inputs : Finset HashInput)
+    (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
+    (hgraph : ∀ parameter, canonicalGraphInputs parameter ⊆ inputs)
+    (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords)
+    (adversary : Adversary) :
+    (fun result =>
+      (decide (result.2.2.TwoEdgeAt result.1
+        (referenceFamilyWords result.2.1 dummy) address),
+        result.2.2.output.2.hashCalls)) <$>
+      referenceContactGame inputs hencoding dummy adversary =
+      prefixTwoEdgeCostGame inputs hencoding hgraph address dummy adversary := by
+  rw [← prefixContactObservedGame_original inputs hencoding hgraph address dummy adversary]
+  unfold prefixContactObservedGame prefixInstrumentedObservedGame prefixTwoEdgeCostGame
+  simp only [map_bind, map_pure]
+  apply congrArg (𝒮[sampleParameter] >>= ·)
+  funext parameter
+  apply congrArg (𝒮[sampleFtsSecrets] >>= ·)
+  funext ftsSecret
+  apply congrArg
+    (𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit] >>= ·)
+  funext selections
+  let words := referenceFamilyWords selections dummy
+  let segment := OtsPrefix.atAddress parameter words address
+  apply congrArg (𝒮[PMF.uniformOfFintype segment.ErasedSecrets] >>= ·)
+  funext other
+  apply congrArg (𝒮[segment.referenceAuxSeedLaw inputs
+    (hencoding parameter) (hgraph parameter) selections] >>= ·)
+  funext auxiliary
+  have h := congrArg (fun law : PMF (Bool × Nat) => 𝒮[law])
+    (contactSeed_twoEdge_cost_eq parameter words address inputs
+      (hencoding parameter) (hgraph parameter) auxiliary other.val
+      ftsSecret adversary)
+  simpa only [← PMF.monad_map_eq_map, evalSPMF_map, bind_map_left,
+    bind_pure_comp, Functor.map_map, Function.comp_def] using h
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceContactGame_twoEdge_cost_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceContactGame_twoEdge_cost_law
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+attribute [local irreducible] canonicalGraphLabels canonicalEncodingInputs canonicalGraphInputs instFintypePosition Finset.univ
+
+theorem prefixTwoEdgeCostGame_budget_le (address : OtsPrefix.ChainAddress)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      prefixTwoEdgeCostGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary)
+        (canonicalGraphInputs_subset_gameInputs adversary)
+        address dummy adversary] ≤
+      prefixTwoEdgeRate q * (q : ENNReal) := by
+  unfold prefixTwoEdgeCostGame
+  refine probEvent_bind_le_of_forall_le fun parameter _ => ?_
+  refine probEvent_bind_le_of_forall_le fun ftsSecret _ => ?_
+  refine probEvent_bind_le_of_forall_le fun selections _ => ?_
+  refine probEvent_bind_le_of_forall_le fun other _ => ?_
+  refine probEvent_bind_le_of_forall_le fun auxiliary _ => ?_
+  let words := referenceFamilyWords selections dummy
+  let segment := OtsPrefix.atAddress parameter words address
+  let inputs := canonicalGraphGameInputs adversary
+  let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
+  let hgraph := canonicalGraphInputs_subset_gameInputs adversary parameter
+  let computation := fun endpoint =>
+    segment.seedGame inputs hencoding hgraph auxiliary other.val
+      ftsSecret words endpoint adversary
+  let cost := fun result : Bool × SigningBoundaryTrace => result.2.hashCalls
+  have hcharge : ∀ endpoint result,
+      result ∈ support
+        (QueryCap.counted PartialChainEndpoint.IsPrefixQuery
+          (computation endpoint)) →
+      result.2 ≤ cost result.1 :=
+    fun endpoint result hresult =>
+      segment.seedGame_counted_le inputs hencoding hgraph auxiliary
+        other.val ftsSecret words endpoint adversary result hresult
+  have h := PartialChainEndpoint.realRun_twoEdgeEvent_cost_budget_le_linear_of_charge
+    (fun _ => OtsPrefix.uniformImpl) computation cost q hcharge
+  simpa only [prefixTwoEdgeRate, probEvent_map, Function.comp_def,
+    decide_eq_true_eq, evalSPMF_pure, bind_pure_comp, PMF.evalSPMF_eq,
+    SPMF.probEvent_liftM] using h
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.prefixTwoEdgeCostGame_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.prefixTwoEdgeCostGame_budget_le
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+attribute [local instance] Classical.propDecidable
+
+theorem referenceContactGame_twoEdgeAt_budget_le
+    (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords)
+    (adversary : Adversary) (q : Nat) :
+    Pr[fun result =>
+      result.2.2.TwoEdgeAt result.1
+        (referenceFamilyWords result.2.1 dummy) address ∧
+      result.2.2.output.2.hashCalls ≤ q |
+      referenceContactGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary)
+        dummy adversary] ≤
+      prefixTwoEdgeRate q * (q : ENNReal) := by
+  have h := referenceContactGame_twoEdge_cost_law
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary)
+    (canonicalGraphInputs_subset_gameInputs adversary)
+    address dummy adversary
+  have he := congrArg
+    (fun law : SPMF (Bool × Nat) =>
+      Pr[fun result => result.1 = true ∧ result.2 ≤ q | law]) h
+  simp only [probEvent_map, Function.comp_def, decide_eq_true_eq] at he
+  change Pr[fun result =>
+      result.2.2.TwoEdgeAt result.1
+        (referenceFamilyWords result.2.1 dummy) address ∧
+      result.2.2.output.2.hashCalls ≤ q |
+      referenceContactGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary)
+        dummy adversary] = _ at he
+  rw [he]
+  exact prefixTwoEdgeCostGame_budget_le address dummy adversary q
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceContactGame_twoEdgeAt_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceContactGame_twoEdgeAt_budget_le
