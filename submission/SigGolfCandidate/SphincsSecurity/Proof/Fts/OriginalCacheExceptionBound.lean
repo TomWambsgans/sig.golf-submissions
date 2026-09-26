@@ -1643,6 +1643,279 @@ theorem original_primitive_add_full_certificate_le_small_budget_add_prefix (dumm
       rw [← add_assoc, ← add_assoc]
       exact add_le_add (add_le_add (by simpa only [div_eq_mul_inv, mul_assoc, mul_comm, mul_left_comm] using hp) le_rfl) le_rfl
 
+
+abbrev CertificateStoppedJointOutput (input : (OracleWorld + SigningSpec).Domain) :=
+  ProposalExecutionRecord input × Nat × CertificateCountedState × CertificateStoppedCacheState
+
+noncomputable def certificateUnboundedJointStep (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) : PMF (CertificateStoppedJointOutput input) :=
+  match input with
+  | .inl world => certificateUnboundedWorldJointStep key budget required stopAfter world state ghost
+  | .inr message => certificateUnboundedSigningJointStep key budget required stopAfter message state ghost
+
+noncomputable def certificateStoppedJointStep (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) : PMF (Option (CertificateStoppedJointOutput input)) :=
+  match input with
+  | .inl world => certificateStoppedWorldJointStep key budget required stopAfter world state ghost
+  | .inr message => certificateStoppedSigningJointStep key budget required stopAfter message state ghost
+
+theorem certificateStoppedJointStep_some (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (x : CertificateStoppedJointOutput input) :
+    certificateStoppedJointStep key budget required stopAfter input state ghost (some x) =
+      if x.1.trace.hashCalls ≤ ghost.2.2 then
+        certificateUnboundedJointStep key budget required stopAfter input state ghost x
+      else 0 := by
+  cases input with
+  | inl world => exact certificateStoppedWorldJointStep_some key budget required stopAfter world state ghost x
+  | inr message => exact certificateStoppedSigningJointStep_some key budget required stopAfter message state ghost x
+
+theorem certificateStoppedJointStep_relation (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (q : Nat)
+    (hspent : state.2.2 ≤ q) (hremaining : ghost.2.2 = q - state.2.2)
+    (x : CertificateStoppedJointOutput input)
+    (hx : some x ∈ (certificateStoppedJointStep key budget required stopAfter
+      input state ghost).support) :
+    x.2.2.2.1 = x.2.2.1.1 ∧ x.2.2.1.2.2 ≤ q ∧
+      x.2.2.2.2.2 = q - x.2.2.1.2.2 := by
+  cases input with
+  | inl world => exact certificateStoppedWorldJointStep_relation key budget required stopAfter world state ghost q hspent hremaining x hx
+  | inr message => exact certificateStoppedSigningJointStep_relation key budget required stopAfter message state ghost q hspent hremaining x hx
+
+theorem certificateUnboundedJointStep_project (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (hcache : ghost.1 = state.1) :
+    (certificateUnboundedJointStep key budget required stopAfter input state ghost).map
+      (fun output => (output.1.output, output.2.2.1)) =
+    ((certificateCountedLengthImpl key budget required stopAfter input).run state) := by
+  cases input with
+  | inl world => exact certificateUnboundedWorldJointStep_project key budget required stopAfter world state ghost hcache
+  | inr message => exact certificateUnboundedSigningJointStep_project key budget required stopAfter message state ghost hcache
+
+
+abbrev CertificateJointState := CertificateCountedState × CertificateStoppedCacheState
+
+noncomputable def certificateStoppedOuterRun {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    CertificateJointState → PMF (Option (Result × CertificateJointState)) :=
+  OracleComp.construct (fun result state => PMF.pure (some (result, state)))
+    (fun input _ next state =>
+      (certificateStoppedJointStep key budget required stopAfter input state.1 state.2).bind
+        fun output => match output with
+        | none => PMF.pure none
+        | some x => next x.1.output (x.2.2.1, x.2.2.2)) computation
+
+noncomputable def certificateUnboundedOuterRun {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    CertificateJointState → PMF (Result × CertificateJointState) :=
+  OracleComp.construct (fun result state => PMF.pure (result, state))
+    (fun input _ next state =>
+      (certificateUnboundedJointStep key budget required stopAfter input state.1 state.2).bind
+        fun x => next x.1.output (x.2.2.1, x.2.2.2)) computation
+
+
+theorem certificateStoppedOuterRun_pure {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (result : Result) (state : CertificateJointState) :
+    certificateStoppedOuterRun key budget required stopAfter
+      (pure result : OracleComp (OracleWorld + SigningSpec) Result) state =
+    PMF.pure (some (result, state)) := by rfl
+
+theorem certificateStoppedOuterRun_query_bind {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateJointState) :
+    certificateStoppedOuterRun key budget required stopAfter
+      (liftM ((OracleWorld + SigningSpec).query input) >>= next) state =
+    (certificateStoppedJointStep key budget required stopAfter input state.1 state.2).bind
+      (fun output => match output with
+      | none => PMF.pure none
+      | some x => certificateStoppedOuterRun key budget required stopAfter
+          (next x.1.output) (x.2.2.1, x.2.2.2)) := by rfl
+
+theorem certificateUnboundedOuterRun_pure {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (result : Result) (state : CertificateJointState) :
+    certificateUnboundedOuterRun key budget required stopAfter
+      (pure result : OracleComp (OracleWorld + SigningSpec) Result) state =
+    PMF.pure (result, state) := by rfl
+
+theorem certificateUnboundedOuterRun_query_bind {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateJointState) :
+    certificateUnboundedOuterRun key budget required stopAfter
+      (liftM ((OracleWorld + SigningSpec).query input) >>= next) state =
+    (certificateUnboundedJointStep key budget required stopAfter input state.1 state.2).bind
+      (fun x => certificateUnboundedOuterRun key budget required stopAfter
+          (next x.1.output) (x.2.2.1, x.2.2.2)) := by rfl
+
+
+private theorem option_kernel_transfer {A B : Type} (p : PMF (Option A)) (q : PMF A)
+    (good : A → Prop) [DecidablePred good]
+    (hp : ∀ a, p (some a) = if good a then q a else 0)
+    (k : A → PMF (Option B)) (event : B → Prop) :
+    Pr[fun r : Option B => r.elim False event |
+      p.bind (fun r => match r with
+        | none => PMF.pure none
+        | some a => k a)] =
+    Pr[fun r : Option B => r.elim False event |
+      q.bind (fun a => if good a then k a else PMF.pure none)] := by
+  classical
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+    ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  rw [tsum_option _ ENNReal.summable]
+  have hnone : Pr[fun r : Option B => r.elim False event |
+      (PMF.pure none : PMF (Option B))] = 0 := by
+    rw [← PMF.monad_pure_eq_pure, probEvent_pure]
+    simp
+  simp only [probOutput_def, hnone, mul_zero, zero_add]
+  apply tsum_congr
+  intro a
+  simp at *
+  rw [hp]
+  by_cases ha : good a
+  · simp [ha]
+  · simp [ha, hnone]
+
+
+theorem certificateUnboundedJointStep_spent (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (x : CertificateStoppedJointOutput input)
+    (hx : x ∈ (certificateUnboundedJointStep key budget required stopAfter input state ghost).support) :
+    x.2.2.1.2.2 = state.2.2 + x.1.trace.hashCalls := by
+  cases input with
+  | inl world =>
+      exact (certificateUnboundedWorldJointStep_state_relation key budget required stopAfter
+        world state ghost x hx).2.2
+  | inr message =>
+      exact (certificateUnboundedSigningJointStep_state_relation key budget required stopAfter
+        message state ghost x hx).2.2
+
+theorem certificateUnboundedOuterRun_spent_mono {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    ∀ (state : CertificateJointState) (output : Result × CertificateJointState),
+      output ∈ (certificateUnboundedOuterRun key budget required stopAfter computation state).support →
+      state.1.2.2 ≤ output.2.1.2.2 := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state output houtput
+      rw [certificateUnboundedOuterRun_pure, PMF.mem_support_pure_iff] at houtput
+      subst output
+      exact Nat.le_refl _
+  | query_bind input next ih =>
+      intro state output houtput
+      rw [certificateUnboundedOuterRun_query_bind, PMF.mem_support_bind_iff] at houtput
+      obtain ⟨middle, hmiddle, htail⟩ := houtput
+      have hstep := certificateUnboundedJointStep_spent key budget required stopAfter
+        input state.1 state.2 middle hmiddle
+      have hnext := ih middle.1.output (middle.2.2.1, middle.2.2.2) output htail
+      change middle.2.2.1.2.2 ≤ output.2.1.2.2 at hnext
+      omega
+
+
+theorem certificateStoppedOuterRun_budget_event {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    ∀ (state : CertificateJointState) (q : Nat),
+      state.1.2.2 ≤ q → state.2.2.2 = q - state.1.2.2 →
+      ∀ (event : Result × CertificateJointState → Prop),
+      Pr[fun result => result.elim False event |
+        certificateStoppedOuterRun key budget required stopAfter computation state] =
+      Pr[fun result => result.2.1.2.2 ≤ q ∧ event result |
+        certificateUnboundedOuterRun key budget required stopAfter computation state] := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state q hspent hremaining event
+      classical
+      rw [certificateStoppedOuterRun_pure, certificateUnboundedOuterRun_pure]
+      rw [← PMF.monad_pure_eq_pure, probEvent_pure,
+        ← PMF.monad_pure_eq_pure, probEvent_pure]
+      simp [hspent]
+  | query_bind input next ih =>
+      intro state q hspent hremaining event
+      classical
+      rw [certificateStoppedOuterRun_query_bind, certificateUnboundedOuterRun_query_bind]
+      have hstep := option_kernel_transfer
+        (certificateStoppedJointStep key budget required stopAfter input state.1 state.2)
+        (certificateUnboundedJointStep key budget required stopAfter input state.1 state.2)
+        (fun x => x.1.trace.hashCalls ≤ state.2.2.2)
+        (certificateStoppedJointStep_some key budget required stopAfter input state.1 state.2)
+        (fun x => certificateStoppedOuterRun key budget required stopAfter
+          (next x.1.output) (x.2.2.1, x.2.2.2)) event
+      calc
+        _ = Pr[fun r => r.elim False event |
+            (certificateUnboundedJointStep key budget required stopAfter input state.1 state.2).bind
+              (fun a => if a.1.trace.hashCalls ≤ state.2.2.2 then
+                certificateStoppedOuterRun key budget required stopAfter
+                  (next a.1.output) (a.2.2.1, a.2.2.2) else PMF.pure none)] := by
+              convert hstep using 1
+              all_goals
+                congr 1
+                congr 1
+                funext r
+                cases r <;> rfl
+        _ = _ := by
+          rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+            ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+          apply tsum_congr
+          intro x
+          rcases Classical.em ((certificateUnboundedJointStep key budget required stopAfter
+            input state.1 state.2) x = 0) with hzero | hzero
+          · simp [hzero]
+          have hx : x ∈ (certificateUnboundedJointStep key budget required stopAfter
+            input state.1 state.2).support := (PMF.mem_support_iff _ _).2 hzero
+          by_cases hgood : x.1.trace.hashCalls ≤ state.2.2.2
+          · have hstopped : some x ∈ (certificateStoppedJointStep key budget required
+                stopAfter input state.1 state.2).support := by
+              apply (PMF.mem_support_iff _ _).2
+              rw [certificateStoppedJointStep_some, if_pos hgood]
+              exact hzero
+            have hrel := certificateStoppedJointStep_relation key budget required
+              stopAfter input state.1 state.2 q hspent hremaining x hstopped
+            have hrec := ih x.1.output (x.2.2.1, x.2.2.2) q hrel.2.1 hrel.2.2 event
+            simp only [if_pos hgood]
+            rw [hrec]
+          · have hspentstep := certificateUnboundedJointStep_spent key budget required
+              stopAfter input state.1 state.2 x hx
+            have hhigh : q < x.2.2.1.2.2 := by omega
+            have hzero_tail : probEvent
+                (certificateUnboundedOuterRun key budget required stopAfter
+                  (next x.1.output) (x.2.2.1, x.2.2.2))
+                (fun result => result.2.1.2.2 ≤ q ∧ event result) = 0 := by
+              change probEvent (𝒮[certificateUnboundedOuterRun key budget required
+                stopAfter (next x.1.output) (x.2.2.1, x.2.2.2)])
+                (fun result => result.2.1.2.2 ≤ q ∧ event result) = 0
+              apply probEvent_eq_zero
+              intro y hy hcondition
+              have hy' : y ∈ (certificateUnboundedOuterRun key budget required stopAfter
+                  (next x.1.output) (x.2.2.1, x.2.2.2)).support := by
+                apply (PMF.mem_support_iff _ _).2
+                have hnz := (mem_support_iff (mx := 𝒮[certificateUnboundedOuterRun key
+                  budget required stopAfter (next x.1.output) (x.2.2.1, x.2.2.2)]) y).1 hy
+                simpa [probOutput_def] using hnz
+              have hmono := certificateUnboundedOuterRun_spent_mono key budget required
+                stopAfter (next x.1.output) (x.2.2.1, x.2.2.2) y hy'
+              change x.2.2.1.2.2 ≤ y.2.1.2.2 at hmono
+              omega
+            simp only [if_neg hgood]
+            rw [← PMF.monad_pure_eq_pure, probEvent_pure]
+            simp [hzero_tail]
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1820,3 +2093,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedWorldJointStep_relation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedWorldJointStep_relation
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_budget_event
