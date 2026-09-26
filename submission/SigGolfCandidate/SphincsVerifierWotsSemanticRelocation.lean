@@ -5878,4 +5878,89 @@ theorem upper_encoding_query_after_previous_path (target : Fin 5)
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_encoding_query_with_index
 
+theorem decoder_step_cell (i : Fin 52) (state : MachineState)
+    (address : Word)
+    (separate : alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) ≠ address) :
+    (SphincsVerifierWotsDecode.decoderState i state).getMem address =
+      state.getMem address := by
+  have storeAddress : (0x44000 : Word) +
+      signExtend12 (BitVec.ofNat 12 i.val) + signExtend12 (0 : BitVec 12) =
+      BitVec.ofNat 64 (0x44000 + i.val) := by
+    fin_cases i <;> decide
+  have distinct : address ≠
+      alignToDword ((0x44000 : Word) +
+        signExtend12 (BitVec.ofNat 12 i.val) +
+        signExtend12 (0 : BitVec 12)) := by
+    intro equal
+    exact separate ((congrArg alignToDword storeAddress).symm.trans equal.symm)
+  simp [SphincsVerifierWotsDecode.decoderState,
+    SphincsVerifierWotsDecode.decoderSuffixState,
+    SphincsVerifierWotsDecode.decoderMiddleState,
+    SphincsVerifierWotsDecode.decoderPrefixState,
+    execInstrBr, MachineState.setByte,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  intro same
+  exact (distinct same).elim
+
+theorem decoder_run_cell (count : Nat) (state : MachineState)
+    (address : Word)
+    (separate : ∀ i : Fin 52,
+      alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) ≠ address) :
+    (SphincsVerifierWotsDecodeData.decoderRun count state).getMem address =
+      state.getMem address := by
+  induction count with
+  | zero => rfl
+  | succ count ih =>
+      change (SphincsVerifierWotsDecode.decoderState
+        ⟨count % 52, Nat.mod_lt _ (by decide)⟩
+        (SphincsVerifierWotsDecodeData.decoderRun count state)).getMem
+          address = _
+      exact (decoder_step_cell _ _ address (separate _)).trans ih
+
+theorem ready_cell (target : Fin 5) (state : MachineState)
+    (address : Word)
+    (separate : ∀ i : Fin 52,
+      alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) ≠ address)
+    (counter : address ≠ 0x43050)
+    (pointer : address ≠ 0x43028) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getMem
+        address = state.getMem address := by
+  rw [SphincsVerifierDecoderRelocation.setup_mem_other target _ address counter pointer]
+  simp [SphincsVerifierDecoderRelocation.upperDecoderState,
+    decoder_run_cell 52 _ address separate,
+    SphincsMaskedSignOtsShift.shift]
+
+theorem ready_layer_cell (target : Fin 5) (state : MachineState) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getMem
+        0x43000 = state.getMem 0x43000 := by
+  apply ready_cell target state 0x43000
+  · intro i
+    fin_cases i <;> decide
+  · decide
+  · decide
+
+theorem digit_cell_ge (i : Fin 52) :
+    0x44000 ≤
+      (alignToDword (BitVec.ofNat 64 (0x44000 + i.val))).toNat := by
+  fin_cases i <;> decide
+
+theorem ready_control_cell (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x44000)
+    (counter : address ≠ 0x43050)
+    (pointer : address ≠ 0x43028) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getMem
+        address = state.getMem address := by
+  apply ready_cell target state address ?_ counter pointer
+  intro i equal
+  have same := congrArg BitVec.toNat equal
+  have high := digit_cell_ge i
+  omega
+
+#print axioms ready_control_cell
+
+#print axioms ready_layer_cell
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
