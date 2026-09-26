@@ -6255,3 +6255,79 @@ theorem forest_complete_first_bottom_wots_output (hash : Hash)
 #print axioms forest_complete_first_bottom_wots_output
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+def signerShiftWords (location : Fin 5) : Nat :=
+  SphincsMaskedSignOtsParents.offset location -
+    SphincsMaskedSignOtsParents.offset (4 : Fin 5)
+
+theorem signer_five_layer_chain_slice (location : Fin 5) :
+    (SphincsMaskedImages.sign.code.drop
+      ((0x3b20 - 0x1000) / 4 + signerShiftWords location)).take
+      ((0x3dec - 0x3b20) / 4) =
+    (SphincsMaskedImages.sign.code.drop ((0x3b20 - 0x1000) / 4)).take
+      ((0x3dec - 0x3b20) / 4) := by
+  fin_cases location <;> simp_all [signerShiftWords, SphincsMaskedSignOtsParents.offset,
+    SphincsMaskedSignOtsShift.chainOffset] <;> rfl
+
+#print axioms signer_five_layer_chain_slice
+
+def signerShiftBytes (location : Fin 5) : Word :=
+  BitVec.ofNat 64 (4 * signerShiftWords location)
+
+theorem signer_shift_bound (location : Fin 5) :
+    signerShiftWords location ≤ 5900 := by
+  fin_cases location <;> decide
+
+theorem signer_five_layer_chain_word (location : Fin 5) (i : Fin 179) :
+    SphincsMaskedImages.sign.code[
+      (0x3b20 - 0x1000) / 4 + signerShiftWords location + i.val]? =
+    SphincsMaskedImages.sign.code[(0x3b20 - 0x1000) / 4 + i.val]? := by
+  have e := congrArg (fun words : List (BitVec 32) => words[i.val]?)
+    (signer_five_layer_chain_slice location)
+  simpa only [List.getElem?_take_of_lt i.isLt, List.getElem?_drop] using e
+
+theorem signer_five_layer_instruction_transfer (location : Fin 5)
+    (pc : Word) (lower : 0x3b20 ≤ pc.toNat) (upper : pc.toNat < 0x3dec)
+    (aligned : pc.toNat % 4 = 0) :
+    instructionAt SphincsMaskedImages.sign (pc + signerShiftBytes location) =
+      instructionAt SphincsMaskedImages.sign pc := by
+  let i : Fin 179 := ⟨(pc.toNat - 0x3b20) / 4, by omega⟩
+  have bounded := signer_shift_bound location
+  have original : pc = BitVec.ofNat 64 (0x1000 +
+      4 * ((0x3b20 - 0x1000) / 4 + i.val)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp [i]; omega)]
+    dsimp [i]
+    omega
+  have translated : pc + signerShiftBytes location =
+      BitVec.ofNat 64 (0x1000 +
+        4 * ((0x3b20 - 0x1000) / 4 + signerShiftWords location + i.val)) := by
+    rw [original, signerShiftBytes, ← BitVec.ofNat_add]
+    congr 1
+    omega
+  rw [translated,
+    SphincsMaskedSignOtsShift.fetch_index _ _ (by omega), original,
+    SphincsMaskedSignOtsShift.fetch_index _ _ (by omega),
+    signer_five_layer_chain_word location i]
+
+#print axioms signer_five_layer_instruction_transfer
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsShift
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+theorem jal_x0_shift (delta : Word) (s : MachineState) (imm : Int) :
+    execInstrBr (shift delta s) (.JAL .x0 imm) =
+      shift delta (execInstrBr s (.JAL .x0 imm)) := by
+  simp [execInstrBr, MachineState.setReg, shift, setPC_twice, BitVec.add_assoc, BitVec.add_comm,
+    add_left_comm]
+#print axioms jal_x0_shift
+end SigGolfCandidate.SphincsMaskedSignOtsShift
