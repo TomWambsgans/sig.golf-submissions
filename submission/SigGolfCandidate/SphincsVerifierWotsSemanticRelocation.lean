@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsVerifierXmssTransition
+import SigGolfCandidate.SphincsMaskedKeygenPadding
 
 namespace SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
@@ -773,6 +774,63 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
     ?_, done, endpoints, by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
 
+/-- The relocated upper-layer copy serializes recovered WOTS endpoints as a leaf. -/
+theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
+    (state : MachineState) (values : ChainIndex → Digest)
+    (pc : state.pc = 0x298c + delta target)
+    (endpoints : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState),
+      Trace hash SphincsImages.verify state 789 789 0 0 final ∧
+      final.pc = 0x29c8 + delta target ∧
+      (∀ i, (hi : i < 1040) →
+        final.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+          ((Concrete.leafPayload values).map UInt8.toBitVec)[i]'(by
+            rw [List.length_map,
+              SphincsVerifierWotsSemanticLeaf.leafPayload_length]
+            exact hi)) := by
+  let base := shift (-delta target) state
+  have basePc : base.pc = 0x298c := by
+    change state.pc + -delta target = 0x298c
+    rw [pc]
+    bv_decide
+  have baseEndpoints : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      base.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8 := by
+    intro chain j hj
+    simpa [base] using endpoints chain j hj
+  obtain ⟨copied, copy, done, payload⟩ :=
+    SphincsVerifierWotsSemanticLeaf.rootCopy_payload base basePc values
+      baseEndpoints
+  obtain ⟨setup, setupPc, sourceReg, destination, count⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopySetup_block base basePc
+  have setupTrace := setup.trace (hash := hash)
+  have setupInside := SigGolfCandidate.SphincsVerifierWotsRank.trace_inside_of_rank
+    hash setupTrace (by rw [basePc]; decide)
+  obtain ⟨insideFinal, loopTrace, _loopPc, _words, _frame, loopInside⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsLeafInterior.root_copy_inside hash
+      (SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopySetupState base)
+      setupPc sourceReg destination count
+  have fullInside : Trace hash SphincsImages.verify base 789 789 0 0
+      insideFinal := by
+    simpa [setupTrace, Nat.add_assoc] using setupTrace.trans loopTrace
+  have interior : SegmentInterior hash fullInside := by
+    simpa [setupTrace, Nat.add_assoc] using
+      segment_interior_trans hash setupTrace loopTrace setupInside loopInside
+  have sameFinal : copied = insideFinal :=
+    SigGolfCandidate.SphincsMaskedKeygenPadding.trace_unique
+      (copy.trace (hash := hash)) fullInside
+  have shiftedStart : shift (delta target) base = state := by
+    simp [base, shift, MachineState.setPC]
+  refine ⟨shift (delta target) insideFinal, ?_, ?_, ?_⟩
+  · simpa only [shiftedStart] using trace_shift target hash
+      fullInside interior
+  · rw [shift_pc, ← sameFinal, done]
+  · intro i hi
+    rw [← sameFinal]
+    simpa using payload i hi
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -802,6 +860,12 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_decoder_chains_semantics
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_rootCopy_payload' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_rootCopy_payload
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,
