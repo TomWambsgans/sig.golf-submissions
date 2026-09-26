@@ -642,6 +642,100 @@ theorem certificateStoppedSigningJointStep_unbounded_budget_event (key : SecretK
     intro i hi
     cases i <;> simp at *
 
+theorem enrichedSigningRecord_remaining (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (result : ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState)
+    (hr : result ∈ (enrichedSigningRecord key message state).support) :
+    result.2.2.2 = state.2.2 - result.1.trace.hashCalls := by
+  unfold enrichedSigningRecord at hr
+  rw [PMF.mem_support_bind_iff] at hr
+  obtain ⟨source, hsource, hindex⟩ := hr
+  rw [PMF.mem_support_map_iff] at hindex
+  obtain ⟨index, _, heq⟩ := hindex
+  subst result
+  exact certificateStoppedRomImpl_remaining_boundary key (signWithView key message)
+    state source hsource
+
+theorem enrichedSigningRecord_cache (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (result : ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState)
+    (hr : result ∈ (enrichedSigningRecord key message state).support) :
+    result.1.cache = result.2.1 := by
+  unfold enrichedSigningRecord at hr
+  rw [PMF.mem_support_bind_iff] at hr
+  obtain ⟨source, _, hindex⟩ := hr
+  rw [PMF.mem_support_map_iff] at hindex
+  obtain ⟨index, _, heq⟩ := hindex
+  subst result
+  rfl
+
+/-- Every joint output keeps the original and ghost cache synchronized,
+    charges exactly the record's hash calls, and updates remaining budget
+    by that same amount. -/
+theorem certificateUnboundedSigningJointStep_state_relation (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (result : CertificateStoppedSigningJointOutput message)
+    (hr : result ∈ (certificateUnboundedSigningJointStep key budget required stopAfter
+      message state ghost).support) :
+    result.2.2.2.1 = result.2.2.1.1 ∧
+      result.2.2.2.2.2 = ghost.2.2 - result.1.trace.hashCalls ∧
+      result.2.2.1.2.2 = state.2.2 + result.1.trace.hashCalls := by
+  unfold certificateUnboundedSigningJointStep at hr
+  rw [PMF.mem_support_bind_iff] at hr
+  obtain ⟨source, hsource, hkernel⟩ := hr
+  unfold certificateStoppedSigningJointKernel at hkernel
+  rw [PMF.mem_support_map_iff] at hkernel
+  obtain ⟨length, _, heq⟩ := hkernel
+  subst result
+  have hremain := enrichedSigningRecord_remaining key message ghost source hsource
+  have hcache := enrichedSigningRecord_cache key message ghost source hsource
+  simp only [originalProposalAdvance, certificateCountedUpdate]
+  exact ⟨hcache.symm, hremain, trivial⟩
+
+theorem certificateStoppedSigningJointStep_some (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (x : CertificateStoppedSigningJointOutput message) :
+    certificateStoppedSigningJointStep key budget required stopAfter message state ghost (some x) =
+      if x.1.trace.hashCalls ≤ ghost.2.2 then
+        certificateUnboundedSigningJointStep key budget required stopAfter message state ghost x
+      else 0 := by
+  classical
+  have h := certificateStoppedSigningJointStep_unbounded_budget_event
+    key budget required stopAfter message state ghost (fun result => result = x)
+  have hleft : (fun result : Option (CertificateStoppedSigningJointOutput message) =>
+      result.elim False (fun output => output = x)) = (fun result => result = some x) := by
+    funext result
+    cases result <;> simp
+  rw [hleft, probEvent_eq_eq_probOutput] at h
+  simp only [probOutput_def] at h
+  by_cases hb : x.1.trace.hashCalls ≤ ghost.2.2
+  · have hpred : (fun result => result.1.trace.hashCalls ≤ ghost.2.2 ∧ result = x) =
+        (fun result => result = x) := by
+      funext result
+      apply propext
+      constructor
+      · exact And.right
+      · intro heq
+        subst result
+        exact ⟨hb, rfl⟩
+    rw [hpred, probEvent_eq_eq_probOutput] at h
+    simpa [hb, probOutput_def] using h
+  · have hpred : (fun result : CertificateStoppedSigningJointOutput message =>
+        result.1.trace.hashCalls ≤ ghost.2.2 ∧ result = x) = (fun _ => False) := by
+      funext result
+      apply propext
+      constructor
+      · intro hr
+        rw [hr.2] at hr
+        exact hb hr.1
+      · exact False.elim
+    rw [hpred] at h
+    simpa [hb, probEvent_eq_tsum_ite] using h
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -1465,3 +1559,19 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_boundary' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_boundary
+
+/-- info: 'SphincsSecurity.Concrete.enrichedSigningRecord_remaining' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedSigningRecord_remaining
+
+/-- info: 'SphincsSecurity.Concrete.enrichedSigningRecord_cache' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedSigningRecord_cache
+
+/-- info: 'SphincsSecurity.Concrete.certificateUnboundedSigningJointStep_state_relation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateUnboundedSigningJointStep_state_relation
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedSigningJointStep_some' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedSigningJointStep_some
