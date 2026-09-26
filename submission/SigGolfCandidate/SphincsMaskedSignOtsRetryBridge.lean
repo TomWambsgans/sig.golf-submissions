@@ -2578,4 +2578,58 @@ theorem first_bottom_chain_first_hash (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_first_hash
 
+/-- The relocated signer chain HASH asks the same oracle query as one
+    abstract WOTS chain step. -/
+theorem first_bottom_chain_hash_query (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step) :
+    hashInput (firstBottomChainHashPrep s) =
+      toQuery (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+        (bytesLE 20 value)) := by
+  have rebased : SphincsMaskedSignOtsDomain.Chain.Context
+      (s.setPC (0x1270#64)) parameter value lay treeIdx leaf chain step := by
+    simpa [SphincsMaskedSignOtsDomain.Chain.Context, Words20,
+      MachineState.getWord32] using ctx
+  rw [firstBottomChainHashPrep, hashInput_shift]
+  exact SphincsMaskedSignOtsDomain.Chain.query_eq _ parameter value lay
+    treeIdx leaf chain step rebased
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_hash_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_hash_query
+
+/-- The first signer chain HASH returns the abstract next-chain value in
+    its 20-byte oracle-answer buffer. -/
+theorem first_bottom_chain_hash_answer_words (hash : Hash) (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step) :
+    Words20 (firstBottomChainHashAnswer hash s) 0x42000
+      (truncateHash (hash (toQuery
+        (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 value))))) := by
+  intro i
+  let prep := firstBottomChainHashPrep s
+  have destination : prep.getReg .x12 = 0x42000 := by
+    simpa [prep, firstBottomChainHashPrep] using
+      (SphincsMaskedChainStep.prepare_registers (s.setPC (0x1270#64))).2.2.1
+  have answer := SphincsVerifierWotsValue.writeHash_word32 prep
+    (hash (hashInput prep)) destination i
+  have query := first_bottom_chain_hash_query s parameter value lay treeIdx
+    leaf chain step ctx
+  rw [show (firstBottomChainHashAnswer hash s).getWord32
+    (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+    (hash (hashInput prep)).extractLsb' (32 * i.val) 32 by
+      simpa [prep, firstBottomChainHashAnswer,
+        SphincsVerifierWotsEndpointCopy.word] using answer]
+  rw [query]
+  exact (BitVec.extractLsb'_extractLsb'_of_le (by omega)).symm
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_hash_answer_words' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_hash_answer_words
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
