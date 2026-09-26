@@ -434,3 +434,40 @@ end SphincsSecurity.WeightedCutoff
 /-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedTail' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedTail
+
+namespace SphincsSecurity.WeightedCutoff
+attribute [local instance] Classical.propDecidable
+
+theorem residual_run_checkedHashQuery (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing)
+    (reject : HashInput → HashOutput → Prop) (input : inputs) (budget : Nat) :
+    run (residualCharge inputs)
+      (simulateQ (Concrete.RetainedResidual.embed inputs routing)
+        (Concrete.ResidualByteFrontend.checkedHashQuery reject input)) budget =
+    if 1 ≤ budget then
+      (do
+        let answer ← simulateQ (Concrete.RetainedResidual.embed inputs routing)
+          (Concrete.ResidualByteFrontend.checkedHashQuery reject input)
+        pure (some answer))
+    else pure none := by
+  simp only [Concrete.ResidualByteFrontend.checkedHashQuery, Concrete.ResidualByteFrontend.hashQuery,
+    simulateQ_bind, simulateQ_spec_query, Concrete.RetainedResidual.embed]
+  simp only [bind_assoc]
+  rw [run_query_bind]
+  by_cases allowed : residualCharge inputs (.inl (.byte routing (.prepare input))) ≤ budget
+  · have h1 : 1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_pos allowed, if_pos h1]
+    congr 1
+    funext action
+    convert residual_run_checkedTail inputs routing (reject input.val) action (budget - 1) using 1
+    all_goals first | rfl | simp only [residualCharge, simulateQ_bind, bind_assoc,
+      Concrete.ResidualByteFrontend.World]
+    congr 1
+  · have h1 : ¬1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_neg allowed, if_neg h1]
+
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery
