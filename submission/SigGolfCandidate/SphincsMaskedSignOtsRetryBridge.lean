@@ -6331,3 +6331,45 @@ theorem jal_x0_shift (delta : Word) (s : MachineState) (imm : Int) :
     add_left_comm]
 #print axioms jal_x0_shift
 end SigGolfCandidate.SphincsMaskedSignOtsShift
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+/-- Transport the actual backward jump of one WOTS signer chain to every lower layer. -/
+theorem signer_jal_site_shift (location : Fin 5) (hash : Hash)
+    (s next : MachineState) (pc : s.pc = 0x3dac)
+    (step : ordinaryStep s (.base (.JAL .x0 (-376))) = some next) :
+    Trace hash SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      1 1 0 0
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) next) := by
+  have sourceFetch : fetch SphincsMaskedImages.sign s =
+      some (.base (.JAL .x0 (-376))) := by
+    rw [SphincsVerifierFtsRootCopy.fetch_at, pc]
+    decide
+  have targetFetch : fetch SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s) =
+      some (.base (.JAL .x0 (-376))) := by
+    change instructionAt SphincsMaskedImages.sign
+      (s.pc + signerShiftBytes location) = _
+    rw [signer_five_layer_instruction_transfer location s.pc
+      (by rw [pc]; decide) (by rw [pc]; decide) (by rw [pc]; decide)]
+    simpa only [SphincsVerifierFtsRootCopy.fetch_at] using sourceFetch
+  have nextEq : next = execInstrBr s (.JAL .x0 (-376)) := by
+    simpa [ordinaryStep, memoryArgumentsValid] using step.symm
+  subst next
+  have shiftedStep : ordinaryStep
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      (.base (.JAL .x0 (-376))) =
+      some (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (execInstrBr s (.JAL .x0 (-376)))) := by
+    simpa [ordinaryStep, memoryArgumentsValid] using
+      congrArg some (SphincsMaskedSignOtsShift.jal_x0_shift (signerShiftBytes location) s (-376))
+  exact Trace.ordinary _ _ _ _ 0 0 0 0 targetFetch shiftedStep (Trace.refl _)
+
+#print axioms signer_jal_site_shift
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
