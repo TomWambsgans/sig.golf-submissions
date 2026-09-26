@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.OriginalMessageAllocation
 import SigGolfCandidate.SphincsSecurity.Proof.Reference.ReferencePrimitiveBound
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.CertificateCacheExceptionKernels
+import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryCapErasure
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
@@ -14,6 +15,9 @@ noncomputable def originalCacheHistoryWeight (key : SecretKey) (state : Certific
 
 private theorem probOutput_probCompLift {Result : Type} (computation : ProbComp Result) (result : Result) :
     Pr[= result | (liftM computation : PMF Result)] = Pr[= result | computation] := rfl
+
+noncomputable def romPmfImpl : QueryImpl OracleWorld (StateT (QueryCache HashSpec) PMF) :=
+  fun input => StateT.mk fun cache => (liftM ((romImpl input).run cache) : PMF _)
 
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
@@ -37,6 +41,58 @@ theorem originalProposalRecord_cache_exception_budget_event (key : SecretKey)
       (simulateQ romImpl (countHashQueries (expandedAdversaryImpl key input))).run cache] := by
   simpa only [Nat.zero_add] using originalProposalRecord_budget_event key input cache 0 q
     (CertificateCacheExceptional key)
+
+theorem originalProposalRecord_budget_stopped_event (key : SecretKey)
+    (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
+    (spent q : Nat) (hspent : spent ≤ q) (event : QueryCache HashSpec → Prop) :
+    Pr[fun record => event record.cache ∧ spent + record.trace.hashCalls ≤ q |
+      originalProposalRecord key input cache] =
+    Pr[QueryCap.stoppedStateEvent (fun _ finalCache => event finalCache) |
+      (simulateQ romPmfImpl (QueryCap.run
+        (fun query : OracleWorld.Domain => query matches .inr _)
+        (expandedAdversaryImpl key input) (q - spent))).run cache] := by
+  rw [originalProposalRecord_budget_event]
+  have hpred :
+      (fun result : (((OracleWorld + SigningSpec).Range input × Nat) × QueryCache HashSpec) =>
+        event result.2 ∧ spent + result.1.2 ≤ q) =
+      (fun result => result.1.2 ≤ q - spent ∧ event result.2) := by
+    funext result
+    apply propext
+    constructor
+    · intro ⟨hevent, hcost⟩
+      exact ⟨by omega, hevent⟩
+    · intro ⟨hcost, hevent⟩
+      exact ⟨hevent, by omega⟩
+  rw [hpred]
+  have hcap := QueryCap.run_budget_event_state
+    (fun query : OracleWorld.Domain => query matches .inr _)
+    romPmfImpl (expandedAdversaryImpl key input) (q - spent) cache
+    (fun (_ : (OracleWorld + SigningSpec).Range input)
+      (finalCache : QueryCache HashSpec) => event finalCache)
+  have hcountLaw :
+      (simulateQ romPmfImpl (QueryCap.counted
+        (fun query : OracleWorld.Domain => query matches .inr _)
+        (expandedAdversaryImpl key input))).run cache =
+      (liftM ((simulateQ romImpl
+        (countHashQueries (expandedAdversaryImpl key input))).run cache) : PMF _) := by
+    change (simulateQ (fun query => StateT.mk fun current =>
+      (liftM ((romImpl query).run current) : PMF _))
+        (QueryCap.counted (fun query : OracleWorld.Domain => query matches .inr _)
+          (expandedAdversaryImpl key input))).run cache =
+      (liftM ((simulateQ romImpl
+        (QueryCap.counted (fun query : OracleWorld.Domain => query matches .inr _)
+          (expandedAdversaryImpl key input))).run cache) : PMF _)
+    exact simulateQ_liftProbCompImpl_run romImpl _ cache
+  calc
+    _ = Pr[fun result => result.1.2 ≤ q - spent ∧ event result.2 |
+        (liftM ((simulateQ romImpl
+          (countHashQueries (expandedAdversaryImpl key input))).run cache) : PMF _)] := by
+      simp only [probEvent_eq_tsum_ite, probOutput_probCompLift]
+    _ = Pr[fun result => result.1.2 ≤ q - spent ∧ event result.2 |
+        (simulateQ romPmfImpl (QueryCap.counted
+          (fun query : OracleWorld.Domain => query matches .inr _)
+          (expandedAdversaryImpl key input))).run cache] := by rw [hcountLaw]
+    _ = _ := hcap.symm
 
 theorem expected_certificateCacheLengthImpl_of_record_function (key : SecretKey) (budget : Nat)
     (required : Finset FtsTree) (stopAfter : CertificateStopRule)
@@ -403,3 +459,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.originalProposalRecord_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.originalProposalRecord_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.originalProposalRecord_budget_stopped_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalProposalRecord_budget_stopped_event
