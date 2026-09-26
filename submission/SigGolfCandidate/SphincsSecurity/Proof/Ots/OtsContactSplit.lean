@@ -46,6 +46,19 @@ theorem splitRun_two_contacts {Result : Type} (computation : OracleComp OracleWo
     have hone := pause_card_le_one parameter words frontier computation middle hmiddle
     omega
 
+/-- Every contact trace of a globally capped computation has at most the cap's hash entries. -/
+theorem splitRun_globalCap_hash_length_le {Result : Type}
+    (parameter : PublicParameter) (words : OtsReferenceWords) (frontier : OtsFrontierValues)
+    (computation : OracleComp OracleWorld Result) (budget : Nat)
+    (result : Trace × (Option (Result × Nat) × Trace))
+    (hresult : result ∈ support (splitRun parameter words frontier
+      (QueryCap.run CausalFrontierProgram.IsHash computation budget))) :
+    (result.1 * result.2.2).toList.length ≤ budget := by
+  apply traced_globalCap_hash_length_le computation budget
+    (result.2.1, result.1 * result.2.2)
+  rw [← splitRun_trace parameter words frontier, support_map]
+  exact ⟨result, hresult, rfl⟩
+
 theorem splitRun_game_cost (external : QueryImpl HashSpec Id)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (adversary : Adversary)
     (result : Trace × ((Bool × SigningBoundaryTrace) × Trace))
@@ -57,3 +70,7 @@ theorem splitRun_game_cost (external : QueryImpl HashSpec Id)
   exact ⟨result, hresult, rfl⟩
 
 end SphincsSecurity.Concrete.OtsContactTrace
+
+/-- info: 'SphincsSecurity.Concrete.OtsContactTrace.splitRun_globalCap_hash_length_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.OtsContactTrace.splitRun_globalCap_hash_length_le
