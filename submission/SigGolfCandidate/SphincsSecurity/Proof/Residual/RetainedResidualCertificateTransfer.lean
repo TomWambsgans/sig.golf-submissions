@@ -2,6 +2,7 @@ import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualBankCompl
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualStrongCoverage
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualPrimitivePotential
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualGameTransfer
+import SigGolfCandidate.SphincsSecurity.Proof.Reference.ReferenceContactGame
 namespace SphincsSecurity.Concrete.RetainedResidual
 
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
@@ -260,3 +261,26 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le_all
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem originalGame_budget_eq_prefixPrior (dummy : OtsReferenceWords)
+    (adversary : Adversary) (budget : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ budget |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] =
+    Pr[fun result => result.2.1 = true ∧ result.2.2.hashCalls ≤ budget |
+      referencePrefixJointPriorGame (gameInputs adversary)
+        (canonicalEncodingInputs_subset_retainedGameInputs adversary) dummy adversary] := by
+  conv_lhs => rw [← probEvent_evalSPMF]
+  rw [← SigGolfCandidate.BoundaryCount.boundaryGameCore_count_law,
+    boundaryGameCore_eq_retainedPrefixPrior, probEvent_map, probEvent_map]
+  rfl
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_eq_prefixPrior' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_eq_prefixPrior
