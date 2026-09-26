@@ -2434,6 +2434,10 @@ theorem first_upper_padding_block (state : MachineState)
       firstUpperPaddingSchedule firstUpperPadding_code state
       (firstUpperPadding_checked state pc first second)
 
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_padding_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_padding_block
+
 theorem first_upper_padding_ready (state : MachineState)
     (pc : state.pc = 0x6de8)
     (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
@@ -2449,6 +2453,101 @@ theorem first_upper_padding_ready (state : MachineState)
     MachineState.getByte,
     MachineState.getMem_setPC, MachineState.getMem_setReg,
     pc, first', second']
+
+private theorem firstUpperTopBitsZero : ∀ b : BitVec 8,
+    b.getLsbD 6 = false → b.getLsbD 7 = false →
+      (BitVec.setWidth 64 b &&& (192#64)) = 0#64 := by
+  decide
+
+theorem first_upper_decoded_padding (answer : BitVec 256)
+    (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest (truncateHash answer) = some encoding) :
+    (BitVec.setWidth 64 (answer.extractLsb' 72 8) &&& (192#64)) = 0#64 ∧
+    (BitVec.setWidth 64 (answer.extractLsb' 152 8) &&& (192#64)) = 0#64 := by
+  have bits : (truncateHash answer).getLsbD 78 = false ∧
+      (truncateHash answer).getLsbD 79 = false ∧
+      (truncateHash answer).getLsbD 158 = false ∧
+      (truncateHash answer).getLsbD 159 = false := by
+    unfold TargetSum.decodeDigest at decoded
+    split_ifs at decoded with h
+    · exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1⟩
+  rcases bits with ⟨h78, h79, h158, h159⟩
+  have project (i : Nat) (hi : i < 160) :
+      (truncateHash answer).getLsbD i = answer.getLsbD i := by
+    change (BitVec.extractLsb' 0 160 answer)[i] = answer.getLsbD i
+    simpa only [Nat.zero_add] using
+      (BitVec.getElem_extractLsb' (start := 0) (len := 160) (x := answer) hi)
+  rw [project 78 (by decide)] at h78
+  rw [project 79 (by decide)] at h79
+  rw [project 158 (by decide)] at h158
+  rw [project 159 (by decide)] at h159
+  have lo6 : (answer.extractLsb' 72 8).getLsbD 6 = false := by
+    simpa [BitVec.getLsbD_extractLsb'] using h78
+  have lo7 : (answer.extractLsb' 72 8).getLsbD 7 = false := by
+    simpa [BitVec.getLsbD_extractLsb'] using h79
+  have hi6 : (answer.extractLsb' 152 8).getLsbD 6 = false := by
+    simpa [BitVec.getLsbD_extractLsb'] using h158
+  have hi7 : (answer.extractLsb' 152 8).getLsbD 7 = false := by
+    simpa [BitVec.getLsbD_extractLsb'] using h159
+  exact ⟨firstUpperTopBitsZero _ lo6 lo7,
+    firstUpperTopBitsZero _ hi6 hi7⟩
+
+theorem first_upper_hash_padding (state : MachineState)
+    (destination : state.getReg .x12 = 0x42000)
+    (answer : BitVec 256) (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest (truncateHash answer) = some encoding) :
+    let answered := writeHash state answer
+    BitVec.setWidth 64 (answered.getByte 0x42009) &&& 192 = (0 : Word) ∧
+    BitVec.setWidth 64 (answered.getByte 0x42013) &&& 192 = (0 : Word) := by
+  have firstByte := SphincsVerifierFtsResult.hashAnswer_byte state answer
+    destination 9 (by decide)
+  have secondByte := SphincsVerifierFtsResult.hashAnswer_byte state answer
+    destination 19 (by decide)
+  have padding := first_upper_decoded_padding answer encoding decoded
+  change
+    BitVec.setWidth 64 ((writeHash state answer).getByte
+      (BitVec.ofNat 64 (0x42000 + 9))) &&& 192 = (0 : Word) ∧
+    BitVec.setWidth 64 ((writeHash state answer).getByte
+      (BitVec.ofNat 64 (0x42000 + 19))) &&& 192 = (0 : Word)
+  rw [firstByte, secondByte]
+  change
+    (BitVec.setWidth 64 (answer.extractLsb' 72 8) &&& (192#64)) = 0#64 ∧
+    (BitVec.setWidth 64 (answer.extractLsb' 152 8) &&& (192#64)) = 0#64
+  exact padding
+
+theorem first_upper_decoder_prefix (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0)
+    (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest
+      (truncateHash (hash (hashInput (firstUpperPrehashState state)))) =
+        some encoding) :
+    let hashed := writeHash (firstUpperPrehashState state)
+      (hash (hashInput (firstUpperPrehashState state)))
+    Trace hash SphincsImages.verify state 61 68 1 1
+      (firstUpperPaddingState hashed) ∧
+    (firstUpperPaddingState hashed).pc = 0x6e1c ∧
+    (firstUpperPaddingState hashed).getReg .x15 = 0 := by
+  obtain ⟨_preRun, readyPc, _source, _bits, destination, _service⟩ :=
+    first_upper_prehash_block state pc small
+  let ready := firstUpperPrehashState state
+  let answer := hash (hashInput ready)
+  let hashed := writeHash ready answer
+  have hashedPc : hashed.pc = 0x6de8 := by
+    change ready.pc + 4 = 0x6de8
+    rw [show ready.pc = 0x6de4 from readyPc]
+    decide
+  have padding := first_upper_hash_padding ready destination answer encoding decoded
+  have tail := first_upper_padding_block hashed hashedPc padding.1 padding.2
+  have final := first_upper_padding_ready hashed hashedPc padding.1 padding.2
+  refine ⟨?_, final⟩
+  have preRun := first_upper_hash_prefix hash state pc small
+  simpa [ready, answer, hashed, Nat.add_assoc] using
+    preRun.trans (tail.trace (hash := hash))
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_decoder_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_decoder_prefix
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
