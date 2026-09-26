@@ -2665,3 +2665,71 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_counted
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem lazyRun_stopped_success_event_eq_budget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (event : Result → State inputs → Prop) :
+    Pr[fun result => ∃ value, result.1 = some (some value) ∧ event value result.2 |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining) state] =
+    Pr[fun result => ∃ value, result.1 = some value ∧
+      result.2.memory.external.hashCalls ≤ budget ∧ event value result.2 |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        program state] := by
+  rw [lazyRun_stopped_success_event_eq_counted parameter inputs hencoding words
+    publicReplies selections rows program state remaining event]
+  rw [← lazyRun_counted_forget parameter inputs hencoding words publicReplies
+    selections rows program state, probEvent_map]
+  rw [probEvent_eq_tsum_ite, probEvent_eq_tsum_ite]
+  apply tsum_congr
+  intro result
+  by_cases hr : Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) program) state] = 0
+  · simp [hr]
+  · rcases result with ⟨option, after⟩
+    cases option with
+    | none => simp [Function.comp_def]
+    | some pair =>
+        rcases pair with ⟨value, cost⟩
+        have hcalls := lazyRun_counted_hashCalls parameter inputs hencoding words
+          publicReplies selections rows program state value cost after hr
+        have hcost : cost ≤ remaining ↔ after.memory.external.hashCalls ≤ budget := by
+          omega
+        have hevent :
+            (∃ target total,
+              some (value, cost) = some (target, total) ∧
+              total ≤ remaining ∧ event target after) ↔
+            (∃ target, some value = some target ∧
+              after.memory.external.hashCalls ≤ budget ∧ event target after) := by
+          simp only [Option.some.injEq, Prod.mk.injEq]
+          constructor
+          · rintro ⟨target, total, ⟨hv, hc⟩, hle, he⟩
+            subst target
+            subst total
+            exact ⟨value, rfl, hcost.mp hle, he⟩
+          · rintro ⟨target, hv, hle, he⟩
+            subst target
+            exact ⟨value, cost, ⟨rfl, rfl⟩, hcost.mpr hle, he⟩
+        simp only [Function.comp_def]
+        rw [propext hevent]
+        simp only [Option.map_some]
+        by_cases h : ∃ target, some value = some target ∧
+            after.memory.external.hashCalls ≤ budget ∧ event target after <;> simp [h]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_budget
