@@ -3206,3 +3206,66 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_weight_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_weight_eq_budget
+
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem completed_message_weight_le_expected_stoppedPotential
+    {Result : Type} {inputs : Finset HashInput} (budget : Nat)
+    (law : SPMF (Option (Option Result) × State inputs)) :
+    (∑' (value : Result) (after : State inputs),
+      Pr[= (some (some value), after) | law] *
+        ((after.memory.messageCalls.length : ENNReal) / 2 ^ digestBits)) ≤
+    ∑' result, Pr[= result | law] *
+      stoppedPrimitiveResultPotential inputs budget result := by
+  have hpoint (result : Option (Option Result) × State inputs) :
+      Pr[= result | law] *
+        (match result.1 with
+        | some (some _) => (result.2.memory.messageCalls.length : ENNReal) / 2 ^ digestBits
+        | _ => 0) ≤
+      Pr[= result | law] * stoppedPrimitiveResultPotential inputs budget result := by
+    rcases result with ⟨answer, after⟩
+    cases answer with
+    | none => simp [stoppedPrimitiveResultPotential, primitiveResultPotential]
+    | some answer =>
+        cases answer with
+        | none => simp [stoppedPrimitiveResultPotential]
+        | some value =>
+            simp only [stoppedPrimitiveResultPotential, primitiveResultPotential,
+              Option.elim_some]
+            exact mul_le_mul' le_rfl (le_add_of_nonneg_right zero_le)
+  have hsum :
+      (∑' result, Pr[= result | law] *
+        (match result.1 with
+        | some (some _) => (result.2.memory.messageCalls.length : ENNReal) / 2 ^ digestBits
+        | _ => 0)) =
+      (∑' (value : Result) (after : State inputs),
+        Pr[= (some (some value), after) | law] *
+          ((after.memory.messageCalls.length : ENNReal) / 2 ^ digestBits)) := by
+    calc
+      _ = ∑' (option : Option (Option Result)) (after : State inputs),
+          Pr[= (option, after) | law] *
+            (match option with
+            | some (some _) => (after.memory.messageCalls.length : ENNReal) / 2 ^ digestBits
+            | _ => 0) := by
+          simpa only using
+            (ENNReal.tsum_prod (f := fun option after =>
+              Pr[= (option, after) | law] *
+                (match option with
+                | some (some _) => (after.memory.messageCalls.length : ENNReal) / 2 ^ digestBits
+                | _ => 0)))
+      _ = _ := by
+        rw [tsum_option _ ENNReal.summable]
+        simp only [mul_zero, tsum_zero, zero_add]
+        rw [tsum_option _ ENNReal.summable]
+        simp only [mul_zero, tsum_zero, zero_add]
+  rw [← hsum]
+  exact ENNReal.tsum_le_tsum hpoint
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.completed_message_weight_le_expected_stoppedPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.completed_message_weight_le_expected_stoppedPotential
