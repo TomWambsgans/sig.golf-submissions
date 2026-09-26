@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Seeded.AdaptiveSeedGuessing
 import SigGolfCandidate.SphincsCommitment
+import SigGolfCandidate.SphincsAlignedQuery
 
 /-! Candidate domain-separated random-oracle inputs for encrypted public cache. -/
 
@@ -15,6 +16,25 @@ def macInput (parameter : PublicParameter) (seed : MasterSeed)
     (ciphertext : HashInput) : HashInput :=
   fieldBytes (tweakFields 15 0 0 0 0) ++
     bytesLE 20 parameter ++ bytesLE 32 seed ++ ciphertext
+
+theorem canonicalTagged_padInput (parameter : PublicParameter) (seed : MasterSeed)
+    (node : BitVec 32) :
+    BetaQuery.canonicalTagged (padInput parameter seed node) := by
+  refine ⟨?_, ?_, ?_⟩
+  · simp [padInput, fieldBytes, protocolDomainSep]
+  · simp [padInput, fieldBytes, bytesLE]
+  · simp [padInput, fieldBytes, tweakFields, bytesLE,
+      QueryDecoder.sourceLength]
+
+theorem canonicalTagged_macInput (parameter : PublicParameter) (seed : MasterSeed)
+    (ciphertext : HashInput) (h : ciphertext.length = 131052) :
+    BetaQuery.canonicalTagged (macInput parameter seed ciphertext) := by
+  refine ⟨?_, ?_, ?_⟩
+  · simp [macInput, fieldBytes, protocolDomainSep]
+  · simp [macInput, fieldBytes, bytesLE, h]
+  · simp [macInput, fieldBytes, tweakFields, bytesLE,
+      QueryDecoder.sourceLength, h]
+    decide
 
 theorem padInput_seedHit (parameter : PublicParameter) (seed : MasterSeed)
     (node : BitVec 32) : SeedHit (padInput parameter seed node) seed := by
@@ -127,6 +147,14 @@ theorem macInput_ne_commitmentInput (parameter : PublicParameter)
   simp [macInput, SigGolfCandidate.SphincsWire.commitmentInput,
     fieldBytes, tweakFields, bytesLE] at htag
   exact (by decide : (15 : UInt8) ≠ 13) htag
+
+/-- info: 'SigGolfCandidate.SphincsCacheSecretDomains.canonicalTagged_padInput' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms canonicalTagged_padInput
+
+/-- info: 'SigGolfCandidate.SphincsCacheSecretDomains.canonicalTagged_macInput' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms canonicalTagged_macInput
 
 end SigGolfCandidate.SphincsCacheSecretDomains
 
