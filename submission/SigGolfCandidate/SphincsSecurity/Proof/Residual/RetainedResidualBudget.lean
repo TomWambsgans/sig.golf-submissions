@@ -1038,3 +1038,36 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.fixedOriginal_gameRest_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.fixedOriginal_gameRest_counted
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem prob_gameRest_budget_le_stopped {inputs : Finset HashInput}
+    (context : Context inputs) (adversary : Adversary)
+    (memory : Memory) (hlog : memory.log = []) (budget : Nat) :
+    Pr[fun result => result.1 = true ∧ memory.external.hashCalls + result.2 ≤ budget |
+      simulateQ (fixedHashWorld context.oracle)
+        (countHashQueries
+          (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩ context.key))] ≤
+    Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true) result ∧
+        result.2.external.hashCalls ≤ budget |
+      fixedSourceRun context
+        (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+          ⟨context.key.root, context.key.parameter⟩) memory] := by
+  rw [fixedOriginal_gameRest_counted, probEvent_map]
+  simp only [Function.comp_def]
+  have h := prob_originalSource_budget_le_stopped context
+    (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+      ⟨context.key.root, context.key.parameter⟩) memory
+    (fun value log => sourceVerdict value log = true) budget
+  rw [hlog] at h
+  exact h
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.prob_gameRest_budget_le_stopped' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.prob_gameRest_budget_le_stopped
