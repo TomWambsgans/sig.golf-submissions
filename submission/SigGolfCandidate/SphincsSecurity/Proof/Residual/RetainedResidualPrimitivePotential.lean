@@ -1169,3 +1169,65 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_random_bind_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_random_bind_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+/-- A supported checked hash answer has spent exactly one global call. -/
+theorem lazyByteRun_hash_remaining_invariant
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+    (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily)
+    (rows : CanonicalEncodingRows) (routing : InterleavedResidual.Routing)
+    (input : HashInput) (hin : input ∈ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hallowed : 1 ≤ remaining)
+    (result : Option HashOutput × State inputs)
+    (hresult : lazyByteRun parameter inputs hencoding words publicReplies selections rows
+      routing (liftM (OracleWorld.query (.inr input))) state result ≠ 0) :
+    result.2.memory.external.hashCalls + (remaining - 1) = budget := by
+  rw [lazyByteRun_hash_hashCalls parameter inputs hencoding words publicReplies
+    selections rows routing input hin state ha result hresult]
+  omega
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_hash_remaining_invariant' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_hash_remaining_invariant
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+/-- A supported random-world answer spends no global hash calls. -/
+theorem lazyByteRun_random_remaining_invariant
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+    (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily)
+    (rows : CanonicalEncodingRows) (routing : InterleavedResidual.Routing)
+    (input : unifSpec.Domain)
+    (hinputs : hashInputs (liftM (OracleWorld.query (.inl input))) ⊆ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (result : Option (unifSpec.Range input) × State inputs)
+    (hresult : lazyByteRun parameter inputs hencoding words publicReplies selections rows
+      routing (liftM (OracleWorld.query (.inl input))) state result ≠ 0) :
+    result.2.memory.external.hashCalls + remaining = budget := by
+  have hh := lazyByteRun_world_hashCalls parameter inputs hencoding words publicReplies
+    selections rows routing (.inl input) hinputs state ha result hresult
+  simp only [reduceCtorEq, ↓reduceIte, Nat.add_zero] at hh
+  rw [hh]
+  exact hremaining
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_random_remaining_invariant' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_random_remaining_invariant
