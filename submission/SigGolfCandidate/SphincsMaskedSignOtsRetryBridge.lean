@@ -1495,4 +1495,86 @@ theorem encoding_checksum_of_decode (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms encoding_checksum_of_decode
 
+def bottomEncodingDigest (hash : Hash) (parameter : PublicParameter)
+    (seed : MasterSeed) (index : Index) : Digest :=
+  evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+    (Concrete.tweakableHash parameter
+      (.encoding bottomLayer (Concrete.treeIndexAt index bottomLayer)
+        (Concrete.leafIndexAt index bottomLayer))
+      (bytesLE 20 (evalWithAnswerFn (spec := SphincsSecurity.HashSpec)
+        (adaptOracle hash) (Seeded.ftsKey parameter index seed)) ++
+        bytesLE 4 (BitVec.ofNat 32 (0 : Counter).toNat)) :
+      OracleComp SphincsSecurity.HashSpec Digest)
+
+theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (encoding : Encoding) (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index)
+    (decoded : TargetSum.decodeDigest
+      (bottomEncodingDigest hash parameter seed index) = some encoding) :
+    ∃ t u, (∃ steps cycles calls blocks,
+      Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
+      Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
+      u.pc = 0x23cc + delta (4 : Fin 5) ∧
+      u.getByte (BitVec.ofNat 64 0x44000) =
+        BitVec.ofNat 8 (encoding (⟨0, by decide⟩ : ChainIndex)).val := by
+  obtain ⟨t, run, done, layer, tree, selected, par, msg⟩ :=
+    forest_complete_to_bottom_encoding_entry hash s parameter seed index pc ctx
+  have words : Words20 (initialEncodingState (4 : Fin 5) hash t) 0x42000
+      (bottomEncodingDigest hash parameter seed index) := by
+    exact initial_encoding_digest_words_from_entry (4 : Fin 5) hash t
+      parameter bottomLayer (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer)
+      (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+        (Seeded.ftsKey parameter index seed)) layer tree selected par msg
+  have p1 := first_encoding_padding_of_decode (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash t)
+    (bottomEncodingDigest hash parameter seed index) encoding words decoded
+  have p2 := second_encoding_padding_of_decode (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash t)
+    (bottomEncodingDigest hash parameter seed index) encoding words decoded
+  have good := encoding_checksum_of_decode (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash t)
+    (bottomEncodingDigest hash parameter seed index) encoding words decoded
+  have failed : ∀ j, j < 0 →
+      let st := fullRetryStates (4 : Fin 5) hash
+        (initialEncodingState (4 : Fin 5) hash t) j
+      (otsPaddingFirst (4 : Fin 5) st).getReg .x10 = 0 ∧
+      (otsPaddingSecond (4 : Fin 5) (otsPaddingFirst (4 : Fin 5) st)).getReg .x10 = 0 ∧
+      answerSum 52 (sumInit (otsPaddingSecond (4 : Fin 5)
+        (otsPaddingFirst (4 : Fin 5) st))) ≠ 194 ∧
+      st.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word) := by
+    intro j hj
+    omega
+  obtain ⟨accepted, endPc⟩ := encoding_success_from_entry
+    (4 : Fin 5) hash t done 0 failed
+    (by simpa [fullRetryStates] using p1)
+    (by simpa [fullRetryStates] using p2)
+    (by simpa [fullRetryStates] using good)
+  have bytes : ∀ j : Fin 20,
+      (sumInit (otsPaddingSecond (4 : Fin 5)
+        (otsPaddingFirst (4 : Fin 5)
+          (initialEncodingState (4 : Fin 5) hash t)))).getByte
+        (BitVec.ofNat 64 (0x42000 + j.val)) =
+        (bottomEncodingDigest hash parameter seed index).extractLsb' (8 * j.val) 8 := by
+    intro j
+    rw [sumInit_byte, otsPaddingSecond_byte, otsPaddingFirst_byte]
+    exact SphincsMaskedPublicKeyDomain.words20_byte _ 0x42000 _
+      (by omega) (by decide) words j
+  have digit := encoding_success_abstract_digit (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash t)
+    (bottomEncodingDigest hash parameter seed index) encoding bytes decoded
+    (⟨0, by decide⟩ : ChainIndex)
+  refine ⟨t, encodingSuccessState (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash t),
+    ⟨_, _, _, _, run⟩, ?_, ?_, ?_⟩
+  · simpa [fullRetryStates] using accepted
+  · simpa [fullRetryStates] using endPc
+  · simpa using digit
+
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_encoding_accepted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_first_bottom_encoding_accepted
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
