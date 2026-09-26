@@ -799,3 +799,83 @@ theorem betaCommitmentReady_hashCost (state : MachineState)
 #print axioms canonicalTagged_tweakable
 
 end SigGolfCandidate.BetaQuery
+
+namespace SigGolfCandidate.BetaQuery
+open OracleComp OracleSpec SphincsSecurity
+
+private def pullAbstractCache (cache : QueryCache SigGolf.HashSpec) :
+    QueryCache SphincsSecurity.HashSpec :=
+  fun input => cache (betaToQuery input)
+
+private theorem pullAbstractCache_update (cache : QueryCache SigGolf.HashSpec)
+    (input : SphincsSecurity.HashInput) (answer : BitVec 256) :
+    pullAbstractCache (cache.cacheQuery (betaToQuery input) answer) =
+      (pullAbstractCache cache).cacheQuery input answer := by
+  funext other
+  by_cases h : other = input
+  · subst other
+    simp [pullAbstractCache, QueryCache.cacheQuery]
+    rfl
+  · have hne : betaToQuery other ≠ betaToQuery input :=
+      fun heq => h (betaToQuery_injective heq)
+    simp [pullAbstractCache, QueryCache.cacheQuery, h, hne]
+    rfl
+
+private theorem randomOracle_pull (input : SphincsSecurity.HashInput)
+    (cache : QueryCache SigGolf.HashSpec) :
+    Prod.map id pullAbstractCache <$>
+      ((randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (betaToQuery input)).run cache =
+    ((randomOracle : QueryImpl SphincsSecurity.HashSpec
+      (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) input).run
+        (pullAbstractCache cache) := by
+  classical
+  cases hc : cache (betaToQuery input) with
+  | none =>
+      have hc' : (pullAbstractCache cache) input = none := hc
+      rw [show (randomOracle : QueryImpl SigGolf.HashSpec _) =
+        (uniformSampleImpl : QueryImpl SigGolf.HashSpec ProbComp).withCaching from rfl]
+      rw [show (randomOracle : QueryImpl SphincsSecurity.HashSpec _) =
+        (uniformSampleImpl : QueryImpl SphincsSecurity.HashSpec ProbComp).withCaching from rfl]
+      rw [QueryImpl.withCaching_run_none _ hc,
+          QueryImpl.withCaching_run_none _ hc']
+      simp [uniformSampleImpl, pullAbstractCache_update cache input]
+      rfl
+  | some answer =>
+      have hc' : (pullAbstractCache cache) input = some answer := hc
+      rw [show (randomOracle : QueryImpl SigGolf.HashSpec _) =
+        (uniformSampleImpl : QueryImpl SigGolf.HashSpec ProbComp).withCaching from rfl]
+      rw [show (randomOracle : QueryImpl SphincsSecurity.HashSpec _) =
+        (uniformSampleImpl : QueryImpl SphincsSecurity.HashSpec ProbComp).withCaching from rfl]
+      rw [QueryImpl.withCaching_run_some _ hc,
+          QueryImpl.withCaching_run_some _ hc']
+      simp
+      rfl
+
+/-- Injectively padding arbitrary abstract queries preserves the shared lazy-RO law. -/
+theorem betaRandomOracle_reindex {α : Type}
+    (program : OracleComp SphincsSecurity.HashSpec α) :
+    (simulateQ (fun input =>
+      (randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (betaToQuery input))
+      program).run' ∅ =
+    (simulateQ (randomOracle : QueryImpl SphincsSecurity.HashSpec
+      (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) program).run' ∅ := by
+  have h := run'_simulateQ_eq_of_query_map_eq
+    (fun input : SphincsSecurity.HashInput => (randomOracle : QueryImpl SigGolf.HashSpec
+      (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (betaToQuery input))
+    (randomOracle : QueryImpl SphincsSecurity.HashSpec
+      (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+    pullAbstractCache (fun input cache => randomOracle_pull input cache) program (∅ : QueryCache SigGolf.HashSpec)
+  have hempty : pullAbstractCache (∅ : QueryCache SigGolf.HashSpec) =
+      (∅ : QueryCache SphincsSecurity.HashSpec) := by
+    funext input
+    rfl
+  rw [hempty] at h
+  exact h
+
+/-- info: 'SigGolfCandidate.BetaQuery.betaRandomOracle_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms betaRandomOracle_reindex
+
+end SigGolfCandidate.BetaQuery
