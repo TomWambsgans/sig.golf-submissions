@@ -6552,3 +6552,61 @@ theorem signer_check_shift (location : Fin 5) (s : MachineState)
 
 #print axioms signer_check_shift
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy SphincsMaskedChainLoop
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+/-- The first WOTS secret HASH makes the same query and uses the same compression count at all five layer PCs. -/
+theorem signer_secret_hash_shift (location : Fin 5) (hash : Hash)
+    (s : MachineState) (pc : s.pc = 0x3b20) :
+    Trace hash SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      41 56 1 2
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomSecretHashAnswer hash s)) := by
+  let prep := firstBottomSecretHashPrep s
+  have baseSupport : ∀ e ∈ firstBottomSecretHashCode,
+      SphincsMaskedSignOtsShift.Supported e.2 := by decide
+  have supported : ∀ e ∈ firstBottomSecretHashCode,
+      signerSupported e.2 := by
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomSecretHashCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have prepared : OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      40 (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) prep) := by
+    have run := signer_block_shift location firstBottomSecretHashCode
+      supported inside first_bottom_secret_hash_code s
+      (first_bottom_secret_hash_checked s pc)
+    simpa [prep, firstBottomSecretHashPrep, firstBottomSecretHashCode] using run
+  obtain ⟨prepPc, src, bits, dst, service⟩ :=
+    first_bottom_secret_hash_registers s pc
+  have fetched : fetch SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) prep) =
+      some (.base .ECALL) := by
+    rw [SphincsVerifierFtsRootCopy.fetch_at,
+      SphincsMaskedSignOtsShift.shift_pc,
+      prepPc,
+      signer_five_layer_instruction_transfer location 0x3bc0
+        (by decide) (by decide) (by decide)]
+    decide
+  have valid : hashArgumentsValid prep = true := by
+    dsimp [prep]
+    simp [hashArgumentsValid, src, bits, dst, accessValid, rangeValid, MEMORY_BYTES]
+  have length : (hashInput prep).1 = 576 := by
+    dsimp [prep]
+    simp [hashInput, bits]
+  have hashed := SphincsMaskedSignOtsShift.hash_block_shift
+    (signerShiftBytes location) hash SphincsMaskedImages.sign prep
+    fetched service valid
+  simpa only [firstBottomSecretHashAnswer, prep, length,
+    show compressions 576 = 2 from by decide, Nat.reduceMul,
+    Nat.reduceAdd] using prepared.trace (hash := hash) |>.trans hashed
+
+#print axioms signer_secret_hash_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
