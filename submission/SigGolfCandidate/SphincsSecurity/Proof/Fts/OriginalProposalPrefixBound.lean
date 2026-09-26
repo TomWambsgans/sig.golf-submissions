@@ -153,3 +153,108 @@ theorem original_primitive_add_full_certificate_small_budget (dummy : OtsReferen
     (add_le_add le_rfl (certificateContextGame_prefix_le adversary q Finset.univ (fun _ => proposalPrefixStop) false))
 
 end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+
+open _root_.OracleComp ENNReal
+
+theorem certificateCountedBudgetExceptional_le_message_add_prefix
+    (adversary : Adversary) (q : Nat) :
+    Pr[CertificateCountedBudgetExceptional q |
+      certificateCountedContextGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false] ≤
+      originalCertificateMessageCost adversary * certificateCacheExceptionRate +
+        proposalPrefixExceptionBound := by
+  have hsubset :
+      Pr[CertificateCountedBudgetExceptional q |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] ≤
+      Pr[fun result => CertificateGameExceptional result.project.2 |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] := by
+    let law : SPMF CertificateCountedContextResult :=
+      liftM (certificateCountedContextGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false)
+    have h := probEvent_mono (mx := law)
+      (p := CertificateCountedBudgetExceptional q)
+      (q := fun result => CertificateGameExceptional result.project.2)
+      (by intro result _ h; exact h.1)
+    simpa only [law, SPMF.probEvent_liftM] using h
+  calc
+    _ ≤ Pr[fun result => CertificateGameExceptional result.project.2 |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] := hsubset
+    _ = Pr[fun result => CertificateGameExceptional result.2 |
+        certificateContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] := by
+      rw [← certificateCountedContextGame_project, probEvent_map]
+      rfl
+    _ ≤ Pr[fun result => result.2.2.2.2.2 = true |
+          certificateContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] +
+        Pr[fun result => ProposalPrefixExceptional
+            result.2.2.2.2.1.proposals result.2.2.2.2.1.log.length |
+          certificateContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      certificateContextGame_exception_le_cache_add_prefix adversary q
+        Finset.univ (fun _ => proposalPrefixStop) false
+    _ ≤ _ := add_le_add
+      (certificateContextGame_cache_hit_le_original_message adversary q
+        Finset.univ (fun _ => proposalPrefixStop) false)
+      (certificateContextGame_prefix_le adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false)
+
+theorem certificateCountedBudgetExceptional_le_cache_budget_add_prefix
+    (adversary : Adversary) (q : Nat) :
+    Pr[CertificateCountedBudgetExceptional q |
+      certificateCountedContextGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false] ≤
+      Pr[fun result => result.project.2.2.2.2.2 = true ∧
+        result.originalCost.2 ≤ q |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] +
+        proposalPrefixExceptionBound := by
+  let law : SPMF CertificateCountedContextResult :=
+    liftM (certificateCountedContextGame adversary q Finset.univ
+      (fun _ => proposalPrefixStop) false)
+  let cacheEvent : CertificateCountedContextResult → Prop := fun result =>
+    result.project.2.2.2.2.2 = true ∧ result.originalCost.2 ≤ q
+  let prefixEvent : CertificateCountedContextResult → Prop := fun result =>
+    ProposalPrefixExceptional result.project.2.2.2.2.1.proposals
+      result.project.2.2.2.2.1.log.length
+  have hcover :
+      Pr[CertificateCountedBudgetExceptional q | law] ≤
+        Pr[cacheEvent | law] + Pr[prefixEvent | law] := by
+    apply le_trans (probEvent_mono (mx := law)
+      (p := CertificateCountedBudgetExceptional q)
+      (q := fun result => cacheEvent result ∨ prefixEvent result)
+      (by
+        intro result _ h
+        rcases h with ⟨h, hcost⟩
+        rcases h with hcache | hprefix
+        · exact Or.inl ⟨hcache, hcost⟩
+        · exact Or.inr hprefix))
+    exact probEvent_or_le law cacheEvent prefixEvent
+  have hprefix : Pr[prefixEvent | law] ≤ proposalPrefixExceptionBound := by
+    have hproject : Pr[prefixEvent | law] =
+        Pr[fun result => ProposalPrefixExceptional
+          result.2.2.2.2.1.proposals result.2.2.2.2.1.log.length |
+          certificateContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] := by
+      simp only [law, SPMF.probEvent_liftM]
+      rw [← certificateCountedContextGame_project, probEvent_map]
+      rfl
+    rw [hproject]
+    exact certificateContextGame_prefix_le adversary q Finset.univ
+      (fun _ => proposalPrefixStop) false
+  simpa only [law, cacheEvent, SPMF.probEvent_liftM] using hcover.trans (add_le_add le_rfl hprefix)
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_message_add_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_message_add_prefix
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_cache_budget_add_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_cache_budget_add_prefix

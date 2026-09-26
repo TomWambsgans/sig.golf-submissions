@@ -189,6 +189,61 @@ private theorem expected_probCompLift_of_map_eq {Source Result : Type}
   rw [← hproject, tsum_probOutput_map_mul]
   simp only [probOutput_probCompLift]
 
+theorem expectedBoundaryMessageCalls_le_hashQueryBound {Result : Type}
+    (parameter : PublicParameter) (computation : OracleComp OracleWorld Result)
+    (cache : QueryCache HashSpec) (q : Nat)
+    (hbound : HashQueryBound computation cache q) :
+    expectedBoundaryMessageCalls parameter computation cache ≤ (q : ENNReal) := by
+  rw [expectedBoundaryMessageCalls]
+  calc
+    _ ≤ ∑' result, Pr[= result | boundaryRun parameter computation cache] * (q : ENNReal) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hr : result ∈ support (boundaryRun parameter computation cache)
+      · apply mul_le_mul' le_rfl
+        exact Nat.cast_le.mpr ((List.length_filterMap_le _ _).trans
+          ((hashQueryBound_iff_boundaryRun parameter computation cache q).mp hbound result hr))
+      · rw [probOutput_eq_zero_of_not_mem_support hr, zero_mul, zero_mul]
+    _ = q := by rw [ENNReal.tsum_mul_right, tsum_probOutput_of_liftM_PMF, one_mul]
+
+theorem certificateCacheLength_hit_le_hashQueryBound {Result : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateCacheMonitorState) (hfinite : Finite state.1)
+    (q : Nat)
+    (hbound : HashQueryBound
+      (simulateQ (expandedAdversaryImpl key) computation) state.1 q) :
+    Pr[fun result => result.2.2.2 = true |
+      (simulateQ (certificateCacheLengthImpl key budget required stopAfter)
+        computation).run state] ≤
+      originalCacheHistoryWeight key state +
+        (q : ENNReal) * certificateCacheExceptionRate := by
+  exact (certificateCacheLength_hit_le_message_cost key budget required stopAfter
+    computation state hfinite).trans
+    (add_le_add le_rfl (mul_le_mul'
+      (expectedBoundaryMessageCalls_le_hashQueryBound key.parameter
+        (simulateQ (expandedAdversaryImpl key) computation) state.1 q hbound) le_rfl))
+
+theorem certificateCacheProposal_hit_le_hashQueryBound {Result : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : List Index × CertificateCacheMonitorState)
+    (hfinite : Finite state.2.1) (q : Nat)
+    (hbound : HashQueryBound
+      (simulateQ (expandedAdversaryImpl key) computation) state.2.1 q) :
+    Pr[fun result => result.2.2.2.2 = true |
+      (simulateQ (certificateCacheProposalImpl key budget required stopAfter)
+        computation).run state] ≤
+      originalCacheHistoryWeight key state.2 +
+        (q : ENNReal) * certificateCacheExceptionRate := by
+  have h := certificateCacheLength_hit_le_hashQueryBound key budget required stopAfter
+    computation state.2 hfinite q hbound
+  rw [← simulateQ_certificateCacheProposalImpl_length key budget required
+    stopAfter computation state, probEvent_map] at h
+  exact h
+
 theorem certificateContextGame_cache_hit_le_original_message (adversary : Adversary) (budget : Nat)
     (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     Pr[fun result => result.2.2.2.2.2 = true | certificateContextGame adversary budget required stopAfter stopped] ≤
@@ -305,3 +360,15 @@ theorem original_primitive_add_full_certificate_le_small_budget_add_prefix (dumm
       exact add_le_add (add_le_add (by simpa only [div_eq_mul_inv, mul_assoc, mul_comm, mul_left_comm] using hp) le_rfl) le_rfl
 
 end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound
+
+/-- info: 'SphincsSecurity.Concrete.certificateCacheLength_hit_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCacheLength_hit_le_hashQueryBound
+
+/-- info: 'SphincsSecurity.Concrete.certificateCacheProposal_hit_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCacheProposal_hit_le_hashQueryBound
