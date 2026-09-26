@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualBankCompleteness
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualStrongCoverage
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualPrimitivePotential
+import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualGameTransfer
 namespace SphincsSecurity.Concrete.RetainedResidual
 
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
@@ -136,3 +137,55 @@ theorem initialMonitoredSource_stop_add_strong_le (key : SecretKey) (adversary :
   exact (add_le_add le_rfl hwin).trans (by rw [← add_assoc]; exact add_le_add hbound le_rfl)
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+private theorem probEvent_bind_le_constant {A B : Type} (law : SPMF A)
+    (next : A → SPMF B) (event : B → Prop) (rate : ENNReal)
+    (h : ∀ value, law value ≠ 0 → Pr[event | next value] ≤ rate) :
+    Pr[event | law >>= next] ≤ rate := by
+  rw [probEvent_bind_eq_tsum]
+  calc
+    _ ≤ ∑' value, Pr[= value | law] * rate := by
+      apply ENNReal.tsum_le_tsum
+      intro value
+      by_cases hv : law value = 0
+      · simp only [SPMF.probOutput_eq_apply, hv, zero_mul, le_refl]
+      · exact mul_le_mul' le_rfl (h value hv)
+    _ ≤ rate := by
+      rw [ENNReal.tsum_mul_right]
+      exact mul_le_of_le_one_left' tsum_probOutput_le_one
+
+theorem sourceGame_fault_within_budget_le (dummy : OtsReferenceWords)
+    (adversary : Adversary) (budget : Nat)
+    (hminimum : keygenHashCost ≤ budget) (hbudget : budget ≤ 2 ^ 128) :
+    Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget |
+      sourceGame dummy adversary] ≤
+    ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) -
+      ((budget : ℝ) / 2 ^ digestBits) ^ 2) := by
+  unfold sourceGame
+  apply probEvent_bind_le_constant
+  intro parameter _
+  apply probEvent_bind_le_constant
+  intro encoding hencoding
+  have hencoding' : encoding ∈ referenceEncodingAuxiliarySample.support := by
+    apply (PMF.mem_support_iff _ _).mpr
+    simpa only [PMF.evalSPMF_eq, SPMF.liftM_apply] using hencoding
+  apply probEvent_bind_le_constant
+  intro high _
+  apply probEvent_bind_le_constant
+  intro exposed _
+  let words := referenceFamilyWords encoding.selections dummy
+  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), default, default⟩
+  exact initialSource_fault_within_budget_le key adversary encoding dummy exposed high budget
+    hencoding' hminimum hbudget
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le
