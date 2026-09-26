@@ -1026,6 +1026,15 @@ theorem leaf_copy_path_frame (state final : MachineState)
           · exact Or.inl low
           · exact Or.inr high.1) i hi
 
+theorem leaf_copy_global_index_cell (state final : MachineState)
+    (frame : ∀ address, address ≠ 0x43010 →
+      (∀ i, i < 130 → address ≠ BitVec.ofNat 64 (0x40028 + 8 * i)) →
+        final.getMem address = state.getMem address) :
+    final.getMem 0x43078 = state.getMem 0x43078 := by
+  apply frame 0x43078 (by decide)
+  intro i hi
+  exact leaf_copy_dest_other 0x43078 (Or.inr (by decide)) i hi
+
 /-- A completed leaf copy preserves the public-key prefix and XMSS coordinates. -/
 theorem leaf_copy_context_of_frame (state final : MachineState)
     (pk : SphincsSecurity.PublicKey)
@@ -1102,6 +1111,7 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ read, LeafPathRetained read →
         final.getMem read = state.getMem read) := by
   obtain ⟨final, run, done, payload, frame, positionZero⟩ :=
@@ -1114,6 +1124,7 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
       treeFinal leafFinal prefixFinal payload
   exact ⟨final, run, done, query,
     layerFinal, treeFinal, leafFinal, prefixFinal,
+    leaf_copy_global_index_cell state final frame,
     fun read retained => leaf_copy_path_frame state final frame read retained⟩
 
 /-- XMSS initialization does not change the freshly computed leaf digest. -/
@@ -1172,6 +1183,39 @@ theorem leafHashNext_frame (hash : Hash) (state : MachineState)
       (outsideHash 0x42018 (by decide)),
     readyFrame]
 
+theorem leafHashNext_global_index_cell (hash : Hash)
+    (state : MachineState) :
+    (SphincsVerifierWotsLeafResult.leafHashNext hash state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  let ready := SphincsVerifierWotsLeafHashReady.leafHashReadyState state
+  have readyFrame : ready.getMem 0x43078 = state.getMem 0x43078 :=
+    SphincsVerifierWotsLeafHashReady.leafHashReady_mem_frame state 0x43078
+      (Or.inr (by decide))
+  rw [SphincsVerifierWotsLeafResult.leafHashNext,
+    SphincsVerifierWotsLeafResult.leafAnswerCopy_mem_frame _ 0x43078
+      (by decide),
+    SphincsVerifierFtsLevelInit.writeHash_mem_frame ready _
+      (SphincsVerifierWotsLeafHashReady.leafHashReady_regs state).2.2.1
+      0x43078 (by decide) (by decide) (by decide) (by decide),
+    readyFrame]
+
+theorem xmssInit_global_index_cell (state : MachineState) :
+    (SphincsVerifierXmssInit.xmssInitState state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  simp [SphincsVerifierXmssInit.xmssInitState,
+    SphincsVerifierXmssInit.xmssInitSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+
+theorem leaf_finish_global_index_cell (hash : Hash)
+    (state : MachineState) :
+    (SphincsVerifierXmssInit.xmssInitState
+      (SphincsVerifierWotsLeafResult.leafHashNext hash state)).getMem
+        0x43078 = state.getMem 0x43078 :=
+  (xmssInit_global_index_cell _).trans
+    (leafHashNext_global_index_cell hash state)
+
 /-- XMSS initialization also keeps the witness and input controls. -/
 theorem leaf_finish_frame (hash : Hash) (state : MachineState)
     (read : Word)
@@ -1218,6 +1262,7 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
               (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ read, read.toNat < 0x40000 ∨
         (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048) →
           final.getMem read = state.getMem read) ∧
@@ -1234,7 +1279,7 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
       SphincsVerifierWotsLeafQuery.leafInput] using
       SigGolfCandidate.SphincsMaskedChainDomain.eval_hash hash
         pk.parameter (.leaf layer tree leaf) (Concrete.leafPayload endpoints)
-  refine ⟨final, run, done, ?_, ?_, ?_, ?_, inside⟩
+  refine ⟨final, run, done, ?_, ?_, ?_, ?_, ?_, inside⟩
   · intro i hi
     rw [exact, xmssInit_current_byte _ i hi,
       SphincsVerifierWotsLeafResult.leafHashNext_byte_of_query
@@ -1243,6 +1288,8 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
     exact SphincsVerifierXmssInit.xmssInit_level _
   · rw [exact]
     exact leaf_finish_bit hash state
+  · rw [exact]
+    exact leaf_finish_global_index_cell hash state
   · intro read retained
     rw [exact]
     exact leaf_finish_frame hash state read retained
@@ -1302,6 +1349,7 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
               (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ read, read.toNat < 0x40000 ∨
         (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048) →
           final.getMem read = state.getMem read) := by
@@ -1325,15 +1373,17 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
               pk.parameter layer tree leaf endpoints) := by
       simpa only [restored] using query
     simpa only [leafHashReady_shift, hashInput_shift] using shifted
-  obtain ⟨finish, run, done, digest, level, bit, frame, inside⟩ :=
+  obtain ⟨finish, run, done, digest, level, bit, globalIndex,
+    frame, inside⟩ :=
     leaf_finish_semantic hash base pk layer tree leaf endpoints basePc baseQuery
-  refine ⟨shift (delta target) finish, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨shift (delta target) finish, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · simpa only [restored] using trace_shift target hash run inside
   · rw [shift_pc, done]
   · intro i hi
     simpa using digest i hi
   · simpa only [shift_mem] using level
   · simpa only [shift_mem, base] using bit
+  · simpa only [shift_mem, base] using globalIndex
   · intro read retained
     simpa only [shift_mem, base] using frame read retained
 
@@ -1360,16 +1410,20 @@ theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
               (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ read, LeafPathRetained read →
         final.getMem read = state.getMem read) := by
   obtain ⟨copied, copyRun, copiedPc, query,
-    _layerFinal, _treeFinal, _leafFinal, _prefixFinal, copyFrame⟩ :=
+    _layerFinal, _treeFinal, _leafFinal, _prefixFinal, copyGlobal,
+    copyFrame⟩ :=
     upper_leaf_query target hash state pk layer tree leaf endpoints
       pc layerCell treeCell leafCell hprefix values
-  obtain ⟨final, finishRun, done, digest, level, bit, finishFrame⟩ :=
+  obtain ⟨final, finishRun, done, digest, level, bit, finishGlobal,
+    finishFrame⟩ :=
     upper_leaf_finish_semantic target hash copied pk layer tree leaf endpoints
       copiedPc query
-  refine ⟨final, ?_, done, digest, level, ?_, ?_⟩
+  refine ⟨final, ?_, done, digest, level, ?_,
+    finishGlobal.trans copyGlobal, ?_⟩
   · simpa [Nat.add_assoc] using copyRun.trans finishRun
   · exact bit.trans (copyFrame 0x43020 (Or.inr (by decide)))
   · intro read retained
@@ -1694,6 +1748,7 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
                   (digits chain) (values chain))))).extractLsb' (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = ready.getMem 0x43020 ∧
+      final.getMem 0x43078 = ready.getMem 0x43078 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ address, address.toNat < 0x40000 →
         final.getMem address = ready.getMem address) ∧
@@ -1702,7 +1757,7 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
   obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
     chainRun, chainsPc, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
-    _globalIndex, prefixFinal, lowFrame, endpointBytes, stepBound, cycleBound,
+    chainGlobal, prefixFinal, lowFrame, endpointBytes, stepBound, cycleBound,
     callBound, blockBound⟩ :=
     upper_decoder_chains_semantics target hash state ready pk layer tree leaf
       digits values readyEq pc checksum layerCell treeCell leafCell decoded
@@ -1711,13 +1766,14 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     evalWithAnswerFn (adaptOracle hash)
       (Concrete.recoverChain pk.parameter layer tree leaf chain
         (digits chain) (values chain))
-  obtain ⟨final, leafRun, done, digest, level, bitDone, leafFrame⟩ :=
+  obtain ⟨final, leafRun, done, digest, level, bitDone, leafGlobal,
+    leafFrame⟩ :=
     upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
       chainsPc layerFinal treeFinal leafFinal prefixFinal
       (by intro chain j hj; exact endpointBytes chain j hj)
   refine ⟨final, chainSteps + 856, chainCycles + 991,
     chainCalls + 1, chainBlocks + 17, ?_, done, ?_, ?_, ?_, digest, level,
-    bitDone.trans bitFinal, ?_, ?_,
+    bitDone.trans bitFinal, leafGlobal.trans chainGlobal, ?_, ?_,
     by omega, by omega, by omega, by omega⟩
   · simpa [Nat.add_assoc] using chainRun.trans leafRun
   · exact (leafFrame 0x43028 (Or.inr ⟨by decide, by decide, by decide⟩)).trans
@@ -1730,6 +1786,41 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
       (fun address low => leafFrame address (Or.inl low))
   · intro address low
     exact (leafFrame address (Or.inl low)).trans (lowFrame address low)
+
+theorem round_global_index_cell (hash : Hash) (lay : Layer)
+    (state : MachineState) :
+    (SphincsVerifierXmssRound.roundState hash lay state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  rw [SphincsVerifierXmssRoundFrame.round_mem_frame hash lay state 0x43078
+    (Or.inr (by decide))
+    (by decide) (by decide) (by decide) (by decide)
+    (by intro offset; fin_cases offset <;> decide)
+    (by decide),
+    SphincsVerifierXmssNodeTransport.prefixState_eq_generic]
+  change (SphincsVerifierFtsLevelPosition.levelPositionState
+    (SphincsVerifierFtsLevelShift.shiftIndexState
+      (SphincsVerifierFtsPairAdvance.advancePointerState
+        (SphincsVerifierFtsPair.pairState state)))).getMem 0x43078 = _
+  rw [SphincsVerifierFtsLevelPosition.levelPosition_mem_frame _ 0x43078
+      (by decide),
+    SphincsVerifierFtsLevelShift.shiftIndex_mem_frame _ 0x43078
+      (by decide) (by decide),
+    SphincsVerifierFtsPairAdvance.advancePointer_mem_frame _ 0x43078
+      (by decide)]
+  apply SphincsVerifierFtsPair.pair_scratch_frame
+  · intro offset; fin_cases offset <;> decide
+  · intro offset; fin_cases offset <;> decide
+
+theorem path_global_index_cell (hash : Hash) (lay : Layer)
+    (n : Nat) (state : MachineState) :
+    (SphincsVerifierXmssPathControl.pathState hash lay n state).getMem
+      0x43078 = state.getMem 0x43078 := by
+  induction n generalizing state with
+  | zero => rfl
+  | succ n ih =>
+      rw [SphincsVerifierXmssPathControl.pathState_succ, ih]
+      exact round_global_index_cell hash lay state
+
 
 /-- The recovered WOTS leaf and its authentication path reach the abstract XMSS root. -/
 theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
@@ -1796,6 +1887,7 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
             (layerHeight layer)).extractLsb' (8 * i) 8) ∧
       SphincsVerifierXmssPathControl.pathCycles hash layer
         (layerHeight layer) final ≤ 141 * layerHeight layer ∧
+      doneState.getMem 0x43078 = ready.getMem 0x43078 ∧
       (∀ address, address.toNat < 0x40000 →
         doneState.getByte address = state.getByte address) := by
   let pointer : Word := BitVec.ofNat 64
@@ -1822,7 +1914,8 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
     rw [readyEq, upper_ready_low_byte_frame target state address low]
     exact siblings.bytes level hlevel i hi
   obtain ⟨final, steps, cycles, calls, blocks, run, done, pointerCell,
-    layerFinal, treeFinal, current, level, bit, prefixFinal, lowFrame,
+    layerFinal, treeFinal, current, level, bit, globalIndex,
+    prefixFinal, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_decoder_leaf_digest target hash state ready pk layer tree leaf
       digits values readyEq pc checksum layerCell treeCell leafCell decoded
@@ -1876,7 +1969,25 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
       exact upper_ready_low_byte_frame target state address low))
   exact ⟨final, steps, cycles, calls, blocks, run,
     stepBound, cycleBound, callBound, blockBound, continuation,
-    path.1, path.2.1, path.2.2, endFrame⟩
+    path.1, path.2.1, path.2.2,
+    (path_global_index_cell hash layer (layerHeight layer) final).trans
+      globalIndex,
+    endFrame⟩
+
+theorem upper_handoff_global_index_cell (target : Fin 5)
+    (state : MachineState) :
+    (SphincsVerifierXmssTransitionMessage.handoffState target state).getMem
+      0x43078 = state.getMem 0x43078 := by
+  let middle := SphincsVerifierXmssTransition.transitionState target state
+  let pointers := SphincsVerifierXmssTransitionMessage.pointerState target middle
+  change (SphincsVerifierCopy.copyRootState pointers).getMem 0x43078 = _
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame pointers 0x43078 (by
+      intro offset
+      rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+      fin_cases offset <;> decide),
+    SphincsVerifierXmssTransitionMessage.pointer_mem target middle 0x43078,
+    SphincsVerifierXmssTransition.transition_global_index]
+
 
 /-- A verified upper layer and the following 43 ordinary instructions form one
 composable prefix. The resulting message is the XMSS root, while every later
@@ -1943,6 +2054,7 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
             (layerHeight layer)).extractLsb' (8 * i) 8) ∧
       (∀ address, address.toNat < 0x40000 →
         nextState.getByte address = state.getByte address) ∧
+      nextState.getMem 0x43078 = ready.getMem 0x43078 ∧
       (∀ future : Fin 5,
         SphincsVerifierXmssPathControl.PathWitness state signature
           (SphincsVerifierXmssTransition.targetLayer future)
@@ -1954,7 +2066,7 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
             (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52))) := by
   obtain ⟨final, steps, cycles, calls, blocks, run,
     stepBound, cycleBound, callBound, blockBound, continuation,
-    donePc, rootBytes, _pathCycleBound, pathFrame⟩ :=
+    donePc, rootBytes, _pathCycleBound, pathGlobal, pathFrame⟩ :=
     upper_decoder_path_digest target hash state ready pk layer tree leaf
       signature digits values layerEq readyEq pc checksum layerCell treeCell
       leafCell indexCell decoded hprefix source siblings
@@ -1972,7 +2084,8 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
     (upper_handoff_low_byte_frame next pathEnd address low).trans
       (pathFrame address low)
   refine ⟨final, steps, cycles, calls, blocks, run,
-    stepBound, cycleBound, callBound, blockBound, handoff, ?_, ?_, lowFrame, ?_⟩
+    stepBound, cycleBound, callBound, blockBound, handoff, ?_, ?_, lowFrame,
+    (upper_handoff_global_index_cell next pathEnd).trans pathGlobal, ?_⟩
   · intro tailSteps result tail
     have afterHandoff : Executes hash SphincsImages.verify pathEnd
         (tailSteps + 43) (result.charge 43 0 0) :=
@@ -3622,54 +3735,6 @@ theorem upper_handoff_index_cells (target : Fin 5)
             0x43020 := (SphincsVerifierXmssTransition.transition_leaf target pathEnd).symm
       _ = _ := leaf
 
-theorem round_global_index_cell (hash : Hash) (lay : Layer)
-    (state : MachineState) :
-    (SphincsVerifierXmssRound.roundState hash lay state).getMem 0x43078 =
-      state.getMem 0x43078 := by
-  rw [SphincsVerifierXmssRoundFrame.round_mem_frame hash lay state 0x43078
-    (Or.inr (by decide))
-    (by decide) (by decide) (by decide) (by decide)
-    (by intro offset; fin_cases offset <;> decide)
-    (by decide),
-    SphincsVerifierXmssNodeTransport.prefixState_eq_generic]
-  change (SphincsVerifierFtsLevelPosition.levelPositionState
-    (SphincsVerifierFtsLevelShift.shiftIndexState
-      (SphincsVerifierFtsPairAdvance.advancePointerState
-        (SphincsVerifierFtsPair.pairState state)))).getMem 0x43078 = _
-  rw [SphincsVerifierFtsLevelPosition.levelPosition_mem_frame _ 0x43078
-      (by decide),
-    SphincsVerifierFtsLevelShift.shiftIndex_mem_frame _ 0x43078
-      (by decide) (by decide),
-    SphincsVerifierFtsPairAdvance.advancePointer_mem_frame _ 0x43078
-      (by decide)]
-  apply SphincsVerifierFtsPair.pair_scratch_frame
-  · intro offset; fin_cases offset <;> decide
-  · intro offset; fin_cases offset <;> decide
-
-theorem path_global_index_cell (hash : Hash) (lay : Layer)
-    (n : Nat) (state : MachineState) :
-    (SphincsVerifierXmssPathControl.pathState hash lay n state).getMem
-      0x43078 = state.getMem 0x43078 := by
-  induction n generalizing state with
-  | zero => rfl
-  | succ n ih =>
-      rw [SphincsVerifierXmssPathControl.pathState_succ, ih]
-      exact round_global_index_cell hash lay state
-
-theorem upper_handoff_global_index_cell (target : Fin 5)
-    (state : MachineState) :
-    (SphincsVerifierXmssTransitionMessage.handoffState target state).getMem
-      0x43078 = state.getMem 0x43078 := by
-  let middle := SphincsVerifierXmssTransition.transitionState target state
-  let pointers := SphincsVerifierXmssTransitionMessage.pointerState target middle
-  change (SphincsVerifierCopy.copyRootState pointers).getMem 0x43078 = _
-  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame pointers 0x43078 (by
-      intro offset
-      rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
-      fin_cases offset <;> decide),
-    SphincsVerifierXmssTransitionMessage.pointer_mem target middle 0x43078,
-    SphincsVerifierXmssTransition.transition_global_index]
-
 theorem upper_path_handoff_global_index_cell (target : Fin 5)
     (hash : Hash) (state : MachineState) :
     (SphincsVerifierXmssTransitionMessage.handoffState target
@@ -3735,6 +3800,17 @@ theorem upper_setup_global_index_cell (target : Fin 5)
   rw [SphincsVerifierDecoderRelocation.setup_mem_other target _ 0x43078
       (by decide) (by decide),
     upper_decoder_global_index_cell]
+
+theorem upper_handoff_global_index_from_input (target : Fin 5)
+    (state ready nextState : MachineState)
+    (readyEq : ready =
+      SphincsVerifierDecoderRelocation.setupState target
+        (SphincsVerifierDecoderRelocation.upperDecoderState target state))
+    (handoffIndex : nextState.getMem 0x43078 = ready.getMem 0x43078) :
+    nextState.getMem 0x43078 = state.getMem 0x43078 := by
+  exact handoffIndex.trans (by
+    rw [readyEq]
+    exact upper_setup_global_index_cell target state)
 
 theorem first_upper_encoding_query_with_index (hash : Hash)
     (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
@@ -4153,11 +4229,31 @@ theorem first_upper_encoding_query_with_index (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_setup_global_index_cell
 
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_global_index_from_input' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_global_index_from_input
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.chain_end_global_index_cell' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms chain_end_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_copy_global_index_cell' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leaf_copy_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leafHashNext_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leafHashNext_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.xmssInit_global_index_cell' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms xmssInit_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_finish_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms leaf_finish_global_index_cell
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_with_index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
