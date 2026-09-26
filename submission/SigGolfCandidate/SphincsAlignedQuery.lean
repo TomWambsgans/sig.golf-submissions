@@ -81,6 +81,29 @@ private theorem recognized_take_head (bytes : SphincsSecurity.HashInput)
   have hn : 0 < sourceLength (bytes[1]?.getD 255) := by omega
   simpa [List.getElem?_take, hn] using h.1
 
+/-- Queries outside the tagged padded image are disjoint from honest scheme domains. -/
+abbrev NonalignedQuery := {query : SigGolf.Query // ¬ recognized (queryBytes query)}
+
+def alignedInput (query : SigGolf.Query) (_h : recognized (queryBytes query)) :
+    SphincsSecurity.HashInput := decode query
+
+theorem recognized_decode_head (query : SigGolf.Query)
+    (h : recognized (queryBytes query)) : (decode query)[0]? = some 1 := by
+  simp only [decode, if_pos h]
+  exact recognized_take_head (queryBytes query) h
+
+theorem foreign_decode_head (query : SigGolf.Query)
+    (h : ¬ recognized (queryBytes query)) : (decode query)[0]? = some 0 := by
+  simp [decode, h]
+
+theorem recognized_foreign_disjoint (good bad : SigGolf.Query)
+    (hgood : recognized (queryBytes good))
+    (hbad : ¬ recognized (queryBytes bad)) : decode good ≠ decode bad := by
+  intro heq
+  have := congrArg (fun bytes : SphincsSecurity.HashInput => bytes[0]?) heq
+  rw [recognized_decode_head good hgood, foreign_decode_head bad hbad] at this
+  cases this
+
 theorem decode_injective : Function.Injective decode := by
   intro first second h
   let a := queryBytes first
@@ -335,6 +358,95 @@ theorem candidate64_securityExperiment_reindexed
         (reindex (securityCore Candidate64.submission adversary rounds))).run' ∅ :=
   securityExperiment_reindexed Candidate64.submission adversary rounds
 
+
+
+
+section DomainShapes
+set_option backward.isDefEq.respectTransparency false
+
+theorem keygen_sourceLength (p : PublicParameter) (d : KeygenDomain) (seed : MasterSeed) :
+    sourceLength ((keygenHashInput p d seed)[1]?.getD 255) =
+      (keygenHashInput p d seed).length := by
+  cases d <;> simp [keygenHashInput, keygenDomainFields, fieldBytes,
+    tweakFields, bytesLE, sourceLength]
+
+theorem keygen_first (p : PublicParameter) (d : KeygenDomain) (seed : MasterSeed) :
+    (keygenHashInput p d seed)[0]? = some 1 := by
+  cases d <;> simp [keygenHashInput, keygenDomainFields, fieldBytes,
+    tweakFields, bytesLE, protocolDomainSep]
+
+theorem randomizer_sourceLength (p : PublicParameter) (seed : MasterSeed)
+    (m : SphincsSecurity.Message) (trial : BitVec 32) :
+    sourceLength ((randomizerHashInput p seed m trial)[1]?.getD 255) =
+      (randomizerHashInput p seed m trial).length := by
+  simp [randomizerHashInput, fieldBytes, bytesLE, sourceLength] <;> decide
+
+theorem randomizer_first (p : PublicParameter) (seed : MasterSeed)
+    (m : SphincsSecurity.Message) (trial : BitVec 32) :
+    (randomizerHashInput p seed m trial)[0]? = some 1 := by
+  simp [randomizerHashInput, fieldBytes, bytesLE, protocolDomainSep]
+
+
+def expectedPayloadLength : HashDomain → Nat
+  | .chain .. => 20
+  | .leaf .. => 1040
+  | .node .. => 40
+  | .encoding .. => 24
+  | .ftsLeaf .. => 20
+  | .ftsNode .. => 40
+  | .ftsRoots .. => 480
+  | .message => 72
+
+theorem tweakable_sourceLength (p : PublicParameter) (d : HashDomain)
+    (payload : HashInput) (h : payload.length = expectedPayloadLength d) :
+    sourceLength ((tweakableHashInput p d payload)[1]?.getD 255) =
+      (tweakableHashInput p d payload).length := by
+  cases d <;> simp [tweakableHashInput, tweakBytes, hashDomainFields,
+    fieldBytes, tweakFields, bytesLE, sourceLength, expectedPayloadLength, h] <;> decide
+
+theorem tweakable_first (p : PublicParameter) (d : HashDomain)
+    (payload : HashInput) :
+    (tweakableHashInput p d payload)[0]? = some 1 := by
+  cases d <;> simp [tweakableHashInput, tweakBytes, hashDomainFields,
+    fieldBytes, tweakFields, bytesLE, protocolDomainSep]
+
+
+theorem chain_payload_length (d : Digest) : (bytesLE 20 d).length = 20 := by simp [bytesLE]
+theorem leaf_payload_length (endpoints : ChainIndex → Digest) :
+    (Concrete.leafPayload endpoints).length = 1040 := by
+  have h (xs : List Digest) : (xs.flatMap (bytesLE 20)).length = 20 * xs.length := by
+    induction xs with
+    | nil => rfl
+    | cons value tail ih =>
+        simp only [List.flatMap_cons, List.length_append, ih, List.length_cons]
+        simp [bytesLE]; omega
+  unfold Concrete.leafPayload
+  rw [h]
+  simp [numChains]
+theorem node_payload_length (left right : Digest) :
+    (Concrete.nodePayload left right).length = 40 := by simp [Concrete.nodePayload, bytesLE]
+theorem encoding_payload_length (message : Digest) (counter : Counter) :
+    (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat)).length = 24 := by
+  simp [bytesLE]
+theorem fts_roots_payload_length (roots : FtsTree → Digest) :
+    (Concrete.ftsRootsPayload roots).length = 480 := by
+  have h (xs : List Digest) : (xs.flatMap (bytesLE 20)).length = 20 * xs.length := by
+    induction xs with
+    | nil => rfl
+    | cons value tail ih =>
+        simp only [List.flatMap_cons, List.length_append, ih, List.length_cons]
+        simp [bytesLE]; omega
+  unfold Concrete.ftsRootsPayload
+  rw [h]
+  simp [ftsTrees]
+theorem message_payload_length (root : Digest) (message : SphincsSecurity.Message)
+    (randomness : Randomness) :
+    (Concrete.messageDigestPayload root message randomness).length = 72 := by
+  simp [Concrete.messageDigestPayload, bytesLE]
+
+
+end DomainShapes
+
 end SigGolfCandidate.QueryDecoder
 
 /-- info: 'SigGolfCandidate.QueryDecoder.decode_injective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -368,3 +480,11 @@ end SigGolfCandidate.QueryDecoder
 /-- info: 'SigGolfCandidate.QueryDecoder.candidate64_securityExperiment_reindexed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.QueryDecoder.candidate64_securityExperiment_reindexed
+
+/-- info: 'SigGolfCandidate.QueryDecoder.recognized_foreign_disjoint' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.recognized_foreign_disjoint
+
+/-- info: 'SigGolfCandidate.QueryDecoder.tweakable_sourceLength' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.tweakable_sourceLength
