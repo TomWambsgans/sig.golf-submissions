@@ -16,6 +16,15 @@ theorem runWith_cost (hash : Hash) (secretKey : SecretKey) :
       (SphincsSubmission.admissible.2 .keygen) rfl rfl rfl
   rw [hrun]
 
+theorem runWith_hashCalls (hash : Hash) (secretKey : SecretKey) :
+    (SphincsSubmission.submission.runWith hash .keygen secretKey).hashCalls =
+      860161 := by
+  obtain ⟨cache, hrun, _, _⟩ :=
+    SphincsMaskedKeygenPadding.keygen_runWith_canonical
+      SphincsSubmission.submission hash secretKey rfl
+      (SphincsSubmission.admissible.2 .keygen) rfl rfl rfl
+  rw [hrun]
+
 theorem runWith_termination (hash : Hash) (secretKey : SecretKey) :
     let result := SphincsSubmission.submission.runWith hash .keygen secretKey
     result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
@@ -58,6 +67,10 @@ theorem exponential_cost_le_two :
 /-- info: 'SigGolfCandidate.SphincsKeygenCost.runWith_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms runWith_cost
+
+/-- info: 'SigGolfCandidate.SphincsKeygenCost.runWith_hashCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms runWith_hashCalls
 
 /-- info: 'SigGolfCandidate.SphincsKeygenCost.runWith_termination' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
