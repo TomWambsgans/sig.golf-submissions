@@ -70,7 +70,8 @@ def FoldInv (fc : FCtx) (s0 : MachineState) (lam : Nat) (v : Val) (s : MachineSt
 def FoldEnd (fc : FCtx) (s0 : MachineState) (u : MachineState) : Prop :=
   Glob fc.wl fc.pk u ∧ KnownOK (globK ++ [(.x10, 0x1C0), (.x11, 64), (.x12, BitVec.ofNat 64 fc.dst)]) u ∧
   FrameOK s0 u ∧ u.pc = pcOf (foldPc fc.base (fc.h - 1) + 9) ∧
-  fetch image u = some (.base .ECALL)
+  fetch image u = some (.base .ECALL) ∧
+  (u.getMem (BitVec.ofNat 64 0x1C8)).toNat % 2 ^ 32 = fc.tau % 2 ^ 32
 
 /-! ## Bit extraction -/
 
@@ -392,7 +393,7 @@ theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
       simp only [Nat.mul_one, Nat.reduceAdd, Nat.reduceMul, Nat.reduceSub] at mv0 mv1 msib0 msib1
       rw [mv0, mv1, msib0, msib1]; simp [← hbdef, h1]
   · refine ⟨hglob _ _ hG, hK', FrameOK.trans hF (fun r hr => hkeep' r hr) (fun A hA hA' => ?_), ?_,
-      hec (by simp [hr, foldExp, hlam])⟩
+      hec (by simp [hr, foldExp, hlam]), by rw [m1C8, BitVec.toNat_ofNat]; omega⟩
     · exact mfr A hA (by omega) (by omega) (by omega) (by omega)
     · rw [PRes.toState_pc]
       simp only [hr, foldExp, if_pos hlam]
@@ -444,7 +445,7 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok)
     · obtain rfl : k = 0 := by omega
       obtain ⟨t, hst, h5, hv, hin, hend⟩ := level_last fc hfc lam hlast hchk s0 v s hs
       simp only [List.range'_zero, List.foldlM_nil, cc_pure]
-      have h3 := Good.hash (K := K) hend.2.2.2.2 h5 hv hin (fun a => hK a t hend)
+      have h3 := Good.hash (K := K) hend.2.2.2.2.1 h5 hv hin (fun a => hK a t hend)
       rw [hblk] at h3
       refine Good.steps' hst h3 (by omega) ?_
       simp [foldCost, levelCost, hlast]

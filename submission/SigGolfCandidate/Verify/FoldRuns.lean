@@ -56,7 +56,4 @@ def foldCheck (base h wa0 dst : Nat) : Bool :=
 
 
 
-set_option maxRecDepth 100000 in
-theorem foldCheck_fors0 : foldCheck 100 10 (0x800 + 32) 0x240 = true := by decide +kernel
-
 end SigGolfCandidate.Verify

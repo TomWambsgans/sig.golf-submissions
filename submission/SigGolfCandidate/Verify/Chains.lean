@@ -41,4 +41,40 @@ theorem chains_good (c : CCtx) (hc : c.ok) (xs : List Nat) (hxs : ∀ i < 42, xs
     simp only [chainsCost, List.range'_succ, List.map_cons, List.sum_cons]
     omega
 
+theorem sum_eq_getD (l : List Nat) : l.sum = ((List.range l.length).map (l.getD · 0)).sum := by
+  induction l with
+  | nil => rfl
+  | cons a l ih =>
+    rw [List.length_cons, List.range_succ_eq_map, List.map_cons, List.sum_cons, List.sum_cons,
+      List.map_map, ih]
+    rfl
+
+theorem chainsCost_aux (c : CCtx) : ∀ k i,
+    ((List.range' i k).map fun j => chainCost j (dig c j)).sum + 12 * ((List.range' i k).map (dig c)).sum =
+      94 * k + ((List.range' i k).map grp).sum := by
+  intro k
+  induction k with
+  | zero => intro i; rfl
+  | succ k ih =>
+    intro i
+    have := ih (i + 1)
+    have := dig_lt c i
+    simp only [List.range'_succ, List.map_cons, List.sum_cons, chainCost] at *
+    omega
+
+theorem grp_sum : ((List.range' 0 42).map grp).sum = 3 := by decide
+
+theorem chainsCost_eq (c : CCtx) (xs : List Nat) (hlen : xs.length = 42)
+    (hxs : ∀ i < 42, xs.getD i 0 = dig c i) (hsum : xs.sum = 170) : chainsCost c 0 42 = 1911 := by
+  have hs : ((List.range' 0 42).map (dig c)).sum = 170 := by
+    rw [← hsum, sum_eq_getD xs, hlen, List.range_eq_range']
+    congr 1
+    apply List.map_congr_left
+    intro i hi
+    rw [hxs i (by simp at hi; omega)]
+  have := chainsCost_aux c 42 0
+  rw [hs, grp_sum] at this
+  unfold chainsCost
+  omega
+
 end SigGolfCandidate.Verify

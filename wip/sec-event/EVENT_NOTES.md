@@ -34,3 +34,17 @@ So the event has to be threaded through the proof.
   request is paid from remaining ≥ 2^ftsTreeHeight), Event/TruncatedCharge + Residual/RetainedResidualEventCache
   (cache exception counted per hash call within the budget), Residual/RetainedResidualEventCoverage.
   Same closing bound as before: no arithmetic change.
+- Merged branch `scheme` (7 layers etc.); only fix needed: an attribute line in EventTransfer.
+- Outer layers done (Event/Erasure, Event/Deterministic, Event/Transfer):
+  `Security.security127_event_of_independent : IndependentEventStatement → ∀ q ≥ 1, ∀ A, Pr[won ∧ calls ≤ q] ≤ q/2^127`
+  where `IndependentEventStatement` is the event form for `Concrete.scheme`. Pieces: counted erasure
+  (`Erases.probEvent_counted_le`, keygen saves one query), capped-computation seed guessing
+  (`probEvent_random_cache_change_event`, via `QueryCap.run`), counted memoization, counted table→reference.
+  Same loss as before: `(q-1)/2^256` absorbed by `seed_loss_absorbed`.
+- `hasClassicalSecurityBits_of_event`: the old statement follows from the event form.
+
+## Remaining: the small-budget Concrete chain (q ≤ 3·2^114)
+Plan (A_vis): cap the adversary by its visible cost (own hash queries + G_min per signing request);
+on the event the cap is never hit. A-part (Ots/Chains) uses syntactic query bounds of A_vis; the joint
+budget needs E[signing digest attempts] ≤ G_min per signing (lazy ROM), transported to the reference
+game; B/C/D carry the event per result.

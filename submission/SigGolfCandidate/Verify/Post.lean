@@ -56,6 +56,24 @@ theorem run_post {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs
   obtain ⟨h1, h2⟩ := pathRun_sound hrun vlook_ok s hpc hk (by rw [ho]; simp) hbr
   exact ⟨h1, h2, fun wl pk hG => Glob_toState hG r.st r.pc hm hr⟩
 
+theorem run_post' {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs : List Bool}
+    {r : PRes} (hrun : runAt known stops n dirs = some r) (hobl : r.st.obl = [])
+    (s : MachineState) (hpc : s.pc = pcOf n) (hk : KnownOK known s)
+    (hbr : ∀ b ∈ r.brs, b.holds s) :
+    Steps image s r.steps r.cycles (r.toState s) ∧
+      (r.ecall = true → fetch image (r.toState s) = some (.base .ECALL)) :=
+  pathRun_sound hrun vlook_ok s hpc hk (by rw [hobl]; simp) hbr
+
+theorem br_ne_zero (x : E) (d : Bool) (s : MachineState) :
+    Br.holds s ⟨.ne, x, .c 0, d⟩ ↔ (decide (x.eval s ≠ 0) = d) := by
+  simp only [Br.holds, CmpOp.eval, E.eval]
+  cases d <;> simp [bne_iff_ne]
+
+theorem br_eq_zero (x : E) (d : Bool) (s : MachineState) :
+    Br.holds s ⟨.eq, x, .c 0, d⟩ ↔ (decide (x.eval s = 0) = d) := by
+  simp only [Br.holds, CmpOp.eval, E.eval]
+  cases d <;> simp
+
 /-! ## HASH arguments at constant registers -/
 
 def hashArgsB (a n d : Nat) : Bool :=

@@ -16,5 +16,14 @@ Plan
   dispatch (8 digit cases), chain steps, chain end, leaf, folds, compare. Families checked by the
   kernel against generic expected results; semantics proven once generically.
 
-Status
-- Exec.lean, Code.lean build (Code ~5 s).
+Status (files in dependency order)
+- Exec, Code: executor + lookup. Judg: `Good`, `cc`, laws. Words: byte/word formats of all hash
+  inputs. Mem: `Glob` invariant. Post: generic run consequences. Arith/Arith2/Swar: bit arithmetic
+  (SWAR digit sum proven via Horner lanes; `omega` alone is too slow on 42 digit atoms).
+- ChainRuns/ChainCheck0..6: expected results of all chain blocks, kernel-checked per layer
+  (~30 s wall in parallel). ChainSem/ChainGood/Chains: chain semantics, 42 chains of a layer,
+  cost 1911 when the digits sum to 170.
+- FoldRuns/FoldCheck/FoldSem: Merkle fold levels (FORS + layers).
+- LayerRuns/LayerSem/LeafSem/LayerGood/Layers: one layer, all layers. Compare: final compare and
+  `layers_good` (all 7 layers + comparison).
+- TODO: FORS trees + roots, start/digest, initial state, top-level theorems.

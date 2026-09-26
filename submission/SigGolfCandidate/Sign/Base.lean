@@ -222,5 +222,11 @@ macro "bvsimp" " [" ts:Lean.Parser.Tactic.simpLemma,* "]" : tactic => do
       ofNat_ushiftRight, ofNat_and_ofNat, ofNat_xor_ofNat, BitVec.toNat_ofNat, Nat.reduceMod,
       Nat.reducePow, Nat.reduceAdd, Nat.reduceMul, Nat.reduceDiv, Nat.reduceSub, truncate32_ofNat,
       ite_true, ite_false, if_true, if_false, BitVec.ofNat_eq_ofNat, Nat.add_sub_cancel,
-      Nat.mod_eq_of_lt, Nat.reduceEqDiff, reduceIte, $ts',*])
+      Nat.mod_eq_of_lt, Nat.reduceEqDiff, reduceIte, and_true, true_and, or_false, false_or, not_false_eq_true, $ts',*])
+end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+theorem bne_cond (a b : Nat) (ha : a < 2 ^ 64) (hb : b < 2 ^ 64) :
+    ((!decide (a % 2 ^ 64 = b % 2 ^ 64)) = true) ↔ a ≠ b := by
+  rw [Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb]; simp
 end SigGolfCandidate.Sign

@@ -132,7 +132,7 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
   rw [buildFtsTree_bind]
   refine Sim.steps hs1 (Sim.bind (forsLeaves_sim S hS k idx (uOf N k) hk hidx hu' t1 lctx pc1 y9)
     (fun p t2 h2 => ?_))
-  obtain ⟨-, hlv, hlvv, hlvs, hsec, pc2, -, lregs, lframe, -, -⟩ := h2
+  obtain ⟨-, hlv, hlvv, hlvs, hsec, pc2, -, lregs, lframe, llo1, llo2⟩ := h2
   have pc2' : t2.pc = pcOf 140 := by rw [pc2]; rfl
   obtain ⟨hsl, hsw⟩ := hsec hu'
   -- block 140
@@ -195,7 +195,6 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
     simp only [ht5, blk182.res, rv_simp]
     bvsimp [x48, x419, ofNat_eq_iff]
     simp (disch := bvomega) only [if_pos, if_neg]
-    rw [show k * 16 + 576 = 0x240 + 16 * k by ring]
   -- the frame from `t` to `t5`
   have ft5 : Frame t t5 (fun x => ((x = 0x6A0 ∨ x = 0xC0) ∨ leafW k x) ∨ levW k x ∨
       (x = 0x240 + 16 * k ∨ x = 0x240 + 16 * k + 8)) := ft13.trans (vframe.trans f5)
@@ -227,7 +226,9 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
   · intro v hv; rcases List.mem_append.mp hv with hv | hv
     · exact hrv v hv
     · simp at hv; subst hv
-      rw [getD_of_lt (by rw [hl4]; norm_num)]; exact hv4 _ (List.getElem_mem _)
+      simp only [List.getElem?_eq_getElem (show 0 < st'.1.length by rw [hl4]; norm_num),
+        Option.getD_some]
+      exact hv4 _ (List.getElem_mem _)
   · apply Slots.snoc
     · exact hroots.frame ft5 (by omega) (by
         intro i hi; simp only [leafW, levW]; constructor <;> omega)
@@ -238,15 +239,46 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
     · rw [if_pos h, if_pos (by simp; omega)]
     · rw [if_neg h, if_neg (by simp; omega)]
   · simp only [ht5, blk182.res, rv_simp]; bvsimp [x48]
-  · simp only [ht5, blk182.res, rv_simp]; bvsimp [x418]; congr 1; ring
+  · simp only [ht5, blk182.res, rv_simp]; bvsimp [x418]
+    apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat]; omega
   · exact ((tregs.trans rt4).trans r5).mono (by decide)
   · exact (tframe.trans ft5).mono (by intro x hx; simp only [forsW, leafW, levW] at hx ⊢; omega)
   · rw [f5.getMem (by norm_num) (by omega), vframe.getMem (by norm_num) (by simp only [levW]; omega),
-      f3.getMem (by norm_num) (by simp)]
-    sorry
-  · sorry
-  · sorry
-  · sorry
-  · sorry
+      f3.getMem (by norm_num) (by simp), llo1, f1.getMem (by norm_num) (by omega), lo1]
+  · rw [f5.getMem (by norm_num) (by omega), vframe.getMem (by norm_num) (by simp only [levW]; omega),
+      f3.getMem (by norm_num) (by simp), llo2, f1.getMem (by norm_num) (by omega), lo2]
+  · rw [f5.getMem (by norm_num) (by omega), vlo, ft13.getMem (by norm_num) (by simp only [leafW]; omega),
+      lo3]
+  · rw [f5.getMem (by norm_num) (by omega), vframe.getMem (by norm_num) (by simp only [levW]; omega),
+      f3.getMem (by norm_num) (by simp), lframe.getMem (by norm_num) (by simp only [leafW]; omega), pb0,
+      ctx.pb0, twWord0, hi32_ofNat]
+    rw [Nat.div_eq_of_lt (by omega)]; rfl
+  · rw [f5.getMem (by norm_num) (by omega), vframe.getMem (by norm_num) (by simp only [levW]; omega),
+      f3.getMem (by norm_num) (by simp), lframe.getMem (by norm_num) (by simp only [leafW]; omega), cb0,
+      ctx.cb0, twWord0, hi32_ofNat]
+    rw [Nat.div_eq_of_lt (by omega)]; rfl
+
+end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+
+/-- Cycle bound of one FORS tree. -/
+abbrev forsTreeW : Nat := 8 + (1024 * 34 + (2 + (10 * 12822 + 9)))
+
+/-- **FORS**: the 14 trees. -/
+theorem fors_sim (S : List Byte) (hS : S.length = 32) (N : Nat) (tF : MachineState)
+    (ctx : ForsCtx S (idxOf N) N tF) (hpc : tF.pc = pcOf 112)
+    (h8 : tF.getReg .x8 = BitVec.ofNat 64 0) (h18 : tF.getReg .x18 = BitVec.ofNat 64 0x2650) :
+    Sim image tF (14 * forsTreeW) (signFors S N) (ForsInv tF 14) := by
+  have hidx : idxOf N < 2 ^ 34 := Nat.mod_lt _ (by norm_num)
+  have hu : ∀ k, uOf N k < 1024 := fun k => Nat.mod_lt _ (by norm_num)
+  unfold signFors ftsTrees ftsA
+  apply Sim.foldlM_range 14 _ ([], []) (ForsInv tF) forsTreeW
+  · intro k hk st t h
+    exact fors_body S hS (idxOf N) N hidx hu tF ctx k hk st t h
+  · exact ⟨by norm_num, rfl, rfl, fun i hi => absurd hi (by simp), by simp, Slots.nil _ _,
+      by simpa using hpc, h8, by simpa using h18, RegsEq.refl _ _, Frame.refl _ _, rfl, rfl, rfl,
+      rfl, rfl⟩
 
 end SigGolfCandidate.Sign
