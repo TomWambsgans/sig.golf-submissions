@@ -1985,6 +1985,110 @@ theorem loaded_next_upper_witness_inputs (next : Fin 5)
     upper_ready_prefix next nextState pk hprefix,
     upper_ready_source next nextState _ source⟩
 
+/-- The ordinary inter-layer handoff stops at the beginning of the next
+    layer's counter-and-hash prefix, before digit decoding. -/
+theorem upper_handoff_prefix_pc (next : Fin 5) (state : MachineState)
+    (pc : state.pc =
+      SphincsVerifierXmssTransition.transitionPc next) :
+    (SphincsVerifierXmssTransitionMessage.handoffState next state).pc =
+      SphincsVerifierXmssTransitionMessage.messagePc next + 56 := by
+  let middle := SphincsVerifierXmssTransition.transitionState next state
+  let pointers := SphincsVerifierXmssTransitionMessage.pointerState next middle
+  have middlePc : middle.pc =
+      SphincsVerifierXmssTransitionMessage.messagePc next := by
+    simpa [middle, SphincsVerifierXmssTransitionMessage.messagePc] using
+      SphincsVerifierXmssTransition.transition_pc next state pc
+  have pointerPc : pointers.pc =
+      SphincsVerifierXmssTransitionMessage.messagePc next + 16 :=
+    SphincsVerifierXmssTransitionMessage.pointer_pc next middle middlePc
+  have indexedPc : pointers.pc = BitVec.ofNat 64
+      (0x1000 + 4 *
+        ((SphincsVerifierXmssTransitionMessage.messagePc next + 16).toNat / 4 -
+          0x400)) := by
+    rw [pointerPc]
+    fin_cases next <;> decide
+  have copied := SphincsVerifierMessageCopy.copy20_final_pc pointers
+    ((SphincsVerifierXmssTransitionMessage.messagePc next + 16).toNat / 4 -
+      0x400) indexedPc
+  change (SphincsVerifierXmssTransitionMessage.messageState next middle).pc =
+      SphincsVerifierXmssTransitionMessage.messagePc next + 56
+  simpa [SphincsVerifierXmssTransitionMessage.messageState, pointers] using
+    (show (SphincsVerifierCopy.copyRootState pointers).pc =
+      SphincsVerifierXmssTransitionMessage.messagePc next + 56 by
+        rw [copied]
+        fin_cases next <;> decide)
+
+theorem upper_handoff_decoder_gap (next : Fin 5) (state : MachineState)
+    (pc : state.pc =
+      SphincsVerifierXmssTransition.transitionPc next) :
+    (SphincsVerifierXmssTransitionMessage.handoffState next state).pc +
+      256 = BitVec.ofNat 64
+        (0x1f20 + 4 * SphincsVerifierWotsRelocationTrace.wordOffset next) := by
+  rw [upper_handoff_prefix_pc next state pc]
+  fin_cases next <;> decide
+
+/-- The handoff installs the next layer's control words before the intervening
+    counter/hash prefix. -/
+theorem upper_handoff_control_cells (next : Fin 5)
+    (state : MachineState) :
+    let done := SphincsVerifierXmssTransitionMessage.handoffState next state
+    let lay := SphincsVerifierXmssTransition.targetLayer next
+    done.getMem 0x43000 = BitVec.ofNat 64 lay.val ∧
+    done.getMem 0x43008 = state.getMem 0x43078 >>>
+      (heightBelow lay + layerHeight lay) ∧
+    done.getMem 0x43020 =
+      (state.getMem 0x43078 >>> heightBelow lay) &&&
+        BitVec.ofNat 64 (2 ^ layerHeight lay - 1) ∧
+    done.getMem 0x43018 = done.getMem 0x43020 := by
+  let middle := SphincsVerifierXmssTransition.transitionState next state
+  let pointers := SphincsVerifierXmssTransitionMessage.pointerState next middle
+  have unchanged (address : Word)
+      (outside : ∀ offset : Fin 5,
+        address ≠ alignToDword
+          (pointers.getReg .x7 +
+            signExtend12 (4#12 * BitVec.ofNat 12 offset.val))) :
+      (SphincsVerifierXmssTransitionMessage.handoffState next state).getMem
+        address = middle.getMem address := by
+    have copy :=
+      SphincsVerifierCopyMemory.copyRoot_mem_frame pointers address outside
+    simpa [SphincsVerifierXmssTransitionMessage.handoffState,
+      SphincsVerifierXmssTransitionMessage.messageState, pointers, middle] using
+      copy.trans
+        (SphincsVerifierXmssTransitionMessage.pointer_mem next middle address)
+  have keepLayer : _ := unchanged 0x43000 (by
+    intro offset
+    rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+    fin_cases offset <;> decide)
+  have keepTree : _ := unchanged 0x43008 (by
+    intro offset
+    rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+    fin_cases offset <;> decide)
+  have keepIndex : _ := unchanged 0x43020 (by
+    intro offset
+    rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+    fin_cases offset <;> decide)
+  have keepLeaf : _ := unchanged 0x43018 (by
+    intro offset
+    rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+    fin_cases offset <;> decide)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [keepLayer]
+    exact SphincsVerifierXmssTransition.transition_layer next state
+  · rw [keepTree]
+    exact SphincsVerifierXmssTransition.transition_tree next state
+  · rw [keepIndex]
+    exact SphincsVerifierXmssTransition.transition_leaf next state
+  · rw [keepLeaf, keepIndex]
+    exact SphincsVerifierXmssTransition.transition_index next state
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_control_cells
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_decoder_gap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_decoder_gap
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_next_upper_witness_inputs' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms loaded_next_upper_witness_inputs
