@@ -1989,6 +1989,25 @@ theorem certificateStoppedOuterRun_hit_budget_event {Result : Type} (key : Secre
           simp only [Function.comp_def, and_comm]
     _ = _ := hbudget.symm
 
+
+noncomputable def certificateInitialCountedState
+    (generated : CertificateKeygenBoundaryResult) (stopped : Bool) : CertificateCountedState :=
+  (generated.2, ((initialCertificateMonitor generated.1.2.hashCalls stopped, false),
+    generated.1.2.hashCalls))
+
+theorem certificateStoppedKeygenInit_joint_relation (q : Nat) (stopped : Bool)
+    (generated : CertificateKeygenBoundaryResult) (ghost : CertificateStoppedCacheState)
+    (hinit : some (generated, ghost) ∈ (certificateStoppedKeygenInit q).support) :
+    (certificateInitialCountedState generated stopped).2.2 ≤ q ∧
+    ghost.1 = (certificateInitialCountedState generated stopped).1 ∧
+    ghost.2.2 = q - (certificateInitialCountedState generated stopped).2.2 ∧
+    ghost.2.1 = false ∧
+    ¬ CertificateCacheExceptional generated.1.1.2 ghost.1 := by
+  have h := certificateStoppedKeygenInit_support q (some (generated, ghost)) hinit
+    generated ghost rfl
+  rcases h with ⟨hcost, rfl, hclean⟩
+  exact ⟨hcost, rfl, rfl, rfl, hclean⟩
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2178,3 +2197,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygenInit_joint_relation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedKeygenInit_joint_relation
