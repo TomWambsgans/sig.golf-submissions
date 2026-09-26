@@ -259,3 +259,93 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_cost_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_cost_law
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace UniformTableCompletion ENNReal
+open FtsGuessSigning (Coordinate)
+attribute [local instance] Classical.propDecidable
+
+theorem referenceTwoWitnessRestCost_initial_bound
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
+    (hauxiliary : auxiliary ∈
+      (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      𝒮[sampleFtsSecrets] >>= fun ftsSecret =>
+        𝒮[referenceTwoWitnessRestCost
+          ⟨parameter, 0, otsSecret, ftsSecret⟩
+          (programmedHash parameter otsSecret ftsSecret labels
+            (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
+              (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
+                (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+                labels auxiliary.rows auxiliary.seed)))
+          labels auxiliary.selections dummy adversary]] ≤ pairRate q := by
+  have h := initial_original_two_witnesses_budget_event dummy adversary q
+    parameter otsSecret labels auxiliary hauxiliary
+  dsimp only at h
+  have hprior := congrArg (fun law : SPMF (Coordinate → Digest) =>
+    law >>= fun secrets =>
+      (fun result => (secrets, result)) <$> 𝒮[simulateQ
+        (fixedAnswers (originalAnswers dummy adversary parameter otsSecret
+          labels auxiliary) secrets)
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary)])
+    FtsGuessSigning.sampleFtsSecrets_table
+  rw [bind_map_left] at hprior
+  rw [← hprior] at h
+  have hprogram (ftsSecret : Index → FtsTree → FtsLeaf → Digest) :=
+    referenceTwoWitnessRestCost_program
+      ⟨parameter, 0, otsSecret, ftsSecret⟩
+      (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+      labels auxiliary hauxiliary dummy adversary
+  simp only [hprogram, evalSPMF_map, probEvent_bind_eq_tsum, probEvent_map,
+    Function.comp_def, Equiv.symm_apply_apply, decide_eq_true_eq] at h ⊢
+  exact h
+
+theorem referenceForgeryGame_two_guesses_budget_event
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => referenceTwoGuesses dummy sample ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+      pairRate q := by
+  have hsource := referenceForgeryGame_two_guesses_cost_law dummy adversary
+  have hprojected := congrArg
+    (fun law : SPMF (Bool × Nat) =>
+      Pr[fun result => result.1 = true ∧ result.2 ≤ q | law]) hsource
+  simp only [probEvent_map, Function.comp_def, decide_eq_true_eq] at hprojected
+  change Pr[fun sample => referenceTwoGuesses dummy sample ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] = _
+    at hprojected
+  rw [hprojected]
+  unfold referenceTwoWitnessCostGame
+  apply probEvent_bind_le_of_forall_le
+  intro parameter _
+  apply probEvent_bind_le_of_forall_le
+  intro otsSecret _
+  rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets]
+    𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)]]
+  apply probEvent_bind_le_of_forall_le
+  intro auxiliary hauxiliary
+  rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets]
+    𝒮[PMF.uniformOfFintype CanonicalGraphLabels]]
+  apply probEvent_bind_le_of_forall_le
+  intro labels _
+  have h := referenceTwoWitnessRestCost_initial_bound dummy adversary q
+    parameter otsSecret labels auxiliary (pmf_support _ auxiliary hauxiliary)
+  simpa only [referenceTwoWitnessRestCost, evalSPMF_map, evalSPMF_pure, bind_pure_comp] using h
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_initial_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_initial_bound
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_budget_event
