@@ -154,6 +154,29 @@ theorem fixedSourceImpl_hash_exact_cost {inputs : Finset HashInput}
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_hash_exact_cost
 
+theorem fixedSourceImpl_random_exact_cost {inputs : Finset HashInput}
+    (context : Context inputs) (sample : Nat) (memory : Memory) :
+    (fun result : Option ((OracleWorld + SigningSpec).Range (.inl (.inl sample))) × Memory =>
+      (result.1, result.2.external.hashCalls - memory.external.hashCalls)) <$>
+      (fixedSourceImpl context (.inl (.inl sample))).run.run memory =
+    (fun result => (some result.1, result.2)) <$>
+      simulateQ (fixedHashWorld context.oracle)
+        (countHashQueries (liftM (OracleWorld.query (.inl sample)))) := by
+  simp only [fixedSourceImpl, OptionT.run_mk, StateT.run_mk,
+    fixedByteRun, simulateQ_spec_query, fixedByteImpl]
+  have hhead : countHashQueries (liftM (OracleWorld.query (.inl sample))) =
+      (fun value => (value, 0)) <$> (liftM (OracleWorld.query (.inl sample))) := by rfl
+  rw [hhead]
+  simp only [simulateQ_map, simulateQ_spec_query, fixedHashWorld,
+    Functor.map_map]
+  simp [liftM_bind, evalSPMF_query, map_eq_bind_pure_comp, bind_assoc]
+
+
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_random_exact_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_random_exact_cost
+
 end SphincsSecurity.Concrete.RetainedResidual
 
 namespace SphincsSecurity.WeightedCutoff
