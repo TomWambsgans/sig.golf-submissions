@@ -237,10 +237,10 @@ theorem firstHash_input (s : MachineState) (seed : MasterSeed)
     rw [firstHash_parameterWords s seed zero key ⟨i / 8, by omega⟩]
     exact parameterPayload_byte seed ⟨i, bound⟩
 
-def afterHashState (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed) : MachineState :=
+def afterHashState (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed) : MachineState :=
   writeHash (firstHashState s) (hash (toQuery (keygenHashInput 0 .parameter seed)))
 
-theorem firstHash_trace (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed)
+theorem firstHash_trace (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed)
     (pc : s.pc = 0x1000)
     (zero : ∀ i : Fin 3, s.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) = 0)
     (key : ∀ i : Fin 4, s.getMem (BitVec.ofNat 64 (0x20 + 8 * i.val)) =
@@ -264,11 +264,11 @@ theorem firstHash_trace (hash : SigGolf.Hash) (s : MachineState) (seed : MasterS
     exact oneStep
   exact (prefix_block s pc).trace.trans hashStep
 
-theorem afterHash_pc (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed)
+theorem afterHash_pc (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed)
     (pc : s.pc = 0x1000) : (afterHashState hash s seed).pc = 0x10d8 := by
   simp [afterHashState, writeHash, firstHash_pc s pc]
 
-theorem afterHash_words (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed)
+theorem afterHash_words (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed)
     (i : Fin 4) :
     (afterHashState hash s seed).getMem (BitVec.ofNat 64 (0x42000 + 8 * i.val)) =
       (hash (toQuery (keygenHashInput 0 .parameter seed))).extractLsb' (64 * i.val) 64 := by
@@ -276,7 +276,7 @@ theorem afterHash_words (hash : SigGolf.Hash) (s : MachineState) (seed : MasterS
   fin_cases i <;> simp [afterHashState, writeHash, dst, MachineState.writeWords]
 
 /-- The first 160 answer bits are the abstract seeded public parameter. -/
-theorem afterHash_parameter (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed) :
+theorem afterHash_parameter (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed) :
     readBuffer (afterHashState hash s seed) 0x42000 20 =
       truncateHash (hash (toQuery (keygenHashInput 0 .parameter seed))) := by
   apply Memory.readBuffer_of_bytes
@@ -288,7 +288,7 @@ theorem afterHash_parameter (hash : SigGolf.Hash) (s : MachineState) (seed : Mas
   rw [extractByte_slice _ ⟨i, by omega⟩]
   exact (BitVec.extractLsb'_extractLsb'_of_le (by change 8 * i + 8 ≤ 160; omega)).symm
 
-theorem afterHash_deriveKey (hash : SigGolf.Hash) (s : MachineState) (seed : MasterSeed) :
+theorem afterHash_deriveKey (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState) (seed : MasterSeed) :
     readBuffer (afterHashState hash s seed) 0x42000 20 =
       evalWithAnswerFn (adaptOracle hash)
         (deriveKey 0 .parameter seed : OracleComp SphincsSecurity.HashSpec Digest) := by
@@ -350,7 +350,7 @@ theorem entry_pc (seed : MasterSeed) : (entryState seed).pc = 0x1000 := by
   simp only [entryState, MachineState.pc_setReg, MachineState.pc_writeBytesAsWords]
 
 /-- The actual loader state executes the first seeded derivation with exact accounting. -/
-theorem loaded_trace (hash : SigGolf.Hash) (seed : MasterSeed) :
+theorem loaded_trace (hash : SigGolfCandidate.Legacy.Hash) (seed : MasterSeed) :
     Trace hash SphincsMaskedImages.keygen (entryState seed) 72 87 1 2
       (afterHashState hash (entryState seed) seed) :=
   firstHash_trace hash _ seed (entry_pc seed) (entry_zero seed) (entry_word seed)
