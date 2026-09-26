@@ -3754,6 +3754,24 @@ def firstUpperEncodingInput (pk : SphincsSecurity.PublicKey)
   tweakableHashInput pk.parameter (.encoding lay tree leaf)
     (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat))
 
+theorem upper_decode_of_abstract (hash : Hash)
+    (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) (encoding : Encoding)
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter lay tree leaf message counter) =
+        some encoding) :
+    TargetSum.decodeDigest (truncateHash
+      (hash (toQuery (firstUpperEncodingInput pk lay tree leaf message counter)))) =
+        some encoding := by
+  simpa only [Concrete.encodeAttempt, evalWithAnswerFn_bind,
+    Concrete.eval_tweakableHash, evalWithAnswerFn_pure, OtsCode.decode_def,
+    adaptOracle, firstUpperEncodingInput, Concrete.counterBytes] using honest
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decode_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decode_of_abstract
+
 theorem firstUpperEncodingInput_eq (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (message : Digest) (counter : Counter) :
