@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsVerifierWotsSemanticEntry
 import SigGolfCandidate.SphincsVerifierWotsEndpointFrame
+import SigGolfCandidate.SphincsVerifierWotsAllChains
 
 namespace SigGolfCandidate.SphincsVerifierWotsSemanticAllChains
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
@@ -179,6 +180,55 @@ theorem walkInv_loop_stable (hash : Hash) (pk : SphincsSecurity.PublicKey)
   · simpa only [one_mul] using callBound
   · simpa only [one_mul] using blockBound
 
+/-- The semantic WOTS walk is also an actual finite bytecode trace, allowing PC relocation. -/
+theorem walkInv_loop_stable_trace (hash : Hash) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat) (state : MachineState)
+    (initialInv : WalkInv hash pk layer tree leaf chain start initial sourceBase 0 state) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      WalkInv hash pk layer tree leaf chain start initial sourceBase
+        (7 - start.val) final ∧
+      (∀ address, StableAddr address →
+        final.getMem address = state.getMem address) ∧
+      steps ≤ 94 * (7 - start.val) ∧
+      cycles ≤ 101 * (7 - start.val) ∧
+      calls ≤ 7 - start.val ∧ blocks ≤ 7 - start.val ∧
+      Trace hash SphincsImages.verify state steps cycles calls blocks final := by
+  let Inv : Nat → MachineState → Prop := fun i current =>
+    WalkInv hash pk layer tree leaf chain start initial sourceBase i current ∧
+    ∀ address, StableAddr address →
+      current.getMem address = state.getMem address
+  have next (i : Nat) (current : MachineState)
+      (small : i < 7 - start.val) (inv : Inv i current) :
+      ∃ (following : MachineState) (steps cycles calls blocks : Nat),
+        Inv (i + 1) following ∧
+        steps ≤ 94 ∧ cycles ≤ 101 ∧ calls ≤ 1 ∧ blocks ≤ 1 ∧
+        Trace hash SphincsImages.verify current steps cycles calls blocks following := by
+    let digit : Fin 8 := ⟨start.val + i, by have := start.isLt; omega⟩
+    have digitSmall : digit.val < 7 := by dsimp [digit]; omega
+    have currentCell : current.getMem 0x43058 =
+      BitVec.ofNat 64 digit.val := inv.1.stepCell
+    refine ⟨stepRound hash current, 94, 101, 1, 1,
+      ⟨walkInv_step hash pk layer tree leaf chain start initial sourceBase i
+        current small inv.1, ?_⟩,
+      by decide, by decide, by decide, by decide, ?_⟩
+    · intro address stable
+      exact (stepRound_stableFrame hash current address stable).trans
+        (inv.2 address stable)
+    · exact SphincsVerifierWotsStepTrace.step_round_trace hash current digit
+        inv.1.pc currentCell digitSmall
+  obtain ⟨final, steps, cycles, calls, blocks, finalInv,
+    stepBound, cycleBound, callBound, blockBound, run⟩ :=
+    SphincsVerifierWotsStepTrace.bounded_loop_trace hash SphincsImages.verify
+      Inv (7 - start.val) 94 101 1 1 next 0 (7 - start.val) state
+      (by omega) ⟨initialInv, by intro address _; rfl⟩
+  refine ⟨final, steps, cycles, calls, blocks,
+    by simpa only [Nat.zero_add] using finalInv.1, finalInv.2,
+    stepBound, cycleBound, ?_, ?_, run⟩
+  · simpa only [one_mul] using callBound
+  · simpa only [one_mul] using blockBound
+
 /-- One complete WOTS chain writes its abstract endpoint and preserves every other chain slot. -/
 theorem chainRound_recover (hash : Hash) (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (layer : Layer)
@@ -223,6 +273,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
       cycles ≤ 101 * (7 - digit.val) + 70 ∧
       calls ≤ 7 - digit.val ∧
       blocks ≤ 7 - digit.val ∧
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
       ∀ (tailSteps : Nat) (result : Execution),
         Executes hash SphincsImages.verify final tailSteps result →
         Executes hash SphincsImages.verify state (tailSteps + steps)
@@ -239,7 +290,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     pc pointer counter decoded layerCell treeCell leafCell hprefix value
   obtain ⟨seven, steps, cycles, calls, blocks, finalInv, stable,
     stepBound, cycleBound, callBound, blockBound, run⟩ :=
-    walkInv_loop_stable hash pk layer tree leaf chain digit initial base
+    walkInv_loop_stable_trace hash pk layer tree leaf chain digit initial base
       (chainEntryState state) initialInv
   have cell : seven.getMem 0x43058 = 7 := by
     simpa [show digit.val + (7 - digit.val) = 7 by
@@ -313,24 +364,24 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
   refine ⟨chainEndState middle, steps + 70, cycles + 70,
     calls, blocks, endPc, endCounter, endPointer, ?_, ?_, ?_,
     lowFrame, digitFrame, otherFrame, endpointByte,
-    by omega, by omega, callBound, blockBound, ?_⟩
+    by omega, by omega, callBound, blockBound, ?_, ?_⟩
   · rw [context 0x43000 (Or.inl rfl), stepCheck_mem]
     exact finalInv.layerCell
   · rw [context 0x43008 (Or.inr (Or.inl rfl)), stepCheck_mem]
     exact finalInv.treeCell
   · rw [context 0x43018 (Or.inr (Or.inr rfl)), stepCheck_mem]
     exact finalInv.leafCell
+  · have preTrace := entry.1.trace (hash := hash)
+    have suffix := (checked.1.append endTrace).trace (hash := hash)
+    have full := (preTrace.trans run).trans suffix
+    convert full using 1 <;> omega
   · intro tailSteps result tail
-    have after := endTrace.then_executes tail
-    have middleRun := checked.1.then_executes after
-    have middleRun' : Executes hash SphincsImages.verify seven
-        (tailSteps + 45) (result.charge 45 0 0) := by
-      simpa [Execution.charge, Nat.add_assoc, Nat.add_comm,
-        Nat.add_left_comm] using middleRun
-    have before := run (tailSteps + 45) (result.charge 45 0 0) middleRun'
-    have full := entry.1.then_executes before
+    have preTrace := entry.1.trace (hash := hash)
+    have suffix := (checked.1.append endTrace).trace (hash := hash)
+    have full := (preTrace.trans run).trans suffix
+    have answer := full.then_executes tail
     simpa [Execution.charge, Nat.add_assoc, Nat.add_comm,
-      Nat.add_left_comm] using full
+      Nat.add_left_comm] using answer
 
 theorem lowByteFrame (initial current : MachineState)
     (frame : ∀ address, address.toNat < 0x40000 →
@@ -425,6 +476,7 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
         final.getMem address = state.getMem address) ∧
       steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
       calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 ∧
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
       ∀ (tailSteps : Nat) (result : Execution),
         Executes hash SphincsImages.verify final tailSteps result →
         Executes hash SphincsImages.verify state (tailSteps + steps)
@@ -435,10 +487,7 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
       ∃ (following : MachineState) (steps cycles calls blocks : Nat),
         Inv (i + 1) following ∧
         steps ≤ 728 ∧ cycles ≤ 777 ∧ calls ≤ 7 ∧ blocks ≤ 7 ∧
-        ∀ (tailSteps : Nat) (result : Execution),
-          Executes hash SphincsImages.verify following tailSteps result →
-          Executes hash SphincsImages.verify current (tailSteps + steps)
-            (result.charge cycles calls blocks) := by
+        Trace hash SphincsImages.verify current steps cycles calls blocks following := by
     let chain : ChainIndex := ⟨i, by simpa [numChains] using small⟩
     let digit := digits chain
     have currentPc : current.pc = 0x2710 := by
@@ -466,14 +515,14 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
       exact source chain j hj
     obtain ⟨following, a, b, c, d, nextPc, nextCounter, nextPointer,
       nextLayer, nextTree, nextLeaf, nextLow, nextDigit, otherSlots,
-      newEndpoint, stepBound, cycleBound, callBound, blockBound, run⟩ :=
+      newEndpoint, stepBound, cycleBound, callBound, blockBound, trace, _run⟩ :=
       chainRound_recover hash current pk layer tree leaf chain digit
         (values chain) base baseBound baseAligned
         currentPc currentPointer currentCounter currentDigit
         inv.layerCell inv.treeCell inv.leafCell currentPrefix currentValue
     refine ⟨following, a, b, c, d, ?_, by
       have hd := digit.isLt; omega, by
-      have hd := digit.isLt; omega, by omega, by omega, run⟩
+      have hd := digit.isLt; omega, by omega, by omega, trace⟩
     constructor
     · simpa [Inv, History, chain] using nextPc
     · simpa [chain] using nextCounter
@@ -512,7 +561,7 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
         exact transferred.trans oldValue
   obtain ⟨final, steps, cycles, calls, blocks, inv,
     stepBound, cycleBound, callBound, blockBound, run⟩ :=
-    bounded_loop hash SphincsImages.verify Inv 52
+    SphincsVerifierWotsStepTrace.bounded_loop_trace hash SphincsImages.verify Inv 52
       728 777 7 7 next 0 52 state (by decide)
       ⟨by simpa [Inv, History] using pc,
        by simpa [Inv, History] using counter,
@@ -526,17 +575,27 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
     by simpa using inv.counter,
     by simpa using inv.pointer,
     ?_, inv.lowFrame, stepBound, cycleBound,
-    callBound, blockBound, run⟩
-  intro chain j hj
-  exact inv.endpoints chain (by
-    have h := chain.isLt
-    simpa [numChains] using h) j hj
+    callBound, blockBound, run, ?_⟩
+  · intro chain j hj
+    exact inv.endpoints chain (by
+      have h := chain.isLt
+      simpa [numChains] using h) j hj
+  · intro tailSteps result tail
+    have answer := run.then_executes tail
+    simpa [Execution.charge, Nat.add_assoc, Nat.add_comm,
+      Nat.add_left_comm] using answer
 
 #print axioms allChains_recover
 
 #print axioms chainEnd_lowFrame
 #print axioms chainEnd_contextFrame
 #print axioms walkInv_loop_stable
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticAllChains.walkInv_loop_stable_trace' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms walkInv_loop_stable_trace
 #print axioms chainRound_recover
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticAllChains
