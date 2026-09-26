@@ -2189,6 +2189,199 @@ theorem first_upper_header_block (state : MachineState)
       firstUpperHeaderSchedule firstUpperHeader_code state
       (firstUpperHeader_checked state pc)
 
+theorem first_upper_header_pc (state : MachineState)
+    (pc : state.pc = 0x6d40) :
+    (firstUpperHeaderState state).pc = 0x6d94 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
+
+private def firstUpperParamPointers : List (Word × Instr) := [
+  (0x6d94, .LUI .x6 0x23),
+  (0x6d98, .ADDI .x6 .x6 (-844)),
+  (0x6d9c, .LUI .x7 0x40),
+  (0x6da0, .ADDI .x7 .x7 20)]
+
+private theorem firstUpperParamPointers_code :
+    ∀ entry ∈ firstUpperParamPointers,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def firstUpperParamPointerState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule firstUpperParamPointers state
+
+private theorem firstUpperParamPointers_checked (state : MachineState)
+    (pc : state.pc = 0x6d94) :
+    SphincsMaskedKeygenPrefix.Checked firstUpperParamPointers state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, firstUpperParamPointers,
+    execInstrBr, ordinaryStep, memoryArgumentsValid,
+    signExtend12, pc]
+
+private theorem firstUpperParamPointers_block (state : MachineState)
+    (pc : state.pc = 0x6d94) :
+    OrdinarySteps SphincsImages.verify state 4
+      (firstUpperParamPointerState state) := by
+  simpa only [firstUpperParamPointerState, firstUpperParamPointers,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      firstUpperParamPointers firstUpperParamPointers_code state
+      (firstUpperParamPointers_checked state pc)
+
+private theorem firstUpperParamPointer_regs (state : MachineState) :
+    (firstUpperParamPointerState state).getReg .x6 = 0x22cb4 ∧
+    (firstUpperParamPointerState state).getReg .x7 = 0x40014 := by
+  simp [firstUpperParamPointerState, firstUpperParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+private theorem firstUpperParamPointer_pc (state : MachineState)
+    (pc : state.pc = 0x6d94) :
+    (firstUpperParamPointerState state).pc = 0x6da4 := by
+  simp [firstUpperParamPointerState, firstUpperParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
+
+private theorem firstUpperParamCopy_code :
+    SphincsVerifierMessageCopy.Copy20Code SphincsImages.verify 5993 := by
+  constructor <;> intro offset <;> fin_cases offset <;> decide
+
+private def firstUpperParamState (state : MachineState) : MachineState :=
+  SphincsVerifierCopy.copyRootState (firstUpperParamPointerState state)
+
+theorem first_upper_parameter_block (state : MachineState)
+    (pc : state.pc = 0x6d94) :
+    OrdinarySteps SphincsImages.verify state 14
+      (firstUpperParamState state) := by
+  have first := firstUpperParamPointers_block state pc
+  have source := (firstUpperParamPointer_regs state).1
+  have destination := (firstUpperParamPointer_regs state).2
+  have second := SphincsVerifierFtsCopyAccess.copy20_block_general
+    SphincsImages.verify 5993 firstUpperParamCopy_code
+    (firstUpperParamPointerState state) 0x22cb4 0x40014
+    (by simpa using firstUpperParamPointer_pc state pc)
+    (by simpa using source) (by simpa using destination)
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+  simpa [firstUpperParamState] using first.append second
+
+theorem first_upper_parameter_pc (state : MachineState)
+    (pc : state.pc = 0x6d94) :
+    (firstUpperParamState state).pc = 0x6dcc := by
+  change (SphincsVerifierCopy.copyRootState
+    (firstUpperParamPointerState state)).pc = 0x6dcc
+  have start := firstUpperParamPointer_pc state pc
+  have finish := SphincsVerifierMessageCopy.copy20_final_pc
+    (firstUpperParamPointerState state) 5993 (by simpa using start)
+  simpa using finish
+
+private def firstUpperServiceSchedule : List (Word × Instr) := [
+  (0x6dcc, .LUI .x10 0x40),
+  (0x6dd0, .ADDI .x10 .x10 0),
+  (0x6dd4, .ADDI .x11 .x0 512),
+  (0x6dd8, .LUI .x12 0x42),
+  (0x6ddc, .ADDI .x12 .x12 0),
+  (0x6de0, .ADDI .x5 .x0 1)]
+
+private theorem firstUpperService_code :
+    ∀ entry ∈ firstUpperServiceSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def firstUpperServiceState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule firstUpperServiceSchedule state
+
+private theorem firstUpperService_checked (state : MachineState)
+    (pc : state.pc = 0x6dcc) :
+    SphincsMaskedKeygenPrefix.Checked firstUpperServiceSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, firstUpperServiceSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid,
+    signExtend12, pc]
+
+theorem first_upper_service_setup_block (state : MachineState)
+    (pc : state.pc = 0x6dcc) :
+    OrdinarySteps SphincsImages.verify state 6
+      (firstUpperServiceState state) := by
+  simpa only [firstUpperServiceState, firstUpperServiceSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      firstUpperServiceSchedule firstUpperService_code state
+      (firstUpperService_checked state pc)
+
+theorem first_upper_service_ready (state : MachineState)
+    (pc : state.pc = 0x6dcc) :
+    let ready := firstUpperServiceState state
+    ready.pc = 0x6de4 ∧ ready.getReg .x10 = 0x40000 ∧
+    ready.getReg .x11 = 512 ∧ ready.getReg .x12 = 0x42000 ∧
+    ready.getReg .x5 = 1 := by
+  simp [firstUpperServiceState, firstUpperServiceSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+private def firstUpperPrehashState (state : MachineState) : MachineState :=
+  firstUpperServiceState (firstUpperParamState
+    (firstUpperHeaderState (firstUpperCounterState state)))
+
+theorem first_upper_prehash_block (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
+    OrdinarySteps SphincsImages.verify state 49
+      (firstUpperPrehashState state) ∧
+    (firstUpperPrehashState state).pc = 0x6de4 ∧
+    (firstUpperPrehashState state).getReg .x10 = 0x40000 ∧
+    (firstUpperPrehashState state).getReg .x11 = 512 ∧
+    (firstUpperPrehashState state).getReg .x12 = 0x42000 ∧
+    (firstUpperPrehashState state).getReg .x5 = 1 := by
+  let counter := firstUpperCounterState state
+  let header := firstUpperHeaderState counter
+  let parameter := firstUpperParamState header
+  have c := first_upper_counter_block state pc small
+  have cp := first_upper_counter_pc state pc small
+  have h := first_upper_header_block counter cp
+  have hp := first_upper_header_pc counter cp
+  have p := first_upper_parameter_block header hp
+  have pp := first_upper_parameter_pc header hp
+  have s := first_upper_service_setup_block parameter pp
+  have ready := first_upper_service_ready parameter pp
+  refine ⟨?_, ready⟩
+  simpa [firstUpperPrehashState, counter, header, parameter,
+    Nat.add_assoc] using ((c.append h).append p).append s
+
+theorem first_upper_hash_site (state : MachineState)
+    (pc : state.pc = 0x6de4) :
+    fetch SphincsImages.verify state = some (.base .ECALL) := by
+  rw [SphincsVerifierMessageCopy.fetch_index SphincsImages.verify state
+    6009 (by decide) (by simpa using pc)]
+  decide
+
+theorem first_upper_hash_step (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x6de4)
+    (source : state.getReg .x10 = 0x40000)
+    (bits : state.getReg .x11 = 512)
+    (destination : state.getReg .x12 = 0x42000)
+    (service : state.getReg .x5 = 1) :
+    Trace hash SphincsImages.verify state 1 8 1 1
+      (writeHash state (hash (hashInput state))) := by
+  have valid : hashArgumentsValid state = true := by
+    simp [hashArgumentsValid, source, bits, destination,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have cost : compressions (hashInput state).1 = 1 := by
+    simp [hashInput, source, bits, compressions]
+  have run := Trace.hash state
+    (writeHash state (hash (hashInput state))) 0 0 0 0
+    (first_upper_hash_site state pc) service valid
+    (Trace.refl _)
+  simpa [cost] using run
+
+theorem first_upper_hash_prefix (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
+    Trace hash SphincsImages.verify state 50 57 1 1
+      (writeHash (firstUpperPrehashState state)
+        (hash (hashInput (firstUpperPrehashState state)))) := by
+  obtain ⟨ordinary, readyPc, source, bits, destination, service⟩ :=
+    first_upper_prehash_block state pc small
+  have hashed := first_upper_hash_step hash (firstUpperPrehashState state)
+    readyPc source bits destination service
+  simpa using (ordinary.trace (hash := hash)).trans hashed
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_handoff_control_cells
