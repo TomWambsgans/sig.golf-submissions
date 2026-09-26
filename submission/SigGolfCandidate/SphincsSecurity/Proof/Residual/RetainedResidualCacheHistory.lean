@@ -343,3 +343,310 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_hashCalls_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_hashCalls_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option synthInstance.maxHeartbeats 200000
+
+variable (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+
+def outerHashSlot : (OracleWorld + SigningSpec).Domain → Nat
+  | .inl (.inl _) => 0
+  | .inl (.inr _) => 1
+  | .inr _ => 1
+
+theorem outerHashSlot_le_macroCost (input : (OracleWorld + SigningSpec).Domain) :
+    outerHashSlot input ≤ signingMacroHashCost input := by
+  cases input with
+  | inl input => cases input <;> simp [outerHashSlot, signingMacroHashCost]
+  | inr message => norm_num [outerHashSlot, signingMacroHashCost, ftsTreeHeight]
+
+theorem digestAttemptExpectation_le_attempts (attempts : Nat)
+    (key : SecretKey) (message : Message) (cache : QueryCache HashSpec) :
+    digestAttemptExpectation attempts key message cache ≤ attempts := by
+  induction attempts generalizing cache with
+  | zero => simp [digestAttemptExpectation]
+  | succ attempts ih =>
+      simp only [digestAttemptExpectation, Nat.cast_add, Nat.cast_one]
+      rw [add_comm (attempts : ENNReal) 1]
+      apply add_le_add_right
+      calc
+        _ ≤ ∑' result,
+          Pr[= result | signDigestAttemptPrefix key message cache] * (attempts : ENNReal) := by
+            apply ENNReal.tsum_le_tsum
+            intro result
+            apply mul_le_mul' le_rfl
+            split_ifs
+            · exact ih result.2.2
+            · exact zero_le
+        _ ≤ attempts := by
+          rw [ENNReal.tsum_mul_right]
+          exact mul_le_of_le_one_left' tsum_probOutput_le_one
+
+theorem nativeMessageCharge_le_outerSlot (input : (OracleWorld + SigningSpec).Domain)
+    (state : CertificateMonitorState) :
+    nativeMessageCharge key input state ≤
+      (outerHashSlot input : ENNReal) * digestAttemptLimit := by
+  cases input with
+  | inl input =>
+      cases input with
+      | inl sample => simp [nativeMessageCharge, outerHashSlot, hashQueryCharge]
+      | inr hash =>
+          simp only [nativeMessageCharge, outerHashSlot, hashQueryCharge,
+            Sum.elim_inr]
+          unfold FtsProbeSimulation.messageHashCharge
+          split_ifs <;> norm_num [digestAttemptLimit]
+  | inr message =>
+      simpa only [nativeMessageCharge, outerHashSlot, Nat.cast_one, one_mul] using
+        digestAttemptExpectation_le_attempts digestAttemptLimit key message state.1
+
+noncomputable def outerSlotCachePotential (q : Nat)
+    (state : ExceptionHistoryState inputs) : ENNReal :=
+  cacheHistoryWeight key state +
+    ((q + 1 - state.1.1.memory.external.hashCalls : Nat) : ENNReal) *
+      ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate)
+
+theorem exceptionHistoryStep_remaining_drop (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : ExceptionHistoryState inputs)
+    (hactive : state.1.1.memory.external.hashCalls ≤ q)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (haccount : MonitoredAccounting state.1)
+    (result : Option ((OracleWorld + SigningSpec).Range input) ×
+      ExceptionHistoryState inputs)
+    (hresult : exceptionHistoryStep key inputs hencoding words publicReplies
+      selections rows budget required stopAfter input state result ≠ 0) :
+    (q + 1 - result.2.1.1.memory.external.hashCalls) + outerHashSlot input ≤
+      q + 1 - state.1.1.memory.external.hashCalls := by
+  have hstep := (exceptionHistoryStep_support key inputs hencoding words
+    publicReplies selections rows budget required stopAfter input state result hresult).1
+  have hcost := (monitoredStep_accounting key inputs hencoding words
+    publicReplies selections rows budget required stopAfter input state.1
+    hvalid hinputs haccount (result.1, result.2.1) hstep).2.1
+  change state.1.1.memory.external.hashCalls + signingMacroHashCost input ≤
+    result.2.1.1.memory.external.hashCalls at hcost
+  have hminimum := outerHashSlot_le_macroCost input
+  have hroom : outerHashSlot input ≤
+      q + 1 - state.1.1.memory.external.hashCalls := by
+    have hslot : outerHashSlot input ≤ 1 := by
+      cases input with
+      | inl input => cases input <;> simp [outerHashSlot]
+      | inr message => simp [outerHashSlot]
+    omega
+  omega
+
+
+theorem exceptionHistoryStep_remaining_price_le (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : ExceptionHistoryState inputs)
+    (hactive : state.1.1.memory.external.hashCalls ≤ q)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (haccount : MonitoredAccounting state.1)
+    (result : Option ((OracleWorld + SigningSpec).Range input) ×
+      ExceptionHistoryState inputs)
+    (hresult : exceptionHistoryStep key inputs hencoding words publicReplies
+      selections rows budget required stopAfter input state result ≠ 0) :
+    ((q + 1 - result.2.1.1.memory.external.hashCalls : Nat) : ENNReal) *
+        ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) ≤
+      ((q + 1 - state.1.1.memory.external.hashCalls - outerHashSlot input : Nat) : ENNReal) *
+        ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) := by
+  have hdrop := exceptionHistoryStep_remaining_drop key inputs hencoding words
+    publicReplies selections rows budget required stopAfter q input state
+    hactive hvalid hinputs haccount result hresult
+  have hnat : q + 1 - result.2.1.1.memory.external.hashCalls ≤
+      q + 1 - state.1.1.memory.external.hashCalls - outerHashSlot input := by omega
+  exact mul_le_mul' (by exact_mod_cast hnat) le_rfl
+
+theorem expected_macroStoppedExceptionStep_potential_le (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (hbound : CacheSizeBound state.1.1.memory)
+    (haccount : MonitoredAccounting state.1) :
+    (∑' result, Pr[= result |
+      macroStoppedExceptionStep key inputs hencoding words publicReplies selections rows
+        budget required stopAfter q input state] *
+      outerSlotCachePotential key inputs q result.2) ≤
+      outerSlotCachePotential key inputs q state := by
+  by_cases hactive : state.1.1.memory.external.hashCalls ≤ q
+  · simp only [macroStoppedExceptionStep, if_pos hactive]
+    let price : ENNReal := (digestAttemptLimit : ENNReal) * certificateCacheExceptionRate
+    let rem : Nat := q + 1 - state.1.1.memory.external.hashCalls
+    let slot : Nat := outerHashSlot input
+    have hslot : slot ≤ rem := by
+      have hs : slot ≤ 1 := by
+        cases input with
+        | inl input => cases input <;> simp [slot, outerHashSlot]
+        | inr message => simp [slot, outerHashSlot]
+      dsimp [rem]
+      omega
+    have hsplit : rem = slot + (rem - slot) := by omega
+    calc
+      _ ≤ ∑' result, Pr[= result |
+          exceptionHistoryStep key inputs hencoding words publicReplies selections rows
+            budget required stopAfter input state] *
+          (cacheHistoryWeight key result.2 + ((rem - slot : Nat) : ENNReal) * price) := by
+        apply ENNReal.tsum_le_tsum
+        intro result
+        by_cases hr : Pr[= result | exceptionHistoryStep key inputs hencoding words
+            publicReplies selections rows budget required stopAfter input state] = 0
+        · simp [hr]
+        rw [SPMF.probOutput_eq_apply] at hr
+        apply mul_le_mul' le_rfl
+        unfold outerSlotCachePotential
+        apply add_le_add le_rfl
+        simpa only [price, rem, slot] using
+          exceptionHistoryStep_remaining_price_le key inputs hencoding words
+            publicReplies selections rows budget required stopAfter q input state
+            hactive hvalid hinputs haccount result hr
+      _ ≤ (cacheHistoryWeight key state +
+            nativeMessageCharge key input (monitorView state.1) * certificateCacheExceptionRate) +
+          ((rem - slot : Nat) : ENNReal) * price := by
+        simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right]
+        exact add_le_add
+          (expected_exceptionHistoryStep_cacheWeight_le key inputs hencoding words
+            publicReplies selections rows budget required stopAfter input state
+            hvalid hinputs hbound)
+          (mul_le_of_le_one_left' tsum_probOutput_le_one)
+      _ ≤ outerSlotCachePotential key inputs q state := by
+        have hcharge := nativeMessageCharge_le_outerSlot key input (monitorView state.1)
+        have hcharged : nativeMessageCharge key input (monitorView state.1) *
+            certificateCacheExceptionRate ≤ (slot : ENNReal) * price := by
+          calc
+            _ ≤ ((slot : ENNReal) * digestAttemptLimit) * certificateCacheExceptionRate :=
+              mul_le_mul' hcharge le_rfl
+            _ = (slot : ENNReal) * price := by rw [mul_assoc]
+        unfold outerSlotCachePotential
+        dsimp [price, rem, slot] at *
+        calc
+          _ ≤ (cacheHistoryWeight key state +
+                ((slot : ENNReal) * (digestAttemptLimit * certificateCacheExceptionRate))) +
+              (((q + 1 - state.1.1.memory.external.hashCalls - slot : Nat) : ENNReal) *
+                (digestAttemptLimit * certificateCacheExceptionRate)) :=
+              add_le_add (add_le_add le_rfl hcharged) le_rfl
+          _ = _ := by
+            rw [add_assoc, ← add_mul, ← Nat.cast_add]
+            congr 1
+            exact congrArg (fun n : Nat => (n : ENNReal) *
+              (digestAttemptLimit * certificateCacheExceptionRate)) hsplit.symm
+  · simp only [macroStoppedExceptionStep, if_neg hactive,
+      tsum_probOutput_pure_mul, le_refl]
+
+
+theorem expected_macroStoppedExceptionRun_potential_le {Result : Type}
+    (q : Nat) (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (hbound : CacheSizeBound state.1.1.memory)
+    (haccount : MonitoredAccounting state.1) :
+    (∑' result, Pr[= result |
+      macroStoppedExceptionRun key inputs hencoding words publicReplies selections rows
+        budget required stopAfter q computation state] *
+      outerSlotCachePotential key inputs q result.2) ≤
+      outerSlotCachePotential key inputs q state := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value =>
+      simp only [macroStoppedExceptionRun_pure, tsum_probOutput_pure_mul, le_refl]
+  | query_bind input next ih =>
+      rw [macroStoppedExceptionRun_query_bind, tsum_probOutput_bind_mul]
+      calc
+        _ ≤ ∑' raw, Pr[= raw | macroStoppedExceptionStep key inputs
+            hencoding words publicReplies selections rows budget required stopAfter
+            q input state] * outerSlotCachePotential key inputs q raw.2 := by
+          apply ENNReal.tsum_le_tsum
+          intro raw
+          by_cases hr : Pr[= raw | macroStoppedExceptionStep key inputs
+              hencoding words publicReplies selections rows budget required stopAfter
+              q input state] = 0
+          · simp only [hr, zero_mul, le_refl]
+          rw [SPMF.probOutput_eq_apply] at hr
+          apply mul_le_mul' le_rfl
+          rcases raw with ⟨answer, after⟩
+          cases answer with
+          | none => simp only [Option.elim_none, tsum_probOutput_pure_mul, le_refl]
+          | some answer =>
+              have hactive : state.1.1.memory.external.hashCalls ≤ q := by
+                by_contra hneg
+                have hs : macroStoppedExceptionStep key inputs hencoding words
+                    publicReplies selections rows budget required stopAfter q input state
+                    (some answer, after) = 0 := by
+                  simp only [macroStoppedExceptionStep, if_neg hneg]
+                  rw [SPMF.pure_apply_eq_zero_iff]
+                  intro hwrong
+                  have hfirst := congrArg Prod.fst hwrong
+                  cases hfirst
+                exact hr hs
+              have hstep : exceptionHistoryStep key inputs hencoding words
+                  publicReplies selections rows budget required stopAfter input state
+                  (some answer, after) ≠ 0 := by
+                simpa only [macroStoppedExceptionStep, if_pos hactive] using hr
+              have hmon := (exceptionHistoryStep_support key inputs hencoding words
+                publicReplies selections rows budget required stopAfter input state
+                (some answer, after) hstep).1
+              have hv := monitoredStep_valid key inputs hencoding words
+                publicReplies selections rows budget required stopAfter input state.1
+                hvalid (some answer, after.1) hmon
+              have hb := monitoredStep_cacheSizeBound key inputs hencoding words
+                publicReplies selections rows budget required stopAfter input state.1
+                hvalid ((requestInputs_subset key input next).trans hinputs)
+                hbound (some answer, after.1) hmon
+              have ha := (monitoredStep_accounting key inputs hencoding words
+                publicReplies selections rows budget required stopAfter input state.1
+                hvalid ((requestInputs_subset key input next).trans hinputs)
+                haccount (some answer, after.1) hmon).1
+              exact ih answer after hv
+                ((sourceInputs_next_subset key input next answer).trans hinputs) hb ha
+        _ ≤ _ := expected_macroStoppedExceptionStep_potential_le key inputs
+          hencoding words publicReplies selections rows budget required stopAfter
+          q input state hvalid ((requestInputs_subset key input next).trans hinputs)
+          hbound haccount
+
+
+theorem exceptionHistoryRun_budget_hit_le_outerSlots {Result : Type}
+    (q : Nat) (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (hbound : CacheSizeBound state.1.1.memory)
+    (haccount : MonitoredAccounting state.1) :
+    Pr[fun result => result.2.2.1 = true ∧
+      result.2.1.1.memory.external.hashCalls ≤ q |
+      exceptionHistoryRun key inputs hencoding words publicReplies selections rows
+        budget required stopAfter computation state] ≤
+      outerSlotCachePotential key inputs q state := by
+  rw [← macroStoppedExceptionRun_budget_event_eq key inputs hencoding words
+    publicReplies selections rows budget required stopAfter q computation state
+    hvalid hinputs haccount (fun result => result.2.2.1 = true)]
+  apply le_trans ?_ (expected_macroStoppedExceptionRun_potential_le key inputs
+    hencoding words publicReplies selections rows budget required stopAfter
+    q computation state hvalid hinputs hbound haccount)
+  apply probEvent_le_tsum_probOutput_mul_cost_of_mem_support
+  intro result _ hhit
+  change result.2.2.1 = true ∧
+    result.2.1.1.memory.external.hashCalls ≤ q at hhit
+  have hweight : cacheHistoryWeight key result.2 = 1 := by
+    simp only [cacheHistoryWeight, hhit.1, ite_true]
+  unfold outerSlotCachePotential
+  rw [hweight]
+  exact le_self_add
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.expected_macroStoppedExceptionRun_potential_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.expected_macroStoppedExceptionRun_potential_le
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.exceptionHistoryRun_budget_hit_le_outerSlots' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.exceptionHistoryRun_budget_hit_le_outerSlots
