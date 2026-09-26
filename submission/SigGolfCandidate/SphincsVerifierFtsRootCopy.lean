@@ -1,4 +1,5 @@
-import SigGolfCandidate.SphincsVerifierFtsRootsPayload
+import SigGolfCandidate.Execution
+import SigGolfCandidate.SphincsImages
 
 namespace SigGolfCandidate.SphincsVerifierFtsRootCopy
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
