@@ -2139,6 +2139,14 @@ theorem first_upper_counter_pc (state : MachineState)
   rw [small']
   decide
 
+theorem first_upper_counter_stored (state : MachineState) :
+    (firstUpperCounterState state).getWord32 0x4003c =
+      state.getWord32 0x23dbc := by
+  simp [firstUpperCounterState, firstUpperCounterSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    SphincsVerifierCopyMemory.getWord32_setWord32_same, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
 private def firstUpperHeaderSchedule : List (Word × Instr) := [
   (0x6d40, .ADDI .x6 .x0 1025),
   (0x6d44, .LUI .x28 0x43),
@@ -2548,6 +2556,152 @@ theorem first_upper_decoder_prefix (hash : Hash) (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_decoder_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_decoder_prefix
+
+
+def firstUpperEncodingInput (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) : HashInput :=
+  tweakableHashInput pk.parameter (.encoding lay tree leaf)
+    (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat))
+
+theorem firstUpperEncodingInput_eq (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) :
+    firstUpperEncodingInput pk lay tree leaf message counter =
+      fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val) ++
+        bytesLE 20 pk.parameter ++ bytesLE 20 message ++
+        bytesLE 4 (BitVec.ofNat 32 counter.toNat) := by rfl
+
+theorem firstUpperEncodingInput_length (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) :
+    (firstUpperEncodingInput pk lay tree leaf message counter).length = 64 := by
+  simp [firstUpperEncodingInput, tweakableHashInput, tweakBytes, hashDomainFields,
+    fieldBytes, bytesLE]
+
+theorem firstUpperEncodingInput_header (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (i : Nat) (hi : i < 20) :
+    ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'(by
+      rw [List.length_map, firstUpperEncodingInput_length]; omega) =
+      ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+        UInt8.toBitVec)[i]'(by simp [fieldBytes, bytesLE]; omega) := by
+  simp only [firstUpperEncodingInput_eq, List.map_append]
+  rw [List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega),
+    List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega),
+    List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega)]
+
+theorem firstUpperEncodingInput_parameter (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (i : Nat) (hi : i < 20) :
+    ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[20+i]'(by
+      rw [List.length_map, firstUpperEncodingInput_length]; omega) =
+      pk.parameter.extractLsb' (8*i) 8 := by
+  simp only [firstUpperEncodingInput_eq, List.map_append]
+  rw [List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega),
+    List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega),
+    List.getElem_append_right (by simp [fieldBytes, bytesLE])]
+  simp only [List.getElem_map, bytesLE, List.getElem_ofFn,
+    UInt8.toBitVec_ofBitVec]
+  simp [fieldBytes, bytesLE]
+  rfl
+
+theorem firstUpperEncodingInput_message (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (i : Nat) (hi : i < 20) :
+    ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[40+i]'(by
+      rw [List.length_map, firstUpperEncodingInput_length]; omega) =
+      message.extractLsb' (8*i) 8 := by
+  simp only [firstUpperEncodingInput_eq, List.map_append]
+  rw [List.getElem_append_left (by simp [fieldBytes, bytesLE]; omega),
+    List.getElem_append_right (by simp [fieldBytes, bytesLE])]
+  simp only [List.getElem_map, bytesLE, List.getElem_ofFn,
+    UInt8.toBitVec_ofBitVec]
+  simp [fieldBytes, bytesLE]
+  rfl
+
+theorem firstUpperEncodingInput_counter (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (i : Nat) (hi : i < 4) :
+    ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[60+i]'(by
+      rw [List.length_map, firstUpperEncodingInput_length]; omega) =
+      (BitVec.ofNat 32 counter.toNat).extractLsb' (8*i) 8 := by
+  simp only [firstUpperEncodingInput_eq, List.map_append]
+  rw [List.getElem_append_right (by simp [fieldBytes, bytesLE])]
+  simp only [List.getElem_map, bytesLE, List.getElem_ofFn,
+    UInt8.toBitVec_ofBitVec]
+  simp [fieldBytes, bytesLE]
+
+theorem first_upper_encoding_query_of_parts (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (source : state.getReg .x10 = 0x40000)
+    (bits : state.getReg .x11 = 512)
+    (header : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40000 + i)) =
+        ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+          UInt8.toBitVec)[i]'(by simp [fieldBytes, bytesLE]; omega))
+    (parameter : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40014 + i)) =
+        pk.parameter.extractLsb' (8*i) 8)
+    (payload : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+        message.extractLsb' (8*i) 8)
+    (counterBytes : ∀ i, (hi : i < 4) →
+      state.getByte (BitVec.ofNat 64 (0x4003c + i)) =
+        (BitVec.ofNat 32 counter.toNat).extractLsb' (8*i) 8) :
+    hashInput state = toQuery (firstUpperEncodingInput pk lay tree leaf message counter) := by
+  apply SigGolfCandidate.Serialization.hashInput_of_list state 0x40000
+    ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)
+  · exact source
+  · rw [bits, List.length_map, firstUpperEncodingInput_length]
+    rfl
+  · intro i hi
+    have bound : i < 64 := by simpa [firstUpperEncodingInput_length] using hi
+    by_cases h0 : i < 20
+    · exact (header i h0).trans (firstUpperEncodingInput_header pk lay tree leaf message counter i h0).symm
+    by_cases h1 : i < 40
+    · let j := i - 20
+      have hj : j < 20 := by dsimp [j]; omega
+      have ieq : i = 20 + j := by dsimp [j]; omega
+      have addr : 0x40000 + i = 0x40014 + j := by omega
+      calc
+        state.getByte (BitVec.ofNat 64 (0x40000 + i)) =
+          state.getByte (BitVec.ofNat 64 (0x40014 + j)) := by rw [addr]
+        _ = pk.parameter.extractLsb' (8*j) 8 := parameter j hj
+        _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
+          simpa [ieq] using (firstUpperEncodingInput_parameter pk lay tree leaf message counter j hj).symm
+    by_cases h2 : i < 60
+    · let j := i - 40
+      have hj : j < 20 := by dsimp [j]; omega
+      have ieq : i = 40 + j := by dsimp [j]; omega
+      have addr : 0x40000 + i = 0x40028 + j := by omega
+      calc
+        state.getByte (BitVec.ofNat 64 (0x40000 + i)) =
+          state.getByte (BitVec.ofNat 64 (0x40028 + j)) := by rw [addr]
+        _ = message.extractLsb' (8*j) 8 := payload j hj
+        _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
+          simpa [ieq] using (firstUpperEncodingInput_message pk lay tree leaf message counter j hj).symm
+    · let j := i - 60
+      have hj : j < 4 := by dsimp [j]; omega
+      have ieq : i = 60 + j := by dsimp [j]; omega
+      have addr : 0x40000 + i = 0x4003c + j := by omega
+      calc
+        state.getByte (BitVec.ofNat 64 (0x40000 + i)) =
+          state.getByte (BitVec.ofNat 64 (0x4003c + j)) := by rw [addr]
+        _ = (BitVec.ofNat 32 counter.toNat).extractLsb' (8*j) 8 := counterBytes j hj
+        _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
+          simpa [ieq] using (firstUpperEncodingInput_counter pk lay tree leaf message counter j hj).symm
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_of_parts' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_encoding_query_of_parts
+
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
