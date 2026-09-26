@@ -3559,19 +3559,19 @@ theorem first_bottom_emit_setup_word_frame (s : MachineState) (address : Word) :
 theorem first_bottom_emit_disjoint (chain : Fin 52) :
     ∀ i j : Fin 5,
       alignToDword (SphincsVerifierWotsEndpointCopy.word 0x44b00 j) ≠
-        alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) := by
+        alignToDword (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i) := by
   intro i j
   have destNat : (alignToDword
-      (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i)).toNat < 0x40000 := by
-    have wordNat : (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i).toNat =
-        0x20060 + 20 * chain.val + 4 * i.val := by
+      (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i)).toNat < 0x40000 := by
+    have wordNat : (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i).toNat =
+        0x2283c + 20 * chain.val + 4 * i.val := by
       simp only [SphincsVerifierWotsEndpointCopy.word, BitVec.toNat_ofNat]
       have hi := i.isLt
       have hc := chain.isLt
       omega
     have alignedLe : (alignToDword
-        (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i)).toNat ≤
-        (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i).toNat := by
+        (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i)).toNat ≤
+        (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i).toNat := by
       unfold alignToDword
       rw [BitVec.toNat_and]
       exact Nat.and_le_left
@@ -3586,10 +3586,10 @@ theorem first_bottom_emit_disjoint (chain : Fin 52) :
 
 theorem first_bottom_emit_lanes (chain : Fin 52) (i j : Fin 5)
     (different : i ≠ j) :
-    alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) ≠
-      alignToDword (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) j) ∨
-    byteOffset (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) i) / 4 ≠
-      byteOffset (SphincsVerifierWotsEndpointCopy.word (0x20060 + 20 * chain.val) j) / 4 := by
+    alignToDword (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i) ≠
+      alignToDword (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) j) ∨
+    byteOffset (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) i) / 4 ≠
+      byteOffset (SphincsVerifierWotsEndpointCopy.word (0x2283c + 20 * chain.val) j) / 4 := by
   fin_cases chain <;> fin_cases i <;> fin_cases j <;>
     first | exact (different rfl).elim | decide
 
@@ -3604,12 +3604,12 @@ theorem first_bottom_emit_lanes (chain : Fin 52) (i j : Fin 5)
 theorem first_bottom_emit_copy_trace_generic (s : MachineState) (chain : Fin 52)
     (pc : s.pc = 0x3db0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     OrdinarySteps SphincsMaskedImages.sign s 15 (firstBottomEmitCopy s) := by
   have controls := first_bottom_emit_setup_controls s pc
   have copy := copy20_block_general SphincsMaskedImages.sign 2929
     first_bottom_emit_copy_code (firstBottomEmitSetup s)
-    0x44b00 (0x20060 + 20 * chain.val)
+    0x44b00 (0x2283c + 20 * chain.val)
     (by simpa using controls.1)
     (by simpa using controls.2.1)
     (controls.2.2.trans pointer)
@@ -3621,13 +3621,13 @@ theorem first_bottom_emit_copy_trace_generic (s : MachineState) (chain : Fin 52)
 theorem first_bottom_emit_copy_words_generic (s : MachineState) (chain : Fin 52)
     (pc : s.pc = 0x3db0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (value : BitVec 160) (initial : Words20 s 0x44b00 value) :
-    Words20 (firstBottomEmitCopy s) (0x20060 + 20 * chain.val) value := by
+    Words20 (firstBottomEmitCopy s) (0x2283c + 20 * chain.val) value := by
   have controls := first_bottom_emit_setup_controls s pc
   intro i
   have copied := copy20_data (firstBottomEmitSetup s)
-    0x44b00 (0x20060 + 20 * chain.val)
+    0x44b00 (0x2283c + 20 * chain.val)
     (by simpa using controls.2.1)
     (controls.2.2.trans pointer)
     (first_bottom_emit_disjoint chain)
@@ -3705,17 +3705,17 @@ theorem first_bottom_zero_chain_serialized (hash : Hash) (s : MachineState)
     (pc : s.pc = 0x3bfc) (chainZero : s.getMem 0x43050 = 0)
     (digitZero : s.getByte 0x44000 = 0)
     (initialWords : Words20 s 0x44b00 initial)
-    (pointer : s.getMem 0x430a0 = 0x20060) :
+    (pointer : s.getMem 0x430a0 = 0x2283c) :
     let emitted := firstBottomEmitCopy (firstBottomChainDigit s)
     Trace hash SphincsMaskedImages.sign s 36 36 0 0 emitted ∧
-    Words20 emitted 0x20060
+    Words20 emitted 0x2283c
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
   let walked := firstBottomChainDigit s
   let emitted := firstBottomEmitCopy walked
   have zero := first_bottom_chain_zero hash s parameter initial lay treeIdx leaf chain
     pc chainZero digitZero initialWords
-  have pointerWalked : walked.getMem 0x430a0 = 0x20060 := by
-    change (firstBottomChainDigit s).getMem 0x430a0 = 0x20060
+  have pointerWalked : walked.getMem 0x430a0 = 0x2283c := by
+    change (firstBottomChainDigit s).getMem 0x430a0 = 0x2283c
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   have copied := first_bottom_emit_copy_trace_generic walked (⟨0, by decide⟩ : Fin 52)
@@ -3735,9 +3735,9 @@ theorem first_bottom_chain_walk_pointer (hash : Hash) (s : MachineState)
     (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
       lay treeIdx leaf chain ⟨0, by decide⟩)
     (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val)
-    (pointer : s.getMem 0x430a0 = 0x20060) :
+    (pointer : s.getMem 0x430a0 = 0x2283c) :
     ∀ n ≤ digit.val,
-      (firstBottomChainWalk hash n s).getMem 0x430a0 = 0x20060 := by
+      (firstBottomChainWalk hash n s).getMem 0x430a0 = 0x2283c := by
   intro n hn
   induction n with
   | zero => simpa [firstBottomChainWalk] using pointer
@@ -3746,7 +3746,7 @@ theorem first_bottom_chain_walk_pointer (hash : Hash) (s : MachineState)
     have pcN := (first_bottom_chain_nonfinal hash s parameter initial
       lay treeIdx leaf chain digit pc ctx loaded n nlt).2.2.1
     change (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).getMem
-      0x430a0 = 0x20060
+      0x430a0 = 0x2283c
     rw [first_bottom_chain_iteration_frame hash (firstBottomChainWalk hash n s)
       pcN 0x430a0 (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide)]
@@ -3766,18 +3766,18 @@ theorem first_bottom_positive_chain_serialized (hash : Hash) (s : MachineState)
       lay treeIdx leaf chain ⟨0, by decide⟩)
     (digitValue : s.getByte 0x44000 = BitVec.ofNat 8 digit.val)
     (positive : 0 < digit.val)
-    (pointer : s.getMem 0x430a0 = 0x20060) :
+    (pointer : s.getMem 0x430a0 = 0x2283c) :
     let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
     let emitted := firstBottomEmitCopy walked
     Trace hash SphincsMaskedImages.sign s (36 + 95 * digit.val)
       (36 + 102 * digit.val) digit.val digit.val emitted ∧
-    Words20 emitted 0x20060
+    Words20 emitted 0x2283c
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
   let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
   let emitted := firstBottomEmitCopy walked
   have positiveRun := first_bottom_chain_positive hash s parameter initial
     lay treeIdx leaf chain digit chainZero pc ctx digitValue positive
-  have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 = 0x20060 := by
+  have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 = 0x2283c := by
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   have entry := first_bottom_chain_digit_positive_entry s parameter initial
@@ -3881,11 +3881,11 @@ theorem first_bottom_next_chain (s : MachineState) (i : Fin 52)
     (pc : s.pc = 0x3dec)
     (last : i.val < 51)
     (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val)
-    (pointer : s.getMem 0x430a0 = BitVec.ofNat 64 (0x20060 + 20 * i.val)) :
+    (pointer : s.getMem 0x430a0 = BitVec.ofNat 64 (0x2283c + 20 * i.val)) :
     (firstBottomNext s).pc = 0x3ac8 ∧
     (firstBottomNext s).getMem 0x43050 = BitVec.ofNat 64 (i.val + 1) ∧
     (firstBottomNext s).getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * (i.val + 1)) := by
+      BitVec.ofNat 64 (0x2283c + 20 * (i.val + 1)) := by
   have controls := first_bottom_next_controls s pc
   constructor
   · rw [controls.2.2, chain]
@@ -4148,17 +4148,17 @@ theorem first_bottom_zero_chain_serialized_any (hash : Hash) (s : MachineState)
       lay treeIdx leaf chain ⟨0, by decide⟩)
     (digitZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     let emitted := firstBottomEmitCopy (firstBottomChainDigit s)
     Trace hash SphincsMaskedImages.sign s 36 36 0 0 emitted ∧
-    Words20 emitted (0x20060 + 20 * chain.val)
+    Words20 emitted (0x2283c + 20 * chain.val)
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
   let walked := firstBottomChainDigit s
   let emitted := firstBottomEmitCopy walked
   have zero := first_bottom_chain_zero_any hash s parameter initial lay treeIdx leaf
     chain pc ctx digitZero
   have pointerWalked : walked.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     change (firstBottomChainDigit s).getMem 0x430a0 = _
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
@@ -4185,19 +4185,19 @@ theorem first_bottom_positive_chain_serialized_any (hash : Hash) (s : MachineSta
       BitVec.ofNat 8 digit.val)
     (positive : 0 < digit.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
     let emitted := firstBottomEmitCopy walked
     Trace hash SphincsMaskedImages.sign s (36 + 95 * digit.val)
       (36 + 102 * digit.val) digit.val digit.val emitted ∧
-    Words20 emitted (0x20060 + 20 * chain.val)
+    Words20 emitted (0x2283c + 20 * chain.val)
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
   let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
   let emitted := firstBottomEmitCopy walked
   have run := first_bottom_chain_positive_any hash s parameter initial lay treeIdx
     leaf chain digit pc ctx digitValue positive
   have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   have controls := first_bottom_chain_digit_controls_any s chain pc ctx.2.2.2.1
@@ -4217,7 +4217,7 @@ theorem first_bottom_positive_chain_serialized_any (hash : Hash) (s : MachineSta
   have pointerWalked := first_bottom_chain_walk_pointer_any hash
     (firstBottomChainDigit s) parameter initial lay treeIdx leaf chain digit
     entryPc entryContext entryDigit
-    (BitVec.ofNat 64 (0x20060 + 20 * chain.val)) pointerDigit digit.val (le_refl _)
+    (BitVec.ofNat 64 (0x2283c + 20 * chain.val)) pointerDigit digit.val (le_refl _)
   have copied := first_bottom_emit_copy_trace_generic walked chain run.2.1
     (by simpa [walked] using pointerWalked)
   have bytes := first_bottom_emit_copy_words_generic walked chain run.2.1
@@ -4537,17 +4537,17 @@ theorem first_bottom_zero_chain_serialized_weak (hash : Hash) (s : MachineState)
     (initialWords : Words20 s 0x44b00 initial)
     (digitZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     let emitted := firstBottomEmitCopy (firstBottomChainDigit s)
     Trace hash SphincsMaskedImages.sign s 36 36 0 0 emitted ∧
-    Words20 emitted (0x20060 + 20 * chain.val)
+    Words20 emitted (0x2283c + 20 * chain.val)
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
   let walked := firstBottomChainDigit s
   let emitted := firstBottomEmitCopy walked
   have zero := first_bottom_chain_zero_weak hash s parameter initial lay treeIdx leaf
     chain pc fixed initialWords digitZero
   have pointerWalked : walked.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     change (firstBottomChainDigit s).getMem 0x430a0 = _
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
@@ -4574,19 +4574,19 @@ theorem first_bottom_positive_chain_serialized_weak (hash : Hash) (s : MachineSt
       BitVec.ofNat 8 digit.val)
     (positive : 0 < digit.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
     let emitted := firstBottomEmitCopy walked
     Trace hash SphincsMaskedImages.sign s (36 + 95 * digit.val)
       (36 + 102 * digit.val) digit.val digit.val emitted ∧
-    Words20 emitted (0x20060 + 20 * chain.val)
+    Words20 emitted (0x2283c + 20 * chain.val)
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
   let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
   let emitted := firstBottomEmitCopy walked
   have run := first_bottom_chain_positive_weak hash s parameter initial lay treeIdx
     leaf chain digit pc fixed initialWords digitValue positive
   have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   have controls := first_bottom_chain_digit_controls_any s chain pc fixed.2.2.2.1
@@ -4606,7 +4606,7 @@ theorem first_bottom_positive_chain_serialized_weak (hash : Hash) (s : MachineSt
   have pointerWalked := first_bottom_chain_walk_pointer_any hash
     (firstBottomChainDigit s) parameter initial lay treeIdx leaf chain digit
     entryPc entryContext entryDigit
-    (BitVec.ofNat 64 (0x20060 + 20 * chain.val)) pointerDigit digit.val (le_refl _)
+    (BitVec.ofNat 64 (0x2283c + 20 * chain.val)) pointerDigit digit.val (le_refl _)
   have copied := first_bottom_emit_copy_trace_generic walked chain run.2.1
     (by simpa [walked] using pointerWalked)
   have bytes := first_bottom_emit_copy_words_generic walked chain run.2.1
@@ -4704,11 +4704,11 @@ theorem first_bottom_secret_initial_fixed_context (hash : Hash) (s : MachineStat
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val)) :
     let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
     SphincsMaskedSignOtsDomain.Chain.FixedContext t parameter lay treeIdx leaf chain ∧
     t.getMem 0x43020 = s.getMem 0x43020 ∧
-    t.getMem 0x430a0 = BitVec.ofNat 64 (0x20060 + 20 * chain.val) ∧
+    t.getMem 0x430a0 = BitVec.ofNat 64 (0x2283c + 20 * chain.val) ∧
     SphincsMaskedSecretDomain.Words32 t seed := by
   let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
   obtain ⟨layer, tree, leafMem, _, par, key, _⟩ := ctx
@@ -4761,7 +4761,7 @@ theorem first_bottom_signed_chain (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val) :
     let initial := truncateHash (hash (toQuery
@@ -4770,7 +4770,7 @@ theorem first_bottom_signed_chain (hash : Hash) (s : MachineState)
       (106 + 102 * digit.val) (1 + digit.val) (2 + digit.val)
       (firstBottomSignedChain hash s digit) ∧
     Words20 (firstBottomSignedChain hash s digit)
-      (0x20060 + 20 * chain.val)
+      (0x2283c + 20 * chain.val)
       (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
   let initial := truncateHash (hash (toQuery
     (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))
@@ -4859,15 +4859,15 @@ theorem first_bottom_chain_walk_mem_frame (hash : Hash) (s : MachineState)
 theorem first_bottom_emit_copy_mem_frame (s : MachineState) (chain : ChainIndex)
     (pc : s.pc = 0x3db0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (a : Word)
     (outside : ∀ i : Fin 5,
       a ≠ alignToDword (BitVec.ofNat 64
-        (0x20060 + 20 * chain.val + 4 * i.val))) :
+        (0x2283c + 20 * chain.val + 4 * i.val))) :
     (firstBottomEmitCopy s).getMem a = s.getMem a := by
   let setup := firstBottomEmitSetup s
   have dst : setup.getReg .x7 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) :=
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) :=
     (first_bottom_emit_setup_controls s pc).2.2.trans pointer
   change (copyRootState setup).getMem a = s.getMem a
   rw [SphincsVerifierCopyMemory.copyRoot_mem_frame]
@@ -4876,10 +4876,10 @@ theorem first_bottom_emit_copy_mem_frame (s : MachineState) (chain : ChainIndex)
   · intro i
     rw [dst]
     have addrEq : alignToDword
-        (BitVec.ofNat 64 (0x20060 + 20 * chain.val) +
+        (BitVec.ofNat 64 (0x2283c + 20 * chain.val) +
           signExtend12 (4#12 * BitVec.ofNat 12 i.val)) =
         alignToDword (BitVec.ofNat 64
-          (0x20060 + 20 * chain.val + 4 * i.val)) := by
+          (0x2283c + 20 * chain.val + 4 * i.val)) := by
       fin_cases i <;> simp [signExtend12, BitVec.ofNat_add, BitVec.ofNat_mul]
     rw [addrEq]
     exact outside i
@@ -4904,7 +4904,7 @@ theorem first_bottom_emit_digit_mem_frame (hash : Hash) (s : MachineState)
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (a : Word)
     (prep : a ∉ SphincsMaskedChainStep.prepareWrites)
     (answer0 : a ≠ (0x42000#64)) (answer8 : a ≠ (0x42008#64))
@@ -4914,14 +4914,14 @@ theorem first_bottom_emit_digit_mem_frame (hash : Hash) (s : MachineState)
     (digitCell : a ≠ (0x430c8#64))
     (outside : ∀ i : Fin 5,
       a ≠ alignToDword (BitVec.ofNat 64
-        (0x20060 + 20 * chain.val + 4 * i.val))) :
+        (0x2283c + 20 * chain.val + 4 * i.val))) :
     (firstBottomEmitDigit hash s digit).getMem a = s.getMem a := by
   let decoded := firstBottomChainDigit s
   have decodedFrame : decoded.getMem a = s.getMem a :=
     first_bottom_chain_digit_mem_frame s a counter digitCell
   have controls := first_bottom_chain_digit_controls_any s chain pc fixed.2.2.2.1
   have pointerDecoded : decoded.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   by_cases hd : digit.val = 0
@@ -4956,7 +4956,7 @@ theorem first_bottom_emit_digit_mem_frame (hash : Hash) (s : MachineState)
         answer16 answer24 copy0 copy8 copy16 counter digit.val (le_refl _)
     have walkedPointer := first_bottom_chain_walk_pointer_any hash decoded parameter
       initial lay treeIdx leaf chain digit decodedPc decodedCtx loaded
-      (BitVec.ofNat 64 (0x20060 + 20 * chain.val)) pointerDecoded digit.val
+      (BitVec.ofNat 64 (0x2283c + 20 * chain.val)) pointerDecoded digit.val
       (le_refl _)
     have copied := first_bottom_emit_copy_mem_frame walked chain walkedPc
       walkedPointer a outside
@@ -4975,7 +4975,7 @@ theorem first_bottom_signed_chain_mem_frame (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (a : Word)
@@ -4988,7 +4988,7 @@ theorem first_bottom_signed_chain_mem_frame (hash : Hash) (s : MachineState)
     (digitCell : a ≠ (0x430c8#64))
     (outside : ∀ i : Fin 5,
       a ≠ alignToDword (BitVec.ofNat 64
-        (0x20060 + 20 * chain.val + 4 * i.val))) :
+        (0x2283c + 20 * chain.val + 4 * i.val))) :
     (firstBottomSignedChain hash s digit).getMem a = s.getMem a := by
   let afterSecret := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
   let initial := truncateHash (hash (toQuery
@@ -5022,21 +5022,21 @@ theorem first_bottom_signed_chain_mem_frame (hash : Hash) (s : MachineState)
 theorem first_bottom_emit_copy_word_frame (s : MachineState) (chain : ChainIndex)
     (pc : s.pc = 0x3db0)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (read : Word)
     (separate : ∀ i : Fin 5,
       alignToDword (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) ≠ alignToDword read ∨
+        (0x2283c + 20 * chain.val) i) ≠ alignToDword read ∨
       byteOffset (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
+        (0x2283c + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
     (firstBottomEmitCopy s).getWord32 read = s.getWord32 read := by
   let setup := firstBottomEmitSetup s
   have dst : setup.getReg .x7 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) :=
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) :=
     (first_bottom_emit_setup_controls s pc).2.2.trans pointer
   change (copyRootState setup).getWord32 read = s.getWord32 read
   rw [SphincsVerifierWotsEndpointCopy.copy20_frame_any setup
-    (0x20060 + 20 * chain.val) dst read separate]
+    (0x2283c + 20 * chain.val) dst read separate]
   exact first_bottom_emit_setup_word_frame s read
 
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_emit_copy_word_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -5053,7 +5053,7 @@ theorem first_bottom_emit_digit_word_frame (hash : Hash) (s : MachineState)
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (read : Word)
     (prep : alignToDword read ∉ SphincsMaskedChainStep.prepareWrites)
     (answer0 : alignToDword read ≠ (0x42000#64))
@@ -5067,9 +5067,9 @@ theorem first_bottom_emit_digit_word_frame (hash : Hash) (s : MachineState)
     (digitCell : alignToDword read ≠ (0x430c8#64))
     (separate : ∀ i : Fin 5,
       alignToDword (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) ≠ alignToDword read ∨
+        (0x2283c + 20 * chain.val) i) ≠ alignToDword read ∨
       byteOffset (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
+        (0x2283c + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
     (firstBottomEmitDigit hash s digit).getWord32 read = s.getWord32 read := by
   let decoded := firstBottomChainDigit s
   have decodedFrame : decoded.getWord32 read = s.getWord32 read := by
@@ -5077,7 +5077,7 @@ theorem first_bottom_emit_digit_word_frame (hash : Hash) (s : MachineState)
     rw [first_bottom_chain_digit_mem_frame s _ counter digitCell]
   have controls := first_bottom_chain_digit_controls_any s chain pc fixed.2.2.2.1
   have pointerDecoded : decoded.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) := by
     rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
     exact pointer
   by_cases hd : digit.val = 0
@@ -5114,7 +5114,7 @@ theorem first_bottom_emit_digit_word_frame (hash : Hash) (s : MachineState)
         digit.val (le_refl _)]
     have walkedPointer := first_bottom_chain_walk_pointer_any hash decoded parameter
       initial lay treeIdx leaf chain digit decodedPc decodedCtx loaded
-      (BitVec.ofNat 64 (0x20060 + 20 * chain.val)) pointerDecoded digit.val
+      (BitVec.ofNat 64 (0x2283c + 20 * chain.val)) pointerDecoded digit.val
       (le_refl _)
     have copied := first_bottom_emit_copy_word_frame walked chain walkedPc
       walkedPointer read separate
@@ -5133,7 +5133,7 @@ theorem first_bottom_signed_chain_word_frame (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (read : Word)
@@ -5151,9 +5151,9 @@ theorem first_bottom_signed_chain_word_frame (hash : Hash) (s : MachineState)
     (digitCell : alignToDword read ≠ (0x430c8#64))
     (separate : ∀ i : Fin 5,
       alignToDword (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) ≠ alignToDword read ∨
+        (0x2283c + 20 * chain.val) i) ≠ alignToDword read ∨
       byteOffset (SphincsVerifierWotsEndpointCopy.word
-        (0x20060 + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
+        (0x2283c + 20 * chain.val) i) / 4 ≠ byteOffset read / 4) :
     (firstBottomSignedChain hash s digit).getWord32 read =
       s.getWord32 read := by
   let afterSecret := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
@@ -5232,23 +5232,23 @@ theorem aligned_lane_eq (a b : Word)
 theorem first_bottom_prior_emission_lanes (prior chain : ChainIndex)
     (older : prior.val < chain.val) (i j : Fin 5) :
     alignToDword (SphincsVerifierWotsEndpointCopy.word
-      (0x20060 + 20 * chain.val) i) ≠
-        alignToDword (BitVec.ofNat 64 (0x20060 + 20 * prior.val + 4 * j.val)) ∨
+      (0x2283c + 20 * chain.val) i) ≠
+        alignToDword (BitVec.ofNat 64 (0x2283c + 20 * prior.val + 4 * j.val)) ∨
     byteOffset (SphincsVerifierWotsEndpointCopy.word
-      (0x20060 + 20 * chain.val) i) / 4 ≠
-        byteOffset (BitVec.ofNat 64 (0x20060 + 20 * prior.val + 4 * j.val)) / 4 := by
+      (0x2283c + 20 * chain.val) i) / 4 ≠
+        byteOffset (BitVec.ofNat 64 (0x2283c + 20 * prior.val + 4 * j.val)) / 4 := by
   by_contra both
   push Not at both
   let written := SphincsVerifierWotsEndpointCopy.word
-    (0x20060 + 20 * chain.val) i
-  let read := BitVec.ofNat 64 (0x20060 + 20 * prior.val + 4 * j.val)
+    (0x2283c + 20 * chain.val) i
+  let read := BitVec.ofNat 64 (0x2283c + 20 * prior.val + 4 * j.val)
   have hp : prior.val < 52 := by simpa [numChains] using prior.isLt
   have hc : chain.val < 52 := by simpa [numChains] using chain.isLt
-  have writtenNat : written.toNat = 0x20060 + 20 * chain.val + 4 * i.val := by
+  have writtenNat : written.toNat = 0x2283c + 20 * chain.val + 4 * i.val := by
     simp [written, SphincsVerifierWotsEndpointCopy.word, BitVec.toNat_ofNat]
     have hi := i.isLt
     omega
-  have readNat : read.toNat = 0x20060 + 20 * prior.val + 4 * j.val := by
+  have readNat : read.toNat = 0x2283c + 20 * prior.val + 4 * j.val := by
     simp [read, BitVec.toNat_ofNat]
     have hj := j.isLt
     omega
@@ -5274,16 +5274,16 @@ theorem first_bottom_signed_chain_prior_emission (hash : Hash) (s : MachineState
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
-    (previous : Words20 s (0x20060 + 20 * prior.val) value) :
+    (previous : Words20 s (0x2283c + 20 * prior.val) value) :
     Words20 (firstBottomSignedChain hash s digit)
-      (0x20060 + 20 * prior.val) value := by
+      (0x2283c + 20 * prior.val) value := by
   intro j
-  let read := BitVec.ofNat 64 (0x20060 + 20 * prior.val + 4 * j.val)
+  let read := BitVec.ofNat 64 (0x2283c + 20 * prior.val + 4 * j.val)
   have hp : prior.val < 52 := by simpa [numChains] using prior.isLt
-  have readNat : read.toNat = 0x20060 + 20 * prior.val + 4 * j.val := by
+  have readNat : read.toNat = 0x2283c + 20 * prior.val + 4 * j.val := by
     simp [read, BitVec.toNat_ofNat]
     have hj := j.isLt
     omega
@@ -5348,7 +5348,7 @@ theorem first_bottom_signed_chain_pc (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val) :
     (firstBottomSignedChain hash s digit).pc = 0x3dec := by
@@ -5397,7 +5397,7 @@ theorem first_bottom_signed_chain_high_frame (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (a : Word) (lower : 0x43000 ≤ a.toNat) (upper : a.toNat < 0x44b00)
@@ -5421,10 +5421,10 @@ theorem first_bottom_signed_chain_high_frame (hash : Hash) (s : MachineState)
     repeat' first | exact notChainPrep | exact neLow _ (by decide) | constructor
   have outside : ∀ i : Fin 5,
       a ≠ alignToDword (BitVec.ofNat 64
-        (0x20060 + 20 * chain.val + 4 * i.val)) := by
+        (0x2283c + 20 * chain.val + 4 * i.val)) := by
     intro i h
     have hc : chain.val < 52 := by simpa [numChains] using chain.isLt
-    have hr : 0x20060 + 20 * chain.val + 4 * i.val < 2 ^ 64 := by
+    have hr : 0x2283c + 20 * chain.val + 4 * i.val < 2 ^ 64 := by
       have hi := i.isLt
       omega
     have hNat := congrArg BitVec.toNat h
@@ -5452,7 +5452,7 @@ theorem first_bottom_signed_chain_low_frame (hash : Hash) (s : MachineState)
     (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
     (a : Word) (low : a.toNat < 0x100) :
@@ -5468,10 +5468,10 @@ theorem first_bottom_signed_chain_low_frame (hash : Hash) (s : MachineState)
     repeat' first | exact neHigh _ (by decide) (by decide) | constructor
   have outside : ∀ i : Fin 5,
       a ≠ alignToDword (BitVec.ofNat 64
-        (0x20060 + 20 * chain.val + 4 * i.val)) := by
+        (0x2283c + 20 * chain.val + 4 * i.val)) := by
     intro i h
     have hc : chain.val < 52 := by simpa [numChains] using chain.isLt
-    have hr : 0x20060 + 20 * chain.val + 4 * i.val < 2 ^ 64 := by
+    have hr : 0x2283c + 20 * chain.val + 4 * i.val < 2 ^ 64 := by
       have hi := i.isLt
       omega
     have hNat := congrArg BitVec.toNat h
@@ -5503,7 +5503,7 @@ theorem first_bottom_signed_chain_retained (hash : Hash) (s : MachineState)
     (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val) :
     let t := firstBottomSignedChain hash s digit
@@ -5512,7 +5512,7 @@ theorem first_bottom_signed_chain_retained (hash : Hash) (s : MachineState)
     t.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
     t.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
     t.getMem 0x43050 = BitVec.ofNat 64 chain.val ∧
-    t.getMem 0x430a0 = BitVec.ofNat 64 (0x20060 + 20 * chain.val) ∧
+    t.getMem 0x430a0 = BitVec.ofNat 64 (0x2283c + 20 * chain.val) ∧
     Words20 t 0x74 parameter ∧
     SphincsMaskedSecretDomain.Words32 t seed ∧
     (∀ next : ChainIndex,
@@ -5575,7 +5575,7 @@ theorem first_bottom_signed_chain_next_secret (hash : Hash) (s : MachineState)
     (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
     (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val) :
     let nextChain : ChainIndex := ⟨chain.val + 1, by
@@ -5710,7 +5710,7 @@ theorem first_bottom_advance_secret_with_frame (t : MachineState)
     (selected : t.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
     (chainControl : t.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (pointer : t.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val))
     (par : Words20 t 0x74 parameter)
     (key : SphincsMaskedSecretDomain.Words32 t seed) :
     let nextChain : ChainIndex := ⟨chain.val + 1, by
@@ -5722,7 +5722,7 @@ theorem first_bottom_advance_secret_with_frame (t : MachineState)
       v.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
       v.getMem 0x43050 = BitVec.ofNat 64 nextChain.val ∧
       v.getMem 0x430a0 =
-        BitVec.ofNat 64 (0x20060 + 20 * nextChain.val) ∧
+        BitVec.ofNat 64 (0x2283c + 20 * nextChain.val) ∧
       (∀ a : Word, (a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) →
         a ≠ 0x43010 → a ≠ 0x43018 → a ≠ 0x430a0 → a ≠ 0x43050 →
         v.getMem a = t.getMem a) := by
@@ -5795,12 +5795,12 @@ def FirstBottomLoopState (hash : Hash) (s : MachineState)
     s.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
     s.getMem 0x43050 = BitVec.ofNat 64 chain.val ∧
     s.getMem 0x430a0 =
-      BitVec.ofNat 64 (0x20060 + 20 * chain.val) ∧
+      BitVec.ofNat 64 (0x2283c + 20 * chain.val) ∧
     (∀ j : ChainIndex,
       s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
         BitVec.ofNat 8 (digits j.val).val) ∧
     (∀ j : ChainIndex, j.val < chain.val →
-      Words20 s (0x20060 + 20 * j.val)
+      Words20 s (0x2283c + 20 * j.val)
         (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j))
 
 def firstBottomPrefixInstructions (digits : Nat → Digit) (n : Nat) : Nat :=
@@ -5848,12 +5848,12 @@ theorem first_bottom_loop_step (hash : Hash) (s : MachineState)
       leaf chain last signedPc signedLayer signedTree signedSelected signedChain
       signedPointer signedPar signedKey
   have advanceOutput (j : ChainIndex) (value : BitVec 160)
-      (present : Words20 signed (0x20060 + 20 * j.val) value) :
-      Words20 v (0x20060 + 20 * j.val) value := by
+      (present : Words20 signed (0x2283c + 20 * j.val) value) :
+      Words20 v (0x2283c + 20 * j.val) value := by
     intro k
-    let read := BitVec.ofNat 64 (0x20060 + 20 * j.val + 4 * k.val)
+    let read := BitVec.ofNat 64 (0x2283c + 20 * j.val + 4 * k.val)
     have hj : j.val < 52 := by simpa [numChains] using j.isLt
-    have readNat : read.toNat = 0x20060 + 20 * j.val + 4 * k.val := by
+    have readNat : read.toNat = 0x2283c + 20 * j.val + 4 * k.val := by
       simp [read, BitVec.toNat_ofNat]
       have hk := k.isLt
       omega
@@ -5902,7 +5902,7 @@ theorem first_bottom_loop_step (hash : Hash) (s : MachineState)
     rw [frame]
     exact (signedDigits j).trans (digitInvariant j)
   have nextPrefix : ∀ j : ChainIndex, j.val < nextChain.val →
-      Words20 v (0x20060 + 20 * j.val)
+      Words20 v (0x2283c + 20 * j.val)
         (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
     intro j before
     by_cases older : j.val < chain.val
@@ -5914,7 +5914,7 @@ theorem first_bottom_loop_step (hash : Hash) (s : MachineState)
       exact advanceOutput j _ kept
     · have sameVal : j = chain := Fin.ext (by dsimp [nextChain] at before; omega)
       subst j
-      have current : Words20 signed (0x20060 + 20 * chain.val)
+      have current : Words20 signed (0x2283c + 20 * chain.val)
           (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits chain) := by
         simpa [firstBottomExpectedChain, digit] using signedRun.2
       exact advanceOutput chain _ current
@@ -5980,7 +5980,7 @@ theorem first_bottom_all_chains (hash : Hash) (s : MachineState)
         (firstBottomPrefixCompressions digits 52) v ∧
       v.pc = 0x3dec ∧
       (∀ j : ChainIndex,
-        Words20 v (0x20060 + 20 * j.val)
+        Words20 v (0x2283c + 20 * j.val)
           (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)) := by
   let finalChain : ChainIndex := ⟨51, by decide⟩
   obtain ⟨mid, firstRun, state⟩ :=
@@ -5995,7 +5995,7 @@ theorem first_bottom_all_chains (hash : Hash) (s : MachineState)
   have lastPc := first_bottom_signed_chain_pc hash mid parameter seed lay treeIdx
     leaf finalChain digit pc ctx chainControl pointer digitByte
   have allWords : ∀ j : ChainIndex,
-      Words20 v (0x20060 + 20 * j.val)
+      Words20 v (0x2283c + 20 * j.val)
         (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
     intro j
     by_cases earlier : j.val < 51
