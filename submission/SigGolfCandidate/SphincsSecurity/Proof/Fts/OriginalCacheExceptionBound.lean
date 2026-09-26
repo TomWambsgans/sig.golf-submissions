@@ -3083,3 +3083,44 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.keygenCountedLengthGame_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.keygenCountedLengthGame_hit_budget_le_rate
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem certificateCountedContextGame_length (adversary : Adversary) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool) :
+    (fun result : CertificateCountedContextResult => (result.2.1, result.2.2.2)) <$>
+      certificateCountedContextGame adversary budget required stopAfter stopped =
+    keygenCountedLengthGame budget budget required stopAfter stopped
+      (fun generated => FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1) := by
+  simp only [certificateCountedContextGame, keygenCountedLengthGame, map_bind, map_pure]
+  apply PMF.bind_congr
+  intro generated _
+  simp only [bind_pure_comp]
+  change Prod.map id Prod.snd <$> _ = _
+  unfold certificateCountedProposalImpl certificateCountedLengthImpl
+  exact simulateQ_originalProposalImpl_length _ _ _ _ _ _
+
+theorem certificateCountedContextGame_cache_hit_budget_le_rate
+    (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    Pr[fun result => result.project.2.2.2.2.2 = true ∧ result.originalCost.2 ≤ q |
+      certificateCountedContextGame adversary q required stopAfter stopped] ≤
+      (q : ENNReal) * certificateCacheExceptionRate := by
+  have h := keygenCountedLengthGame_hit_budget_le_rate q q required stopAfter stopped
+    (fun generated => FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1.1)
+  rw [← certificateCountedContextGame_length adversary q required stopAfter stopped,
+    probEvent_map] at h
+  simpa only [CertificateCountedContextResult.project,
+    CertificateCountedContextResult.originalCost, certificateCountedProject, Function.comp_def] using h
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_length' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedContextGame_length
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_cache_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedContextGame_cache_hit_budget_le_rate
