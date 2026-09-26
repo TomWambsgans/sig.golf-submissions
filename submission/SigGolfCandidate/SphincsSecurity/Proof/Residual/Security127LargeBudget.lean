@@ -109,3 +109,95 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.native_actual_budget_bound_le_security127' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.native_actual_budget_bound_le_security127
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+set_option exponentiation.threshold 1024
+
+theorem actual_outer_slot_bound_le_security127 (q : Nat)
+    (hq : 1 ≤ q) (hsmall : q ≤ 2 ^ 128) :
+    ENNReal.ofReal (2 * ((q : ℝ) / 2 ^ digestBits) -
+      ((q : ℝ) / 2 ^ digestBits) ^ 2) +
+      ((q : ENNReal) * fullCertificateTotalRate +
+        (((q + 1 - keygenHashCost : Nat) : ENNReal) *
+          ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) +
+          proposalPrefixExceptionBound)) ≤
+      (q : ENNReal) / 2 ^ 127 := by
+  have hslots : q + 1 - keygenHashCost ≤ 2 * q := by omega
+  have hupper : ((q + 1 - keygenHashCost : Nat) : ENNReal) *
+      ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) ≤
+      (2 * q : ENNReal) *
+        ((digestAttemptLimit : ENNReal) * (2 ^ 155 : ENNReal)⁻¹) := by
+    apply mul_le_mul'
+    · exact_mod_cast hslots
+    · exact mul_le_mul' le_rfl certificateCacheExceptionRate_le
+  refine le_trans (add_le_add le_rfl (add_le_add le_rfl (add_le_add hupper le_rfl))) ?_
+  rw [fullCertificateTotalRate_def, fullCertificateExcessRate_def,
+    proposalPrefixExceptionBound_def, digestAttemptLimit]
+  have hqreal : (0 : ℝ) ≤ q := by exact_mod_cast Nat.zero_le q
+  have hratio : (q : ℝ) / 2 ^ digestBits ≤ 1 := by
+    apply (div_le_iff₀ (by positivity)).mpr
+    simpa only [one_mul] using (calc
+      (q : ℝ) ≤ 2 ^ 128 := by exact_mod_cast hsmall
+      _ ≤ 2 ^ digestBits := by norm_num [digestBits])
+  have hnonneg : 0 ≤ 2 * ((q : ℝ) / 2 ^ digestBits) -
+      ((q : ℝ) / 2 ^ digestBits) ^ 2 := by
+    have hn : 0 ≤ (q : ℝ) / 2 ^ digestBits := by positivity
+    nlinarith [mul_nonneg hn (sub_nonneg.mpr hratio)]
+  apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
+  repeat rw [ENNReal.toReal_add (by finiteness) (by finiteness)]
+  rw [ENNReal.toReal_ofReal hnonneg]
+  simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv,
+    ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat]
+  have hqone : (1 : ℝ) ≤ q := by exact_mod_cast hq
+  have hpositive : 0 ≤ (q : ℝ) / 2 ^ digestBits := by positivity
+  have htail : (1 : ℝ) / 2 ^ 700 ≤ (q : ℝ) / 2 ^ 700 :=
+    div_le_div_of_nonneg_right hqone (by positivity)
+  norm_num [digestBits] at *
+  nlinarith [sq_nonneg ((q : ℝ) / 2 ^ 256), htail]
+
+end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem originalGame_actual_budget_le_security127
+    (adversary : Adversary) (q : Nat)
+    (hq : 1 ≤ q) (hsmall : q ≤ 2 ^ 128) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    (q : ENNReal) / 2 ^ 127 := by
+  apply le_trans (RetainedResidual.originalGame_budget_le_fault_rate_add_history
+    fixedReferenceDummy (fun _ _ _ => fixedReferenceDummyWord_valid)
+    adversary q hsmall)
+  apply le_trans (add_le_add le_rfl (add_le_add le_rfl
+    (add_le_add
+      (RetainedResidual.exceptionHistorySourceGame_budget_cache_le_outerSlots
+        fixedReferenceDummy adversary q)
+      (RetainedResidual.exceptionHistorySourceGame_prefix_le
+        fixedReferenceDummy adversary q))))
+  exact actual_outer_slot_bound_le_security127 q hq hsmall
+
+theorem originalGame_actual_budget_le_security127_all
+    (adversary : Adversary) (q : Nat) (hq : 1 ≤ q) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    (q : ENNReal) / 2 ^ 127 := by
+  by_cases hsmall : q ≤ 2 ^ 128
+  · exact originalGame_actual_budget_le_security127 adversary q hq hsmall
+  · apply probEvent_le_one.trans
+    calc
+      (1 : ENNReal) = (2 ^ 127 : ENNReal) / 2 ^ 127 :=
+        (ENNReal.div_self (by positivity) (by finiteness)).symm
+      _ ≤ _ := ENNReal.div_le_div_right
+        (by exact_mod_cast (show 2 ^ 127 ≤ q by omega)) _
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.originalGame_actual_budget_le_security127_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalGame_actual_budget_le_security127_all
+
+/-- info: 'SphincsSecurity.Concrete.originalGame_actual_budget_le_security127' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalGame_actual_budget_le_security127

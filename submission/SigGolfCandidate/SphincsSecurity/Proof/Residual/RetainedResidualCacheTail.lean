@@ -88,3 +88,68 @@ theorem forgeAdvantage_le_native_bound (dummy : OtsReferenceWords)
     (add_le_add le_rfl (add_le_add (exceptionHistorySourceGame_cache_le dummy adversary budget hcost) le_rfl))
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem initialExceptionHistorySource_budget_cache_le_outerSlots
+    (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (budget : Nat) :
+    Pr[fun result => result.2.2.1 = true ∧
+      result.2.1.1.memory.external.hashCalls ≤ budget |
+      initialExceptionHistorySource key adversary encoding dummy exposed high budget] ≤
+      ((budget + 1 - keygenHashCost : Nat) : ENNReal) *
+        ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) := by
+  apply le_trans (exceptionHistoryRun_budget_hit_le_outerSlots key (gameInputs adversary)
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+    (referenceFamilyWords encoding.selections dummy)
+    (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
+    encoding.selections encoding.rows budget Finset.univ (proposalStop (fun _ _ _ _ => false))
+    budget (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩)
+    ((initialState (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) exposed,
+      initialCertificateMonitor keygenHashCost false), (false, false))
+    ⟨initialAllowed_nonempty _ exposed, initialState_rowsCovered _ _ exposed⟩
+    (sourceInputs_unlogged_subset_gameInputs adversary key)
+    (show CacheSizeBound (initialMemory (referenceFamilyWords encoding.selections dummy) exposed) from by
+      change QueryCache.enncard (∅ : QueryCache HashSpec) ≤ (keygenHashCost : ENNReal)
+      rw [QueryCache.enncard_empty]
+      exact zero_le)
+    (by intro _; simp [initialCertificateMonitor, initialState, initialMemory]))
+  change certificateCacheExceptionWeight key (∅ : QueryCache HashSpec) +
+    ((budget + 1 - keygenHashCost : Nat) : ENNReal) *
+      ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) ≤ _
+  simp only [certificateCacheExceptionWeight_initial key ∅ (fun _ _ => rfl), zero_add, le_refl]
+
+
+theorem exceptionHistorySourceGame_budget_cache_le_outerSlots
+    (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) :
+    Pr[fun result => result.2.2.1 = true ∧
+      result.2.1.1.memory.external.hashCalls ≤ budget |
+      exceptionHistorySourceGame dummy adversary budget] ≤
+      ((budget + 1 - keygenHashCost : Nat) : ENNReal) *
+        ((digestAttemptLimit : ENNReal) * certificateCacheExceptionRate) := by
+  unfold exceptionHistorySourceGame
+  apply probEvent_bind_le_of_forall_le
+  intro parameter _
+  apply probEvent_bind_le_of_forall_le
+  intro encoding _
+  apply probEvent_bind_le_of_forall_le
+  intro high _
+  apply probEvent_bind_le_of_forall_le
+  intro exposed _
+  unfold initialExceptionHistoryPrior
+  apply probEvent_bind_le_of_forall_le
+  intro labels _
+  exact initialExceptionHistorySource_budget_cache_le_outerSlots _ adversary
+    encoding dummy exposed high budget
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.exceptionHistorySourceGame_budget_cache_le_outerSlots' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.exceptionHistorySourceGame_budget_cache_le_outerSlots
