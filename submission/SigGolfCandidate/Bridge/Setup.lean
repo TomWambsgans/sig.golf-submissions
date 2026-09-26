@@ -1,6 +1,6 @@
 import SigGolfCandidate.Bridge.Basic
 import SigGolf.Security
-import SphincsSecurity.Statement
+import SigGolfCandidate.SphincsSecurity.Statement
 
 /-!
 # Bridge assumptions

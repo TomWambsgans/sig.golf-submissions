@@ -1,4 +1,4 @@
-import SphincsSecurity.Scheme
+import SigGolfCandidate.SphincsSecurity.Scheme
 import SigGolfCandidate.Ref
 import SigGolfCandidate.Bridge.Basic
 

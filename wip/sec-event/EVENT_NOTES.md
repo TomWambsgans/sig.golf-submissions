@@ -43,8 +43,27 @@ So the event has to be threaded through the proof.
   Same loss as before: `(q-1)/2^256` absorbed by `seed_loss_absorbed`.
 - `hasClassicalSecurityBits_of_event`: the old statement follows from the event form.
 
-## Remaining: the small-budget Concrete chain (q ≤ 3·2^114)
-Plan (A_vis): cap the adversary by its visible cost (own hash queries + G_min per signing request);
-on the event the cap is never hit. A-part (Ots/Chains) uses syntactic query bounds of A_vis; the joint
-budget needs E[signing digest attempts] ≤ G_min per signing (lazy ROM), transported to the reference
-game; B/C/D carry the event per result.
+## Remaining: the small-budget Concrete chain (q ≤ 3·2^114) -- plan (A_vis)
+Constants: K = keygenHashCost = 9503, G = ftsOpenHashCost = 28659 (every signing makes ≥ G calls,
+`boundaryHashAtLeast_sign`), V_max ≈ 2263 = syntactic bound on verify's hash calls (need V_max + 1 ≤ K),
+G_max = syntactic bound on one signing (≈ 8.5e6), b = q + 1.
+A_vis(A, b): runs A.main pk, charging 1 per own hash query and G per signing request; stops (dummy forgery
+with an out-of-range counter, verify makes no call) before the charge would exceed b - K - 1; at the end
+makes one marker query: a message-class input with odd payload length 2m+1, m = number of its own
+nonmessage hash queries. Syntactic: own + G·#sign ≤ b - K (weighted IsQueryBound).
+1. Coupling: Pr[win ∧ hc ≤ q | A] ≤ Pr[win ∧ hc ≤ q+1 | A_vis(q+1)] (on the event the cap never fires,
+   since real cost ≥ charge; the marker adds 1; the marker input is never queried by verify).
+   After this the event is dropped: bound Pr[win | A_vis].
+2. Crude cap: HasHashQueryBound A_vis q' with q' = b + (b/G)·G_max + V_max (≈ 300·b): used by B (full
+   certificate, unchanged, excess term q'·11/2^144 ≈ 0.05x) and by the D monitor (hwork at q').
+3. Probes (C pair, D slots): probes = adversary world queries + verify queries ≤ (b - K) + V_max ≤ b + V_max
+   pointwise (syntactic; signing makes no probes).  C = pairRate(b + V_max); D slots over range(b+V_max).
+4. D per slot: monitor budget q'; creation mass ≤ own + V + 2^10·#sign ≤ b (syntactic, 2^10 ≤ G) replaces
+   hwork in `near_alive_le`; stopped case pays q'·cacheRate (negligible).
+5. A-part (Ots/Chains): the Chains glue takes cost := const b; hcharge = syntactic prefix-query bound
+   (prefix queries only from own hash queries (≤ b - K) and verify (≤ V_max); signing makes none), hreal trivial.
+   Rates at b.  Joint budget in expectation: E[recorded nonmessage + messageCalls | refRecorded] ≤ b:
+   recorded nonmessage ≤ m(trace) + V_max (marker decodes m), then trace-law transport to the real game,
+   where m + messageCalls = own + 1 + Σ attempts + V_msg ≤ b - K - G·#sign + Σ attempts + 1 and
+   E[attempts per signing | cache] ≤ 2^11 ≤ G (lazy ROM, fresh randomizer, cache ≤ q' ≤ 2^127).
+6. Closing: same shape at b = q + 1 (plus q'·excess and pair/near at b + V_max); slack absorbs.
