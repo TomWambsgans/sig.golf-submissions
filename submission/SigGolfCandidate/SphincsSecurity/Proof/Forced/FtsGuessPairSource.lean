@@ -208,3 +208,54 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_program' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_program
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace UniformTableCompletion
+attribute [local instance] Classical.propDecidable
+set_option maxHeartbeats 2000000
+noncomputable def referenceTwoWitnessCostGame (dummy : OtsReferenceWords)
+    (adversary : Adversary) : SPMF (Bool × Nat) := do
+  let parameter ← 𝒮[sampleParameter]
+  let otsSecret ← 𝒮[sampleOtsSecrets]
+  let ftsSecret ← 𝒮[sampleFtsSecrets]
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let auxiliary ← 𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)]
+  let labels ← 𝒮[PMF.uniformOfFintype CanonicalGraphLabels]
+  let f := programmedHash parameter otsSecret ftsSecret labels
+    (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
+      (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+        labels auxiliary.rows auxiliary.seed))
+  let before ← 𝒮[referenceForgeryRest key f labels auxiliary.selections dummy adversary]
+  pure (decide (sourceTwoWitnesses key f labels auxiliary.selections dummy before),
+    (completedReferenceContact key.parameter f
+      (referenceFamilyWords auxiliary.selections dummy)
+      (canonicalGraphFrontier key.otsSecret labels
+        (referenceFamilyWords auxiliary.selections dummy)) before).output.2.hashCalls)
+
+theorem referenceForgeryGame_two_guesses_cost_law (dummy : OtsReferenceWords)
+    (adversary : Adversary) :
+    (fun sample : ReferenceForgerySample (canonicalGraphGameInputs adversary) =>
+      (decide (referenceTwoGuesses dummy sample),
+        (sample.context dummy).2.2.2.output.2.hashCalls)) <$>
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary =
+    referenceTwoWitnessCostGame dummy adversary := by
+  have hsource := referenceForgeryGame_bind_auxiliary
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary)
+    (canonicalGraphInputs_subset_gameInputs adversary) dummy adversary
+    (fun key f labels selections before => pure
+      (decide (sourceTwoWitnesses key f labels selections dummy before),
+        (completedReferenceContact key.parameter f
+          (referenceFamilyWords selections dummy)
+          (canonicalGraphFrontier key.otsSecret labels
+            (referenceFamilyWords selections dummy)) before).output.2.hashCalls))
+  simp only [evalSPMF_pure, bind_pure_comp] at hsource
+  exact hsource
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_cost_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_two_guesses_cost_law
