@@ -2305,6 +2305,146 @@ theorem first_upper_header_index_word (state : MachineState) :
     MachineState.getMem_setReg, setWord32_eq,
     MachineState.getMem_setMem_ne, alignToDword, byteOffset]
 
+theorem first_upper_header_tag_byte (state : MachineState) (lay : Layer)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (byte : Fin 4) :
+    (firstUpperHeaderState state).getByte
+      (BitVec.ofNat 64 (0x40000 + byte.val)) =
+      (BitVec.ofNat 32 (0x401 + 0x10000 * lay.val)).extractLsb'
+        (8 * byte.val) 8 := by
+  have split := variableWord_byte (firstUpperHeaderState state) 0x40000
+    (by decide) (by decide) (0 : Fin 5) byte
+  have value := first_upper_header_tag_word state
+  rw [layerCell] at value
+  have tag : ((1025#64) + (BitVec.ofNat 64 lay.val <<< 16)).truncate 32 =
+      BitVec.ofNat 32 (0x401 + 0x10000 * lay.val) := by
+    fin_cases lay <;> decide
+  have word : (firstUpperHeaderState state).getWord32 0x40000 =
+      BitVec.ofNat 32 (0x401 + 0x10000 * lay.val) := value.trans tag
+  have word' : (firstUpperHeaderState state).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * (0 : Fin 5).val)) =
+      BitVec.ofNat 32 (0x401 + 0x10000 * lay.val) := by simpa using word
+  rw [word'] at split
+  simpa using split
+
+theorem first_upper_header_position_byte (state : MachineState)
+    (positionZero : state.getMem 0x43010 = 0) (byte : Fin 4) :
+    (firstUpperHeaderState state).getByte
+      (BitVec.ofNat 64 (0x40004 + byte.val)) = 0 := by
+  have split := variableWord_byte (firstUpperHeaderState state) 0x40004
+    (by decide) (by decide) (0 : Fin 5) byte
+  have value := first_upper_header_position_word state
+  rw [positionZero] at value
+  have word : (firstUpperHeaderState state).getWord32
+      (BitVec.ofNat 64 (0x40004 + 4 * (0 : Fin 5).val)) = 0 := by
+    simpa using value
+  rw [word] at split
+  simpa using split
+
+theorem first_upper_header_tree_byte (state : MachineState)
+    (tree : TreeIndex)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (byte : Fin 8) :
+    (firstUpperHeaderState state).getByte
+      (BitVec.ofNat 64 (0x40008 + byte.val)) =
+      (BitVec.ofNat 64 tree.val).extractLsb' (8 * byte.val) 8 := by
+  have word : (firstUpperHeaderState state).getMem 0x40008 =
+      BitVec.ofNat 64 tree.val := by
+    rw [first_upper_header_tree_word, treeCell]
+  have word' : (firstUpperHeaderState state).getMem (262152#64) =
+      BitVec.ofNat 64 tree.val := by simpa using word
+  fin_cases byte <;>
+    simp [MachineState.getByte, alignToDword, byteOffset, word',
+      extractByte, BitVec.setWidth_ushiftRight_eq_extractLsb]
+  have small : tree.val < 2 ^ 64 := by
+    have h := tree.isLt
+    simp only [totalHeight] at h
+    omega
+  simp [BitVec.extractLsb']
+  rw [Nat.mod_eq_of_lt (by simpa using small)]
+
+theorem first_upper_header_index_byte (state : MachineState)
+    (leaf : LeafIndex)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (byte : Fin 4) :
+    (firstUpperHeaderState state).getByte
+      (BitVec.ofNat 64 (0x40010 + byte.val)) =
+      (BitVec.ofNat 32 leaf.val).extractLsb' (8 * byte.val) 8 := by
+  have split := variableWord_byte (firstUpperHeaderState state) 0x40010
+    (by decide) (by decide) (0 : Fin 5) byte
+  have value := first_upper_header_index_word state
+  rw [leafCell] at value
+  have word : (firstUpperHeaderState state).getWord32
+      (BitVec.ofNat 64 (0x40010 + 4 * (0 : Fin 5).val)) =
+      BitVec.ofNat 32 leaf.val := by simpa using value
+  rw [word] at split
+  simpa using split
+
+theorem first_upper_tag_field_byte (lay : Layer)
+    (tree : TreeIndex) (leaf : LeafIndex) (byte : Fin 4) :
+    ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+      UInt8.toBitVec)[byte.val]'(by
+        simp [fieldBytes, tweakFields, bytesLE]; omega) =
+      (BitVec.ofNat 32 (0x401 + 0x10000 * lay.val)).extractLsb'
+        (8 * byte.val) 8 := by
+  fin_cases lay <;> fin_cases byte <;>
+    simp [fieldBytes, tweakFields, protocolDomainSep, bytesLE]
+
+theorem first_upper_header_bytes (state : MachineState)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (byte : Fin 20) :
+    (firstUpperHeaderState state).getByte
+      (BitVec.ofNat 64 (0x40000 + byte.val)) =
+      ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+        UInt8.toBitVec)[byte.val]'(by
+          simp [fieldBytes, tweakFields, bytesLE]) := by
+  fin_cases byte <;>
+    first
+    | simpa using (first_upper_header_tag_byte state lay layerCell 0).trans
+        (first_upper_tag_field_byte lay tree leaf 0).symm
+    | simpa using (first_upper_header_tag_byte state lay layerCell 1).trans
+        (first_upper_tag_field_byte lay tree leaf 1).symm
+    | simpa using (first_upper_header_tag_byte state lay layerCell 2).trans
+        (first_upper_tag_field_byte lay tree leaf 2).symm
+    | simpa using (first_upper_header_tag_byte state lay layerCell 3).trans
+        (first_upper_tag_field_byte lay tree leaf 3).symm
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_position_byte state positionZero 0
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_position_byte state positionZero 1
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_position_byte state positionZero 2
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_position_byte state positionZero 3
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 0
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 1
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 2
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 3
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 4
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 5
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 6
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_tree_byte state tree treeCell 7
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_index_byte state leaf leafCell 0
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_index_byte state leaf leafCell 1
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_index_byte state leaf leafCell 2
+    | simpa [fieldBytes, tweakFields, protocolDomainSep, bytesLE] using
+        first_upper_header_index_byte state leaf leafCell 3
+
 theorem first_upper_header_payload_word (state : MachineState)
     (index : Fin 5) :
     (firstUpperHeaderState state).getWord32
@@ -2640,6 +2780,31 @@ theorem first_upper_prehash_header_byte (state : MachineState)
     (firstUpperHeaderState (firstUpperCounterState state))
     0x40000 0x40000 (by decide) (by decide) (by decide) (by decide)
     (first_upper_prehash_header_word state) i hi
+
+theorem first_upper_prehash_header (state : MachineState)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (i : Nat) (hi : i < 20) :
+    (firstUpperPrehashState state).getByte (BitVec.ofNat 64 (0x40000 + i)) =
+      ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+        UInt8.toBitVec)[i]'(by simp [fieldBytes, tweakFields, bytesLE]; omega) := by
+  have controls :
+      (firstUpperCounterState state).getMem 0x43000 = BitVec.ofNat 64 lay.val ∧
+      (firstUpperCounterState state).getMem 0x43010 = 0 ∧
+      (firstUpperCounterState state).getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+      (firstUpperCounterState state).getMem 0x43018 = BitVec.ofNat 64 leaf.val := by
+    rw [first_upper_counter_mem_frame _ _ (by decide), layerCell,
+      first_upper_counter_mem_frame _ _ (by decide), positionZero,
+      first_upper_counter_mem_frame _ _ (by decide), treeCell,
+      first_upper_counter_mem_frame _ _ (by decide), leafCell]
+    exact ⟨rfl, rfl, rfl, rfl⟩
+  exact (first_upper_prehash_header_byte state i hi).trans
+    (first_upper_header_bytes (firstUpperCounterState state)
+      lay tree leaf controls.1 controls.2.1 controls.2.2.1 controls.2.2.2
+      ⟨i, hi⟩)
 
 theorem first_upper_prehash_payload_byte (state : MachineState)
     (i : Nat) (hi : i < 20) :
@@ -3311,5 +3476,13 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_position_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_handoff_position_zero
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_header_bytes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_header' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_header
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation

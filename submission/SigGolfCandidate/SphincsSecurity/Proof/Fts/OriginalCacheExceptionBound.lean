@@ -95,6 +95,21 @@ theorem certificateStoppedRomImpl_hit_run {Result : Type} (key : SecretKey)
       have hnext := ih middle.1 middle.2 result hstep.2 htail
       exact ⟨fun hhit => hnext.1 (hstep.1 hhit), hnext.2⟩
 
+/-- A ghost state can be carried through the independent proposal-length
+    sample without changing the original length/record distribution. -/
+theorem recordLengthBridge_joint_project {Ω Γ : Type} (law : PMF (Ω × Γ))
+    (accept : ENNReal) (hpos : accept ≠ 0) (hle : accept ≤ 1) :
+    (fun output : Nat × (Ω × Γ) => (output.1, output.2.1)) <$>
+      recordLengthBridge law accept hpos hle =
+    recordLengthBridge (Prod.fst <$> law) accept hpos hle := by
+  change PMF.map _ _ = _
+  rw [recordLengthBridge, PMF.map_bind, recordLengthBridge,
+    PMF.monad_map_eq_map, PMF.bind_map]
+  apply PMF.bind_congr
+  intro pair _
+  simp only [PMF.map_comp]
+  rfl
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -854,3 +869,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygenInit_success_mass' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedKeygenInit_success_mass
+
+/-- info: 'SphincsSecurity.Concrete.recordLengthBridge_joint_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.recordLengthBridge_joint_project
