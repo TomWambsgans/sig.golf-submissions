@@ -15,7 +15,7 @@ open AdaptiveResidualLabels hiding World State Environment
 open FtsProbeSimulation (withSigningLog)
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs sourceInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
-  signDigestLoop signAfterDigest sequenceFin chainWalk gameInputs
+  signDigestLoop sequenceFin chainWalk gameInputs
 set_option backward.isDefEq.respectTransparency false
 
 private theorem fixedCounted_sign_bind {Result : Type} (key : SecretKey) (oracle : QueryImpl HashSpec Id)

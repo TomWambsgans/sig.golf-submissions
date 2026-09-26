@@ -1,4 +1,4 @@
-import SigGolfCandidate.Sign.Base
+import SigGolfCandidate.Sign.Inv
 
 /-!
 # The node loop (`node_hash`), shared by sign (FORS, tree_build) and keygen (tree_build)
@@ -262,5 +262,18 @@ theorem nodeLoop_sim {image : Image} {L : Nat} (hA : CodeAt image (pcOf L) nodeS
     rw [hblk]
   · refine ⟨Nat.zero_le _, rfl, by simp, by simp, fun i hi _ => hslots i hi, by simp [hpc, hm],
       by simpa using h16, fun r _ _ _ _ _ _ => rfl, fun a _ _ _ _ _ _ _ => rfl, rfl⟩
+
+theorem NodeRegs.toRegsEq {s t : MachineState} (h : NodeRegs s t) :
+    RegsEq s t [.x1, .x3, .x10, .x11, .x12, .x16] := by
+  intro r hr
+  simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at hr
+  exact h r hr.1 hr.2.1 hr.2.2.1 hr.2.2.2.1 hr.2.2.2.2.1 hr.2.2.2.2.2
+
+theorem NodeFrame.toFrame {c : NodeCtx} {s t : MachineState} (h : NodeFrame c s t) :
+    Frame s t (fun a => (c.B ≤ a ∧ a < c.B + 32 * c.m) ∨ a = 456 ∨ a = 480 ∨ a = 488 ∨ a = 496 ∨
+      a = 504) := by
+  intro a ha hW
+  simp only [not_or, not_and, not_lt] at hW
+  exact h.1 a ha (by omega) hW.2.1 hW.2.2.1 hW.2.2.2.1 hW.2.2.2.2.1 hW.2.2.2.2.2
 
 end SigGolfCandidate.Sign

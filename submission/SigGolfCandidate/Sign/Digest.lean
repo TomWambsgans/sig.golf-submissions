@@ -188,8 +188,7 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
   have fu5 : Frame u t5 digW := ((fu3.trans f4).trans f5).mono (by
     intro x hx; simp only [digW, false_or, or_false] at hx ⊢; omega)
   have ru5 : RegsEq u t5 digRegs := (((((tregs.trans r1).trans (regsEq_writeHash _ _ [])).trans r3).trans
-    (regsEq_writeHash _ _ [])).trans r5).mono (by
-      intro r hr; simp only [digRegs, List.mem_append, List.mem_cons, List.not_mem_nil] at hr ⊢; tauto)
+    (regsEq_writeHash _ _ [])).trans r5).mono (by decide)
   have pc5 : t5.pc = if admissible (ans2.toNat % 2 ^ 184) then pcOf 46 else pcOf 41 := by
     have h368 := w4 2 (by norm_num)
     simp only [Nat.reduceMul, Nat.reduceAdd] at h368
@@ -236,7 +235,7 @@ theorem digNext (u : MachineState) (hx7 : u.getReg .x7 = BitVec.ofNat 64 (2 ^ 20
   have r41 : RegsEq t (blk41.res.toState t) [.x6] := by
     intro r hr
     rw [Result.toState_getReg]
-    cases r <;> first | rfl | simp_all [blk41.res, rv_simp]
+    cases r <;> first | exact absurd (by decide) hr | rfl
   refine ⟨_, hs, ?_, ?_, r41⟩
   · intro h
     refine ⟨?_, ?_, h, ?_, ?_, ?_⟩

@@ -89,7 +89,7 @@ dig_ok:
      82 03c15213  srli tp, sp, 60
      83 03fe7193  andi gp, t3, 63
      84 00419193  slli gp, gp, 4
-     85 0041e1b3  or gp, gp, tp
+     85 004181b3  add gp, gp, tp
      86 74303c23  sd gp, 1880(x0)
      87 006e5193  srli gp, t3, 6
      88 3ff1f193  andi gp, gp, 1023
@@ -114,14 +114,14 @@ dig_ok:
     106 01819193  slli gp, gp, 24
     107 00001eb7  lui t4, 0x1
     108 801e8e93  addi t4, t4, -2047
-    109 01d1e733  or a4, gp, t4
+    109 01d18733  add a4, gp, t4
     110 000309b7  lui s3, 0x30
     111 00000413  addi s0, x0, 0
 fors_loop:
     112 00341193  slli gp, s0, 3
     113 7101b683  ld a3, 1808(gp)
     114 01041193  slli gp, s0, 16
-    115 00376eb3  or t4, a4, gp
+    115 00370eb3  add t4, a4, gp
     116 6bd02023  sw t4, 1696(x0)
     117 100e8e93  addi t4, t4, 256
     118 0dd02023  sw t4, 192(x0)
@@ -163,10 +163,10 @@ fors_level_loop:
     151 001eb823  sd ra, 16(t4)
     152 002ebc23  sd sp, 24(t4)
     153 01041193  slli gp, s0, 16
-    154 00e1e1b3  or gp, gp, a4
+    154 00e181b3  add gp, gp, a4
     155 20018193  addi gp, gp, 512
     156 02079e93  slli t4, a5, 32
-    157 01d1e1b3  or gp, gp, t4
+    157 01d181b3  add gp, gp, t4
     158 1c303023  sd gp, 448(x0)
     159 0018d893  srli a7, a7, 1
     160 00000813  addi a6, x0, 0
@@ -206,7 +206,7 @@ fors_node_loop:
     192 01819193  slli gp, gp, 24
     193 00001eb7  lui t4, 0x1
     194 b01e8e93  addi t4, t4, -1279
-    195 01d1e1b3  or gp, gp, t4
+    195 01d181b3  add gp, gp, t4
     196 22302023  sw gp, 544(x0)
     197 22002223  sw x0, 548(x0)
     198 22000513  addi a0, x0, 544
@@ -238,9 +238,9 @@ layer_route:
     220 009e0eb3  add t4, t3, s1
     221 01db5f33  srl t5, s6, t4
     222 02069193  slli gp, a3, 32
-    223 003f6fb3  or t6, t5, gp
+    223 003f0fb3  add t6, t5, gp
     224 01041193  slli gp, s0, 16
-    225 4011e193  ori gp, gp, 1025
+    225 40118193  addi gp, gp, 1025
     226 10303023  sd gp, 256(x0)
     227 11f03423  sd t6, 264(x0)
     228 12003c23  sd x0, 312(x0)
@@ -650,42 +650,42 @@ pack_0:
     617 000e6083  lwu ra, 0(t3)
     618 008e6103  lwu sp, 8(t3)
     619 02011113  slli sp, sp, 32
-    620 0020e0b3  or ra, ra, sp
+    620 002080b3  add ra, ra, sp
     621 001eb023  sd ra, 0(t4)
     622 00ce6083  lwu ra, 12(t3)
     623 010e6103  lwu sp, 16(t3)
     624 02011113  slli sp, sp, 32
-    625 0020e0b3  or ra, ra, sp
+    625 002080b3  add ra, ra, sp
     626 001eb423  sd ra, 8(t4)
     627 014e6083  lwu ra, 20(t3)
     628 018e6103  lwu sp, 24(t3)
     629 02011113  slli sp, sp, 32
-    630 0020e0b3  or ra, ra, sp
+    630 002080b3  add ra, ra, sp
     631 001eb823  sd ra, 16(t4)
     632 01ce6083  lwu ra, 28(t3)
     633 020e6103  lwu sp, 32(t3)
     634 02011113  slli sp, sp, 32
-    635 0020e0b3  or ra, ra, sp
+    635 002080b3  add ra, ra, sp
     636 001ebc23  sd ra, 24(t4)
     637 024e6083  lwu ra, 36(t3)
     638 028e6103  lwu sp, 40(t3)
     639 02011113  slli sp, sp, 32
-    640 0020e0b3  or ra, ra, sp
+    640 002080b3  add ra, ra, sp
     641 021eb023  sd ra, 32(t4)
     642 02ce6083  lwu ra, 44(t3)
     643 030e6103  lwu sp, 48(t3)
     644 02011113  slli sp, sp, 32
-    645 0020e0b3  or ra, ra, sp
+    645 002080b3  add ra, ra, sp
     646 021eb423  sd ra, 40(t4)
     647 034e6083  lwu ra, 52(t3)
     648 038e6103  lwu sp, 56(t3)
     649 02011113  slli sp, sp, 32
-    650 0020e0b3  or ra, ra, sp
+    650 002080b3  add ra, ra, sp
     651 021eb823  sd ra, 48(t4)
     652 03ce6083  lwu ra, 60(t3)
     653 040e6103  lwu sp, 64(t3)
     654 02011113  slli sp, sp, 32
-    655 0020e0b3  or ra, ra, sp
+    655 002080b3  add ra, ra, sp
     656 021ebc23  sd ra, 56(t4)
 pack_1:
     657 00001e37  lui t3, 0x1
@@ -695,42 +695,42 @@ pack_1:
     661 000e6083  lwu ra, 0(t3)
     662 004e6103  lwu sp, 4(t3)
     663 02011113  slli sp, sp, 32
-    664 0020e0b3  or ra, ra, sp
+    664 002080b3  add ra, ra, sp
     665 001eb023  sd ra, 0(t4)
     666 008e6083  lwu ra, 8(t3)
     667 00ce6103  lwu sp, 12(t3)
     668 02011113  slli sp, sp, 32
-    669 0020e0b3  or ra, ra, sp
+    669 002080b3  add ra, ra, sp
     670 001eb423  sd ra, 8(t4)
     671 010e6083  lwu ra, 16(t3)
     672 014e6103  lwu sp, 20(t3)
     673 02011113  slli sp, sp, 32
-    674 0020e0b3  or ra, ra, sp
+    674 002080b3  add ra, ra, sp
     675 001eb823  sd ra, 16(t4)
     676 018e6083  lwu ra, 24(t3)
     677 01ce6103  lwu sp, 28(t3)
     678 02011113  slli sp, sp, 32
-    679 0020e0b3  or ra, ra, sp
+    679 002080b3  add ra, ra, sp
     680 001ebc23  sd ra, 24(t4)
     681 020e6083  lwu ra, 32(t3)
     682 024e6103  lwu sp, 36(t3)
     683 02011113  slli sp, sp, 32
-    684 0020e0b3  or ra, ra, sp
+    684 002080b3  add ra, ra, sp
     685 021eb023  sd ra, 32(t4)
     686 028e6083  lwu ra, 40(t3)
     687 02ce6103  lwu sp, 44(t3)
     688 02011113  slli sp, sp, 32
-    689 0020e0b3  or ra, ra, sp
+    689 002080b3  add ra, ra, sp
     690 021eb423  sd ra, 40(t4)
     691 030e6083  lwu ra, 48(t3)
     692 034e6103  lwu sp, 52(t3)
     693 02011113  slli sp, sp, 32
-    694 0020e0b3  or ra, ra, sp
+    694 002080b3  add ra, ra, sp
     695 021eb823  sd ra, 48(t4)
     696 038e6083  lwu ra, 56(t3)
     697 03ce6103  lwu sp, 60(t3)
     698 02011113  slli sp, sp, 32
-    699 0020e0b3  or ra, ra, sp
+    699 002080b3  add ra, ra, sp
     700 021ebc23  sd ra, 56(t4)
 pack_2:
     701 00001e37  lui t3, 0x1
@@ -740,42 +740,42 @@ pack_2:
     705 000e6083  lwu ra, 0(t3)
     706 004e6103  lwu sp, 4(t3)
     707 02011113  slli sp, sp, 32
-    708 0020e0b3  or ra, ra, sp
+    708 002080b3  add ra, ra, sp
     709 001eb023  sd ra, 0(t4)
     710 008e6083  lwu ra, 8(t3)
     711 00ce6103  lwu sp, 12(t3)
     712 02011113  slli sp, sp, 32
-    713 0020e0b3  or ra, ra, sp
+    713 002080b3  add ra, ra, sp
     714 001eb423  sd ra, 8(t4)
     715 010e6083  lwu ra, 16(t3)
     716 014e6103  lwu sp, 20(t3)
     717 02011113  slli sp, sp, 32
-    718 0020e0b3  or ra, ra, sp
+    718 002080b3  add ra, ra, sp
     719 001eb823  sd ra, 16(t4)
     720 018e6083  lwu ra, 24(t3)
     721 01ce6103  lwu sp, 28(t3)
     722 02011113  slli sp, sp, 32
-    723 0020e0b3  or ra, ra, sp
+    723 002080b3  add ra, ra, sp
     724 001ebc23  sd ra, 24(t4)
     725 020e6083  lwu ra, 32(t3)
     726 024e6103  lwu sp, 36(t3)
     727 02011113  slli sp, sp, 32
-    728 0020e0b3  or ra, ra, sp
+    728 002080b3  add ra, ra, sp
     729 021eb023  sd ra, 32(t4)
     730 028e6083  lwu ra, 40(t3)
     731 02ce6103  lwu sp, 44(t3)
     732 02011113  slli sp, sp, 32
-    733 0020e0b3  or ra, ra, sp
+    733 002080b3  add ra, ra, sp
     734 021eb423  sd ra, 40(t4)
     735 030e6083  lwu ra, 48(t3)
     736 034e6103  lwu sp, 52(t3)
     737 02011113  slli sp, sp, 32
-    738 0020e0b3  or ra, ra, sp
+    738 002080b3  add ra, ra, sp
     739 021eb823  sd ra, 48(t4)
     740 038e6083  lwu ra, 56(t3)
     741 03ce6103  lwu sp, 60(t3)
     742 02011113  slli sp, sp, 32
-    743 0020e0b3  or ra, ra, sp
+    743 002080b3  add ra, ra, sp
     744 021ebc23  sd ra, 56(t4)
 pack_3:
     745 00001e37  lui t3, 0x1
@@ -785,42 +785,42 @@ pack_3:
     749 000e6083  lwu ra, 0(t3)
     750 004e6103  lwu sp, 4(t3)
     751 02011113  slli sp, sp, 32
-    752 0020e0b3  or ra, ra, sp
+    752 002080b3  add ra, ra, sp
     753 001eb023  sd ra, 0(t4)
     754 008e6083  lwu ra, 8(t3)
     755 00ce6103  lwu sp, 12(t3)
     756 02011113  slli sp, sp, 32
-    757 0020e0b3  or ra, ra, sp
+    757 002080b3  add ra, ra, sp
     758 001eb423  sd ra, 8(t4)
     759 010e6083  lwu ra, 16(t3)
     760 014e6103  lwu sp, 20(t3)
     761 02011113  slli sp, sp, 32
-    762 0020e0b3  or ra, ra, sp
+    762 002080b3  add ra, ra, sp
     763 001eb823  sd ra, 16(t4)
     764 018e6083  lwu ra, 24(t3)
     765 01ce6103  lwu sp, 28(t3)
     766 02011113  slli sp, sp, 32
-    767 0020e0b3  or ra, ra, sp
+    767 002080b3  add ra, ra, sp
     768 001ebc23  sd ra, 24(t4)
     769 020e6083  lwu ra, 32(t3)
     770 024e6103  lwu sp, 36(t3)
     771 02011113  slli sp, sp, 32
-    772 0020e0b3  or ra, ra, sp
+    772 002080b3  add ra, ra, sp
     773 021eb023  sd ra, 32(t4)
     774 028e6083  lwu ra, 40(t3)
     775 02ce6103  lwu sp, 44(t3)
     776 02011113  slli sp, sp, 32
-    777 0020e0b3  or ra, ra, sp
+    777 002080b3  add ra, ra, sp
     778 021eb423  sd ra, 40(t4)
     779 030e6083  lwu ra, 48(t3)
     780 034e6103  lwu sp, 52(t3)
     781 02011113  slli sp, sp, 32
-    782 0020e0b3  or ra, ra, sp
+    782 002080b3  add ra, ra, sp
     783 021eb823  sd ra, 48(t4)
     784 038e6083  lwu ra, 56(t3)
     785 03ce6103  lwu sp, 60(t3)
     786 02011113  slli sp, sp, 32
-    787 0020e0b3  or ra, ra, sp
+    787 002080b3  add ra, ra, sp
     788 021ebc23  sd ra, 56(t4)
 pack_4:
     789 00001e37  lui t3, 0x1
@@ -830,42 +830,42 @@ pack_4:
     793 000e6083  lwu ra, 0(t3)
     794 004e6103  lwu sp, 4(t3)
     795 02011113  slli sp, sp, 32
-    796 0020e0b3  or ra, ra, sp
+    796 002080b3  add ra, ra, sp
     797 001eb023  sd ra, 0(t4)
     798 008e6083  lwu ra, 8(t3)
     799 00ce6103  lwu sp, 12(t3)
     800 02011113  slli sp, sp, 32
-    801 0020e0b3  or ra, ra, sp
+    801 002080b3  add ra, ra, sp
     802 001eb423  sd ra, 8(t4)
     803 010e6083  lwu ra, 16(t3)
     804 014e6103  lwu sp, 20(t3)
     805 02011113  slli sp, sp, 32
-    806 0020e0b3  or ra, ra, sp
+    806 002080b3  add ra, ra, sp
     807 001eb823  sd ra, 16(t4)
     808 018e6083  lwu ra, 24(t3)
     809 01ce6103  lwu sp, 28(t3)
     810 02011113  slli sp, sp, 32
-    811 0020e0b3  or ra, ra, sp
+    811 002080b3  add ra, ra, sp
     812 001ebc23  sd ra, 24(t4)
     813 020e6083  lwu ra, 32(t3)
     814 024e6103  lwu sp, 36(t3)
     815 02011113  slli sp, sp, 32
-    816 0020e0b3  or ra, ra, sp
+    816 002080b3  add ra, ra, sp
     817 021eb023  sd ra, 32(t4)
     818 028e6083  lwu ra, 40(t3)
     819 02ce6103  lwu sp, 44(t3)
     820 02011113  slli sp, sp, 32
-    821 0020e0b3  or ra, ra, sp
+    821 002080b3  add ra, ra, sp
     822 021eb423  sd ra, 40(t4)
     823 030e6083  lwu ra, 48(t3)
     824 034e6103  lwu sp, 52(t3)
     825 02011113  slli sp, sp, 32
-    826 0020e0b3  or ra, ra, sp
+    826 002080b3  add ra, ra, sp
     827 021eb823  sd ra, 48(t4)
     828 038e6083  lwu ra, 56(t3)
     829 03ce6103  lwu sp, 60(t3)
     830 02011113  slli sp, sp, 32
-    831 0020e0b3  or ra, ra, sp
+    831 002080b3  add ra, ra, sp
     832 021ebc23  sd ra, 56(t4)
 pack_5:
     833 00001e37  lui t3, 0x1
@@ -875,42 +875,42 @@ pack_5:
     837 000e6083  lwu ra, 0(t3)
     838 004e6103  lwu sp, 4(t3)
     839 02011113  slli sp, sp, 32
-    840 0020e0b3  or ra, ra, sp
+    840 002080b3  add ra, ra, sp
     841 001eb023  sd ra, 0(t4)
     842 008e6083  lwu ra, 8(t3)
     843 00ce6103  lwu sp, 12(t3)
     844 02011113  slli sp, sp, 32
-    845 0020e0b3  or ra, ra, sp
+    845 002080b3  add ra, ra, sp
     846 001eb423  sd ra, 8(t4)
     847 010e6083  lwu ra, 16(t3)
     848 014e6103  lwu sp, 20(t3)
     849 02011113  slli sp, sp, 32
-    850 0020e0b3  or ra, ra, sp
+    850 002080b3  add ra, ra, sp
     851 001eb823  sd ra, 16(t4)
     852 018e6083  lwu ra, 24(t3)
     853 01ce6103  lwu sp, 28(t3)
     854 02011113  slli sp, sp, 32
-    855 0020e0b3  or ra, ra, sp
+    855 002080b3  add ra, ra, sp
     856 001ebc23  sd ra, 24(t4)
     857 020e6083  lwu ra, 32(t3)
     858 024e6103  lwu sp, 36(t3)
     859 02011113  slli sp, sp, 32
-    860 0020e0b3  or ra, ra, sp
+    860 002080b3  add ra, ra, sp
     861 021eb023  sd ra, 32(t4)
     862 028e6083  lwu ra, 40(t3)
     863 02ce6103  lwu sp, 44(t3)
     864 02011113  slli sp, sp, 32
-    865 0020e0b3  or ra, ra, sp
+    865 002080b3  add ra, ra, sp
     866 021eb423  sd ra, 40(t4)
     867 030e6083  lwu ra, 48(t3)
     868 034e6103  lwu sp, 52(t3)
     869 02011113  slli sp, sp, 32
-    870 0020e0b3  or ra, ra, sp
+    870 002080b3  add ra, ra, sp
     871 021eb823  sd ra, 48(t4)
     872 038e6083  lwu ra, 56(t3)
     873 03ce6103  lwu sp, 60(t3)
     874 02011113  slli sp, sp, 32
-    875 0020e0b3  or ra, ra, sp
+    875 002080b3  add ra, ra, sp
     876 021ebc23  sd ra, 56(t4)
 pack_6:
     877 00001e37  lui t3, 0x1
@@ -920,42 +920,42 @@ pack_6:
     881 000e6083  lwu ra, 0(t3)
     882 004e6103  lwu sp, 4(t3)
     883 02011113  slli sp, sp, 32
-    884 0020e0b3  or ra, ra, sp
+    884 002080b3  add ra, ra, sp
     885 001eb023  sd ra, 0(t4)
     886 008e6083  lwu ra, 8(t3)
     887 00ce6103  lwu sp, 12(t3)
     888 02011113  slli sp, sp, 32
-    889 0020e0b3  or ra, ra, sp
+    889 002080b3  add ra, ra, sp
     890 001eb423  sd ra, 8(t4)
     891 010e6083  lwu ra, 16(t3)
     892 014e6103  lwu sp, 20(t3)
     893 02011113  slli sp, sp, 32
-    894 0020e0b3  or ra, ra, sp
+    894 002080b3  add ra, ra, sp
     895 001eb823  sd ra, 16(t4)
     896 018e6083  lwu ra, 24(t3)
     897 01ce6103  lwu sp, 28(t3)
     898 02011113  slli sp, sp, 32
-    899 0020e0b3  or ra, ra, sp
+    899 002080b3  add ra, ra, sp
     900 001ebc23  sd ra, 24(t4)
     901 020e6083  lwu ra, 32(t3)
     902 024e6103  lwu sp, 36(t3)
     903 02011113  slli sp, sp, 32
-    904 0020e0b3  or ra, ra, sp
+    904 002080b3  add ra, ra, sp
     905 021eb023  sd ra, 32(t4)
     906 028e6083  lwu ra, 40(t3)
     907 02ce6103  lwu sp, 44(t3)
     908 02011113  slli sp, sp, 32
-    909 0020e0b3  or ra, ra, sp
+    909 002080b3  add ra, ra, sp
     910 021eb423  sd ra, 40(t4)
     911 030e6083  lwu ra, 48(t3)
     912 034e6103  lwu sp, 52(t3)
     913 02011113  slli sp, sp, 32
-    914 0020e0b3  or ra, ra, sp
+    914 002080b3  add ra, ra, sp
     915 021eb823  sd ra, 48(t4)
     916 038e6083  lwu ra, 56(t3)
     917 03ce6103  lwu sp, 60(t3)
     918 02011113  slli sp, sp, 32
-    919 0020e0b3  or ra, ra, sp
+    919 002080b3  add ra, ra, sp
     920 021ebc23  sd ra, 56(t4)
 pack_7:
     921 00001e37  lui t3, 0x1
@@ -965,42 +965,42 @@ pack_7:
     925 000e6083  lwu ra, 0(t3)
     926 004e6103  lwu sp, 4(t3)
     927 02011113  slli sp, sp, 32
-    928 0020e0b3  or ra, ra, sp
+    928 002080b3  add ra, ra, sp
     929 001eb023  sd ra, 0(t4)
     930 008e6083  lwu ra, 8(t3)
     931 00ce6103  lwu sp, 12(t3)
     932 02011113  slli sp, sp, 32
-    933 0020e0b3  or ra, ra, sp
+    933 002080b3  add ra, ra, sp
     934 001eb423  sd ra, 8(t4)
     935 010e6083  lwu ra, 16(t3)
     936 014e6103  lwu sp, 20(t3)
     937 02011113  slli sp, sp, 32
-    938 0020e0b3  or ra, ra, sp
+    938 002080b3  add ra, ra, sp
     939 001eb823  sd ra, 16(t4)
     940 018e6083  lwu ra, 24(t3)
     941 01ce6103  lwu sp, 28(t3)
     942 02011113  slli sp, sp, 32
-    943 0020e0b3  or ra, ra, sp
+    943 002080b3  add ra, ra, sp
     944 001ebc23  sd ra, 24(t4)
     945 020e6083  lwu ra, 32(t3)
     946 024e6103  lwu sp, 36(t3)
     947 02011113  slli sp, sp, 32
-    948 0020e0b3  or ra, ra, sp
+    948 002080b3  add ra, ra, sp
     949 021eb023  sd ra, 32(t4)
     950 028e6083  lwu ra, 40(t3)
     951 02ce6103  lwu sp, 44(t3)
     952 02011113  slli sp, sp, 32
-    953 0020e0b3  or ra, ra, sp
+    953 002080b3  add ra, ra, sp
     954 021eb423  sd ra, 40(t4)
     955 030e6083  lwu ra, 48(t3)
     956 034e6103  lwu sp, 52(t3)
     957 02011113  slli sp, sp, 32
-    958 0020e0b3  or ra, ra, sp
+    958 002080b3  add ra, ra, sp
     959 021eb823  sd ra, 48(t4)
     960 038e6083  lwu ra, 56(t3)
     961 03ce6103  lwu sp, 60(t3)
     962 02011113  slli sp, sp, 32
-    963 0020e0b3  or ra, ra, sp
+    963 002080b3  add ra, ra, sp
     964 021ebc23  sd ra, 56(t4)
 pack_8:
     965 00001e37  lui t3, 0x1
@@ -1010,42 +1010,42 @@ pack_8:
     969 000e6083  lwu ra, 0(t3)
     970 004e6103  lwu sp, 4(t3)
     971 02011113  slli sp, sp, 32
-    972 0020e0b3  or ra, ra, sp
+    972 002080b3  add ra, ra, sp
     973 001eb023  sd ra, 0(t4)
     974 008e6083  lwu ra, 8(t3)
     975 00ce6103  lwu sp, 12(t3)
     976 02011113  slli sp, sp, 32
-    977 0020e0b3  or ra, ra, sp
+    977 002080b3  add ra, ra, sp
     978 001eb423  sd ra, 8(t4)
     979 010e6083  lwu ra, 16(t3)
     980 014e6103  lwu sp, 20(t3)
     981 02011113  slli sp, sp, 32
-    982 0020e0b3  or ra, ra, sp
+    982 002080b3  add ra, ra, sp
     983 001eb823  sd ra, 16(t4)
     984 018e6083  lwu ra, 24(t3)
     985 01ce6103  lwu sp, 28(t3)
     986 02011113  slli sp, sp, 32
-    987 0020e0b3  or ra, ra, sp
+    987 002080b3  add ra, ra, sp
     988 001ebc23  sd ra, 24(t4)
     989 020e6083  lwu ra, 32(t3)
     990 024e6103  lwu sp, 36(t3)
     991 02011113  slli sp, sp, 32
-    992 0020e0b3  or ra, ra, sp
+    992 002080b3  add ra, ra, sp
     993 021eb023  sd ra, 32(t4)
     994 028e6083  lwu ra, 40(t3)
     995 02ce6103  lwu sp, 44(t3)
     996 02011113  slli sp, sp, 32
-    997 0020e0b3  or ra, ra, sp
+    997 002080b3  add ra, ra, sp
     998 021eb423  sd ra, 40(t4)
     999 030e6083  lwu ra, 48(t3)
    1000 034e6103  lwu sp, 52(t3)
    1001 02011113  slli sp, sp, 32
-   1002 0020e0b3  or ra, ra, sp
+   1002 002080b3  add ra, ra, sp
    1003 021eb823  sd ra, 48(t4)
    1004 038e6083  lwu ra, 56(t3)
    1005 03ce6103  lwu sp, 60(t3)
    1006 02011113  slli sp, sp, 32
-   1007 0020e0b3  or ra, ra, sp
+   1007 002080b3  add ra, ra, sp
    1008 021ebc23  sd ra, 56(t4)
 pack_9:
    1009 00001e37  lui t3, 0x1
@@ -1055,42 +1055,42 @@ pack_9:
    1013 000e6083  lwu ra, 0(t3)
    1014 004e6103  lwu sp, 4(t3)
    1015 02011113  slli sp, sp, 32
-   1016 0020e0b3  or ra, ra, sp
+   1016 002080b3  add ra, ra, sp
    1017 001eb023  sd ra, 0(t4)
    1018 008e6083  lwu ra, 8(t3)
    1019 00ce6103  lwu sp, 12(t3)
    1020 02011113  slli sp, sp, 32
-   1021 0020e0b3  or ra, ra, sp
+   1021 002080b3  add ra, ra, sp
    1022 001eb423  sd ra, 8(t4)
    1023 010e6083  lwu ra, 16(t3)
    1024 014e6103  lwu sp, 20(t3)
    1025 02011113  slli sp, sp, 32
-   1026 0020e0b3  or ra, ra, sp
+   1026 002080b3  add ra, ra, sp
    1027 001eb823  sd ra, 16(t4)
    1028 018e6083  lwu ra, 24(t3)
    1029 01ce6103  lwu sp, 28(t3)
    1030 02011113  slli sp, sp, 32
-   1031 0020e0b3  or ra, ra, sp
+   1031 002080b3  add ra, ra, sp
    1032 001ebc23  sd ra, 24(t4)
    1033 020e6083  lwu ra, 32(t3)
    1034 024e6103  lwu sp, 36(t3)
    1035 02011113  slli sp, sp, 32
-   1036 0020e0b3  or ra, ra, sp
+   1036 002080b3  add ra, ra, sp
    1037 021eb023  sd ra, 32(t4)
    1038 028e6083  lwu ra, 40(t3)
    1039 02ce6103  lwu sp, 44(t3)
    1040 02011113  slli sp, sp, 32
-   1041 0020e0b3  or ra, ra, sp
+   1041 002080b3  add ra, ra, sp
    1042 021eb423  sd ra, 40(t4)
    1043 030e6083  lwu ra, 48(t3)
    1044 034e6103  lwu sp, 52(t3)
    1045 02011113  slli sp, sp, 32
-   1046 0020e0b3  or ra, ra, sp
+   1046 002080b3  add ra, ra, sp
    1047 021eb823  sd ra, 48(t4)
    1048 038e6083  lwu ra, 56(t3)
    1049 03ce6103  lwu sp, 60(t3)
    1050 02011113  slli sp, sp, 32
-   1051 0020e0b3  or ra, ra, sp
+   1051 002080b3  add ra, ra, sp
    1052 021ebc23  sd ra, 56(t4)
 pack_10:
    1053 00001e37  lui t3, 0x1
@@ -1100,42 +1100,42 @@ pack_10:
    1057 000e6083  lwu ra, 0(t3)
    1058 004e6103  lwu sp, 4(t3)
    1059 02011113  slli sp, sp, 32
-   1060 0020e0b3  or ra, ra, sp
+   1060 002080b3  add ra, ra, sp
    1061 001eb023  sd ra, 0(t4)
    1062 008e6083  lwu ra, 8(t3)
    1063 00ce6103  lwu sp, 12(t3)
    1064 02011113  slli sp, sp, 32
-   1065 0020e0b3  or ra, ra, sp
+   1065 002080b3  add ra, ra, sp
    1066 001eb423  sd ra, 8(t4)
    1067 010e6083  lwu ra, 16(t3)
    1068 014e6103  lwu sp, 20(t3)
    1069 02011113  slli sp, sp, 32
-   1070 0020e0b3  or ra, ra, sp
+   1070 002080b3  add ra, ra, sp
    1071 001eb823  sd ra, 16(t4)
    1072 018e6083  lwu ra, 24(t3)
    1073 01ce6103  lwu sp, 28(t3)
    1074 02011113  slli sp, sp, 32
-   1075 0020e0b3  or ra, ra, sp
+   1075 002080b3  add ra, ra, sp
    1076 001ebc23  sd ra, 24(t4)
    1077 020e6083  lwu ra, 32(t3)
    1078 024e6103  lwu sp, 36(t3)
    1079 02011113  slli sp, sp, 32
-   1080 0020e0b3  or ra, ra, sp
+   1080 002080b3  add ra, ra, sp
    1081 021eb023  sd ra, 32(t4)
    1082 028e6083  lwu ra, 40(t3)
    1083 02ce6103  lwu sp, 44(t3)
    1084 02011113  slli sp, sp, 32
-   1085 0020e0b3  or ra, ra, sp
+   1085 002080b3  add ra, ra, sp
    1086 021eb423  sd ra, 40(t4)
    1087 030e6083  lwu ra, 48(t3)
    1088 034e6103  lwu sp, 52(t3)
    1089 02011113  slli sp, sp, 32
-   1090 0020e0b3  or ra, ra, sp
+   1090 002080b3  add ra, ra, sp
    1091 021eb823  sd ra, 48(t4)
    1092 038e6083  lwu ra, 56(t3)
    1093 03ce6103  lwu sp, 60(t3)
    1094 02011113  slli sp, sp, 32
-   1095 0020e0b3  or ra, ra, sp
+   1095 002080b3  add ra, ra, sp
    1096 021ebc23  sd ra, 56(t4)
 pack_11:
    1097 00001e37  lui t3, 0x1
@@ -1145,37 +1145,37 @@ pack_11:
    1101 000e6083  lwu ra, 0(t3)
    1102 004e6103  lwu sp, 4(t3)
    1103 02011113  slli sp, sp, 32
-   1104 0020e0b3  or ra, ra, sp
+   1104 002080b3  add ra, ra, sp
    1105 001eb023  sd ra, 0(t4)
    1106 008e6083  lwu ra, 8(t3)
    1107 00ce6103  lwu sp, 12(t3)
    1108 02011113  slli sp, sp, 32
-   1109 0020e0b3  or ra, ra, sp
+   1109 002080b3  add ra, ra, sp
    1110 001eb423  sd ra, 8(t4)
    1111 010e6083  lwu ra, 16(t3)
    1112 014e6103  lwu sp, 20(t3)
    1113 02011113  slli sp, sp, 32
-   1114 0020e0b3  or ra, ra, sp
+   1114 002080b3  add ra, ra, sp
    1115 001eb823  sd ra, 16(t4)
    1116 018e6083  lwu ra, 24(t3)
    1117 01ce6103  lwu sp, 28(t3)
    1118 02011113  slli sp, sp, 32
-   1119 0020e0b3  or ra, ra, sp
+   1119 002080b3  add ra, ra, sp
    1120 001ebc23  sd ra, 24(t4)
    1121 020e6083  lwu ra, 32(t3)
    1122 024e6103  lwu sp, 36(t3)
    1123 02011113  slli sp, sp, 32
-   1124 0020e0b3  or ra, ra, sp
+   1124 002080b3  add ra, ra, sp
    1125 021eb023  sd ra, 32(t4)
    1126 028e6083  lwu ra, 40(t3)
    1127 02ce6103  lwu sp, 44(t3)
    1128 02011113  slli sp, sp, 32
-   1129 0020e0b3  or ra, ra, sp
+   1129 002080b3  add ra, ra, sp
    1130 021eb423  sd ra, 40(t4)
    1131 030e6083  lwu ra, 48(t3)
    1132 034e6103  lwu sp, 52(t3)
    1133 02011113  slli sp, sp, 32
-   1134 0020e0b3  or ra, ra, sp
+   1134 002080b3  add ra, ra, sp
    1135 021eb823  sd ra, 48(t4)
    1136 03ce3083  ld ra, 60(t3)
    1137 021ebc23  sd ra, 56(t4)
@@ -1428,17 +1428,17 @@ pack_23:
    1372 028e6083  lwu ra, 40(t3)
    1373 030e6103  lwu sp, 48(t3)
    1374 02011113  slli sp, sp, 32
-   1375 0020e0b3  or ra, ra, sp
+   1375 002080b3  add ra, ra, sp
    1376 021eb423  sd ra, 40(t4)
    1377 034e6083  lwu ra, 52(t3)
    1378 038e6103  lwu sp, 56(t3)
    1379 02011113  slli sp, sp, 32
-   1380 0020e0b3  or ra, ra, sp
+   1380 002080b3  add ra, ra, sp
    1381 021eb823  sd ra, 48(t4)
    1382 03ce6083  lwu ra, 60(t3)
    1383 040e6103  lwu sp, 64(t3)
    1384 02011113  slli sp, sp, 32
-   1385 0020e0b3  or ra, ra, sp
+   1385 002080b3  add ra, ra, sp
    1386 021ebc23  sd ra, 56(t4)
 pack_24:
    1387 00001e37  lui t3, 0x1
@@ -1448,42 +1448,42 @@ pack_24:
    1391 000e6083  lwu ra, 0(t3)
    1392 004e6103  lwu sp, 4(t3)
    1393 02011113  slli sp, sp, 32
-   1394 0020e0b3  or ra, ra, sp
+   1394 002080b3  add ra, ra, sp
    1395 001eb023  sd ra, 0(t4)
    1396 008e6083  lwu ra, 8(t3)
    1397 00ce6103  lwu sp, 12(t3)
    1398 02011113  slli sp, sp, 32
-   1399 0020e0b3  or ra, ra, sp
+   1399 002080b3  add ra, ra, sp
    1400 001eb423  sd ra, 8(t4)
    1401 010e6083  lwu ra, 16(t3)
    1402 014e6103  lwu sp, 20(t3)
    1403 02011113  slli sp, sp, 32
-   1404 0020e0b3  or ra, ra, sp
+   1404 002080b3  add ra, ra, sp
    1405 001eb823  sd ra, 16(t4)
    1406 018e6083  lwu ra, 24(t3)
    1407 01ce6103  lwu sp, 28(t3)
    1408 02011113  slli sp, sp, 32
-   1409 0020e0b3  or ra, ra, sp
+   1409 002080b3  add ra, ra, sp
    1410 001ebc23  sd ra, 24(t4)
    1411 020e6083  lwu ra, 32(t3)
    1412 024e6103  lwu sp, 36(t3)
    1413 02011113  slli sp, sp, 32
-   1414 0020e0b3  or ra, ra, sp
+   1414 002080b3  add ra, ra, sp
    1415 021eb023  sd ra, 32(t4)
    1416 028e6083  lwu ra, 40(t3)
    1417 02ce6103  lwu sp, 44(t3)
    1418 02011113  slli sp, sp, 32
-   1419 0020e0b3  or ra, ra, sp
+   1419 002080b3  add ra, ra, sp
    1420 021eb423  sd ra, 40(t4)
    1421 030e6083  lwu ra, 48(t3)
    1422 034e6103  lwu sp, 52(t3)
    1423 02011113  slli sp, sp, 32
-   1424 0020e0b3  or ra, ra, sp
+   1424 002080b3  add ra, ra, sp
    1425 021eb823  sd ra, 48(t4)
    1426 038e6083  lwu ra, 56(t3)
    1427 03ce6103  lwu sp, 60(t3)
    1428 02011113  slli sp, sp, 32
-   1429 0020e0b3  or ra, ra, sp
+   1429 002080b3  add ra, ra, sp
    1430 021ebc23  sd ra, 56(t4)
 pack_25:
    1431 00001e37  lui t3, 0x1
@@ -1493,42 +1493,42 @@ pack_25:
    1435 000e6083  lwu ra, 0(t3)
    1436 004e6103  lwu sp, 4(t3)
    1437 02011113  slli sp, sp, 32
-   1438 0020e0b3  or ra, ra, sp
+   1438 002080b3  add ra, ra, sp
    1439 001eb023  sd ra, 0(t4)
    1440 008e6083  lwu ra, 8(t3)
    1441 00ce6103  lwu sp, 12(t3)
    1442 02011113  slli sp, sp, 32
-   1443 0020e0b3  or ra, ra, sp
+   1443 002080b3  add ra, ra, sp
    1444 001eb423  sd ra, 8(t4)
    1445 010e6083  lwu ra, 16(t3)
    1446 014e6103  lwu sp, 20(t3)
    1447 02011113  slli sp, sp, 32
-   1448 0020e0b3  or ra, ra, sp
+   1448 002080b3  add ra, ra, sp
    1449 001eb823  sd ra, 16(t4)
    1450 018e6083  lwu ra, 24(t3)
    1451 01ce6103  lwu sp, 28(t3)
    1452 02011113  slli sp, sp, 32
-   1453 0020e0b3  or ra, ra, sp
+   1453 002080b3  add ra, ra, sp
    1454 001ebc23  sd ra, 24(t4)
    1455 020e6083  lwu ra, 32(t3)
    1456 024e6103  lwu sp, 36(t3)
    1457 02011113  slli sp, sp, 32
-   1458 0020e0b3  or ra, ra, sp
+   1458 002080b3  add ra, ra, sp
    1459 021eb023  sd ra, 32(t4)
    1460 028e6083  lwu ra, 40(t3)
    1461 02ce6103  lwu sp, 44(t3)
    1462 02011113  slli sp, sp, 32
-   1463 0020e0b3  or ra, ra, sp
+   1463 002080b3  add ra, ra, sp
    1464 021eb423  sd ra, 40(t4)
    1465 030e6083  lwu ra, 48(t3)
    1466 034e6103  lwu sp, 52(t3)
    1467 02011113  slli sp, sp, 32
-   1468 0020e0b3  or ra, ra, sp
+   1468 002080b3  add ra, ra, sp
    1469 021eb823  sd ra, 48(t4)
    1470 038e6083  lwu ra, 56(t3)
    1471 03ce6103  lwu sp, 60(t3)
    1472 02011113  slli sp, sp, 32
-   1473 0020e0b3  or ra, ra, sp
+   1473 002080b3  add ra, ra, sp
    1474 021ebc23  sd ra, 56(t4)
 pack_26:
    1475 00001e37  lui t3, 0x1
@@ -1538,42 +1538,42 @@ pack_26:
    1479 000e6083  lwu ra, 0(t3)
    1480 004e6103  lwu sp, 4(t3)
    1481 02011113  slli sp, sp, 32
-   1482 0020e0b3  or ra, ra, sp
+   1482 002080b3  add ra, ra, sp
    1483 001eb023  sd ra, 0(t4)
    1484 008e6083  lwu ra, 8(t3)
    1485 00ce6103  lwu sp, 12(t3)
    1486 02011113  slli sp, sp, 32
-   1487 0020e0b3  or ra, ra, sp
+   1487 002080b3  add ra, ra, sp
    1488 001eb423  sd ra, 8(t4)
    1489 010e6083  lwu ra, 16(t3)
    1490 014e6103  lwu sp, 20(t3)
    1491 02011113  slli sp, sp, 32
-   1492 0020e0b3  or ra, ra, sp
+   1492 002080b3  add ra, ra, sp
    1493 001eb823  sd ra, 16(t4)
    1494 018e6083  lwu ra, 24(t3)
    1495 01ce6103  lwu sp, 28(t3)
    1496 02011113  slli sp, sp, 32
-   1497 0020e0b3  or ra, ra, sp
+   1497 002080b3  add ra, ra, sp
    1498 001ebc23  sd ra, 24(t4)
    1499 020e6083  lwu ra, 32(t3)
    1500 024e6103  lwu sp, 36(t3)
    1501 02011113  slli sp, sp, 32
-   1502 0020e0b3  or ra, ra, sp
+   1502 002080b3  add ra, ra, sp
    1503 021eb023  sd ra, 32(t4)
    1504 028e6083  lwu ra, 40(t3)
    1505 02ce6103  lwu sp, 44(t3)
    1506 02011113  slli sp, sp, 32
-   1507 0020e0b3  or ra, ra, sp
+   1507 002080b3  add ra, ra, sp
    1508 021eb423  sd ra, 40(t4)
    1509 030e6083  lwu ra, 48(t3)
    1510 034e6103  lwu sp, 52(t3)
    1511 02011113  slli sp, sp, 32
-   1512 0020e0b3  or ra, ra, sp
+   1512 002080b3  add ra, ra, sp
    1513 021eb823  sd ra, 48(t4)
    1514 038e6083  lwu ra, 56(t3)
    1515 03ce6103  lwu sp, 60(t3)
    1516 02011113  slli sp, sp, 32
-   1517 0020e0b3  or ra, ra, sp
+   1517 002080b3  add ra, ra, sp
    1518 021ebc23  sd ra, 56(t4)
 pack_27:
    1519 00001e37  lui t3, 0x1
@@ -1583,42 +1583,42 @@ pack_27:
    1523 000e6083  lwu ra, 0(t3)
    1524 004e6103  lwu sp, 4(t3)
    1525 02011113  slli sp, sp, 32
-   1526 0020e0b3  or ra, ra, sp
+   1526 002080b3  add ra, ra, sp
    1527 001eb023  sd ra, 0(t4)
    1528 008e6083  lwu ra, 8(t3)
    1529 00ce6103  lwu sp, 12(t3)
    1530 02011113  slli sp, sp, 32
-   1531 0020e0b3  or ra, ra, sp
+   1531 002080b3  add ra, ra, sp
    1532 001eb423  sd ra, 8(t4)
    1533 010e6083  lwu ra, 16(t3)
    1534 014e6103  lwu sp, 20(t3)
    1535 02011113  slli sp, sp, 32
-   1536 0020e0b3  or ra, ra, sp
+   1536 002080b3  add ra, ra, sp
    1537 001eb823  sd ra, 16(t4)
    1538 018e6083  lwu ra, 24(t3)
    1539 01ce6103  lwu sp, 28(t3)
    1540 02011113  slli sp, sp, 32
-   1541 0020e0b3  or ra, ra, sp
+   1541 002080b3  add ra, ra, sp
    1542 001ebc23  sd ra, 24(t4)
    1543 020e6083  lwu ra, 32(t3)
    1544 024e6103  lwu sp, 36(t3)
    1545 02011113  slli sp, sp, 32
-   1546 0020e0b3  or ra, ra, sp
+   1546 002080b3  add ra, ra, sp
    1547 021eb023  sd ra, 32(t4)
    1548 028e6083  lwu ra, 40(t3)
    1549 02ce6103  lwu sp, 44(t3)
    1550 02011113  slli sp, sp, 32
-   1551 0020e0b3  or ra, ra, sp
+   1551 002080b3  add ra, ra, sp
    1552 021eb423  sd ra, 40(t4)
    1553 030e6083  lwu ra, 48(t3)
    1554 034e6103  lwu sp, 52(t3)
    1555 02011113  slli sp, sp, 32
-   1556 0020e0b3  or ra, ra, sp
+   1556 002080b3  add ra, ra, sp
    1557 021eb823  sd ra, 48(t4)
    1558 038e6083  lwu ra, 56(t3)
    1559 03ce6103  lwu sp, 60(t3)
    1560 02011113  slli sp, sp, 32
-   1561 0020e0b3  or ra, ra, sp
+   1561 002080b3  add ra, ra, sp
    1562 021ebc23  sd ra, 56(t4)
 pack_28:
    1563 00001e37  lui t3, 0x1
@@ -1628,42 +1628,42 @@ pack_28:
    1567 000e6083  lwu ra, 0(t3)
    1568 004e6103  lwu sp, 4(t3)
    1569 02011113  slli sp, sp, 32
-   1570 0020e0b3  or ra, ra, sp
+   1570 002080b3  add ra, ra, sp
    1571 001eb023  sd ra, 0(t4)
    1572 008e6083  lwu ra, 8(t3)
    1573 00ce6103  lwu sp, 12(t3)
    1574 02011113  slli sp, sp, 32
-   1575 0020e0b3  or ra, ra, sp
+   1575 002080b3  add ra, ra, sp
    1576 001eb423  sd ra, 8(t4)
    1577 010e6083  lwu ra, 16(t3)
    1578 014e6103  lwu sp, 20(t3)
    1579 02011113  slli sp, sp, 32
-   1580 0020e0b3  or ra, ra, sp
+   1580 002080b3  add ra, ra, sp
    1581 001eb823  sd ra, 16(t4)
    1582 018e6083  lwu ra, 24(t3)
    1583 01ce6103  lwu sp, 28(t3)
    1584 02011113  slli sp, sp, 32
-   1585 0020e0b3  or ra, ra, sp
+   1585 002080b3  add ra, ra, sp
    1586 001ebc23  sd ra, 24(t4)
    1587 020e6083  lwu ra, 32(t3)
    1588 024e6103  lwu sp, 36(t3)
    1589 02011113  slli sp, sp, 32
-   1590 0020e0b3  or ra, ra, sp
+   1590 002080b3  add ra, ra, sp
    1591 021eb023  sd ra, 32(t4)
    1592 028e6083  lwu ra, 40(t3)
    1593 02ce6103  lwu sp, 44(t3)
    1594 02011113  slli sp, sp, 32
-   1595 0020e0b3  or ra, ra, sp
+   1595 002080b3  add ra, ra, sp
    1596 021eb423  sd ra, 40(t4)
    1597 030e6083  lwu ra, 48(t3)
    1598 034e6103  lwu sp, 52(t3)
    1599 02011113  slli sp, sp, 32
-   1600 0020e0b3  or ra, ra, sp
+   1600 002080b3  add ra, ra, sp
    1601 021eb823  sd ra, 48(t4)
    1602 038e6083  lwu ra, 56(t3)
    1603 03ce6103  lwu sp, 60(t3)
    1604 02011113  slli sp, sp, 32
-   1605 0020e0b3  or ra, ra, sp
+   1605 002080b3  add ra, ra, sp
    1606 021ebc23  sd ra, 56(t4)
 pack_29:
    1607 00001e37  lui t3, 0x1
@@ -1673,42 +1673,42 @@ pack_29:
    1611 000e6083  lwu ra, 0(t3)
    1612 004e6103  lwu sp, 4(t3)
    1613 02011113  slli sp, sp, 32
-   1614 0020e0b3  or ra, ra, sp
+   1614 002080b3  add ra, ra, sp
    1615 001eb023  sd ra, 0(t4)
    1616 008e6083  lwu ra, 8(t3)
    1617 00ce6103  lwu sp, 12(t3)
    1618 02011113  slli sp, sp, 32
-   1619 0020e0b3  or ra, ra, sp
+   1619 002080b3  add ra, ra, sp
    1620 001eb423  sd ra, 8(t4)
    1621 010e6083  lwu ra, 16(t3)
    1622 014e6103  lwu sp, 20(t3)
    1623 02011113  slli sp, sp, 32
-   1624 0020e0b3  or ra, ra, sp
+   1624 002080b3  add ra, ra, sp
    1625 001eb823  sd ra, 16(t4)
    1626 018e6083  lwu ra, 24(t3)
    1627 01ce6103  lwu sp, 28(t3)
    1628 02011113  slli sp, sp, 32
-   1629 0020e0b3  or ra, ra, sp
+   1629 002080b3  add ra, ra, sp
    1630 001ebc23  sd ra, 24(t4)
    1631 020e6083  lwu ra, 32(t3)
    1632 024e6103  lwu sp, 36(t3)
    1633 02011113  slli sp, sp, 32
-   1634 0020e0b3  or ra, ra, sp
+   1634 002080b3  add ra, ra, sp
    1635 021eb023  sd ra, 32(t4)
    1636 028e6083  lwu ra, 40(t3)
    1637 02ce6103  lwu sp, 44(t3)
    1638 02011113  slli sp, sp, 32
-   1639 0020e0b3  or ra, ra, sp
+   1639 002080b3  add ra, ra, sp
    1640 021eb423  sd ra, 40(t4)
    1641 030e6083  lwu ra, 48(t3)
    1642 034e6103  lwu sp, 52(t3)
    1643 02011113  slli sp, sp, 32
-   1644 0020e0b3  or ra, ra, sp
+   1644 002080b3  add ra, ra, sp
    1645 021eb823  sd ra, 48(t4)
    1646 038e6083  lwu ra, 56(t3)
    1647 03ce6103  lwu sp, 60(t3)
    1648 02011113  slli sp, sp, 32
-   1649 0020e0b3  or ra, ra, sp
+   1649 002080b3  add ra, ra, sp
    1650 021ebc23  sd ra, 56(t4)
 pack_30:
    1651 00001e37  lui t3, 0x1
@@ -1718,42 +1718,42 @@ pack_30:
    1655 000e6083  lwu ra, 0(t3)
    1656 004e6103  lwu sp, 4(t3)
    1657 02011113  slli sp, sp, 32
-   1658 0020e0b3  or ra, ra, sp
+   1658 002080b3  add ra, ra, sp
    1659 001eb023  sd ra, 0(t4)
    1660 008e6083  lwu ra, 8(t3)
    1661 00ce6103  lwu sp, 12(t3)
    1662 02011113  slli sp, sp, 32
-   1663 0020e0b3  or ra, ra, sp
+   1663 002080b3  add ra, ra, sp
    1664 001eb423  sd ra, 8(t4)
    1665 010e6083  lwu ra, 16(t3)
    1666 014e6103  lwu sp, 20(t3)
    1667 02011113  slli sp, sp, 32
-   1668 0020e0b3  or ra, ra, sp
+   1668 002080b3  add ra, ra, sp
    1669 001eb823  sd ra, 16(t4)
    1670 018e6083  lwu ra, 24(t3)
    1671 01ce6103  lwu sp, 28(t3)
    1672 02011113  slli sp, sp, 32
-   1673 0020e0b3  or ra, ra, sp
+   1673 002080b3  add ra, ra, sp
    1674 001ebc23  sd ra, 24(t4)
    1675 020e6083  lwu ra, 32(t3)
    1676 024e6103  lwu sp, 36(t3)
    1677 02011113  slli sp, sp, 32
-   1678 0020e0b3  or ra, ra, sp
+   1678 002080b3  add ra, ra, sp
    1679 021eb023  sd ra, 32(t4)
    1680 028e6083  lwu ra, 40(t3)
    1681 02ce6103  lwu sp, 44(t3)
    1682 02011113  slli sp, sp, 32
-   1683 0020e0b3  or ra, ra, sp
+   1683 002080b3  add ra, ra, sp
    1684 021eb423  sd ra, 40(t4)
    1685 030e6083  lwu ra, 48(t3)
    1686 034e6103  lwu sp, 52(t3)
    1687 02011113  slli sp, sp, 32
-   1688 0020e0b3  or ra, ra, sp
+   1688 002080b3  add ra, ra, sp
    1689 021eb823  sd ra, 48(t4)
    1690 038e6083  lwu ra, 56(t3)
    1691 03ce6103  lwu sp, 60(t3)
    1692 02011113  slli sp, sp, 32
-   1693 0020e0b3  or ra, ra, sp
+   1693 002080b3  add ra, ra, sp
    1694 021ebc23  sd ra, 56(t4)
 pack_31:
    1695 00001e37  lui t3, 0x1
@@ -1763,42 +1763,42 @@ pack_31:
    1699 000e6083  lwu ra, 0(t3)
    1700 004e6103  lwu sp, 4(t3)
    1701 02011113  slli sp, sp, 32
-   1702 0020e0b3  or ra, ra, sp
+   1702 002080b3  add ra, ra, sp
    1703 001eb023  sd ra, 0(t4)
    1704 008e6083  lwu ra, 8(t3)
    1705 00ce6103  lwu sp, 12(t3)
    1706 02011113  slli sp, sp, 32
-   1707 0020e0b3  or ra, ra, sp
+   1707 002080b3  add ra, ra, sp
    1708 001eb423  sd ra, 8(t4)
    1709 010e6083  lwu ra, 16(t3)
    1710 014e6103  lwu sp, 20(t3)
    1711 02011113  slli sp, sp, 32
-   1712 0020e0b3  or ra, ra, sp
+   1712 002080b3  add ra, ra, sp
    1713 001eb823  sd ra, 16(t4)
    1714 018e6083  lwu ra, 24(t3)
    1715 01ce6103  lwu sp, 28(t3)
    1716 02011113  slli sp, sp, 32
-   1717 0020e0b3  or ra, ra, sp
+   1717 002080b3  add ra, ra, sp
    1718 001ebc23  sd ra, 24(t4)
    1719 020e6083  lwu ra, 32(t3)
    1720 024e6103  lwu sp, 36(t3)
    1721 02011113  slli sp, sp, 32
-   1722 0020e0b3  or ra, ra, sp
+   1722 002080b3  add ra, ra, sp
    1723 021eb023  sd ra, 32(t4)
    1724 028e6083  lwu ra, 40(t3)
    1725 02ce6103  lwu sp, 44(t3)
    1726 02011113  slli sp, sp, 32
-   1727 0020e0b3  or ra, ra, sp
+   1727 002080b3  add ra, ra, sp
    1728 021eb423  sd ra, 40(t4)
    1729 030e6083  lwu ra, 48(t3)
    1730 034e6103  lwu sp, 52(t3)
    1731 02011113  slli sp, sp, 32
-   1732 0020e0b3  or ra, ra, sp
+   1732 002080b3  add ra, ra, sp
    1733 021eb823  sd ra, 48(t4)
    1734 038e6083  lwu ra, 56(t3)
    1735 03ce6103  lwu sp, 60(t3)
    1736 02011113  slli sp, sp, 32
-   1737 0020e0b3  or ra, ra, sp
+   1737 002080b3  add ra, ra, sp
    1738 021ebc23  sd ra, 56(t4)
 pack_32:
    1739 00001e37  lui t3, 0x1
@@ -1808,42 +1808,42 @@ pack_32:
    1743 000e6083  lwu ra, 0(t3)
    1744 004e6103  lwu sp, 4(t3)
    1745 02011113  slli sp, sp, 32
-   1746 0020e0b3  or ra, ra, sp
+   1746 002080b3  add ra, ra, sp
    1747 001eb023  sd ra, 0(t4)
    1748 008e6083  lwu ra, 8(t3)
    1749 00ce6103  lwu sp, 12(t3)
    1750 02011113  slli sp, sp, 32
-   1751 0020e0b3  or ra, ra, sp
+   1751 002080b3  add ra, ra, sp
    1752 001eb423  sd ra, 8(t4)
    1753 010e6083  lwu ra, 16(t3)
    1754 014e6103  lwu sp, 20(t3)
    1755 02011113  slli sp, sp, 32
-   1756 0020e0b3  or ra, ra, sp
+   1756 002080b3  add ra, ra, sp
    1757 001eb823  sd ra, 16(t4)
    1758 018e6083  lwu ra, 24(t3)
    1759 01ce6103  lwu sp, 28(t3)
    1760 02011113  slli sp, sp, 32
-   1761 0020e0b3  or ra, ra, sp
+   1761 002080b3  add ra, ra, sp
    1762 001ebc23  sd ra, 24(t4)
    1763 020e6083  lwu ra, 32(t3)
    1764 024e6103  lwu sp, 36(t3)
    1765 02011113  slli sp, sp, 32
-   1766 0020e0b3  or ra, ra, sp
+   1766 002080b3  add ra, ra, sp
    1767 021eb023  sd ra, 32(t4)
    1768 028e6083  lwu ra, 40(t3)
    1769 02ce6103  lwu sp, 44(t3)
    1770 02011113  slli sp, sp, 32
-   1771 0020e0b3  or ra, ra, sp
+   1771 002080b3  add ra, ra, sp
    1772 021eb423  sd ra, 40(t4)
    1773 030e6083  lwu ra, 48(t3)
    1774 034e6103  lwu sp, 52(t3)
    1775 02011113  slli sp, sp, 32
-   1776 0020e0b3  or ra, ra, sp
+   1776 002080b3  add ra, ra, sp
    1777 021eb823  sd ra, 48(t4)
    1778 038e6083  lwu ra, 56(t3)
    1779 03ce6103  lwu sp, 60(t3)
    1780 02011113  slli sp, sp, 32
-   1781 0020e0b3  or ra, ra, sp
+   1781 002080b3  add ra, ra, sp
    1782 021ebc23  sd ra, 56(t4)
 pack_33:
    1783 00001e37  lui t3, 0x1
@@ -1853,42 +1853,42 @@ pack_33:
    1787 000e6083  lwu ra, 0(t3)
    1788 004e6103  lwu sp, 4(t3)
    1789 02011113  slli sp, sp, 32
-   1790 0020e0b3  or ra, ra, sp
+   1790 002080b3  add ra, ra, sp
    1791 001eb023  sd ra, 0(t4)
    1792 008e6083  lwu ra, 8(t3)
    1793 00ce6103  lwu sp, 12(t3)
    1794 02011113  slli sp, sp, 32
-   1795 0020e0b3  or ra, ra, sp
+   1795 002080b3  add ra, ra, sp
    1796 001eb423  sd ra, 8(t4)
    1797 010e6083  lwu ra, 16(t3)
    1798 014e6103  lwu sp, 20(t3)
    1799 02011113  slli sp, sp, 32
-   1800 0020e0b3  or ra, ra, sp
+   1800 002080b3  add ra, ra, sp
    1801 001eb823  sd ra, 16(t4)
    1802 018e6083  lwu ra, 24(t3)
    1803 01ce6103  lwu sp, 28(t3)
    1804 02011113  slli sp, sp, 32
-   1805 0020e0b3  or ra, ra, sp
+   1805 002080b3  add ra, ra, sp
    1806 001ebc23  sd ra, 24(t4)
    1807 020e6083  lwu ra, 32(t3)
    1808 024e6103  lwu sp, 36(t3)
    1809 02011113  slli sp, sp, 32
-   1810 0020e0b3  or ra, ra, sp
+   1810 002080b3  add ra, ra, sp
    1811 021eb023  sd ra, 32(t4)
    1812 028e6083  lwu ra, 40(t3)
    1813 02ce6103  lwu sp, 44(t3)
    1814 02011113  slli sp, sp, 32
-   1815 0020e0b3  or ra, ra, sp
+   1815 002080b3  add ra, ra, sp
    1816 021eb423  sd ra, 40(t4)
    1817 030e6083  lwu ra, 48(t3)
    1818 034e6103  lwu sp, 52(t3)
    1819 02011113  slli sp, sp, 32
-   1820 0020e0b3  or ra, ra, sp
+   1820 002080b3  add ra, ra, sp
    1821 021eb823  sd ra, 48(t4)
    1822 038e6083  lwu ra, 56(t3)
    1823 03ce6103  lwu sp, 60(t3)
    1824 02011113  slli sp, sp, 32
-   1825 0020e0b3  or ra, ra, sp
+   1825 002080b3  add ra, ra, sp
    1826 021ebc23  sd ra, 56(t4)
 pack_34:
    1827 00001e37  lui t3, 0x1
@@ -1898,42 +1898,42 @@ pack_34:
    1831 000e6083  lwu ra, 0(t3)
    1832 004e6103  lwu sp, 4(t3)
    1833 02011113  slli sp, sp, 32
-   1834 0020e0b3  or ra, ra, sp
+   1834 002080b3  add ra, ra, sp
    1835 001eb023  sd ra, 0(t4)
    1836 008e6083  lwu ra, 8(t3)
    1837 00ce6103  lwu sp, 12(t3)
    1838 02011113  slli sp, sp, 32
-   1839 0020e0b3  or ra, ra, sp
+   1839 002080b3  add ra, ra, sp
    1840 001eb423  sd ra, 8(t4)
    1841 010e6083  lwu ra, 16(t3)
    1842 014e6103  lwu sp, 20(t3)
    1843 02011113  slli sp, sp, 32
-   1844 0020e0b3  or ra, ra, sp
+   1844 002080b3  add ra, ra, sp
    1845 001eb823  sd ra, 16(t4)
    1846 018e6083  lwu ra, 24(t3)
    1847 01ce6103  lwu sp, 28(t3)
    1848 02011113  slli sp, sp, 32
-   1849 0020e0b3  or ra, ra, sp
+   1849 002080b3  add ra, ra, sp
    1850 001ebc23  sd ra, 24(t4)
    1851 020e6083  lwu ra, 32(t3)
    1852 024e6103  lwu sp, 36(t3)
    1853 02011113  slli sp, sp, 32
-   1854 0020e0b3  or ra, ra, sp
+   1854 002080b3  add ra, ra, sp
    1855 021eb023  sd ra, 32(t4)
    1856 028e6083  lwu ra, 40(t3)
    1857 02ce6103  lwu sp, 44(t3)
    1858 02011113  slli sp, sp, 32
-   1859 0020e0b3  or ra, ra, sp
+   1859 002080b3  add ra, ra, sp
    1860 021eb423  sd ra, 40(t4)
    1861 030e6083  lwu ra, 48(t3)
    1862 034e6103  lwu sp, 52(t3)
    1863 02011113  slli sp, sp, 32
-   1864 0020e0b3  or ra, ra, sp
+   1864 002080b3  add ra, ra, sp
    1865 021eb823  sd ra, 48(t4)
    1866 038e6083  lwu ra, 56(t3)
    1867 03ce6103  lwu sp, 60(t3)
    1868 02011113  slli sp, sp, 32
-   1869 0020e0b3  or ra, ra, sp
+   1869 002080b3  add ra, ra, sp
    1870 021ebc23  sd ra, 56(t4)
 pack_35:
    1871 00001e37  lui t3, 0x1
@@ -1943,22 +1943,22 @@ pack_35:
    1875 000e6083  lwu ra, 0(t3)
    1876 004e6103  lwu sp, 4(t3)
    1877 02011113  slli sp, sp, 32
-   1878 0020e0b3  or ra, ra, sp
+   1878 002080b3  add ra, ra, sp
    1879 001eb023  sd ra, 0(t4)
    1880 008e6083  lwu ra, 8(t3)
    1881 00ce6103  lwu sp, 12(t3)
    1882 02011113  slli sp, sp, 32
-   1883 0020e0b3  or ra, ra, sp
+   1883 002080b3  add ra, ra, sp
    1884 001eb423  sd ra, 8(t4)
    1885 010e6083  lwu ra, 16(t3)
    1886 014e6103  lwu sp, 20(t3)
    1887 02011113  slli sp, sp, 32
-   1888 0020e0b3  or ra, ra, sp
+   1888 002080b3  add ra, ra, sp
    1889 001eb823  sd ra, 16(t4)
    1890 018e6083  lwu ra, 24(t3)
    1891 01ce6103  lwu sp, 28(t3)
    1892 02011113  slli sp, sp, 32
-   1893 0020e0b3  or ra, ra, sp
+   1893 002080b3  add ra, ra, sp
    1894 001ebc23  sd ra, 24(t4)
    1895 024e3083  ld ra, 36(t3)
    1896 021eb023  sd ra, 32(t4)
@@ -2211,32 +2211,32 @@ pack_47:
    2131 010e6083  lwu ra, 16(t3)
    2132 018e6103  lwu sp, 24(t3)
    2133 02011113  slli sp, sp, 32
-   2134 0020e0b3  or ra, ra, sp
+   2134 002080b3  add ra, ra, sp
    2135 001eb823  sd ra, 16(t4)
    2136 01ce6083  lwu ra, 28(t3)
    2137 020e6103  lwu sp, 32(t3)
    2138 02011113  slli sp, sp, 32
-   2139 0020e0b3  or ra, ra, sp
+   2139 002080b3  add ra, ra, sp
    2140 001ebc23  sd ra, 24(t4)
    2141 024e6083  lwu ra, 36(t3)
    2142 028e6103  lwu sp, 40(t3)
    2143 02011113  slli sp, sp, 32
-   2144 0020e0b3  or ra, ra, sp
+   2144 002080b3  add ra, ra, sp
    2145 021eb023  sd ra, 32(t4)
    2146 02ce6083  lwu ra, 44(t3)
    2147 030e6103  lwu sp, 48(t3)
    2148 02011113  slli sp, sp, 32
-   2149 0020e0b3  or ra, ra, sp
+   2149 002080b3  add ra, ra, sp
    2150 021eb423  sd ra, 40(t4)
    2151 034e6083  lwu ra, 52(t3)
    2152 038e6103  lwu sp, 56(t3)
    2153 02011113  slli sp, sp, 32
-   2154 0020e0b3  or ra, ra, sp
+   2154 002080b3  add ra, ra, sp
    2155 021eb823  sd ra, 48(t4)
    2156 03ce6083  lwu ra, 60(t3)
    2157 040e6103  lwu sp, 64(t3)
    2158 02011113  slli sp, sp, 32
-   2159 0020e0b3  or ra, ra, sp
+   2159 002080b3  add ra, ra, sp
    2160 021ebc23  sd ra, 56(t4)
 pack_48:
    2161 00001e37  lui t3, 0x1
@@ -2246,42 +2246,42 @@ pack_48:
    2165 000e6083  lwu ra, 0(t3)
    2166 004e6103  lwu sp, 4(t3)
    2167 02011113  slli sp, sp, 32
-   2168 0020e0b3  or ra, ra, sp
+   2168 002080b3  add ra, ra, sp
    2169 001eb023  sd ra, 0(t4)
    2170 008e6083  lwu ra, 8(t3)
    2171 00ce6103  lwu sp, 12(t3)
    2172 02011113  slli sp, sp, 32
-   2173 0020e0b3  or ra, ra, sp
+   2173 002080b3  add ra, ra, sp
    2174 001eb423  sd ra, 8(t4)
    2175 010e6083  lwu ra, 16(t3)
    2176 014e6103  lwu sp, 20(t3)
    2177 02011113  slli sp, sp, 32
-   2178 0020e0b3  or ra, ra, sp
+   2178 002080b3  add ra, ra, sp
    2179 001eb823  sd ra, 16(t4)
    2180 018e6083  lwu ra, 24(t3)
    2181 01ce6103  lwu sp, 28(t3)
    2182 02011113  slli sp, sp, 32
-   2183 0020e0b3  or ra, ra, sp
+   2183 002080b3  add ra, ra, sp
    2184 001ebc23  sd ra, 24(t4)
    2185 020e6083  lwu ra, 32(t3)
    2186 024e6103  lwu sp, 36(t3)
    2187 02011113  slli sp, sp, 32
-   2188 0020e0b3  or ra, ra, sp
+   2188 002080b3  add ra, ra, sp
    2189 021eb023  sd ra, 32(t4)
    2190 028e6083  lwu ra, 40(t3)
    2191 02ce6103  lwu sp, 44(t3)
    2192 02011113  slli sp, sp, 32
-   2193 0020e0b3  or ra, ra, sp
+   2193 002080b3  add ra, ra, sp
    2194 021eb423  sd ra, 40(t4)
    2195 030e6083  lwu ra, 48(t3)
    2196 034e6103  lwu sp, 52(t3)
    2197 02011113  slli sp, sp, 32
-   2198 0020e0b3  or ra, ra, sp
+   2198 002080b3  add ra, ra, sp
    2199 021eb823  sd ra, 48(t4)
    2200 038e6083  lwu ra, 56(t3)
    2201 03ce6103  lwu sp, 60(t3)
    2202 02011113  slli sp, sp, 32
-   2203 0020e0b3  or ra, ra, sp
+   2203 002080b3  add ra, ra, sp
    2204 021ebc23  sd ra, 56(t4)
 pack_49:
    2205 00001e37  lui t3, 0x1
@@ -2291,42 +2291,42 @@ pack_49:
    2209 000e6083  lwu ra, 0(t3)
    2210 004e6103  lwu sp, 4(t3)
    2211 02011113  slli sp, sp, 32
-   2212 0020e0b3  or ra, ra, sp
+   2212 002080b3  add ra, ra, sp
    2213 001eb023  sd ra, 0(t4)
    2214 008e6083  lwu ra, 8(t3)
    2215 00ce6103  lwu sp, 12(t3)
    2216 02011113  slli sp, sp, 32
-   2217 0020e0b3  or ra, ra, sp
+   2217 002080b3  add ra, ra, sp
    2218 001eb423  sd ra, 8(t4)
    2219 010e6083  lwu ra, 16(t3)
    2220 014e6103  lwu sp, 20(t3)
    2221 02011113  slli sp, sp, 32
-   2222 0020e0b3  or ra, ra, sp
+   2222 002080b3  add ra, ra, sp
    2223 001eb823  sd ra, 16(t4)
    2224 018e6083  lwu ra, 24(t3)
    2225 01ce6103  lwu sp, 28(t3)
    2226 02011113  slli sp, sp, 32
-   2227 0020e0b3  or ra, ra, sp
+   2227 002080b3  add ra, ra, sp
    2228 001ebc23  sd ra, 24(t4)
    2229 020e6083  lwu ra, 32(t3)
    2230 024e6103  lwu sp, 36(t3)
    2231 02011113  slli sp, sp, 32
-   2232 0020e0b3  or ra, ra, sp
+   2232 002080b3  add ra, ra, sp
    2233 021eb023  sd ra, 32(t4)
    2234 028e6083  lwu ra, 40(t3)
    2235 02ce6103  lwu sp, 44(t3)
    2236 02011113  slli sp, sp, 32
-   2237 0020e0b3  or ra, ra, sp
+   2237 002080b3  add ra, ra, sp
    2238 021eb423  sd ra, 40(t4)
    2239 030e6083  lwu ra, 48(t3)
    2240 034e6103  lwu sp, 52(t3)
    2241 02011113  slli sp, sp, 32
-   2242 0020e0b3  or ra, ra, sp
+   2242 002080b3  add ra, ra, sp
    2243 021eb823  sd ra, 48(t4)
    2244 038e6083  lwu ra, 56(t3)
    2245 03ce6103  lwu sp, 60(t3)
    2246 02011113  slli sp, sp, 32
-   2247 0020e0b3  or ra, ra, sp
+   2247 002080b3  add ra, ra, sp
    2248 021ebc23  sd ra, 56(t4)
 pack_50:
    2249 00001e37  lui t3, 0x1
@@ -2336,42 +2336,42 @@ pack_50:
    2253 000e6083  lwu ra, 0(t3)
    2254 004e6103  lwu sp, 4(t3)
    2255 02011113  slli sp, sp, 32
-   2256 0020e0b3  or ra, ra, sp
+   2256 002080b3  add ra, ra, sp
    2257 001eb023  sd ra, 0(t4)
    2258 008e6083  lwu ra, 8(t3)
    2259 00ce6103  lwu sp, 12(t3)
    2260 02011113  slli sp, sp, 32
-   2261 0020e0b3  or ra, ra, sp
+   2261 002080b3  add ra, ra, sp
    2262 001eb423  sd ra, 8(t4)
    2263 010e6083  lwu ra, 16(t3)
    2264 014e6103  lwu sp, 20(t3)
    2265 02011113  slli sp, sp, 32
-   2266 0020e0b3  or ra, ra, sp
+   2266 002080b3  add ra, ra, sp
    2267 001eb823  sd ra, 16(t4)
    2268 018e6083  lwu ra, 24(t3)
    2269 01ce6103  lwu sp, 28(t3)
    2270 02011113  slli sp, sp, 32
-   2271 0020e0b3  or ra, ra, sp
+   2271 002080b3  add ra, ra, sp
    2272 001ebc23  sd ra, 24(t4)
    2273 020e6083  lwu ra, 32(t3)
    2274 024e6103  lwu sp, 36(t3)
    2275 02011113  slli sp, sp, 32
-   2276 0020e0b3  or ra, ra, sp
+   2276 002080b3  add ra, ra, sp
    2277 021eb023  sd ra, 32(t4)
    2278 028e6083  lwu ra, 40(t3)
    2279 02ce6103  lwu sp, 44(t3)
    2280 02011113  slli sp, sp, 32
-   2281 0020e0b3  or ra, ra, sp
+   2281 002080b3  add ra, ra, sp
    2282 021eb423  sd ra, 40(t4)
    2283 030e6083  lwu ra, 48(t3)
    2284 034e6103  lwu sp, 52(t3)
    2285 02011113  slli sp, sp, 32
-   2286 0020e0b3  or ra, ra, sp
+   2286 002080b3  add ra, ra, sp
    2287 021eb823  sd ra, 48(t4)
    2288 038e6083  lwu ra, 56(t3)
    2289 03ce6103  lwu sp, 60(t3)
    2290 02011113  slli sp, sp, 32
-   2291 0020e0b3  or ra, ra, sp
+   2291 002080b3  add ra, ra, sp
    2292 021ebc23  sd ra, 56(t4)
 pack_51:
    2293 00001e37  lui t3, 0x1
@@ -2381,42 +2381,42 @@ pack_51:
    2297 000e6083  lwu ra, 0(t3)
    2298 004e6103  lwu sp, 4(t3)
    2299 02011113  slli sp, sp, 32
-   2300 0020e0b3  or ra, ra, sp
+   2300 002080b3  add ra, ra, sp
    2301 001eb023  sd ra, 0(t4)
    2302 008e6083  lwu ra, 8(t3)
    2303 00ce6103  lwu sp, 12(t3)
    2304 02011113  slli sp, sp, 32
-   2305 0020e0b3  or ra, ra, sp
+   2305 002080b3  add ra, ra, sp
    2306 001eb423  sd ra, 8(t4)
    2307 010e6083  lwu ra, 16(t3)
    2308 014e6103  lwu sp, 20(t3)
    2309 02011113  slli sp, sp, 32
-   2310 0020e0b3  or ra, ra, sp
+   2310 002080b3  add ra, ra, sp
    2311 001eb823  sd ra, 16(t4)
    2312 018e6083  lwu ra, 24(t3)
    2313 01ce6103  lwu sp, 28(t3)
    2314 02011113  slli sp, sp, 32
-   2315 0020e0b3  or ra, ra, sp
+   2315 002080b3  add ra, ra, sp
    2316 001ebc23  sd ra, 24(t4)
    2317 020e6083  lwu ra, 32(t3)
    2318 024e6103  lwu sp, 36(t3)
    2319 02011113  slli sp, sp, 32
-   2320 0020e0b3  or ra, ra, sp
+   2320 002080b3  add ra, ra, sp
    2321 021eb023  sd ra, 32(t4)
    2322 028e6083  lwu ra, 40(t3)
    2323 02ce6103  lwu sp, 44(t3)
    2324 02011113  slli sp, sp, 32
-   2325 0020e0b3  or ra, ra, sp
+   2325 002080b3  add ra, ra, sp
    2326 021eb423  sd ra, 40(t4)
    2327 030e6083  lwu ra, 48(t3)
    2328 034e6103  lwu sp, 52(t3)
    2329 02011113  slli sp, sp, 32
-   2330 0020e0b3  or ra, ra, sp
+   2330 002080b3  add ra, ra, sp
    2331 021eb823  sd ra, 48(t4)
    2332 038e6083  lwu ra, 56(t3)
    2333 03ce6103  lwu sp, 60(t3)
    2334 02011113  slli sp, sp, 32
-   2335 0020e0b3  or ra, ra, sp
+   2335 002080b3  add ra, ra, sp
    2336 021ebc23  sd ra, 56(t4)
 pack_52:
    2337 00001e37  lui t3, 0x1
@@ -2426,42 +2426,42 @@ pack_52:
    2341 000e6083  lwu ra, 0(t3)
    2342 004e6103  lwu sp, 4(t3)
    2343 02011113  slli sp, sp, 32
-   2344 0020e0b3  or ra, ra, sp
+   2344 002080b3  add ra, ra, sp
    2345 001eb023  sd ra, 0(t4)
    2346 008e6083  lwu ra, 8(t3)
    2347 00ce6103  lwu sp, 12(t3)
    2348 02011113  slli sp, sp, 32
-   2349 0020e0b3  or ra, ra, sp
+   2349 002080b3  add ra, ra, sp
    2350 001eb423  sd ra, 8(t4)
    2351 010e6083  lwu ra, 16(t3)
    2352 014e6103  lwu sp, 20(t3)
    2353 02011113  slli sp, sp, 32
-   2354 0020e0b3  or ra, ra, sp
+   2354 002080b3  add ra, ra, sp
    2355 001eb823  sd ra, 16(t4)
    2356 018e6083  lwu ra, 24(t3)
    2357 01ce6103  lwu sp, 28(t3)
    2358 02011113  slli sp, sp, 32
-   2359 0020e0b3  or ra, ra, sp
+   2359 002080b3  add ra, ra, sp
    2360 001ebc23  sd ra, 24(t4)
    2361 020e6083  lwu ra, 32(t3)
    2362 024e6103  lwu sp, 36(t3)
    2363 02011113  slli sp, sp, 32
-   2364 0020e0b3  or ra, ra, sp
+   2364 002080b3  add ra, ra, sp
    2365 021eb023  sd ra, 32(t4)
    2366 028e6083  lwu ra, 40(t3)
    2367 02ce6103  lwu sp, 44(t3)
    2368 02011113  slli sp, sp, 32
-   2369 0020e0b3  or ra, ra, sp
+   2369 002080b3  add ra, ra, sp
    2370 021eb423  sd ra, 40(t4)
    2371 030e6083  lwu ra, 48(t3)
    2372 034e6103  lwu sp, 52(t3)
    2373 02011113  slli sp, sp, 32
-   2374 0020e0b3  or ra, ra, sp
+   2374 002080b3  add ra, ra, sp
    2375 021eb823  sd ra, 48(t4)
    2376 038e6083  lwu ra, 56(t3)
    2377 03ce6103  lwu sp, 60(t3)
    2378 02011113  slli sp, sp, 32
-   2379 0020e0b3  or ra, ra, sp
+   2379 002080b3  add ra, ra, sp
    2380 021ebc23  sd ra, 56(t4)
 pack_53:
    2381 00001e37  lui t3, 0x1
@@ -2471,42 +2471,42 @@ pack_53:
    2385 000e6083  lwu ra, 0(t3)
    2386 004e6103  lwu sp, 4(t3)
    2387 02011113  slli sp, sp, 32
-   2388 0020e0b3  or ra, ra, sp
+   2388 002080b3  add ra, ra, sp
    2389 001eb023  sd ra, 0(t4)
    2390 008e6083  lwu ra, 8(t3)
    2391 00ce6103  lwu sp, 12(t3)
    2392 02011113  slli sp, sp, 32
-   2393 0020e0b3  or ra, ra, sp
+   2393 002080b3  add ra, ra, sp
    2394 001eb423  sd ra, 8(t4)
    2395 010e6083  lwu ra, 16(t3)
    2396 014e6103  lwu sp, 20(t3)
    2397 02011113  slli sp, sp, 32
-   2398 0020e0b3  or ra, ra, sp
+   2398 002080b3  add ra, ra, sp
    2399 001eb823  sd ra, 16(t4)
    2400 018e6083  lwu ra, 24(t3)
    2401 01ce6103  lwu sp, 28(t3)
    2402 02011113  slli sp, sp, 32
-   2403 0020e0b3  or ra, ra, sp
+   2403 002080b3  add ra, ra, sp
    2404 001ebc23  sd ra, 24(t4)
    2405 020e6083  lwu ra, 32(t3)
    2406 024e6103  lwu sp, 36(t3)
    2407 02011113  slli sp, sp, 32
-   2408 0020e0b3  or ra, ra, sp
+   2408 002080b3  add ra, ra, sp
    2409 021eb023  sd ra, 32(t4)
    2410 028e6083  lwu ra, 40(t3)
    2411 02ce6103  lwu sp, 44(t3)
    2412 02011113  slli sp, sp, 32
-   2413 0020e0b3  or ra, ra, sp
+   2413 002080b3  add ra, ra, sp
    2414 021eb423  sd ra, 40(t4)
    2415 030e6083  lwu ra, 48(t3)
    2416 034e6103  lwu sp, 52(t3)
    2417 02011113  slli sp, sp, 32
-   2418 0020e0b3  or ra, ra, sp
+   2418 002080b3  add ra, ra, sp
    2419 021eb823  sd ra, 48(t4)
    2420 038e6083  lwu ra, 56(t3)
    2421 03ce6103  lwu sp, 60(t3)
    2422 02011113  slli sp, sp, 32
-   2423 0020e0b3  or ra, ra, sp
+   2423 002080b3  add ra, ra, sp
    2424 021ebc23  sd ra, 56(t4)
 pack_54:
    2425 00001e37  lui t3, 0x1
@@ -2516,42 +2516,42 @@ pack_54:
    2429 000e6083  lwu ra, 0(t3)
    2430 004e6103  lwu sp, 4(t3)
    2431 02011113  slli sp, sp, 32
-   2432 0020e0b3  or ra, ra, sp
+   2432 002080b3  add ra, ra, sp
    2433 001eb023  sd ra, 0(t4)
    2434 008e6083  lwu ra, 8(t3)
    2435 00ce6103  lwu sp, 12(t3)
    2436 02011113  slli sp, sp, 32
-   2437 0020e0b3  or ra, ra, sp
+   2437 002080b3  add ra, ra, sp
    2438 001eb423  sd ra, 8(t4)
    2439 010e6083  lwu ra, 16(t3)
    2440 014e6103  lwu sp, 20(t3)
    2441 02011113  slli sp, sp, 32
-   2442 0020e0b3  or ra, ra, sp
+   2442 002080b3  add ra, ra, sp
    2443 001eb823  sd ra, 16(t4)
    2444 018e6083  lwu ra, 24(t3)
    2445 01ce6103  lwu sp, 28(t3)
    2446 02011113  slli sp, sp, 32
-   2447 0020e0b3  or ra, ra, sp
+   2447 002080b3  add ra, ra, sp
    2448 001ebc23  sd ra, 24(t4)
    2449 020e6083  lwu ra, 32(t3)
    2450 024e6103  lwu sp, 36(t3)
    2451 02011113  slli sp, sp, 32
-   2452 0020e0b3  or ra, ra, sp
+   2452 002080b3  add ra, ra, sp
    2453 021eb023  sd ra, 32(t4)
    2454 028e6083  lwu ra, 40(t3)
    2455 02ce6103  lwu sp, 44(t3)
    2456 02011113  slli sp, sp, 32
-   2457 0020e0b3  or ra, ra, sp
+   2457 002080b3  add ra, ra, sp
    2458 021eb423  sd ra, 40(t4)
    2459 030e6083  lwu ra, 48(t3)
    2460 034e6103  lwu sp, 52(t3)
    2461 02011113  slli sp, sp, 32
-   2462 0020e0b3  or ra, ra, sp
+   2462 002080b3  add ra, ra, sp
    2463 021eb823  sd ra, 48(t4)
    2464 038e6083  lwu ra, 56(t3)
    2465 03ce6103  lwu sp, 60(t3)
    2466 02011113  slli sp, sp, 32
-   2467 0020e0b3  or ra, ra, sp
+   2467 002080b3  add ra, ra, sp
    2468 021ebc23  sd ra, 56(t4)
 pack_55:
    2469 00001e37  lui t3, 0x1
@@ -2561,42 +2561,42 @@ pack_55:
    2473 000e6083  lwu ra, 0(t3)
    2474 004e6103  lwu sp, 4(t3)
    2475 02011113  slli sp, sp, 32
-   2476 0020e0b3  or ra, ra, sp
+   2476 002080b3  add ra, ra, sp
    2477 001eb023  sd ra, 0(t4)
    2478 008e6083  lwu ra, 8(t3)
    2479 00ce6103  lwu sp, 12(t3)
    2480 02011113  slli sp, sp, 32
-   2481 0020e0b3  or ra, ra, sp
+   2481 002080b3  add ra, ra, sp
    2482 001eb423  sd ra, 8(t4)
    2483 010e6083  lwu ra, 16(t3)
    2484 014e6103  lwu sp, 20(t3)
    2485 02011113  slli sp, sp, 32
-   2486 0020e0b3  or ra, ra, sp
+   2486 002080b3  add ra, ra, sp
    2487 001eb823  sd ra, 16(t4)
    2488 018e6083  lwu ra, 24(t3)
    2489 01ce6103  lwu sp, 28(t3)
    2490 02011113  slli sp, sp, 32
-   2491 0020e0b3  or ra, ra, sp
+   2491 002080b3  add ra, ra, sp
    2492 001ebc23  sd ra, 24(t4)
    2493 020e6083  lwu ra, 32(t3)
    2494 024e6103  lwu sp, 36(t3)
    2495 02011113  slli sp, sp, 32
-   2496 0020e0b3  or ra, ra, sp
+   2496 002080b3  add ra, ra, sp
    2497 021eb023  sd ra, 32(t4)
    2498 028e6083  lwu ra, 40(t3)
    2499 02ce6103  lwu sp, 44(t3)
    2500 02011113  slli sp, sp, 32
-   2501 0020e0b3  or ra, ra, sp
+   2501 002080b3  add ra, ra, sp
    2502 021eb423  sd ra, 40(t4)
    2503 030e6083  lwu ra, 48(t3)
    2504 034e6103  lwu sp, 52(t3)
    2505 02011113  slli sp, sp, 32
-   2506 0020e0b3  or ra, ra, sp
+   2506 002080b3  add ra, ra, sp
    2507 021eb823  sd ra, 48(t4)
    2508 038e6083  lwu ra, 56(t3)
    2509 03ce6103  lwu sp, 60(t3)
    2510 02011113  slli sp, sp, 32
-   2511 0020e0b3  or ra, ra, sp
+   2511 002080b3  add ra, ra, sp
    2512 021ebc23  sd ra, 56(t4)
 pack_56:
    2513 00001e37  lui t3, 0x1
@@ -2606,42 +2606,42 @@ pack_56:
    2517 000e6083  lwu ra, 0(t3)
    2518 004e6103  lwu sp, 4(t3)
    2519 02011113  slli sp, sp, 32
-   2520 0020e0b3  or ra, ra, sp
+   2520 002080b3  add ra, ra, sp
    2521 001eb023  sd ra, 0(t4)
    2522 008e6083  lwu ra, 8(t3)
    2523 00ce6103  lwu sp, 12(t3)
    2524 02011113  slli sp, sp, 32
-   2525 0020e0b3  or ra, ra, sp
+   2525 002080b3  add ra, ra, sp
    2526 001eb423  sd ra, 8(t4)
    2527 010e6083  lwu ra, 16(t3)
    2528 014e6103  lwu sp, 20(t3)
    2529 02011113  slli sp, sp, 32
-   2530 0020e0b3  or ra, ra, sp
+   2530 002080b3  add ra, ra, sp
    2531 001eb823  sd ra, 16(t4)
    2532 018e6083  lwu ra, 24(t3)
    2533 01ce6103  lwu sp, 28(t3)
    2534 02011113  slli sp, sp, 32
-   2535 0020e0b3  or ra, ra, sp
+   2535 002080b3  add ra, ra, sp
    2536 001ebc23  sd ra, 24(t4)
    2537 020e6083  lwu ra, 32(t3)
    2538 024e6103  lwu sp, 36(t3)
    2539 02011113  slli sp, sp, 32
-   2540 0020e0b3  or ra, ra, sp
+   2540 002080b3  add ra, ra, sp
    2541 021eb023  sd ra, 32(t4)
    2542 028e6083  lwu ra, 40(t3)
    2543 02ce6103  lwu sp, 44(t3)
    2544 02011113  slli sp, sp, 32
-   2545 0020e0b3  or ra, ra, sp
+   2545 002080b3  add ra, ra, sp
    2546 021eb423  sd ra, 40(t4)
    2547 030e6083  lwu ra, 48(t3)
    2548 034e6103  lwu sp, 52(t3)
    2549 02011113  slli sp, sp, 32
-   2550 0020e0b3  or ra, ra, sp
+   2550 002080b3  add ra, ra, sp
    2551 021eb823  sd ra, 48(t4)
    2552 038e6083  lwu ra, 56(t3)
    2553 03ce6103  lwu sp, 60(t3)
    2554 02011113  slli sp, sp, 32
-   2555 0020e0b3  or ra, ra, sp
+   2555 002080b3  add ra, ra, sp
    2556 021ebc23  sd ra, 56(t4)
 pack_57:
    2557 00001e37  lui t3, 0x1
@@ -2651,42 +2651,42 @@ pack_57:
    2561 000e6083  lwu ra, 0(t3)
    2562 004e6103  lwu sp, 4(t3)
    2563 02011113  slli sp, sp, 32
-   2564 0020e0b3  or ra, ra, sp
+   2564 002080b3  add ra, ra, sp
    2565 001eb023  sd ra, 0(t4)
    2566 008e6083  lwu ra, 8(t3)
    2567 00ce6103  lwu sp, 12(t3)
    2568 02011113  slli sp, sp, 32
-   2569 0020e0b3  or ra, ra, sp
+   2569 002080b3  add ra, ra, sp
    2570 001eb423  sd ra, 8(t4)
    2571 010e6083  lwu ra, 16(t3)
    2572 014e6103  lwu sp, 20(t3)
    2573 02011113  slli sp, sp, 32
-   2574 0020e0b3  or ra, ra, sp
+   2574 002080b3  add ra, ra, sp
    2575 001eb823  sd ra, 16(t4)
    2576 018e6083  lwu ra, 24(t3)
    2577 01ce6103  lwu sp, 28(t3)
    2578 02011113  slli sp, sp, 32
-   2579 0020e0b3  or ra, ra, sp
+   2579 002080b3  add ra, ra, sp
    2580 001ebc23  sd ra, 24(t4)
    2581 020e6083  lwu ra, 32(t3)
    2582 024e6103  lwu sp, 36(t3)
    2583 02011113  slli sp, sp, 32
-   2584 0020e0b3  or ra, ra, sp
+   2584 002080b3  add ra, ra, sp
    2585 021eb023  sd ra, 32(t4)
    2586 028e6083  lwu ra, 40(t3)
    2587 02ce6103  lwu sp, 44(t3)
    2588 02011113  slli sp, sp, 32
-   2589 0020e0b3  or ra, ra, sp
+   2589 002080b3  add ra, ra, sp
    2590 021eb423  sd ra, 40(t4)
    2591 030e6083  lwu ra, 48(t3)
    2592 034e6103  lwu sp, 52(t3)
    2593 02011113  slli sp, sp, 32
-   2594 0020e0b3  or ra, ra, sp
+   2594 002080b3  add ra, ra, sp
    2595 021eb823  sd ra, 48(t4)
    2596 038e6083  lwu ra, 56(t3)
    2597 03ce6103  lwu sp, 60(t3)
    2598 02011113  slli sp, sp, 32
-   2599 0020e0b3  or ra, ra, sp
+   2599 002080b3  add ra, ra, sp
    2600 021ebc23  sd ra, 56(t4)
 pack_58:
    2601 00001e37  lui t3, 0x1
@@ -2696,42 +2696,42 @@ pack_58:
    2605 000e6083  lwu ra, 0(t3)
    2606 004e6103  lwu sp, 4(t3)
    2607 02011113  slli sp, sp, 32
-   2608 0020e0b3  or ra, ra, sp
+   2608 002080b3  add ra, ra, sp
    2609 001eb023  sd ra, 0(t4)
    2610 008e6083  lwu ra, 8(t3)
    2611 00ce6103  lwu sp, 12(t3)
    2612 02011113  slli sp, sp, 32
-   2613 0020e0b3  or ra, ra, sp
+   2613 002080b3  add ra, ra, sp
    2614 001eb423  sd ra, 8(t4)
    2615 010e6083  lwu ra, 16(t3)
    2616 014e6103  lwu sp, 20(t3)
    2617 02011113  slli sp, sp, 32
-   2618 0020e0b3  or ra, ra, sp
+   2618 002080b3  add ra, ra, sp
    2619 001eb823  sd ra, 16(t4)
    2620 018e6083  lwu ra, 24(t3)
    2621 01ce6103  lwu sp, 28(t3)
    2622 02011113  slli sp, sp, 32
-   2623 0020e0b3  or ra, ra, sp
+   2623 002080b3  add ra, ra, sp
    2624 001ebc23  sd ra, 24(t4)
    2625 020e6083  lwu ra, 32(t3)
    2626 024e6103  lwu sp, 36(t3)
    2627 02011113  slli sp, sp, 32
-   2628 0020e0b3  or ra, ra, sp
+   2628 002080b3  add ra, ra, sp
    2629 021eb023  sd ra, 32(t4)
    2630 028e6083  lwu ra, 40(t3)
    2631 02ce6103  lwu sp, 44(t3)
    2632 02011113  slli sp, sp, 32
-   2633 0020e0b3  or ra, ra, sp
+   2633 002080b3  add ra, ra, sp
    2634 021eb423  sd ra, 40(t4)
    2635 030e6083  lwu ra, 48(t3)
    2636 034e6103  lwu sp, 52(t3)
    2637 02011113  slli sp, sp, 32
-   2638 0020e0b3  or ra, ra, sp
+   2638 002080b3  add ra, ra, sp
    2639 021eb823  sd ra, 48(t4)
    2640 038e6083  lwu ra, 56(t3)
    2641 03ce6103  lwu sp, 60(t3)
    2642 02011113  slli sp, sp, 32
-   2643 0020e0b3  or ra, ra, sp
+   2643 002080b3  add ra, ra, sp
    2644 021ebc23  sd ra, 56(t4)
 pack_59:
    2645 00001e37  lui t3, 0x1
@@ -2741,7 +2741,7 @@ pack_59:
    2649 000e6083  lwu ra, 0(t3)
    2650 004e6103  lwu sp, 4(t3)
    2651 02011113  slli sp, sp, 32
-   2652 0020e0b3  or ra, ra, sp
+   2652 002080b3  add ra, ra, sp
    2653 001eb023  sd ra, 0(t4)
    2654 00ce3083  ld ra, 12(t3)
    2655 001eb423  sd ra, 8(t4)
@@ -2988,7 +2988,7 @@ pack_70:
    2885 038e6083  lwu ra, 56(t3)
    2886 040e6103  lwu sp, 64(t3)
    2887 02011113  slli sp, sp, 32
-   2888 0020e0b3  or ra, ra, sp
+   2888 002080b3  add ra, ra, sp
    2889 021ebc23  sd ra, 56(t4)
 pack_71:
    2890 00002e37  lui t3, 0x2
@@ -2998,42 +2998,42 @@ pack_71:
    2894 000e6083  lwu ra, 0(t3)
    2895 004e6103  lwu sp, 4(t3)
    2896 02011113  slli sp, sp, 32
-   2897 0020e0b3  or ra, ra, sp
+   2897 002080b3  add ra, ra, sp
    2898 001eb023  sd ra, 0(t4)
    2899 008e6083  lwu ra, 8(t3)
    2900 00ce6103  lwu sp, 12(t3)
    2901 02011113  slli sp, sp, 32
-   2902 0020e0b3  or ra, ra, sp
+   2902 002080b3  add ra, ra, sp
    2903 001eb423  sd ra, 8(t4)
    2904 010e6083  lwu ra, 16(t3)
    2905 014e6103  lwu sp, 20(t3)
    2906 02011113  slli sp, sp, 32
-   2907 0020e0b3  or ra, ra, sp
+   2907 002080b3  add ra, ra, sp
    2908 001eb823  sd ra, 16(t4)
    2909 018e6083  lwu ra, 24(t3)
    2910 01ce6103  lwu sp, 28(t3)
    2911 02011113  slli sp, sp, 32
-   2912 0020e0b3  or ra, ra, sp
+   2912 002080b3  add ra, ra, sp
    2913 001ebc23  sd ra, 24(t4)
    2914 020e6083  lwu ra, 32(t3)
    2915 024e6103  lwu sp, 36(t3)
    2916 02011113  slli sp, sp, 32
-   2917 0020e0b3  or ra, ra, sp
+   2917 002080b3  add ra, ra, sp
    2918 021eb023  sd ra, 32(t4)
    2919 028e6083  lwu ra, 40(t3)
    2920 02ce6103  lwu sp, 44(t3)
    2921 02011113  slli sp, sp, 32
-   2922 0020e0b3  or ra, ra, sp
+   2922 002080b3  add ra, ra, sp
    2923 021eb423  sd ra, 40(t4)
    2924 030e6083  lwu ra, 48(t3)
    2925 034e6103  lwu sp, 52(t3)
    2926 02011113  slli sp, sp, 32
-   2927 0020e0b3  or ra, ra, sp
+   2927 002080b3  add ra, ra, sp
    2928 021eb823  sd ra, 48(t4)
    2929 038e6083  lwu ra, 56(t3)
    2930 03ce6103  lwu sp, 60(t3)
    2931 02011113  slli sp, sp, 32
-   2932 0020e0b3  or ra, ra, sp
+   2932 002080b3  add ra, ra, sp
    2933 021ebc23  sd ra, 56(t4)
 pack_72:
    2934 00002e37  lui t3, 0x2
@@ -3043,42 +3043,42 @@ pack_72:
    2938 000e6083  lwu ra, 0(t3)
    2939 004e6103  lwu sp, 4(t3)
    2940 02011113  slli sp, sp, 32
-   2941 0020e0b3  or ra, ra, sp
+   2941 002080b3  add ra, ra, sp
    2942 001eb023  sd ra, 0(t4)
    2943 008e6083  lwu ra, 8(t3)
    2944 00ce6103  lwu sp, 12(t3)
    2945 02011113  slli sp, sp, 32
-   2946 0020e0b3  or ra, ra, sp
+   2946 002080b3  add ra, ra, sp
    2947 001eb423  sd ra, 8(t4)
    2948 010e6083  lwu ra, 16(t3)
    2949 014e6103  lwu sp, 20(t3)
    2950 02011113  slli sp, sp, 32
-   2951 0020e0b3  or ra, ra, sp
+   2951 002080b3  add ra, ra, sp
    2952 001eb823  sd ra, 16(t4)
    2953 018e6083  lwu ra, 24(t3)
    2954 01ce6103  lwu sp, 28(t3)
    2955 02011113  slli sp, sp, 32
-   2956 0020e0b3  or ra, ra, sp
+   2956 002080b3  add ra, ra, sp
    2957 001ebc23  sd ra, 24(t4)
    2958 020e6083  lwu ra, 32(t3)
    2959 024e6103  lwu sp, 36(t3)
    2960 02011113  slli sp, sp, 32
-   2961 0020e0b3  or ra, ra, sp
+   2961 002080b3  add ra, ra, sp
    2962 021eb023  sd ra, 32(t4)
    2963 028e6083  lwu ra, 40(t3)
    2964 02ce6103  lwu sp, 44(t3)
    2965 02011113  slli sp, sp, 32
-   2966 0020e0b3  or ra, ra, sp
+   2966 002080b3  add ra, ra, sp
    2967 021eb423  sd ra, 40(t4)
    2968 030e6083  lwu ra, 48(t3)
    2969 034e6103  lwu sp, 52(t3)
    2970 02011113  slli sp, sp, 32
-   2971 0020e0b3  or ra, ra, sp
+   2971 002080b3  add ra, ra, sp
    2972 021eb823  sd ra, 48(t4)
    2973 038e6083  lwu ra, 56(t3)
    2974 03ce6103  lwu sp, 60(t3)
    2975 02011113  slli sp, sp, 32
-   2976 0020e0b3  or ra, ra, sp
+   2976 002080b3  add ra, ra, sp
    2977 021ebc23  sd ra, 56(t4)
 pack_73:
    2978 00002e37  lui t3, 0x2
@@ -3088,42 +3088,42 @@ pack_73:
    2982 000e6083  lwu ra, 0(t3)
    2983 004e6103  lwu sp, 4(t3)
    2984 02011113  slli sp, sp, 32
-   2985 0020e0b3  or ra, ra, sp
+   2985 002080b3  add ra, ra, sp
    2986 001eb023  sd ra, 0(t4)
    2987 008e6083  lwu ra, 8(t3)
    2988 00ce6103  lwu sp, 12(t3)
    2989 02011113  slli sp, sp, 32
-   2990 0020e0b3  or ra, ra, sp
+   2990 002080b3  add ra, ra, sp
    2991 001eb423  sd ra, 8(t4)
    2992 010e6083  lwu ra, 16(t3)
    2993 014e6103  lwu sp, 20(t3)
    2994 02011113  slli sp, sp, 32
-   2995 0020e0b3  or ra, ra, sp
+   2995 002080b3  add ra, ra, sp
    2996 001eb823  sd ra, 16(t4)
    2997 018e6083  lwu ra, 24(t3)
    2998 01ce6103  lwu sp, 28(t3)
    2999 02011113  slli sp, sp, 32
-   3000 0020e0b3  or ra, ra, sp
+   3000 002080b3  add ra, ra, sp
    3001 001ebc23  sd ra, 24(t4)
    3002 020e6083  lwu ra, 32(t3)
    3003 024e6103  lwu sp, 36(t3)
    3004 02011113  slli sp, sp, 32
-   3005 0020e0b3  or ra, ra, sp
+   3005 002080b3  add ra, ra, sp
    3006 021eb023  sd ra, 32(t4)
    3007 028e6083  lwu ra, 40(t3)
    3008 02ce6103  lwu sp, 44(t3)
    3009 02011113  slli sp, sp, 32
-   3010 0020e0b3  or ra, ra, sp
+   3010 002080b3  add ra, ra, sp
    3011 021eb423  sd ra, 40(t4)
    3012 030e6083  lwu ra, 48(t3)
    3013 034e6103  lwu sp, 52(t3)
    3014 02011113  slli sp, sp, 32
-   3015 0020e0b3  or ra, ra, sp
+   3015 002080b3  add ra, ra, sp
    3016 021eb823  sd ra, 48(t4)
    3017 038e6083  lwu ra, 56(t3)
    3018 03ce6103  lwu sp, 60(t3)
    3019 02011113  slli sp, sp, 32
-   3020 0020e0b3  or ra, ra, sp
+   3020 002080b3  add ra, ra, sp
    3021 021ebc23  sd ra, 56(t4)
 pack_74:
    3022 00002e37  lui t3, 0x2
@@ -3133,42 +3133,42 @@ pack_74:
    3026 000e6083  lwu ra, 0(t3)
    3027 004e6103  lwu sp, 4(t3)
    3028 02011113  slli sp, sp, 32
-   3029 0020e0b3  or ra, ra, sp
+   3029 002080b3  add ra, ra, sp
    3030 001eb023  sd ra, 0(t4)
    3031 008e6083  lwu ra, 8(t3)
    3032 00ce6103  lwu sp, 12(t3)
    3033 02011113  slli sp, sp, 32
-   3034 0020e0b3  or ra, ra, sp
+   3034 002080b3  add ra, ra, sp
    3035 001eb423  sd ra, 8(t4)
    3036 010e6083  lwu ra, 16(t3)
    3037 014e6103  lwu sp, 20(t3)
    3038 02011113  slli sp, sp, 32
-   3039 0020e0b3  or ra, ra, sp
+   3039 002080b3  add ra, ra, sp
    3040 001eb823  sd ra, 16(t4)
    3041 018e6083  lwu ra, 24(t3)
    3042 01ce6103  lwu sp, 28(t3)
    3043 02011113  slli sp, sp, 32
-   3044 0020e0b3  or ra, ra, sp
+   3044 002080b3  add ra, ra, sp
    3045 001ebc23  sd ra, 24(t4)
    3046 020e6083  lwu ra, 32(t3)
    3047 024e6103  lwu sp, 36(t3)
    3048 02011113  slli sp, sp, 32
-   3049 0020e0b3  or ra, ra, sp
+   3049 002080b3  add ra, ra, sp
    3050 021eb023  sd ra, 32(t4)
    3051 028e6083  lwu ra, 40(t3)
    3052 02ce6103  lwu sp, 44(t3)
    3053 02011113  slli sp, sp, 32
-   3054 0020e0b3  or ra, ra, sp
+   3054 002080b3  add ra, ra, sp
    3055 021eb423  sd ra, 40(t4)
    3056 030e6083  lwu ra, 48(t3)
    3057 034e6103  lwu sp, 52(t3)
    3058 02011113  slli sp, sp, 32
-   3059 0020e0b3  or ra, ra, sp
+   3059 002080b3  add ra, ra, sp
    3060 021eb823  sd ra, 48(t4)
    3061 038e6083  lwu ra, 56(t3)
    3062 03ce6103  lwu sp, 60(t3)
    3063 02011113  slli sp, sp, 32
-   3064 0020e0b3  or ra, ra, sp
+   3064 002080b3  add ra, ra, sp
    3065 021ebc23  sd ra, 56(t4)
 pack_75:
    3066 00002e37  lui t3, 0x2
@@ -3178,42 +3178,42 @@ pack_75:
    3070 000e6083  lwu ra, 0(t3)
    3071 004e6103  lwu sp, 4(t3)
    3072 02011113  slli sp, sp, 32
-   3073 0020e0b3  or ra, ra, sp
+   3073 002080b3  add ra, ra, sp
    3074 001eb023  sd ra, 0(t4)
    3075 008e6083  lwu ra, 8(t3)
    3076 00ce6103  lwu sp, 12(t3)
    3077 02011113  slli sp, sp, 32
-   3078 0020e0b3  or ra, ra, sp
+   3078 002080b3  add ra, ra, sp
    3079 001eb423  sd ra, 8(t4)
    3080 010e6083  lwu ra, 16(t3)
    3081 014e6103  lwu sp, 20(t3)
    3082 02011113  slli sp, sp, 32
-   3083 0020e0b3  or ra, ra, sp
+   3083 002080b3  add ra, ra, sp
    3084 001eb823  sd ra, 16(t4)
    3085 018e6083  lwu ra, 24(t3)
    3086 01ce6103  lwu sp, 28(t3)
    3087 02011113  slli sp, sp, 32
-   3088 0020e0b3  or ra, ra, sp
+   3088 002080b3  add ra, ra, sp
    3089 001ebc23  sd ra, 24(t4)
    3090 020e6083  lwu ra, 32(t3)
    3091 024e6103  lwu sp, 36(t3)
    3092 02011113  slli sp, sp, 32
-   3093 0020e0b3  or ra, ra, sp
+   3093 002080b3  add ra, ra, sp
    3094 021eb023  sd ra, 32(t4)
    3095 028e6083  lwu ra, 40(t3)
    3096 02ce6103  lwu sp, 44(t3)
    3097 02011113  slli sp, sp, 32
-   3098 0020e0b3  or ra, ra, sp
+   3098 002080b3  add ra, ra, sp
    3099 021eb423  sd ra, 40(t4)
    3100 030e6083  lwu ra, 48(t3)
    3101 034e6103  lwu sp, 52(t3)
    3102 02011113  slli sp, sp, 32
-   3103 0020e0b3  or ra, ra, sp
+   3103 002080b3  add ra, ra, sp
    3104 021eb823  sd ra, 48(t4)
    3105 038e6083  lwu ra, 56(t3)
    3106 03ce6103  lwu sp, 60(t3)
    3107 02011113  slli sp, sp, 32
-   3108 0020e0b3  or ra, ra, sp
+   3108 002080b3  add ra, ra, sp
    3109 021ebc23  sd ra, 56(t4)
 pack_76:
    3110 00002e37  lui t3, 0x2
@@ -3223,42 +3223,42 @@ pack_76:
    3114 000e6083  lwu ra, 0(t3)
    3115 004e6103  lwu sp, 4(t3)
    3116 02011113  slli sp, sp, 32
-   3117 0020e0b3  or ra, ra, sp
+   3117 002080b3  add ra, ra, sp
    3118 001eb023  sd ra, 0(t4)
    3119 008e6083  lwu ra, 8(t3)
    3120 00ce6103  lwu sp, 12(t3)
    3121 02011113  slli sp, sp, 32
-   3122 0020e0b3  or ra, ra, sp
+   3122 002080b3  add ra, ra, sp
    3123 001eb423  sd ra, 8(t4)
    3124 010e6083  lwu ra, 16(t3)
    3125 014e6103  lwu sp, 20(t3)
    3126 02011113  slli sp, sp, 32
-   3127 0020e0b3  or ra, ra, sp
+   3127 002080b3  add ra, ra, sp
    3128 001eb823  sd ra, 16(t4)
    3129 018e6083  lwu ra, 24(t3)
    3130 01ce6103  lwu sp, 28(t3)
    3131 02011113  slli sp, sp, 32
-   3132 0020e0b3  or ra, ra, sp
+   3132 002080b3  add ra, ra, sp
    3133 001ebc23  sd ra, 24(t4)
    3134 020e6083  lwu ra, 32(t3)
    3135 024e6103  lwu sp, 36(t3)
    3136 02011113  slli sp, sp, 32
-   3137 0020e0b3  or ra, ra, sp
+   3137 002080b3  add ra, ra, sp
    3138 021eb023  sd ra, 32(t4)
    3139 028e6083  lwu ra, 40(t3)
    3140 02ce6103  lwu sp, 44(t3)
    3141 02011113  slli sp, sp, 32
-   3142 0020e0b3  or ra, ra, sp
+   3142 002080b3  add ra, ra, sp
    3143 021eb423  sd ra, 40(t4)
    3144 030e6083  lwu ra, 48(t3)
    3145 034e6103  lwu sp, 52(t3)
    3146 02011113  slli sp, sp, 32
-   3147 0020e0b3  or ra, ra, sp
+   3147 002080b3  add ra, ra, sp
    3148 021eb823  sd ra, 48(t4)
    3149 038e6083  lwu ra, 56(t3)
    3150 03ce6103  lwu sp, 60(t3)
    3151 02011113  slli sp, sp, 32
-   3152 0020e0b3  or ra, ra, sp
+   3152 002080b3  add ra, ra, sp
    3153 021ebc23  sd ra, 56(t4)
 pack_77:
    3154 00002e37  lui t3, 0x2
@@ -3268,42 +3268,42 @@ pack_77:
    3158 000e6083  lwu ra, 0(t3)
    3159 004e6103  lwu sp, 4(t3)
    3160 02011113  slli sp, sp, 32
-   3161 0020e0b3  or ra, ra, sp
+   3161 002080b3  add ra, ra, sp
    3162 001eb023  sd ra, 0(t4)
    3163 008e6083  lwu ra, 8(t3)
    3164 00ce6103  lwu sp, 12(t3)
    3165 02011113  slli sp, sp, 32
-   3166 0020e0b3  or ra, ra, sp
+   3166 002080b3  add ra, ra, sp
    3167 001eb423  sd ra, 8(t4)
    3168 010e6083  lwu ra, 16(t3)
    3169 014e6103  lwu sp, 20(t3)
    3170 02011113  slli sp, sp, 32
-   3171 0020e0b3  or ra, ra, sp
+   3171 002080b3  add ra, ra, sp
    3172 001eb823  sd ra, 16(t4)
    3173 018e6083  lwu ra, 24(t3)
    3174 01ce6103  lwu sp, 28(t3)
    3175 02011113  slli sp, sp, 32
-   3176 0020e0b3  or ra, ra, sp
+   3176 002080b3  add ra, ra, sp
    3177 001ebc23  sd ra, 24(t4)
    3178 020e6083  lwu ra, 32(t3)
    3179 024e6103  lwu sp, 36(t3)
    3180 02011113  slli sp, sp, 32
-   3181 0020e0b3  or ra, ra, sp
+   3181 002080b3  add ra, ra, sp
    3182 021eb023  sd ra, 32(t4)
    3183 028e6083  lwu ra, 40(t3)
    3184 02ce6103  lwu sp, 44(t3)
    3185 02011113  slli sp, sp, 32
-   3186 0020e0b3  or ra, ra, sp
+   3186 002080b3  add ra, ra, sp
    3187 021eb423  sd ra, 40(t4)
    3188 030e6083  lwu ra, 48(t3)
    3189 034e6103  lwu sp, 52(t3)
    3190 02011113  slli sp, sp, 32
-   3191 0020e0b3  or ra, ra, sp
+   3191 002080b3  add ra, ra, sp
    3192 021eb823  sd ra, 48(t4)
    3193 038e6083  lwu ra, 56(t3)
    3194 03ce6103  lwu sp, 60(t3)
    3195 02011113  slli sp, sp, 32
-   3196 0020e0b3  or ra, ra, sp
+   3196 002080b3  add ra, ra, sp
    3197 021ebc23  sd ra, 56(t4)
 pack_78:
    3198 00002e37  lui t3, 0x2
@@ -3313,42 +3313,42 @@ pack_78:
    3202 000e6083  lwu ra, 0(t3)
    3203 004e6103  lwu sp, 4(t3)
    3204 02011113  slli sp, sp, 32
-   3205 0020e0b3  or ra, ra, sp
+   3205 002080b3  add ra, ra, sp
    3206 001eb023  sd ra, 0(t4)
    3207 008e6083  lwu ra, 8(t3)
    3208 00ce6103  lwu sp, 12(t3)
    3209 02011113  slli sp, sp, 32
-   3210 0020e0b3  or ra, ra, sp
+   3210 002080b3  add ra, ra, sp
    3211 001eb423  sd ra, 8(t4)
    3212 010e6083  lwu ra, 16(t3)
    3213 014e6103  lwu sp, 20(t3)
    3214 02011113  slli sp, sp, 32
-   3215 0020e0b3  or ra, ra, sp
+   3215 002080b3  add ra, ra, sp
    3216 001eb823  sd ra, 16(t4)
    3217 018e6083  lwu ra, 24(t3)
    3218 01ce6103  lwu sp, 28(t3)
    3219 02011113  slli sp, sp, 32
-   3220 0020e0b3  or ra, ra, sp
+   3220 002080b3  add ra, ra, sp
    3221 001ebc23  sd ra, 24(t4)
    3222 020e6083  lwu ra, 32(t3)
    3223 024e6103  lwu sp, 36(t3)
    3224 02011113  slli sp, sp, 32
-   3225 0020e0b3  or ra, ra, sp
+   3225 002080b3  add ra, ra, sp
    3226 021eb023  sd ra, 32(t4)
    3227 028e6083  lwu ra, 40(t3)
    3228 02ce6103  lwu sp, 44(t3)
    3229 02011113  slli sp, sp, 32
-   3230 0020e0b3  or ra, ra, sp
+   3230 002080b3  add ra, ra, sp
    3231 021eb423  sd ra, 40(t4)
    3232 030e6083  lwu ra, 48(t3)
    3233 034e6103  lwu sp, 52(t3)
    3234 02011113  slli sp, sp, 32
-   3235 0020e0b3  or ra, ra, sp
+   3235 002080b3  add ra, ra, sp
    3236 021eb823  sd ra, 48(t4)
    3237 038e6083  lwu ra, 56(t3)
    3238 03ce6103  lwu sp, 60(t3)
    3239 02011113  slli sp, sp, 32
-   3240 0020e0b3  or ra, ra, sp
+   3240 002080b3  add ra, ra, sp
    3241 021ebc23  sd ra, 56(t4)
 pack_79:
    3242 00002e37  lui t3, 0x2
@@ -3358,42 +3358,42 @@ pack_79:
    3246 000e6083  lwu ra, 0(t3)
    3247 004e6103  lwu sp, 4(t3)
    3248 02011113  slli sp, sp, 32
-   3249 0020e0b3  or ra, ra, sp
+   3249 002080b3  add ra, ra, sp
    3250 001eb023  sd ra, 0(t4)
    3251 008e6083  lwu ra, 8(t3)
    3252 00ce6103  lwu sp, 12(t3)
    3253 02011113  slli sp, sp, 32
-   3254 0020e0b3  or ra, ra, sp
+   3254 002080b3  add ra, ra, sp
    3255 001eb423  sd ra, 8(t4)
    3256 010e6083  lwu ra, 16(t3)
    3257 014e6103  lwu sp, 20(t3)
    3258 02011113  slli sp, sp, 32
-   3259 0020e0b3  or ra, ra, sp
+   3259 002080b3  add ra, ra, sp
    3260 001eb823  sd ra, 16(t4)
    3261 018e6083  lwu ra, 24(t3)
    3262 01ce6103  lwu sp, 28(t3)
    3263 02011113  slli sp, sp, 32
-   3264 0020e0b3  or ra, ra, sp
+   3264 002080b3  add ra, ra, sp
    3265 001ebc23  sd ra, 24(t4)
    3266 020e6083  lwu ra, 32(t3)
    3267 024e6103  lwu sp, 36(t3)
    3268 02011113  slli sp, sp, 32
-   3269 0020e0b3  or ra, ra, sp
+   3269 002080b3  add ra, ra, sp
    3270 021eb023  sd ra, 32(t4)
    3271 028e6083  lwu ra, 40(t3)
    3272 02ce6103  lwu sp, 44(t3)
    3273 02011113  slli sp, sp, 32
-   3274 0020e0b3  or ra, ra, sp
+   3274 002080b3  add ra, ra, sp
    3275 021eb423  sd ra, 40(t4)
    3276 030e6083  lwu ra, 48(t3)
    3277 034e6103  lwu sp, 52(t3)
    3278 02011113  slli sp, sp, 32
-   3279 0020e0b3  or ra, ra, sp
+   3279 002080b3  add ra, ra, sp
    3280 021eb823  sd ra, 48(t4)
    3281 038e6083  lwu ra, 56(t3)
    3282 03ce6103  lwu sp, 60(t3)
    3283 02011113  slli sp, sp, 32
-   3284 0020e0b3  or ra, ra, sp
+   3284 002080b3  add ra, ra, sp
    3285 021ebc23  sd ra, 56(t4)
 pack_80:
    3286 00002e37  lui t3, 0x2
@@ -3403,42 +3403,42 @@ pack_80:
    3290 000e6083  lwu ra, 0(t3)
    3291 004e6103  lwu sp, 4(t3)
    3292 02011113  slli sp, sp, 32
-   3293 0020e0b3  or ra, ra, sp
+   3293 002080b3  add ra, ra, sp
    3294 001eb023  sd ra, 0(t4)
    3295 008e6083  lwu ra, 8(t3)
    3296 00ce6103  lwu sp, 12(t3)
    3297 02011113  slli sp, sp, 32
-   3298 0020e0b3  or ra, ra, sp
+   3298 002080b3  add ra, ra, sp
    3299 001eb423  sd ra, 8(t4)
    3300 010e6083  lwu ra, 16(t3)
    3301 014e6103  lwu sp, 20(t3)
    3302 02011113  slli sp, sp, 32
-   3303 0020e0b3  or ra, ra, sp
+   3303 002080b3  add ra, ra, sp
    3304 001eb823  sd ra, 16(t4)
    3305 018e6083  lwu ra, 24(t3)
    3306 01ce6103  lwu sp, 28(t3)
    3307 02011113  slli sp, sp, 32
-   3308 0020e0b3  or ra, ra, sp
+   3308 002080b3  add ra, ra, sp
    3309 001ebc23  sd ra, 24(t4)
    3310 020e6083  lwu ra, 32(t3)
    3311 024e6103  lwu sp, 36(t3)
    3312 02011113  slli sp, sp, 32
-   3313 0020e0b3  or ra, ra, sp
+   3313 002080b3  add ra, ra, sp
    3314 021eb023  sd ra, 32(t4)
    3315 028e6083  lwu ra, 40(t3)
    3316 02ce6103  lwu sp, 44(t3)
    3317 02011113  slli sp, sp, 32
-   3318 0020e0b3  or ra, ra, sp
+   3318 002080b3  add ra, ra, sp
    3319 021eb423  sd ra, 40(t4)
    3320 030e6083  lwu ra, 48(t3)
    3321 034e6103  lwu sp, 52(t3)
    3322 02011113  slli sp, sp, 32
-   3323 0020e0b3  or ra, ra, sp
+   3323 002080b3  add ra, ra, sp
    3324 021eb823  sd ra, 48(t4)
    3325 038e6083  lwu ra, 56(t3)
    3326 03ce6103  lwu sp, 60(t3)
    3327 02011113  slli sp, sp, 32
-   3328 0020e0b3  or ra, ra, sp
+   3328 002080b3  add ra, ra, sp
    3329 021ebc23  sd ra, 56(t4)
 pack_81:
    3330 00002e37  lui t3, 0x2
@@ -3448,42 +3448,42 @@ pack_81:
    3334 000e6083  lwu ra, 0(t3)
    3335 004e6103  lwu sp, 4(t3)
    3336 02011113  slli sp, sp, 32
-   3337 0020e0b3  or ra, ra, sp
+   3337 002080b3  add ra, ra, sp
    3338 001eb023  sd ra, 0(t4)
    3339 008e6083  lwu ra, 8(t3)
    3340 00ce6103  lwu sp, 12(t3)
    3341 02011113  slli sp, sp, 32
-   3342 0020e0b3  or ra, ra, sp
+   3342 002080b3  add ra, ra, sp
    3343 001eb423  sd ra, 8(t4)
    3344 010e6083  lwu ra, 16(t3)
    3345 014e6103  lwu sp, 20(t3)
    3346 02011113  slli sp, sp, 32
-   3347 0020e0b3  or ra, ra, sp
+   3347 002080b3  add ra, ra, sp
    3348 001eb823  sd ra, 16(t4)
    3349 018e6083  lwu ra, 24(t3)
    3350 01ce6103  lwu sp, 28(t3)
    3351 02011113  slli sp, sp, 32
-   3352 0020e0b3  or ra, ra, sp
+   3352 002080b3  add ra, ra, sp
    3353 001ebc23  sd ra, 24(t4)
    3354 020e6083  lwu ra, 32(t3)
    3355 024e6103  lwu sp, 36(t3)
    3356 02011113  slli sp, sp, 32
-   3357 0020e0b3  or ra, ra, sp
+   3357 002080b3  add ra, ra, sp
    3358 021eb023  sd ra, 32(t4)
    3359 028e6083  lwu ra, 40(t3)
    3360 02ce6103  lwu sp, 44(t3)
    3361 02011113  slli sp, sp, 32
-   3362 0020e0b3  or ra, ra, sp
+   3362 002080b3  add ra, ra, sp
    3363 021eb423  sd ra, 40(t4)
    3364 030e6083  lwu ra, 48(t3)
    3365 034e6103  lwu sp, 52(t3)
    3366 02011113  slli sp, sp, 32
-   3367 0020e0b3  or ra, ra, sp
+   3367 002080b3  add ra, ra, sp
    3368 021eb823  sd ra, 48(t4)
    3369 038e6083  lwu ra, 56(t3)
    3370 03ce6103  lwu sp, 60(t3)
    3371 02011113  slli sp, sp, 32
-   3372 0020e0b3  or ra, ra, sp
+   3372 002080b3  add ra, ra, sp
    3373 021ebc23  sd ra, 56(t4)
 pack_82:
    3374 00002e37  lui t3, 0x2
@@ -3493,17 +3493,17 @@ pack_82:
    3378 000e6083  lwu ra, 0(t3)
    3379 004e6103  lwu sp, 4(t3)
    3380 02011113  slli sp, sp, 32
-   3381 0020e0b3  or ra, ra, sp
+   3381 002080b3  add ra, ra, sp
    3382 001eb023  sd ra, 0(t4)
    3383 008e6083  lwu ra, 8(t3)
    3384 00ce6103  lwu sp, 12(t3)
    3385 02011113  slli sp, sp, 32
-   3386 0020e0b3  or ra, ra, sp
+   3386 002080b3  add ra, ra, sp
    3387 001eb423  sd ra, 8(t4)
    3388 010e6083  lwu ra, 16(t3)
    3389 014e6103  lwu sp, 20(t3)
    3390 02011113  slli sp, sp, 32
-   3391 0020e0b3  or ra, ra, sp
+   3391 002080b3  add ra, ra, sp
    3392 001eb823  sd ra, 16(t4)
    3393 018e6083  lwu ra, 24(t3)
    3394 001ebc23  sd ra, 24(t4)

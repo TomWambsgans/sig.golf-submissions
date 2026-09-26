@@ -121,4 +121,14 @@ theorem Slots.getD {t : MachineState} {B : Nat} {vs : List Val} (h : Slots t B v
     t.readWords (BitVec.ofNat 64 (B + 16 * i)) 2 = wordsOf (vs.getD i []) := by
   rw [h i hi]; simp [List.getD, List.getElem?_eq_getElem hi]
 
+theorem Slots.cons {t : MachineState} {B : Nat} {v : Val} {vs : List Val}
+    (h1 : t.readWords (BitVec.ofNat 64 B) 2 = wordsOf v) (h2 : Slots t (B + 16) vs) :
+    Slots t B (v :: vs) := by
+  intro i hi
+  cases i with
+  | zero => simpa using h1
+  | succ i =>
+    have := h2 i (by simpa using hi)
+    rw [show B + 16 * (i + 1) = B + 16 + 16 * i by ring]; simpa using this
+
 end SigGolfCandidate.Sign

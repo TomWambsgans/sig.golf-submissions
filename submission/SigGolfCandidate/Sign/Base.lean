@@ -188,3 +188,39 @@ macro "rvs" " [" ts:Lean.Parser.Tactic.simpLemma,* "]" : tactic => do
       Nat.reduceAdd, Nat.reduceMul, Nat.reducePow, truncate32_ofNat, BitVec.toNat_ofNat,
       ofNat_add_ofNat, ofNat_shiftLeft, $ts',*])
 end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+/-- `omega` after removing `% 2^64` of in-range terms (omega is incomplete with the huge
+coefficients those produce). -/
+macro "bvomega" : tactic =>
+  `(tactic| ((try simp (disch := omega) only [Nat.reducePow, Nat.mod_eq_of_lt]); omega))
+end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+open RiscvZkvm.Rv64
+
+/-- OR of values with disjoint bit ranges is addition. -/
+theorem ofNat_or_disjoint (x b i : Nat) (hx : x % 2 ^ i = 0) (hb : b < 2 ^ i) (h : x + b < 2 ^ 64) :
+    BitVec.ofNat 64 x ||| BitVec.ofNat 64 b = BitVec.ofNat 64 (x + b) := by
+  rw [ofNat_or_ofNat _ _ (by omega) (by omega)]
+  congr 1
+  obtain ⟨q, rfl⟩ : ∃ q, x = 2 ^ i * q := ⟨x / 2 ^ i, by rw [Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero hx)]⟩
+  rw [Nat.two_pow_add_eq_or_of_lt hb]
+
+theorem ofNat_or_disjoint' (x b i : Nat) (hx : x % 2 ^ i = 0) (hb : b < 2 ^ i) (h : x + b < 2 ^ 64) :
+    BitVec.ofNat 64 b ||| BitVec.ofNat 64 x = BitVec.ofNat 64 (x + b) := by
+  rw [BitVec.or_comm, ofNat_or_disjoint x b i hx hb h]
+end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+/-- `BitVec.ofNat 64` arithmetic → `Nat` arithmetic, side conditions by `omega`. Run after
+`simp only [blk.res, rv_simp]` (whose `addNegLit` turns `x + (-c)` into `x - c`). -/
+macro "bvsimp" " [" ts:Lean.Parser.Tactic.simpLemma,* "]" : tactic => do
+  let ts' : Lean.Syntax.TSepArray [`Lean.Parser.Tactic.simpStar, `Lean.Parser.Tactic.simpErase,
+    `Lean.Parser.Tactic.simpLemma] "," := ⟨ts.elemsAndSeps⟩
+  `(tactic| simp (disch := omega) only [ofNat_add_ofNat, ofNat_sub_ofNat, ofNat_shiftLeft,
+      ofNat_ushiftRight, ofNat_and_ofNat, ofNat_xor_ofNat, BitVec.toNat_ofNat, Nat.reduceMod,
+      Nat.reducePow, Nat.reduceAdd, Nat.reduceMul, Nat.reduceDiv, Nat.reduceSub, truncate32_ofNat,
+      ite_true, ite_false, if_true, if_false, BitVec.ofNat_eq_ofNat, Nat.add_sub_cancel,
+      Nat.mod_eq_of_lt, Nat.reduceEqDiff, reduceIte, $ts',*])
+end SigGolfCandidate.Sign

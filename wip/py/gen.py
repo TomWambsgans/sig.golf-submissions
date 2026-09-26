@@ -81,7 +81,7 @@ def enc_check(a, d0, d1, ra, rb, t, m1, m2, fail):
     a.bne(ra, X0, fail)
 
 
-def u_extract(a, k, dst, w, tmp):
+def u_extract(a, k, dst, w, tmp, combine=None):
     """dst = u_k = bits 34+10k .. 34+10k+9 of N; w = (w0, w1, w2) registers."""
     start = 34 + 10 * k
     wi, bit = divmod(start, 64)
@@ -98,7 +98,7 @@ def u_extract(a, k, dst, w, tmp):
         a.srli(tmp, w[wi], bit)
         a.andi(dst, w[wi + 1], (1 << (10 - lo)) - 1)
         a.slli(dst, dst, lo)
-        a.or_(dst, dst, tmp)
+        (combine or a.or_)(dst, dst, tmp)
 
 
 # ================================================================== verify
@@ -661,7 +661,7 @@ def gen_sign():
     a.slli(R.IDX, V0, 30)
     a.srli(R.IDX, R.IDX, 30)
     for k in range(14):
-        u_extract(a, k, T, (V0, V1, R.TA_), TP)
+        u_extract(a, k, T, (V0, V1, R.TA_), TP, combine=a.add)
         a.sd(T, X0, US + 8 * k)
     a.note('FORS')
     a.sw(R.IDX, X0, PB + 8)
@@ -673,14 +673,14 @@ def gen_sign():
     a.srli(T, R.IDX, 32)
     a.slli(T, T, 24)
     a.li(R.TB_, 0x801)
-    a.or_(R.FW, T, R.TB_)
+    a.add(R.FW, T, R.TB_)
     a.li(R.FAP, FA)
     a.addi(R.KAP, X0, 0)
     a.label('fors_loop')
     a.slli(T, R.KAP, 3)
     a.ld(R.U, T, US)
     a.slli(T, R.KAP, 16)
-    a.or_(R.TB_, R.FW, T)
+    a.add(R.TB_, R.FW, T)
     a.sw(R.TB_, X0, PB)
     a.addi(R.TB_, R.TB_, 0x100)
     a.sw(R.TB_, X0, CB)
@@ -722,10 +722,10 @@ def gen_sign():
     a.sd(V0, R.TB_, 16)                   # SIGL + 32 + 16 (LAM - 1)
     a.sd(V1, R.TB_, 24)
     a.slli(T, R.KAP, 16)
-    a.or_(T, T, R.FW)
+    a.add(T, T, R.FW)
     a.addi(T, T, 0x200)
     a.slli(R.TB_, R.LAM, 32)
-    a.or_(T, T, R.TB_)
+    a.add(T, T, R.TB_)
     a.sd(T, X0, NB)
     a.srli(R.NCNT, R.NCNT, 1)
     a.addi(R.JJ, X0, 0)
@@ -749,7 +749,7 @@ def gen_sign():
     a.srli(T, R.IDX, 32)
     a.slli(T, T, 24)
     a.li(R.TB_, 0xB01)
-    a.or_(T, T, R.TB_)
+    a.add(T, T, R.TB_)
     a.sw(T, X0, RB2)
     a.sw(X0, X0, RB2 + 4)
     a.addi(A0, X0, RB2)
@@ -780,9 +780,9 @@ def gen_sign():
     a.add(R.TB_, R.TA_, R.J)
     a.srl(R.TAU, R.IDX, R.TB_)
     a.slli(T, R.U, 32)
-    a.or_(R.W1, R.TAU, T)
+    a.add(R.W1, R.TAU, T)
     a.slli(T, R.KAP, 16)
-    a.ori(T, T, 0x401)
+    a.addi(T, T, 0x401)
     a.sd(T, X0, EB)
     a.sd(R.W1, X0, EB + 8)
     a.sd(X0, X0, EB + 56)
@@ -884,7 +884,7 @@ def pack(a):
                 if hi is not None:
                     a.lwu(V1, RS, hi - bs)
                     a.slli(V1, V1, 32)
-                    a.or_(V0, V0, V1)
+                    a.add(V0, V0, V1)
             a.sd(V0, RD, SIG + D - bd)
 
 
