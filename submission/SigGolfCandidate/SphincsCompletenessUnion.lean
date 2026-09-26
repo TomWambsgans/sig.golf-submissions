@@ -2,7 +2,7 @@ import SigGolf.Statements
 import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
 import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
-/-- Shared-oracle all-message failure bound for the current beta HASH query type. -/
+/- Shared-oracle all-message failure bound for the current beta HASH query type. -/
 namespace SigGolfCandidate.SphincsCompletenessUnion
 open SigGolf OracleComp
 set_option maxRecDepth 4096
