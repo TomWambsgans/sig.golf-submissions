@@ -106,6 +106,37 @@ theorem observedRun_source_hashCalls_le {Result : Type} {inputs : Finset HashInp
   rw [observedRun_source_memory context computation hinputs state hcovered hcompatible] at h
   exact fixedSourceRun_hashCalls_le context computation q hbound state.memory (forgetState result) h
 
+theorem fixedSourceImpl_sign_exact_cost {inputs : Finset HashInput}
+    (context : Context inputs) (message : Message) (memory : Memory) :
+    (fun result : Option (Option Signature) × Memory =>
+      (result.1, result.2.external.hashCalls - memory.external.hashCalls)) <$>
+      (fixedSourceImpl context (.inr message)).run.run memory =
+    (fun result : Option Signature × Nat => (some result.1, result.2)) <$>
+      simulateQ (fixedHashWorld context.oracle)
+        (countHashQueries (scheme.sign context.key message)) := by
+  simp only [fixedSourceImpl, OptionT.run_mk, StateT.run_mk]
+  rw [show scheme.sign context.key message = sign context.key message from rfl,
+    ← signWithView_fst context.key message]
+  simp only [countHashQueries_map, simulateQ_map, Functor.map_map]
+  rw [← fixedBoundaryRun_count context.key.parameter context.oracle (signWithView context.key message)]
+  simp only [Functor.map_map, ← evalSPMF_map]
+  change 𝒮[_ <$> fixedBoundaryRun context.key.parameter context.oracle
+      (signWithView context.key message)] =
+    𝒮[_ <$> fixedBoundaryRun context.key.parameter context.oracle
+      (signWithView context.key message)]
+  congr 1
+  apply congrArg (fun f => f <$> fixedBoundaryRun context.key.parameter context.oracle
+    (signWithView context.key message))
+  funext result
+  rcases result with ⟨answer, trace⟩
+  rw [applyBoundary_recordSigning_hashCalls memory message (answer, trace)]
+  simp
+
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_sign_exact_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_sign_exact_cost
+
 end SphincsSecurity.Concrete.RetainedResidual
 
 namespace SphincsSecurity.WeightedCutoff
