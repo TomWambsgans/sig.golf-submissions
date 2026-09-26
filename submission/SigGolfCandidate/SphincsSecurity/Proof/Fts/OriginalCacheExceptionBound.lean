@@ -349,6 +349,45 @@ theorem enrichedStoppedSigningRecord_budget_event (key : SecretKey) (message : M
     funext r
     cases r <;> rfl
 
+theorem enrichedSigningRecord_kernel (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    enrichedSigningRecord key message state =
+      ((simulateQ (certificateStoppedRomImpl key)
+        (boundaryComputation key.parameter (signWithView key message))).run state).bind
+        (signingRecordKernel key message) := by
+  rfl
+
+/-- Successful stopped signer records project to the actual proposal record,
+    restricted by its own trace cost. -/
+theorem enrichedStoppedSigningRecord_original_budget_event (key : SecretKey)
+    (message : Message) (state : CertificateStoppedCacheState)
+    (event : ProposalExecutionRecord (.inr message) → Prop) :
+    Pr[fun result => result.elim False (fun record => event record.1) |
+      enrichedStoppedSigningRecord key message state] =
+    Pr[fun record => record.trace.hashCalls ≤ state.2.2 ∧ event record |
+      originalProposalRecord key (.inr message) state.1] := by
+  classical
+  have h := enrichedStoppedSigningRecord_budget_event key message state
+    (fun record => event record.1)
+  rw [← enrichedSigningRecord_project, ← PMF.monad_map_eq_map, probEvent_map,
+    enrichedSigningRecord_kernel]
+  rw [h]
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+    ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  apply tsum_congr
+  intro x
+  congr 1
+  by_cases hb : x.1.2.hashCalls ≤ state.2.2
+  · simp only [if_pos hb, ← PMF.monad_map_eq_map, probEvent_map,
+      Function.comp_def, Option.elim_some, signingRecordKernel]
+    simp [hb]
+  · simp only [if_neg hb]
+    simp only [← PMF.monad_map_eq_map, probEvent_map, signingRecordKernel,
+      Function.comp_def]
+    simp [hb, probEvent_eq_tsum_ite]
+    intro i hi
+    cases i <;> simp at *
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -1136,3 +1175,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.enrichedSigningRecord_kernel' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedSigningRecord_kernel
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_original_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_original_budget_event
