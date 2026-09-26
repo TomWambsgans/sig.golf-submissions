@@ -105,3 +105,177 @@ theorem exceptionHistoryRun_cache_le {Result : Type} (computation : OracleComp (
   simp only [cacheHistoryWeight, hflag, ite_true, le_refl]
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option synthInstance.maxHeartbeats 200000
+
+variable (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+
+/-- Stop at the first outer query after the actual HASH count exceeds `q`.
+One signing query may overshoot; no subsequent query is executed. -/
+noncomputable def macroStoppedExceptionStep (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : ExceptionHistoryState inputs) :
+    SPMF (Option ((OracleWorld + SigningSpec).Range input) × ExceptionHistoryState inputs) :=
+  if state.1.1.memory.external.hashCalls ≤ q then
+    exceptionHistoryStep key inputs hencoding words publicReplies selections rows
+      budget required stopAfter input state
+  else pure (none, state)
+
+noncomputable def macroStoppedExceptionRun {Result : Type} (q : Nat)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs) :
+    SPMF (Option Result × ExceptionHistoryState inputs) :=
+  (simulateQ (fun input => OptionT.mk (StateT.mk
+    (macroStoppedExceptionStep key inputs hencoding words publicReplies selections rows
+      budget required stopAfter q input))) computation).run.run state
+
+theorem macroStoppedExceptionRun_pure {Result : Type} (q : Nat)
+    (value : Result) (state : ExceptionHistoryState inputs) :
+    macroStoppedExceptionRun key inputs hencoding words publicReplies selections rows
+      budget required stopAfter q (pure value) state = pure (some value, state) := by
+  simp only [macroStoppedExceptionRun, simulateQ_pure, OptionT.run_pure, StateT.run_pure]
+
+theorem macroStoppedExceptionRun_query_bind {Result : Type} (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (next : (OracleWorld + SigningSpec).Range input →
+      OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs) :
+    macroStoppedExceptionRun key inputs hencoding words publicReplies selections rows
+      budget required stopAfter q
+      (liftM ((OracleWorld + SigningSpec).query input) >>= next) state =
+    (macroStoppedExceptionStep key inputs hencoding words publicReplies selections rows
+      budget required stopAfter q input state >>= fun result =>
+        result.1.elim (pure (none, result.2)) fun answer =>
+          macroStoppedExceptionRun key inputs hencoding words publicReplies selections rows
+            budget required stopAfter q (next answer) result.2) := by
+  simp only [macroStoppedExceptionRun, simulateQ_bind, simulateQ_spec_query,
+    OptionT.run_bind, Option.elimM, StateT.run_bind, OptionT.run_mk, StateT.run_mk]
+  apply congrArg (_ >>= ·)
+  funext result
+  rcases result with ⟨answer, after⟩
+  cases answer <;> rfl
+
+theorem exceptionHistoryRun_hashCalls_mono {Result : Type}
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (haccount : MonitoredAccounting state.1)
+    (result : Option Result × ExceptionHistoryState inputs)
+    (hresult : exceptionHistoryRun key inputs hencoding words publicReplies
+      selections rows budget required stopAfter computation state result ≠ 0) :
+    state.1.1.memory.external.hashCalls ≤
+      result.2.1.1.memory.external.hashCalls := by
+  have hproject := exceptionHistoryRun_support key inputs hencoding words
+    publicReplies selections rows budget required stopAfter computation state result hresult
+  exact (monitoredRun_accounting key inputs hencoding words publicReplies
+    selections rows budget required stopAfter computation state.1 hvalid
+    hinputs haccount (result.1, result.2.1) hproject).2.1
+
+theorem macroStoppedExceptionRun_budget_event_eq {Result : Type} (q : Nat)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (haccount : MonitoredAccounting state.1)
+    (event : Option Result × ExceptionHistoryState inputs → Prop) :
+    Pr[fun result => event result ∧ result.2.1.1.memory.external.hashCalls ≤ q |
+      macroStoppedExceptionRun key inputs hencoding words publicReplies selections
+        rows budget required stopAfter q computation state] =
+    Pr[fun result => event result ∧ result.2.1.1.memory.external.hashCalls ≤ q |
+      exceptionHistoryRun key inputs hencoding words publicReplies selections
+        rows budget required stopAfter computation state] := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value =>
+      simp only [macroStoppedExceptionRun_pure, exceptionHistoryRun_pure]
+  | query_bind input next ih =>
+      rw [macroStoppedExceptionRun_query_bind, exceptionHistoryRun_query_bind]
+      by_cases hwithin : state.1.1.memory.external.hashCalls ≤ q
+      · simp only [macroStoppedExceptionStep, if_pos hwithin]
+        rw [probEvent_bind_eq_tsum, probEvent_bind_eq_tsum]
+        apply tsum_congr
+        intro raw
+        by_cases hraw : exceptionHistoryStep key inputs hencoding words
+            publicReplies selections rows budget required stopAfter input state raw = 0
+        · simp only [SPMF.probOutput_eq_apply, hraw, zero_mul]
+        rcases raw with ⟨answer, after⟩
+        cases answer with
+        | none => rfl
+        | some answer =>
+            apply congrArg ((Pr[= (some answer, after) |
+              exceptionHistoryStep key inputs hencoding words publicReplies selections
+                rows budget required stopAfter input state]) * ·)
+            have hstep := (exceptionHistoryStep_support key inputs hencoding words
+              publicReplies selections rows budget required stopAfter input state
+              (some answer, after) hraw).1
+            have hvalid' := monitoredStep_valid key inputs hencoding words
+              publicReplies selections rows budget required stopAfter input state.1
+              hvalid (some answer, after.1) hstep
+            have hinputs' := (sourceInputs_next_subset key input next answer).trans hinputs
+            have haccount' := (monitoredStep_accounting key inputs hencoding words
+              publicReplies selections rows budget required stopAfter input state.1
+              hvalid ((requestInputs_subset key input next).trans hinputs) haccount
+              (some answer, after.1) hstep).1
+            exact ih answer after hvalid' hinputs' haccount'
+      · simp only [macroStoppedExceptionStep, if_neg hwithin, pure_bind,
+          Option.elim_none]
+        have hzero :
+            Pr[fun result => event result ∧
+              result.2.1.1.memory.external.hashCalls ≤ q |
+              exceptionHistoryStep key inputs hencoding words publicReplies
+                selections rows budget required stopAfter input state >>= fun raw =>
+                raw.1.elim (pure (none, raw.2)) fun answer =>
+                  exceptionHistoryRun key inputs hencoding words publicReplies
+                    selections rows budget required stopAfter (next answer) raw.2] = 0 := by
+          rw [← exceptionHistoryRun_query_bind]
+          apply (probEvent_eq_zero_iff).2
+          intro result hresult hevent
+          have hmono := exceptionHistoryRun_hashCalls_mono key inputs hencoding
+            words publicReplies selections rows budget required stopAfter
+            (liftM ((OracleWorld + SigningSpec).query input) >>= next) state
+            hvalid hinputs haccount result hresult
+          omega
+        rw [hzero]
+        simp only [probEvent_pure]
+        simp only [hwithin, and_false, if_false]
+
+theorem expected_macroStoppedExceptionStep_cacheWeight_le (q : Nat)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : ExceptionHistoryState inputs)
+    (hvalid : MonitoredValid inputs state.1)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (hbound : CacheSizeBound state.1.1.memory) :
+    (∑' result, Pr[= result |
+      macroStoppedExceptionStep key inputs hencoding words publicReplies selections rows
+        budget required stopAfter q input state] *
+      cacheHistoryWeight key result.2) ≤
+      cacheHistoryWeight key state +
+        (if state.1.1.memory.external.hashCalls ≤ q then
+          nativeMessageCharge key input (monitorView state.1) * certificateCacheExceptionRate
+        else 0) := by
+  by_cases h : state.1.1.memory.external.hashCalls ≤ q
+  · simpa only [macroStoppedExceptionStep, if_pos h] using
+      expected_exceptionHistoryStep_cacheWeight_le key inputs hencoding words
+        publicReplies selections rows budget required stopAfter input state
+        hvalid hinputs hbound
+  · simp only [macroStoppedExceptionStep, if_neg h, tsum_probOutput_pure_mul,
+      add_zero, le_refl]
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.expected_macroStoppedExceptionStep_cacheWeight_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.expected_macroStoppedExceptionStep_cacheWeight_le
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_budget_event_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_budget_event_eq
