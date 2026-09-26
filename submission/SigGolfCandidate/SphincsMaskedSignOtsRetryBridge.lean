@@ -8197,3 +8197,94 @@ theorem signer_secret_initial_value_shift (location : Fin 5) (hash : Hash)
 
 #print axioms signer_secret_initial_value_shift
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+def signerPreludeHigh (location : Fin 5) : BitVec 20 :=
+  if location.val = 0 then 0x21 else if location.val = 4 then 0x23 else 0x22
+
+def signerPreludeBeforeLow (location : Fin 5) : BitVec 12 :=
+  match location.val with
+  | 0 => 0x66c
+  | 1 => 0xae4
+  | 2 => 0xf5c
+  | 3 => 0x3d4
+  | _ => 0x838
+
+def signerPreludeOutputLow (location : Fin 5) : BitVec 12 :=
+  match location.val with
+  | 0 => 0x670
+  | 1 => 0xae8
+  | 2 => 0xf60
+  | 3 => 0x3d8
+  | _ => 0x83c
+
+def signerPreludeInstr (location : Fin 5) (e : Word × Instr) : Instr :=
+  if e.1 = 0x3a98 then .LUI .x7 (signerPreludeHigh location)
+  else if e.1 = 0x3a9c then .ADDI .x7 .x7 (signerPreludeBeforeLow location)
+  else if e.1 = 0x3ab4 then .LUI .x6 (signerPreludeHigh location)
+  else if e.1 = 0x3ab8 then .ADDI .x6 .x6 (signerPreludeOutputLow location)
+  else e.2
+
+def signerPreludeCode (location : Fin 5) : List (Word × Instr) :=
+  firstBottomSecretPreludeCode.map fun e =>
+    (e.1 + signerShiftBytes location, signerPreludeInstr location e)
+
+theorem signerPreludeCode_fetch (location : Fin 5) :
+    ∀ e ∈ signerPreludeCode location,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  fin_cases location <;> decide
+
+#print axioms signerPreludeCode_fetch
+
+def signerPreludeState (location : Fin 5) (s : MachineState) : MachineState :=
+  runSchedule (signerPreludeCode location) s
+
+theorem signerPrelude_pointer (location : Fin 5) (s : MachineState) :
+    (signerPreludeState location s).getMem 0x430a0 =
+      BitVec.ofNat 64 (match location.val with
+        | 0 => 0x21670
+        | 1 => 0x21ae8
+        | 2 => 0x21f60
+        | 3 => 0x223d8
+        | _ => 0x2283c) := by
+  fin_cases location <;>
+    simp [signerPreludeState, signerPreludeCode, signerPreludeInstr,
+      signerPreludeHigh, signerPreludeBeforeLow, signerPreludeOutputLow,
+      firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne,
+      setWord32_eq, alignToDword]
+
+#print axioms signerPrelude_pointer
+
+theorem signerPrelude_checked (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location) :
+    Checked (signerPreludeCode location) s := by
+  fin_cases location <;>
+    simp [signerPreludeCode, signerPreludeInstr, signerPreludeHigh,
+      signerPreludeBeforeLow, signerPreludeOutputLow, signerShiftBytes,
+      signerShiftWords, SphincsMaskedSignOtsParents.offset,
+      SphincsMaskedSignOtsShift.chainOffset,
+      firstBottomSecretPreludeCode, Checked, execInstrBr, ordinaryStep,
+      memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+#print axioms signerPrelude_checked
+
+theorem signerPrelude_trace (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location) :
+    OrdinarySteps SphincsMaskedImages.sign s 31 (signerPreludeState location s) := by
+  have run := checked_sound SphincsMaskedImages.sign
+    (signerPreludeCode location) (signerPreludeCode_fetch location)
+    s (signerPrelude_checked location s pc)
+  have len : (signerPreludeCode location).length = 31 := by
+    simp [signerPreludeCode, firstBottomSecretPreludeCode]
+  simpa [signerPreludeState, len] using run
+
+#print axioms signerPrelude_trace
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
