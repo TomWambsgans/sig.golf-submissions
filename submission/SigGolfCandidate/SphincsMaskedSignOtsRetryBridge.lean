@@ -116,4 +116,46 @@ theorem retry_encoding_followup (location : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms retry_encoding_followup
 
+/-- A checksum failure with valid digest padding takes the complete retry loop:
+    both padding tests, digit decoding, counter advance, and the next HASH. -/
+theorem retry_full_failed_attempt (location : Fin 5) (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x1b94 + delta location)
+    (padding1 : (otsPaddingFirst location s).getReg .x10 = 0)
+    (padding2 : (otsPaddingSecond location (otsPaddingFirst location s)).getReg .x10 = 0)
+    (bad : answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location s))) ≠ 194)
+    (under : s.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word)) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s 594 601 1 1 t ∧
+      t.pc = 0x1b94 + delta location ∧
+      t.getMem 0x430b8 = s.getMem 0x430b8 + 1 := by
+  let first := otsPaddingFirst location s
+  let second := otsPaddingSecond location first
+  let retry := retryDecision (retryCounter location
+    (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit second)))))
+  have firstTrace := (otsPaddingFirst_block location s pc).trace (hash := hash)
+  have firstPc : first.pc = 0x1bac + delta location :=
+    otsPaddingFirst_good_pc location s padding1
+  have secondTrace := (otsPaddingSecond_block location first firstPc).trace (hash := hash)
+  have secondPc : second.pc = 0x1bc4 + delta location :=
+    otsPaddingSecond_good_pc location first padding2
+  have counter : second.getMem 0x430b8 = s.getMem 0x430b8 := by
+    simp [second, first, otsPaddingSecond, otsPaddingSecondState,
+      otsPaddingSecondCode, otsPaddingFirst, otsPaddingFirstState,
+      otsPaddingFirstCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  have under' : second.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word) := by
+    rw [counter]
+    exact under
+  obtain ⟨retryTrace, retryPc⟩ :=
+    signer_encoding_retry location second secondPc bad under'
+  obtain ⟨t, finalTrace, finalPc, finalCounter⟩ :=
+    retry_encoding_hash location hash retry retryPc
+  refine ⟨t, ?_, finalPc, ?_⟩
+  · simpa only [first, second, retry, Nat.reduceAdd] using
+      (firstTrace.trans (secondTrace.trans (retryTrace.trace (hash := hash)))).trans finalTrace
+  · rw [finalCounter, signer_encoding_retry_counter, counter]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.retry_full_failed_attempt' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms retry_full_failed_attempt
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue

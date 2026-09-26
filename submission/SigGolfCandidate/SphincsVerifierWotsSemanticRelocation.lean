@@ -1487,6 +1487,19 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
       steps ≤ 507 + 728 * 52 + 856 ∧
       cycles ≤ 507 + 777 * 52 + 991 ∧
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 ∧
+      (∀ (tailSteps : Nat) (result : Execution),
+        Executes hash SphincsImages.verify
+          (SphincsVerifierXmssPathControl.pathState hash layer
+            (layerHeight layer) final) tailSteps result →
+        Executes hash SphincsImages.verify state
+          (steps + (tailSteps +
+            SphincsVerifierXmssPathControl.pathInstructions hash layer
+              (layerHeight layer) final))
+          (result.charge
+            (cycles + SphincsVerifierXmssPathControl.pathCycles hash layer
+              (layerHeight layer) final)
+            (calls + layerHeight layer)
+            (blocks + 2 * layerHeight layer))) ∧
       let doneState := SphincsVerifierXmssPathControl.pathState hash layer
         (layerHeight layer) final
       doneState.pc = SphincsVerifierXmssNext.branchPc layer + 4 ∧
@@ -1531,38 +1544,26 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
     hash layer final pk tree leaf signature first pointer finalPc
     pointerCell bound aligned layerFinal treeFinal level
     (bit.trans indexCell) prefixFinal current finalSiblings
+  have continuation (tailSteps : Nat) (result : Execution)
+      (tail : Executes hash SphincsImages.verify
+        (SphincsVerifierXmssPathControl.pathState hash layer
+          (layerHeight layer) final) tailSteps result) :
+      Executes hash SphincsImages.verify state
+        (steps + (tailSteps +
+          SphincsVerifierXmssPathControl.pathInstructions hash layer
+            (layerHeight layer) final))
+        (result.charge
+          (cycles + SphincsVerifierXmssPathControl.pathCycles hash layer
+            (layerHeight layer) final)
+          (calls + layerHeight layer)
+          (blocks + 2 * layerHeight layer)) := by
+    have suffix := SphincsVerifierXmssPathComplete.complete_path_executes
+      hash layer final pointer finalPc pointerCell bound aligned level
+        tailSteps result tail
+    simpa [Execution.charge, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+      using run.then_executes suffix
   exact ⟨final, steps, cycles, calls, blocks, run,
-    stepBound, cycleBound, callBound, blockBound, path⟩
-
-/-- The exact prefix trace and XMSS path form one charged verifier execution. -/
-theorem upper_prefix_path_executes (hash : Hash) (layer : Layer)
-    (start leaf : MachineState) (pointer : Word)
-    (prefixSteps prefixCycles prefixCalls prefixBlocks : Nat)
-    (preTrace : Trace hash SphincsImages.verify start
-      prefixSteps prefixCycles prefixCalls prefixBlocks leaf)
-    (pc : leaf.pc = SphincsVerifierXmssParity.nodePc layer)
-    (pointerValue : leaf.getMem 0x43028 = pointer)
-    (pointerBound : pointer.toNat + 20 * layerHeight layer ≤ 0x40000)
-    (pointerAligned : pointer.toNat % 4 = 0)
-    (levelCell : leaf.getMem 0x43048 = 1)
-    (tailSteps : Nat) (result : Execution)
-    (tail : Executes hash SphincsImages.verify
-      (SphincsVerifierXmssPathControl.pathState hash layer
-        (layerHeight layer) leaf) tailSteps result) :
-    Executes hash SphincsImages.verify start
-      (prefixSteps +
-        (tailSteps + SphincsVerifierXmssPathControl.pathInstructions hash layer
-          (layerHeight layer) leaf))
-      (result.charge
-        (prefixCycles + SphincsVerifierXmssPathControl.pathCycles hash layer
-          (layerHeight layer) leaf)
-        (prefixCalls + layerHeight layer)
-        (prefixBlocks + 2 * layerHeight layer)) := by
-  have path := SphincsVerifierXmssPathComplete.complete_path_executes
-    hash layer leaf pointer pc pointerValue pointerBound pointerAligned
-      levelCell tailSteps result tail
-  simpa [Execution.charge, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
-    using preTrace.then_executes path
+    stepBound, cycleBound, callBound, blockBound, continuation, path⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
@@ -1598,12 +1599,6 @@ theorem upper_prefix_path_executes (hash : Hash) (layer : Layer)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_decoder_path_digest
-
-/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_prefix_path_executes' depends on axioms: [propext,
- Classical.choice,
- Quot.sound] -/
-#guard_msgs in
-#print axioms upper_prefix_path_executes
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_source' depends on axioms: [propext,
  Classical.choice,

@@ -1862,6 +1862,97 @@ theorem expected_certificateShadowLengthImpl_potential_le
   · exact expected_certificateShadowLengthImpl_potential_le_of_stopped key budget
       required stopAfter input state hstop
 
+noncomputable def expectedShadowCharge {α : Type} (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α) :
+    CertificateShadowState → ENNReal :=
+  OracleComp.construct (fun _ _ => 0)
+    (fun input _ next state =>
+      certificateMonitorCharge key budget required input (state.1, state.2.2) +
+        ∑' result,
+          Pr[= result | (certificateShadowLengthImpl key budget required stopAfter
+            input).run state] * next result.1 result.2) computation
+
+@[simp] theorem expectedShadowCharge_pure {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (value : α) (state : CertificateShadowState) :
+    expectedShadowCharge key budget required stopAfter (pure value) state = 0 := rfl
+
+theorem expectedShadowCharge_query_bind {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (next : (OracleWorld + SigningSpec).Range input →
+      OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) :
+    expectedShadowCharge key budget required stopAfter
+      (OracleSpec.query input >>= next) state =
+    certificateMonitorCharge key budget required input (state.1, state.2.2) +
+      ∑' result,
+        Pr[= result | (certificateShadowLengthImpl key budget required stopAfter
+          input).run state] *
+          expectedShadowCharge key budget required stopAfter (next result.1)
+            result.2 := rfl
+
+/-- Optional stopping lifts the shadow-bank potential bound through any adaptive
+oracle computation, while the actual execution continues after the shadow stops. -/
+theorem expected_certificateShadow_potential_le_initial_add_charge {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState)
+    (hinv : state.2.2 = state.2.1.1.1 ∨ state.2.2.stopped = true) :
+    (∑' result,
+      Pr[= result | (simulateQ (certificateShadowLengthImpl key budget required
+        stopAfter) computation).run state] *
+      certificateMonitorPotential key budget required (result.2.1, result.2.2.2)) ≤
+    certificateMonitorPotential key budget required (state.1, state.2.2) +
+      expectedShadowCharge key budget required stopAfter computation state := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, tsum_probOutput_pure_mul,
+        expectedShadowCharge_pure, add_zero, le_refl]
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        tsum_probOutput_bind_mul, expectedShadowCharge_query_bind]
+      let law := (certificateShadowLengthImpl key budget required stopAfter input).run
+        state
+      calc
+        _ ≤ ∑' result, Pr[= result | law] *
+            (certificateMonitorPotential key budget required
+                (result.2.1, result.2.2.2) +
+              expectedShadowCharge key budget required stopAfter (next result.1)
+                result.2) := by
+          apply ENNReal.tsum_le_tsum
+          intro result
+          by_cases hr : result ∈ law.support
+          · exact mul_le_mul' le_rfl
+              (ih result.1 result.2
+                (certificateShadowLengthImpl_invariant key budget required
+                  stopAfter input state hinv result hr))
+          · have hz : Pr[= result | law] = 0 := by
+              rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+              exact hr
+            dsimp only [law] at hz
+            simp only [hz, zero_mul]
+            exact zero_le
+        _ = (∑' result, Pr[= result | law] *
+              certificateMonitorPotential key budget required
+                (result.2.1, result.2.2.2)) +
+            ∑' result, Pr[= result | law] *
+              expectedShadowCharge key budget required stopAfter (next result.1)
+                result.2 := by simp only [mul_add, ENNReal.tsum_add]
+        _ ≤ (certificateMonitorPotential key budget required
+              (state.1, state.2.2) +
+            certificateMonitorCharge key budget required input
+              (state.1, state.2.2)) +
+            ∑' result, Pr[= result | law] *
+              expectedShadowCharge key budget required stopAfter (next result.1)
+                result.2 :=
+          add_le_add
+            (expected_certificateShadowLengthImpl_potential_le key budget required
+              stopAfter input state hinv) le_rfl
+        _ = _ := by rw [add_assoc]
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1947,3 +2038,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.expected_certificateShadowLengthImpl_potential_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.expected_certificateShadowLengthImpl_potential_le
+
+/-- info: 'SphincsSecurity.Concrete.expected_certificateShadow_potential_le_initial_add_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_certificateShadow_potential_le_initial_add_charge

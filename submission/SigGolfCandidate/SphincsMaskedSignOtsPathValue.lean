@@ -1621,7 +1621,7 @@ theorem signerDigit_run_all (location : Fin 5) (state : MachineState)
     fin_cases location <;> decide
   simpa [cost,finish] using all
 
-private def sumInit (s : MachineState) : MachineState :=
+def sumInit (s : MachineState) : MachineState :=
   execInstrBr s (.ADDI .x15 .x0 0)
 
 theorem sumInit_block (location : Fin 5) (s : MachineState)
@@ -1659,7 +1659,7 @@ theorem sumInit_digits (location : Fin 5) (s : MachineState)
   simp
 
 
-private def sumTest (s : MachineState) : MachineState :=
+def sumTest (s : MachineState) : MachineState :=
   execInstrBr (execInstrBr s (.ADDI .x10 .x0 194)) (.BEQ .x15 .x10 64)
 
 theorem sumTest_block (location : Fin 5) (s : MachineState)

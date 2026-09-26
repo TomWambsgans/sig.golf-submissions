@@ -276,6 +276,86 @@ theorem ftsOpening_pathByte (signature : Signature)
   simp only [indexEq]
   exact digestVectorBytes_byte (signature.ftsPath tree) level i hi
 
+/-- A layer's authentication path follows its counter and WOTS chain values. -/
+theorem layerEncoding_pathByte (signature : Signature) (lay : Layer)
+    (level : Fin (layerHeight lay)) (i : Nat) (hi : i < digestBytes) :
+    ((layerEncoding signature lay).map UInt8.toBitVec)[counterBytes +
+        numChains * digestBytes + level.val * digestBytes + i]'(by
+          rw [List.length_map, layerEncoding_length]
+          have h := level.isLt
+          simp only [layerBytes, digestBytes, numChains, counterBytes]
+          have hi20 : i < 20 := by simpa [digestBytes] using hi
+          omega) =
+      ((signature.layers lay).path level).extractLsb' (8 * i) 8 := by
+  simp only [layerEncoding, List.map_append]
+  rw [List.getElem_append_right (by
+    simp [bytesLE, digestVectorBytes_length, digestBytes, counterBytes]
+    omega)]
+  simp only [List.length_map, List.length_append]
+  simp only [show (bytesLE counterBytes (BitVec.ofNat 32
+      (signature.layers lay).counter.toNat)).length = counterBytes by
+      simp [bytesLE], digestVectorBytes_length]
+  have indexEq : counterBytes + numChains * digestBytes +
+      level.val * digestBytes + i -
+      (counterBytes + digestBytes * numChains) =
+      level.val * digestBytes + i := by
+    simp only [digestBytes, numChains, counterBytes]
+    omega
+  simp only [indexEq]
+  exact digestVectorBytes_byte (signature.layers lay).path level i hi
+
+/-- The top XMSS authentication path occupies its fixed slot in the witness. -/
+theorem wire_topPath (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (level : Fin (layerHeight topLayer))
+    (i : Nat) (hi : i < digestBytes) :
+    (wire pk signature).extractLsb' (8 *
+      (topOffset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) 8 =
+      ((signature.layers topLayer).path level).extractLsb' (8 * i) 8 := by
+  let j := counterBytes + numChains * digestBytes + level.val * digestBytes + i
+  have jBound : j < layerBytes topLayer := by
+    dsimp [j, layerBytes]
+    have hlevel := level.isLt
+    have hi20 : i < 20 := by simpa [digestBytes] using hi
+    simp only [counterBytes, numChains, digestBytes] at *
+    omega
+  have full : topOffset + j < SphincsWire.signatureBytes := by
+    have size := SphincsWire.signatureBytes_eq
+    have topStart : topOffset = 4380 := by decide
+    have topSize : layerBytes topLayer = 1264 := by decide
+    omega
+  have indexEq : topOffset + counterBytes + numChains * digestBytes +
+      level.val * digestBytes + i = topOffset + j := by
+    dsimp [j]
+    omega
+  rw [indexEq]
+  rw [wire_byte pk signature (topOffset + j) full]
+  simp only [encodeBytes_prefix]
+  rw [List.getElem_append_right (by
+    simp [prefixBytes, bytesLE, topOffset, ftsOffset,
+      ftsOpeningBytes, ftsTrees, digestBytes]
+    omega)]
+  simp only [List.length_map]
+  have prefixLength : (prefixBytes pk signature).length = 60 := by
+    simp [prefixBytes, bytesLE]
+  simp only [prefixLength]
+  have offsetEq : topOffset + j - 60 =
+      (ftsTrees - 1) * ftsOpeningBytes + j := by
+    simp only [topOffset, ftsOffset, randomizerOffset, parameterOffset,
+      rootOffset, digestBytes]
+    omega
+  simp only [offsetEq, restBytes, List.map_append, List.append_assoc]
+  rw [List.getElem_append_right (by
+    simp only [List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    omega)]
+  simp only [List.length_map,
+    concatFields_length _ _ _ (ftsOpening_length signature),
+    Nat.add_sub_cancel_left]
+  rw [List.getElem_append_left (by
+    simpa only [List.length_map, layerEncoding_length] using jBound)]
+  simpa only [j] using layerEncoding_pathByte signature topLayer level i hi
+
 /-- Every byte of every FORS opening occupies its declared wire slot. -/
 theorem wire_ftsOpeningByte (pk : SphincsSecurity.PublicKey)
     (signature : SphincsSecurity.Signature)
@@ -503,5 +583,13 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_bytes
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.layerEncoding_pathByte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms layerEncoding_pathByte
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_topPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms wire_topPath
 
 end SigGolfCandidate.SphincsWireEncoding
