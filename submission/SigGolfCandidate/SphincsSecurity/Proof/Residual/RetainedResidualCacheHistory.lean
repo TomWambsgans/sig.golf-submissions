@@ -112,6 +112,11 @@ open AdaptiveResidualLabels hiding World State Environment
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 set_option synthInstance.maxHeartbeats 200000
+variable (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
 
 variable (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
@@ -279,3 +284,62 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_budget_event_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_budget_event_eq
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option synthInstance.maxHeartbeats 200000
+theorem macroStoppedExceptionRun_hashCalls_le {Result : Type} (q overshoot : Nat)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : ExceptionHistoryState inputs)
+    (hinitial : state.1.1.memory.external.hashCalls ≤ q + overshoot)
+    (hstep : ∀ (input : (OracleWorld + SigningSpec).Domain)
+      (before : ExceptionHistoryState inputs)
+      (after : Option ((OracleWorld + SigningSpec).Range input) ×
+        ExceptionHistoryState inputs),
+      exceptionHistoryStep key inputs hencoding words publicReplies selections rows
+        budget required stopAfter input before after ≠ 0 →
+      after.2.1.1.memory.external.hashCalls ≤
+        before.1.1.memory.external.hashCalls + overshoot)
+    (result : Option Result × ExceptionHistoryState inputs)
+    (hresult : macroStoppedExceptionRun key inputs hencoding words publicReplies
+      selections rows budget required stopAfter q computation state result ≠ 0) :
+    result.2.1.1.memory.external.hashCalls ≤ q + overshoot := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value =>
+      rw [macroStoppedExceptionRun_pure] at hresult
+      simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+      subst result
+      exact hinitial
+  | query_bind input next ih =>
+      rw [macroStoppedExceptionRun_query_bind, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨⟨answer, after⟩, hfirst, htail⟩ := hresult
+      have hafter : after.1.1.memory.external.hashCalls ≤ q + overshoot := by
+        by_cases hactive : state.1.1.memory.external.hashCalls ≤ q
+        · have hraw : exceptionHistoryStep key inputs hencoding words
+              publicReplies selections rows budget required stopAfter input state
+              (answer, after) ≠ 0 := by
+            simpa only [macroStoppedExceptionStep, if_pos hactive] using hfirst
+          exact (hstep input state (answer, after) hraw).trans
+            (Nat.add_le_add_right hactive overshoot)
+        · simp only [macroStoppedExceptionStep, if_neg hactive,
+            ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hfirst
+          cases hfirst
+          exact hinitial
+      cases answer with
+      | none =>
+          simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+            not_not] at htail
+          subst result
+          exact hafter
+      | some answer =>
+          exact ih answer after hafter htail
+
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_hashCalls_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.macroStoppedExceptionRun_hashCalls_le
