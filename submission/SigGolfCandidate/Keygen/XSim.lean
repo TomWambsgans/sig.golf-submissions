@@ -184,6 +184,17 @@ theorem XSim.foldlM_range {γ : Type} (n : Nat) (f : γ → Nat → OracleComp H
 
 end
 
+/-- The counts of a refined computation are constant. -/
+theorem XSim.count_eq {image : Image} {s : MachineState} {k c n b : Nat}
+    {oa : OracleComp HashSpec α} {Q : α → MachineState → Prop} (h : XSim image s k c n b oa Q) :
+    countWith (fun _ => 1) oa = (fun a => (a, n)) <$> oa ∧
+      countWith Query.blocks oa = (fun a => (a, b)) <$> oa := by
+  obtain ⟨oc, hc, hb, _⟩ := h
+  have hv := XSim.val hc
+  refine ⟨?_, ?_⟩
+  · rw [← hc, ← hv, Functor.map_map]
+  · rw [← hb, ← hv, Functor.map_map]
+
 /-! ## Whole phases -/
 
 /-- **A whole phase, exactly.** If the machine refines `oa` from the initial state in `k` steps

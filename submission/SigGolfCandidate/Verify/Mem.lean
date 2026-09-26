@@ -118,7 +118,7 @@ def memOK (ws : SymMem) : Bool :=
 def regsOK (rf : RegFile) : Bool := globK.all fun p => E.beq (rf.get p.1) (.c p.2)
 
 def safeDest (d : Nat) : Bool :=
-  decide (d + 32 ≤ 0x800) && pSlots.all (fun q => decide (q + 8 ≤ d ∨ d + 32 ≤ q)) &&
+  decide (d % 8 = 0) && decide (d + 32 ≤ 0x800) && pSlots.all (fun q => decide (q + 8 ≤ d ∨ d + 32 ≤ q)) &&
     decide (0xA8 + 8 ≤ d ∨ d + 32 ≤ 0xA0)
 
 theorem memOK_ne {ws : SymMem} (h : memOK ws = true) (s : MachineState) (A : Nat)
@@ -167,7 +167,7 @@ theorem Glob_writeHash {wl pk : List Byte} {s : MachineState} (hG : Glob wl pk s
     (hsafe : safeDest d = true) : Glob wl pk (writeHash s ans) := by
   obtain ⟨h1, h2, h3, h4⟩ := hG
   simp only [safeDest, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hsafe
-  obtain ⟨⟨hd1, hd2⟩, hd3⟩ := hsafe
+  obtain ⟨⟨⟨-, hd1⟩, hd2⟩, hd3⟩ := hsafe
   have fr : ∀ A, A < 2 ^ 64 → (A + 8 ≤ d ∨ d + 32 ≤ A) →
       (writeHash s ans).getMem (BitVec.ofNat 64 A) = s.getMem (BitVec.ofNat 64 A) := by
     intro A hA hp

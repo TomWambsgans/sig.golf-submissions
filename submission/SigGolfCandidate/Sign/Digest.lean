@@ -46,14 +46,12 @@ def DigPost (u : MachineState) : Option (Val × Nat) → MachineState → Prop
       uOf N 14 = 0
 
 theorem admissible_iff (ans : BitVec 256) :
-    (ans.extractLsb' 128 64 <<< 8 >>> 54 = 0) ↔ uOf (ans.toNat % 2 ^ 184) 14 = 0 := by
+    (ans.extractLsb' 128 64 <<< 8 >>> 54 = BitVec.ofNat 64 0) ↔ uOf (ans.toNat % 2 ^ 184) 14 = 0 := by
   rw [← BitVec.toNat_inj]
   simp only [BitVec.toNat_ushiftRight, BitVec.toNat_shiftLeft, BitVec.extractLsb'_toNat,
     Nat.shiftRight_eq_div_pow, Nat.shiftLeft_eq, BitVec.toNat_ofNat, uOf, totalH, ftsA,
     BitVec.toNat_zero, Nat.reducePow, Nat.reduceAdd, Nat.reduceMul, Nat.reduceMod]
   have := ans.isLt
-  have h0 : (0 : BitVec 64).toNat = 0 := rfl
-  rw [h0]
   constructor <;> intro h <;> omega
 
 theorem pcOf_eq (i : Nat) (h : 0x1000 + 4 * i < 2 ^ 64) (w : Word) (hw : w.toNat = 0x1000 + 4 * i) :
@@ -149,7 +147,7 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
     rw [readWords_ofNat_two]; simp only [ht3, blk32.res, rv_simp]; rfl
   -- frame from u to t3 outside digW
   have fu3 : Frame u t3 digW := (((tframe.trans f1).trans f2).trans f3).mono (by
-    intro x hx; simp only [digW] at hx ⊢; omega)
+    intro x hx; simp only [digW, false_or, or_false] at hx ⊢; omega)
   have hlen : rho.length = 16 := by simp [hrho]
   have hq2 : hashInput t3 = pad64 (digestInput rho (toList m)) := by
     obtain ⟨hn, hw⟩ := words_digestInput _ _ hlen hm
@@ -188,18 +186,18 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
     intro r hr; simp only [ht5, Result.toState_getReg]
     cases r <;> simp_all [blk37.res, rv_simp]
   have fu5 : Frame u t5 digW := ((fu3.trans f4).trans f5).mono (by
-    intro x hx; simp only [digW] at hx ⊢; omega)
+    intro x hx; simp only [digW, false_or, or_false] at hx ⊢; omega)
   have ru5 : RegsEq u t5 digRegs := (((((tregs.trans r1).trans (regsEq_writeHash _ _ [])).trans r3).trans
-    (regsEq_writeHash _ _ [])).trans r5).mono (by intro r hr; simp [digRegs] at hr ⊢; omega)
+    (regsEq_writeHash _ _ [])).trans r5).mono (by
+      intro r hr; simp only [digRegs, List.mem_append, List.mem_cons, List.not_mem_nil] at hr ⊢; tauto)
   have pc5 : t5.pc = if admissible (ans2.toNat % 2 ^ 184) then pcOf 46 else pcOf 41 := by
     have h368 := w4 2 (by norm_num)
     simp only [Nat.reduceMul, Nat.reduceAdd] at h368
-    simp only [ht5, blk37.res, rv_simp]
-    rw [show (368 : Word) = BitVec.ofNat 64 368 from rfl, h368]
-    simp only [BitVec.toNat_ofNat, Nat.reduceMod, admissible, beq_iff_eq]
+    simp only [ht5, blk37.res, rv_simp, h368]
+    simp only [BitVec.toNat_ofNat, Nat.reducePow, Nat.reduceMod, admissible, beq_iff_eq]
     by_cases h : uOf (ans2.toNat % 2 ^ 184) 14 = 0
-    · rw [if_pos ((admissible_iff ans2).mpr h), if_pos (by simpa using h)]; rfl
-    · rw [if_neg (mt (admissible_iff ans2).mp h), if_neg (by simpa using h)]; rfl
+    · rw [if_pos ((admissible_iff ans2).mpr h), if_pos (by simpa using h)]
+    · rw [if_neg (mt (admissible_iff ans2).mp h), if_neg (by simpa using h)]
   by_cases hadm : admissible (ans2.toNat % 2 ^ 184) = true
   · rw [if_pos hadm]
     refine (Sim.pure_steps hs3 ?_).mono (by omega) (fun _ _ h => h)
@@ -213,11 +211,47 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
     · simpa [admissible] using hadm
   · rw [if_neg hadm]
     refine Sim.steps hs3 (hrest t5 (by rw [pc5, if_neg hadm]) ?_ ru5 fu5 ?_)
-    · rw [ru5.get .x6 (by simp [digRegs]) |>.trans (tregs.get .x6 (by simp [digRegs])).symm, t6]
+    · rw [r5.get .x6, ht4, writeHash_getReg, r3.get .x6, ht2, writeHash_getReg, r1.get .x6, t6]
     · rw [f5.getMem (by norm_num) (by simp), f4.getMem (by norm_num) (by omega),
         f3.getMem (by norm_num) (by omega), f2.getMem (by norm_num) (by omega)]
       simp only [ht1, blk27.res, rv_simp, ite_true, lo32_replace1, Nat.reduceDiv]
       exact tlo
+
+theorem searchDigest_succ (S mm : List Byte) (a f : Nat) :
+    searchDigest S mm a (f + 1) = (hash16 (rndInput S mm a) >>= fun rho =>
+      (liftM (HashSpec.query (pad64 (digestInput rho mm))) : OracleComp HashSpec _) >>= fun ans =>
+        if admissible (ans.toNat % 2 ^ 184) then pure (some (rho, ans.toNat % 2 ^ 184))
+        else searchDigest S mm (a + 1) f) := by
+  simp only [searchDigest, digest, H, bind_assoc, pure_bind]
+
+/-- After a non-admissible trial (instruction 41): `a += 1`, back to the loop or fail. -/
+theorem digNext (u : MachineState) (hx7 : u.getReg .x7 = BitVec.ofNat 64 (2 ^ 20)) (a : Nat)
+    (ha : a < 2 ^ 20) (t : MachineState) (tpc : t.pc = pcOf 41) (t6 : t.getReg .x6 = BitVec.ofNat 64 a)
+    (tregs : RegsEq u t digRegs) (tframe : Frame u t digW)
+    (tlo : lo32 (t.getMem (BitVec.ofNat 64 0x620)) = lo32 (u.getMem (BitVec.ofNat 64 0x620))) :
+    ∃ t', Steps image t 2 2 t' ∧
+      (a + 1 < 2 ^ 20 → DigInv u (a + 1) t') ∧ (a + 1 = 2 ^ 20 → t'.pc = pcOf 43) ∧
+      RegsEq t t' [.x6] := by
+  have hs := symRun_sound blk41 codeAt_41 t tpc (by simp only [blk41.res, rv_simp])
+  have r41 : RegsEq t (blk41.res.toState t) [.x6] := by
+    intro r hr
+    rw [Result.toState_getReg]
+    cases r <;> first | rfl | simp_all [blk41.res, rv_simp]
+  refine ⟨_, hs, ?_, ?_, r41⟩
+  · intro h
+    refine ⟨?_, ?_, h, ?_, ?_, ?_⟩
+    · simp only [blk41.res, rv_simp, t6, tregs.get .x7 (by simp [digRegs]), hx7, ofNat_add_ofNat,
+        ofNat_bne_ofNat]
+      rw [if_pos (by simp; omega)]
+    · simp only [blk41.res, rv_simp, t6, ofNat_add_ofNat]
+    · exact (tregs.trans r41).mono (by intro r hr; simp [digRegs] at hr ⊢; tauto)
+    · intro x hx hW
+      rw [Result.toState_getMem, show blk41.res.st.mem = [] from rfl, memEval_nil]; exact tframe x hx hW
+    · rw [Result.toState_getMem, show blk41.res.st.mem = [] from rfl, memEval_nil]; exact tlo
+  · intro h
+    simp only [blk41.res, rv_simp, t6, tregs.get .x7 (by simp [digRegs]), hx7, ofNat_add_ofNat,
+      ofNat_bne_ofNat]
+    rw [if_neg (by simp; omega)]
 
 /-- The digest search. -/
 theorem digLoop_sim (sk : SecretKey) (m : Message) (u : MachineState)
@@ -230,7 +264,26 @@ theorem digLoop_sim (sk : SecretKey) (m : Message) (u : MachineState)
   have hm : (toList m).length = 32 := length_toList m
   intro fuel
   induction fuel with
-  | zero => sorry
-  | succ f ih => sorry
+  | zero =>
+    intro a t ha hinv
+    rw [searchDigest_succ]
+    refine (digTrial sk m u hmem hx5 a t hinv _ 4 ?_).mono (by omega) (fun _ _ h => h)
+    intro t' tpc t6 tregs tframe tlo
+    obtain ⟨t'', hs, -, hfail, -⟩ := digNext u hx7 a (by omega) t' tpc t6 tregs tframe tlo
+    have hs43 := symRun_sound blk43 codeAt_43 t'' (hfail (by omega)) (by simp only [blk43.res, rv_simp])
+    have hc : blk43.res.cycles = 2 := rfl
+    rw [hc] at hs43
+    have := Sim.steps hs (Sim.pure_steps (a := (none : Option (Val × Nat))) (Q := DigPost u) hs43
+      ⟨by simp only [blk43.res, rv_simp], by simp only [blk43.res, rv_simp],
+       by simp only [blk43.res, rv_simp]⟩)
+    simpa [searchDigest] using this
+  | succ f ih =>
+    intro a t ha hinv
+    rw [searchDigest_succ]
+    refine (digTrial sk m u hmem hx5 a t hinv _ (2 + ((f + 1) * 46 + 2)) ?_).mono (by ring_nf; omega)
+      (fun _ _ h => h)
+    intro t' tpc t6 tregs tframe tlo
+    obtain ⟨t'', hs, hinv', -, -⟩ := digNext u hx7 a (by omega) t' tpc t6 tregs tframe tlo
+    exact Sim.steps hs (ih (a + 1) t'' (by omega) (hinv' (by omega)))
 
 end SigGolfCandidate.Sign

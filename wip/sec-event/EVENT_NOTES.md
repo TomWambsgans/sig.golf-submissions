@@ -26,3 +26,11 @@ So the event has to be threaded through the proof.
 - large range: slack ≥ x(x - 11/65536) ≥ 2^-28 absolute.
 
 ## Log
+- Large-budget Concrete chain done: `Concrete.security127_event_of_large_budget` (Residual/RetainedResidualEventLarge.lean).
+  New pieces: Event/Boundary (event on boundary game), Residual/RetainedResidualEventTransfer (counted coupling
+  to the source game), Fts/CertificateCreationBudget + Residual/RetainedResidualCreationBudget (creation mass ≤ budget
+  structurally, via the monitor's activity rule), Residual/RetainedResidualEventPotential (primitive potential on
+  the monitored run, paying hazards while hc ≤ q and the monitor's creation mass; a live overshooting signing
+  request is paid from remaining ≥ 2^ftsTreeHeight), Event/TruncatedCharge + Residual/RetainedResidualEventCache
+  (cache exception counted per hash call within the budget), Residual/RetainedResidualEventCoverage.
+  Same closing bound as before: no arithmetic change.

@@ -271,8 +271,9 @@ theorem erases_signFrom_table (root : Digest) (index : Index) (randomness : Rand
     Erases known
       (Concrete.signFrom parameter index (ftsSecret parameter seed index) (otsSecret parameter seed)
         randomness leaves : OracleComp HashSpec (Option Signature))
-      (Concrete.signAfterDigest (tableKey parameter root outputs) randomness index leaves) :=
-  erases_signFrom parameter index
+      (Concrete.signAfterDigest (tableKey parameter root outputs) randomness index leaves) := by
+  rw [Concrete.signAfterDigest]
+  exact erases_signFrom parameter index
     (fun tree leaf => erases_ftsSecret known parameter seed outputs hknown index tree leaf)
     (fun lay tree leaf chainIdx => erases_otsSecret known parameter seed outputs hknown lay tree leaf chainIdx)
     randomness leaves

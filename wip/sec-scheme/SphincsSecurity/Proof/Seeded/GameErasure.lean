@@ -30,7 +30,9 @@ def keygenTree (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest
 
 theorem keygenRoot_eq_keygenTree (secret : LeafIndex → ChainIndex → Digest) :
     (Concrete.keygenRoot 0 secret : OracleComp HashSpec Digest) =
-      keygenTree fun leaf chainIdx => pure (secret leaf chainIdx) := rfl
+      keygenTree fun leaf chainIdx => pure (secret leaf chainIdx) := by
+  rw [Concrete.keygenRoot]
+  rfl
 
 /-- The seeded game once the seed is sampled: build the top tree from the seed, then play. -/
 noncomputable def gameAfterSeed (adversary : Adversary) (seed : MasterSeed) : OracleComp OracleWorld Bool := do
