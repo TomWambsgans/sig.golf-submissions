@@ -12115,3 +12115,64 @@ theorem beta_hash_stub_macro (hash : Hash) (image : Image) (state : MachineState
 
 end StubMacro
 -- END StubMacro
+
+namespace BetaKeygenFetch
+open SigGolf SigGolf.Riscv SigGolfCandidate RiscvZkvm.Rv64
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+
+private def oldSites : List Nat := [53, 137, 221, 337, 479, 635, 727, 873, 900]
+
+private theorem unchanged_check :
+    (List.range 901).all (fun i =>
+      if i ∈ oldSites then true else
+        SphincsMaskedImages.keygen.code[i]? == BetaImages.keygen.code[i]?) = true := by
+  decide
+
+private theorem unchanged_at (i : Nat) (hi : i < 901) (hsite : i ∉ oldSites) :
+    SphincsMaskedImages.keygen.code[i]? = BetaImages.keygen.code[i]? := by
+  have h := List.all_eq_true.mp unchanged_check i (List.mem_range.mpr hi)
+  simp only [hsite, ↓reduceIte] at h
+  exact beq_iff_eq.mp h
+
+private theorem sites_ecall_check :
+    oldSites.all (fun i =>
+      SphincsMaskedImages.keygen.code[i]? == some (0x00000073 : BitVec 32)) = true := by
+  decide
+
+private theorem site_ecall_at (i : Nat) (hi : i ∈ oldSites) :
+    SphincsMaskedImages.keygen.code[i]? = some (0x00000073 : BitVec 32) := by
+  have h := List.all_eq_true.mp sites_ecall_check i hi
+  exact beq_iff_eq.mp h
+
+theorem ordinary_fetch (state : MachineState) (instruction : Instruction)
+    (hf : fetch SphincsMaskedImages.keygen state = some instruction)
+    (hne : instruction ≠ .base .ECALL) :
+    fetch BetaImages.keygen state = some instruction := by
+  by_cases hlow : state.pc.toNat < 0x1000
+  · simp [fetch, hlow] at hf
+  by_cases halign : state.pc.toNat % 4 = 0
+  · let i := (state.pc.toNat - 0x1000) / 4
+    have hfetch : (SphincsMaskedImages.keygen.code[i]?).bind decodeInstruction = some instruction := by
+      simpa [fetch, hlow, halign, i] using hf
+    have hi : i < 901 := by
+      by_contra h
+      have hout : SphincsMaskedImages.keygen.code[i]? = none :=
+        List.getElem?_eq_none (by rw [SphincsMaskedImages.keygen_code_length]; omega)
+      simp [hout] at hfetch
+    have hnot : i ∉ oldSites := by
+      intro hs
+      have hw := site_ecall_at i hs
+      rw [hw] at hfetch
+      simp [decodeInstruction] at hfetch
+      exact hne hfetch.symm
+    have heq := unchanged_at i hi hnot
+    simpa [fetch, hlow, halign, i, ← heq] using hfetch
+  · have hn : state.pc.toNat % 4 != 0 := by simpa only [bne_iff_ne] using halign
+    simp [fetch, hlow, hn] at hf
+
+/-- info: 'BetaKeygenFetch.ordinary_fetch' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms ordinary_fetch
+
+end BetaKeygenFetch
