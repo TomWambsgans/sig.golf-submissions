@@ -4233,3 +4233,187 @@ theorem first_bottom_positive_chain_serialized_any (hash : Hash) (s : MachineSta
 #print axioms first_bottom_positive_chain_serialized_any
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+def firstBottomSecretRepeatCode : List (Word × Instr) :=
+  firstBottomSecretPreludeCode.drop 15
+
+def firstBottomSecretRepeat (s : MachineState) : MachineState :=
+  runSchedule firstBottomSecretRepeatCode s
+
+theorem first_bottom_secret_repeat_code :
+    ∀ e ∈ firstBottomSecretRepeatCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_secret_repeat_checked (s : MachineState)
+    (pc : s.pc = 0x3ac8) : Checked firstBottomSecretRepeatCode s := by
+  simp [firstBottomSecretRepeatCode, firstBottomSecretPreludeCode,
+    Checked, execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_secret_repeat_trace (s : MachineState)
+    (pc : s.pc = 0x3ac8) :
+    OrdinarySteps SphincsMaskedImages.sign s 16 (firstBottomSecretRepeat s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomSecretRepeatCode
+    first_bottom_secret_repeat_code s (first_bottom_secret_repeat_checked s pc)
+  simpa [firstBottomSecretRepeat, firstBottomSecretRepeatCode,
+    firstBottomSecretPreludeCode] using run
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_repeat_trace' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_repeat_trace
+
+theorem first_bottom_secret_repeat_registers (s : MachineState)
+    (pc : s.pc = 0x3ac8) :
+    (firstBottomSecretRepeat s).pc = 0x3b08 ∧
+    (firstBottomSecretRepeat s).getReg .x6 = 0x20 ∧
+    (firstBottomSecretRepeat s).getReg .x7 = 0x40028 ∧
+    (firstBottomSecretRepeat s).getReg .x10 = 4 := by
+  simp [firstBottomSecretRepeat, firstBottomSecretRepeatCode,
+    firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_repeat_registers' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_repeat_registers
+
+theorem first_bottom_secret_repeat_controls (s : MachineState) :
+    (firstBottomSecretRepeat s).getMem 0x43000 = s.getMem 0x43000 ∧
+    (firstBottomSecretRepeat s).getMem 0x43008 = s.getMem 0x43008 ∧
+    (firstBottomSecretRepeat s).getMem 0x43010 = s.getMem 0x43050 ∧
+    (firstBottomSecretRepeat s).getMem 0x43018 = s.getMem 0x43020 := by
+  simp [firstBottomSecretRepeat, firstBottomSecretRepeatCode,
+    firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_repeat_controls' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_repeat_controls
+
+theorem first_bottom_secret_repeat_mem_frame (s : MachineState) (a : Word)
+    (notChain : a ≠ 0x43010) (notLeaf : a ≠ 0x43018) :
+    (firstBottomSecretRepeat s).getMem a = s.getMem a := by
+  simp [firstBottomSecretRepeat, firstBottomSecretRepeatCode,
+    firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_ne]
+  split_ifs with h₁ h₂
+  · exact (notLeaf h₁).elim
+  · exact (notChain h₂).elim
+  · rfl
+
+theorem first_bottom_secret_repeat_word32 (s : MachineState) (a : Word)
+    (low : a.toNat < 0x100) :
+    (firstBottomSecretRepeat s).getWord32 a = s.getWord32 a := by
+  simp only [MachineState.getWord32]
+  rw [first_bottom_secret_repeat_mem_frame s (alignToDword a)]
+  · intro eq
+    have h := congrArg BitVec.toNat eq
+    have bound : (alignToDword a).toNat ≤ a.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    simp at h
+    omega
+  · intro eq
+    have h := congrArg BitVec.toNat eq
+    have bound : (alignToDword a).toNat ≤ a.toNat := by
+      unfold alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    simp at h
+    omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_repeat_word32' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_repeat_word32
+
+theorem first_bottom_secret_context_from_repeat (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3ac8)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 40 t ∧
+      t.pc = 0x3b20 ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf chain := by
+  let mid := firstBottomSecretRepeat s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    first_bottom_secret_repeat_registers s pc
+  obtain ⟨t, copied, endPc, values, frame⟩ :=
+    first_bottom_secret_copy_with_frame mid midPc source destination count
+  have outside (a : Word)
+      (ha : a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) :
+      t.getMem a = mid.getMem a := by
+    apply frame a
+    intro j hj eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  have lowWord (address : Nat) (bound : address < 0x100) :
+      t.getWord32 (BitVec.ofNat 64 address) =
+        mid.getWord32 (BitVec.ofNat 64 address) := by
+    simp only [MachineState.getWord32]
+    rw [outside _ (Or.inl (by
+      have h : (alignToDword (BitVec.ofNat 64 address)).toNat ≤ address := by
+        simp only [alignToDword, BitVec.toNat_and, BitVec.toNat_ofNat]
+        exact Nat.and_le_left |>.trans (Nat.mod_le _ _)
+      omega))]
+  have midPar : Words20 mid 0x74 parameter := by
+    intro i
+    exact (first_bottom_secret_repeat_word32 s _
+      (by fin_cases i <;> decide)).trans (par i)
+  have midKey : SphincsMaskedSecretDomain.Words32 mid seed := by
+    intro i
+    exact (first_bottom_secret_repeat_word32 s _
+      (by fin_cases i <;> decide)).trans (key i)
+  have midCtrl := first_bottom_secret_repeat_controls s
+  refine ⟨t, by simpa only [mid, Nat.reduceAdd] using
+      (first_bottom_secret_repeat_trace s pc).append copied,
+    endPc, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [outside _ (Or.inr (by decide)), midCtrl.1]
+    exact layer
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.1]
+    exact tree
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.2.2]
+    exact selected
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.2.1]
+    exact chainControl
+  · intro i
+    exact (lowWord _ (by fin_cases i <;> decide)).trans (midPar i)
+  · intro i
+    exact (lowWord _ (by fin_cases i <;> decide)).trans (midKey i)
+  · intro i
+    let cell : Fin 4 := ⟨i.val / 2, by fin_cases i <;> decide⟩
+    have dstAlign : alignToDword (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+        wordAddress 0x40028 cell.val := by fin_cases i <;> decide
+    have srcAlign : alignToDword (BitVec.ofNat 64 (0x20 + 4 * i.val)) =
+        wordAddress 0x20 cell.val := by fin_cases i <;> decide
+    have offset : byteOffset (BitVec.ofNat 64 (0x40028 + 4 * i.val)) / 4 =
+        byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4 := by
+      fin_cases i <;> decide
+    have copiedWord : t.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+        mid.getWord32 (BitVec.ofNat 64 (0x20 + 4 * i.val)) := by
+      simp only [MachineState.getWord32, dstAlign, srcAlign, offset]
+      exact congrArg (fun word : Word => extractWord32 word
+        (byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4))
+        (values cell.val cell.isLt)
+    exact copiedWord.trans (midKey i)
+
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_context_from_repeat' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_context_from_repeat
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
