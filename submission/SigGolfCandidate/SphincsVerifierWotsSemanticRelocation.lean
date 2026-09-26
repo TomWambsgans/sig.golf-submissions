@@ -1397,6 +1397,76 @@ theorem upper_path_source_address (target : Fin 5) :
       SphincsSecurity.numChains * SigGolfCandidate.SphincsWire.digestBytes := by
   fin_cases target <;> decide
 
+theorem upper_chain_source_address (target : Fin 5) :
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target =
+      0x22ca0 + SigGolfCandidate.SphincsWireEncoding.layerOffset
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) +
+        SigGolfCandidate.SphincsWire.counterBytes := by
+  fin_cases target <;> decide
+
+/-- Each upper-layer WOTS value is already at the exact source address used
+    by the relocated verifier. -/
+theorem loaded_upper_chain_source (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some state)
+    (chain : ChainIndex) (j : Nat) (hj : j < 20) :
+    state.getByte (BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * chain.val + j)) =
+      (((signature.layers
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target)).chainValues
+          chain)).extractLsb' (8 * j) 8 := by
+  let lay := SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target
+  have addressEq :
+      SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * chain.val + j =
+      0x22ca0 + SigGolfCandidate.SphincsWireEncoding.layerOffset lay +
+        SigGolfCandidate.SphincsWire.counterBytes +
+        chain.val * SigGolfCandidate.SphincsWire.digestBytes + j := by
+    rw [upper_chain_source_address target]
+    simp only [lay, SigGolfCandidate.SphincsWire.digestBytes]
+    omega
+  rw [addressEq]
+  exact SigGolfCandidate.SphincsWireEncoding.loaded_honest_layerChain
+    publicKey message pk signature state loaded lay chain j (by
+      simpa [SigGolfCandidate.SphincsWire.digestBytes] using hj)
+
+theorem loaded_upper_chain_source_after_frame (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial final : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address)
+    (chain : ChainIndex) (j : Nat) (hj : j < 20) :
+    final.getByte (BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * chain.val + j)) =
+      (((signature.layers
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target)).chainValues
+          chain)).extractLsb' (8 * j) 8 := by
+  let address : Word := BitVec.ofNat 64
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+      20 * chain.val + j)
+  have low : address.toNat < 0x40000 := by
+    have bound := SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_bound target
+    have hc := chain.isLt
+    change chain.val < 52 at hc
+    have small : SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * chain.val + j < 2 ^ 64 := by omega
+    simp only [address, BitVec.toNat_ofNat, Nat.mod_eq_of_lt small]
+    omega
+  exact (frame address low).trans
+    (loaded_upper_chain_source target publicKey message pk signature initial
+      loaded chain j hj)
+
 /-- The freshly loaded verifier memory contains every upper-layer XMSS sibling. -/
 theorem loaded_upper_path_witness (target : Fin 5)
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
@@ -1860,6 +1930,10 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms loaded_upper_path_witness
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_chain_source_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_upper_chain_source_after_frame
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.pathWitness_of_low_byte_frame' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
