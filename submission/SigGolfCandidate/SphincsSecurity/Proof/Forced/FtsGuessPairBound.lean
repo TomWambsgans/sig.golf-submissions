@@ -63,3 +63,48 @@ theorem lazy_original_two_guesses (dummy : OtsReferenceWords) (adversary : Adver
   simpa only [pairRate, show Fintype.card Digest = 2 ^ 160 by simp [digestBits]] using hbound
 
 end SphincsSecurity.Concrete.FtsGuessHash
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec ENNReal
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State lazyRun initialState)
+
+theorem lazy_original_two_guesses_budget_event (dummy : OtsReferenceWords)
+    (adversary : Adversary) (q : Nat) (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary)) :
+    Pr[fun result => 2 ≤ result.2.guesses.card ∧
+      keygenHashCost + completedWork result.1 ≤ q |
+      lazyRun
+        (SecretGuessObservation.environment
+          (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+        (initialState PUnit.unit)] ≤ pairRate q := by
+  let law := lazyRun
+    (SecretGuessObservation.environment
+      (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+    (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+    (initialState PUnit.unit)
+  have hsub : Pr[fun result => 2 ≤ result.2.guesses.card ∧
+      keygenHashCost + completedWork result.1 ≤ q | law] ≤
+      Pr[fun result => 2 ≤ result.2.guesses.card ∧ result.2.probes ≤ q | law] := by
+    apply _root_.probEvent_mono
+    intro result hr hevent
+    have hp := lazy_original_completedRun_probes_le_work dummy adversary parameter
+      otsSecret labels auxiliary result
+      (by simpa only [mem_support_iff, SPMF.probOutput_eq_apply] using hr)
+    exact ⟨hevent.1, by omega⟩
+  exact hsub.trans (by
+    simpa only [pairRate, show Fintype.card Digest = 2 ^ 160 by simp [digestBits]] using
+      SecretGuessObservation.lazyRun_two_guesses_budget_event
+        (SecretGuessObservation.environment
+          (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+        PUnit.unit q)
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.lazy_original_two_guesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.lazy_original_two_guesses_budget_event
