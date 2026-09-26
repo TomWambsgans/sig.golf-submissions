@@ -94,6 +94,51 @@ theorem originalProposalRecord_budget_stopped_event (key : SecretKey)
           (expandedAdversaryImpl key input))).run cache] := by rw [hcountLaw]
     _ = _ := hcap.symm
 
+private theorem certificateCountedLengthImpl_event_of_record (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (counter : CertificateCountedState → Prop)
+    (weight : ProposalExecutionRecord input → Prop)
+    (hadvance : ∀ length record, counter
+      (originalProposalAdvance (certificateCountedUpdate key budget required stopAfter)
+        input state length record) ↔ weight record) :
+    Pr[fun result => counter result.2 |
+      (certificateCountedLengthImpl key budget required stopAfter input).run state] =
+    Pr[weight | originalProposalRecord key input state.1] := by
+  simp only [certificateCountedLengthImpl, originalLengthImpl, lengthRecordImpl, StateT.run_mk]
+  split
+  · rw [← PMF.monad_map_eq_map, probEvent_map]
+    simp only [Function.comp_def, hadvance]
+    have h := congrArg (fun law : PMF (ProposalExecutionRecord input) => Pr[weight | law])
+      (recordLengthBridge_record (originalProposalRecord key input state.1)
+        targetProposalAcceptance targetProposalAcceptance_ne_zero targetProposalAcceptance_lt_one.le)
+    rw [← PMF.monad_map_eq_map, probEvent_map] at h
+    exact h
+  · rw [← PMF.monad_map_eq_map, probEvent_map]
+    simp only [Function.comp_def, hadvance]
+
+theorem certificateCountedLengthImpl_hit_budget_stopped_event (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (q : Nat) (hspent : state.2.2 ≤ q) :
+    Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+      (certificateCountedLengthImpl key budget required stopAfter input).run state] =
+    Pr[QueryCap.stoppedStateEvent (fun _ finalCache =>
+      (state.2.1.2 || decide (CertificateCacheExceptional key state.1) ||
+        decide (CertificateCacheExceptional key finalCache)) = true) |
+      (simulateQ romPmfImpl (QueryCap.run
+        (fun query : OracleWorld.Domain => query matches .inr _)
+        (expandedAdversaryImpl key input) (q - state.2.2))).run state.1] := by
+  let hit : QueryCache HashSpec → Prop := fun finalCache =>
+    (state.2.1.2 || decide (CertificateCacheExceptional key state.1) ||
+      decide (CertificateCacheExceptional key finalCache)) = true
+  have hstep := certificateCountedLengthImpl_event_of_record key budget required stopAfter input state
+    (fun after => after.2.1.2 = true ∧ after.2.2 ≤ q)
+    (fun record => hit record.cache ∧ state.2.2 + record.trace.hashCalls ≤ q)
+    (by intro length record; rfl)
+  exact hstep.trans (originalProposalRecord_budget_stopped_event key input state.1
+    state.2.2 q hspent hit)
+
 theorem expected_certificateCacheLengthImpl_of_record_function (key : SecretKey) (budget : Nat)
     (required : Finset FtsTree) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
@@ -463,3 +508,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.originalProposalRecord_budget_stopped_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.originalProposalRecord_budget_stopped_event
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_stopped_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_stopped_event
