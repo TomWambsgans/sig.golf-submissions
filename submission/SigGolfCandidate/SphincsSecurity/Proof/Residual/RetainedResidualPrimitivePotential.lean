@@ -875,3 +875,50 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_completeWork_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_completeWork_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+variable (parameter : PublicParameter) (inputs : Finset HashInput)
+  (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+  (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+
+/-- A one-step potential payment composes with any continuation that preserves the
+potential on every supported successful answer. -/
+theorem lazyRun_stoppedPotential_bind_le {First Result : Type}
+    (first : OracleComp (World inputs) First)
+    (next : First → OracleComp (World inputs) (Option Result))
+    (state : State inputs) (budget : Nat)
+    (hnext : ∀ middle, Pr[= middle | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows) first state] ≠ 0 →
+      ∀ answer, middle.1 = some answer →
+      (∑' result, Pr[= result | lazyRun
+        (environment parameter inputs hencoding words publicReplies selections rows)
+        (next answer) middle.2] * stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget middle.2.memory) :
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (first >>= next) state] * stoppedPrimitiveResultPotential inputs budget result) ≤
+    (∑' middle, Pr[= middle | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows) first state] *
+      primitiveResultPotential budget middle) := by
+  rw [lazyRun_bind, tsum_probOutput_bind_mul]
+  apply ENNReal.tsum_le_tsum
+  intro middle
+  by_cases hm : Pr[= middle | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows) first state] = 0
+  · simp only [hm, zero_mul, le_refl]
+  · apply mul_le_mul' le_rfl
+    rcases middle with ⟨answer, after⟩
+    cases answer with
+    | none => simp [stoppedPrimitiveResultPotential, primitiveResultPotential]
+    | some answer => exact hnext (some answer, after) hm answer rfl
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stoppedPotential_bind_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stoppedPotential_bind_le
