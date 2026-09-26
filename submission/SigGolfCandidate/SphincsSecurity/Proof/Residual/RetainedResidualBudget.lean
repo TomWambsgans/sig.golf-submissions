@@ -137,6 +137,23 @@ theorem fixedSourceImpl_sign_exact_cost {inputs : Finset HashInput}
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_sign_exact_cost
 
+theorem fixedSourceImpl_hash_exact_cost {inputs : Finset HashInput}
+    (context : Context inputs) (input : HashInput) (memory : Memory) :
+    (fun result : Option HashOutput × Memory =>
+      (result.1, result.2.external.hashCalls - memory.external.hashCalls)) <$>
+      (fixedSourceImpl context (.inl (.inr input))).run.run memory =
+    pure ((fixedHashStep context.key.parameter context.words context.auxiliary.selections
+      memory.routing context.actual context.oracle input memory).1, 1) := by
+  simp only [fixedSourceImpl, OptionT.run_mk, StateT.run_mk, fixedByteRun,
+    simulateQ_spec_query, fixedByteImpl, map_pure]
+  rw [fixedHashStep_hashCalls]
+  simp
+
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_hash_exact_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.fixedSourceImpl_hash_exact_cost
+
 end SphincsSecurity.Concrete.RetainedResidual
 
 namespace SphincsSecurity.WeightedCutoff
