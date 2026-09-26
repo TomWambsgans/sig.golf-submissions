@@ -6018,4 +6018,116 @@ theorem first_bottom_all_chains (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_all_chains
 
+theorem first_bottom_secret_prelude_digit_frame (s : MachineState)
+    (j : ChainIndex) :
+    (firstBottomSecretPrelude s).getByte
+        (BitVec.ofNat 64 (0x44000 + j.val)) =
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) := by
+  let address := BitVec.ofNat 64 (0x44000 + j.val)
+  have hj : j.val < 52 := by simpa [numChains] using j.isLt
+  have distinct (n : Nat) (small : n < 0x44000) :
+      alignToDword address ≠ BitVec.ofNat 64 n := by
+    intro h
+    have e := congrArg BitVec.toNat h
+    have addressNat : address.toNat = 0x44000 + j.val := by
+      simp [address, BitVec.toNat_ofNat]
+      omega
+    rw [align_nat, addressNat] at e
+    simp [BitVec.toNat_ofNat] at e
+    omega
+  simp only [MachineState.getByte]
+  have h0 := distinct 0x43018 (by decide)
+  have h1 := distinct 0x43010 (by decide)
+  have h2 := distinct 0x430a0 (by decide)
+  have h3 := distinct 0x43050 (by decide)
+  have h4 := distinct 0x22838 (by decide)
+  dsimp [address] at h0 h1 h2 h3 h4
+  simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, MachineState.getMem_setMem_ne,
+    setWord32_eq]
+  simp only [show alignToDword (141368#64) = (141368#64) by decide,
+    if_neg h0, if_neg h1, if_neg h2, if_neg h3, if_neg h4]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_prelude_digit_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_prelude_digit_frame
+
+theorem first_bottom_secret_prelude_output_pointer (s : MachineState) :
+    (firstBottomSecretPrelude s).getMem 0x430a0 = 0x2283c ∧
+    (firstBottomSecretPrelude s).getMem 0x43050 = 0 ∧
+    (firstBottomSecretPrelude s).getMem 0x43020 = s.getMem 0x43020 := by
+  simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, setWord32_eq, alignToDword]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_prelude_output_pointer' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_prelude_output_pointer
+
+theorem first_bottom_initial_real_pointer (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (pc : s.pc = 0x3a8c)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf
+        ⟨0, by decide⟩ ∧
+      t.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+      t.getMem 0x43050 = 0 ∧
+      t.getMem 0x430a0 = 0x2283c ∧
+      (∀ j : ChainIndex,
+        t.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+          s.getByte (BitVec.ofNat 64 (0x44000 + j.val))) := by
+  obtain ⟨t, run, done, ctx⟩ :=
+    first_bottom_secret_context_from_encoding s parameter seed lay treeIdx
+      leaf pc layer tree selected par key
+  let mid := firstBottomSecretPrelude s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    first_bottom_secret_prelude_registers s pc
+  obtain ⟨v, copied, _, _, frame⟩ :=
+    first_bottom_secret_copy_with_frame mid midPc source destination count
+  have composed : OrdinarySteps SphincsMaskedImages.sign s 55 v := by
+    simpa only [mid, Nat.reduceAdd] using
+      (first_bottom_secret_prelude s pc).append copied
+  have same : t = v := ordinarySteps_unique run composed
+  subst v
+  have controls := first_bottom_secret_prelude_output_pointer s
+  have preserved (a : Word) (outside : a.toNat ≥ 0x40048) :
+      t.getMem a = mid.getMem a := by
+    apply frame a
+    intro i hi eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  refine ⟨t, run, done, ctx, ?_, ?_, ?_, ?_⟩
+  · rw [preserved 0x43020 (by decide), controls.2.2]
+    exact selected
+  · rw [preserved 0x43050 (by decide)]
+    exact controls.2.1
+  · rw [preserved 0x430a0 (by decide)]
+    exact controls.1
+  · intro j
+    let address := BitVec.ofNat 64 (0x44000 + j.val)
+    have hj : j.val < 52 := by simpa [numChains] using j.isLt
+    have high : (alignToDword address).toNat ≥ 0x40048 := by
+      rw [align_nat]
+      have natAddress : address.toNat = 0x44000 + j.val := by
+        simp [address, BitVec.toNat_ofNat]
+        omega
+      rw [natAddress]
+      omega
+    simp only [MachineState.getByte]
+    rw [preserved _ high]
+    exact first_bottom_secret_prelude_digit_frame s j
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_initial_real_pointer' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_initial_real_pointer
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
