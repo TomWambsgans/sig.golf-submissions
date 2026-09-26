@@ -3252,6 +3252,102 @@ theorem loaded_first_upper_counter_word
   simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
     decide_true, Bool.true_and, offset] using bitEq
 
+theorem first_upper_counter_word_after_frame (initial final : MachineState)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address) :
+    final.getWord32 0x23dbc = initial.getWord32 0x23dbc := by
+  apply BitVec.eq_of_getLsbD_eq_iff.mpr
+  intro bit hbit
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  have finalByte := variableWord_byte final 0x23dbc
+    (by decide) (by decide) (0 : Fin 5) byte
+  have initialByte := variableWord_byte initial 0x23dbc
+    (by decide) (by decide) (0 : Fin 5) byte
+  have low : (BitVec.ofNat 64 (0x23dbc + byte.val)).toNat < 0x40000 := by
+    simp only [BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega : 0x23dbc + byte.val < 2 ^ 64)]
+    omega
+  have byteEq : (final.getWord32 0x23dbc).extractLsb' (8 * byte.val) 8 =
+      (initial.getWord32 0x23dbc).extractLsb' (8 * byte.val) 8 := by
+    have address : 0x23dbc + 4 * (0 : Fin 5).val + byte.val =
+        0x23dbc + byte.val := by simp
+    rw [address] at finalByte initialByte
+    calc
+      _ = final.getByte (BitVec.ofNat 64 (0x23dbc + byte.val)) := finalByte.symm
+      _ = initial.getByte (BitVec.ofNat 64 (0x23dbc + byte.val)) := frame _ low
+      _ = _ := initialByte
+  have bitEq := congrArg (fun value : BitVec 8 => value.getLsbD (bit % 8)) byteEq
+  have offset : 8 * byte.val + bit % 8 = bit := by
+    dsimp [byte]
+    omega
+  simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
+    decide_true, Bool.true_and, offset] using bitEq
+
+theorem honest_first_upper_counter_word_after_frame
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial final : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address) :
+    final.getWord32 0x23dbc =
+      BitVec.ofNat 32 (signature.layers topLayer).counter.toNat := by
+  exact (first_upper_counter_word_after_frame initial final frame).trans
+    (loaded_first_upper_counter_word publicKey message pk signature initial loaded)
+
+theorem first_upper_handoff_low_frame (hash : Hash)
+    (initial state : MachineState)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (SphincsVerifierXmssTransitionMessage.handoffState (0 : Fin 5)
+      (SphincsVerifierXmssPathControl.pathState hash
+        (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5))
+        (layerHeight (SphincsVerifierXmssTransition.previousLayer
+          (0 : Fin 5))) state)).getByte address =
+      initial.getByte address := by
+  let previous := SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash previous
+    (layerHeight previous) state
+  have pathFrame : pathEnd.getByte address = state.getByte address := by
+    apply SphincsVerifierWotsSemanticAllChains.lowByteFrame state pathEnd
+      (fun read small =>
+        SphincsVerifierXmssPathControl.path_low_mem hash previous
+          (layerHeight previous) state read small) address low
+  exact (upper_handoff_low_byte_frame (0 : Fin 5) pathEnd address low).trans
+    (pathFrame.trans (frame address low))
+
+theorem honest_first_upper_handoff_counter_word (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address) :
+    (SphincsVerifierXmssTransitionMessage.handoffState (0 : Fin 5)
+      (SphincsVerifierXmssPathControl.pathState hash
+        (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5))
+        (layerHeight (SphincsVerifierXmssTransition.previousLayer
+          (0 : Fin 5))) state)).getWord32 0x23dbc =
+      BitVec.ofNat 32 (signature.layers topLayer).counter.toNat := by
+  exact honest_first_upper_counter_word_after_frame publicKey message pk
+    signature initial _ loaded
+    (first_upper_handoff_low_frame hash initial state frame)
+
+theorem first_upper_honest_counter_small (counter : Counter) :
+    BitVec.setWidth 64 (BitVec.ofNat 32 counter.toNat) >>> 20 = 0 := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ushiftRight]
+  rw [BitVec.toNat_setWidth_of_le (by decide)]
+  simp only [BitVec.toNat_ofNat]
+  have below : counter.toNat < 2 ^ 20 := counter.isLt
+  rw [Nat.mod_eq_of_lt (by omega : counter.toNat < 2 ^ 32)]
+  exact Nat.shiftRight_eq_zero counter.toNat 20 below
+
 theorem first_upper_encoding_query (state : MachineState)
     (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
@@ -3282,6 +3378,38 @@ theorem first_upper_encoding_query (state : MachineState)
     exact (first_upper_prehash_payload_byte state i hi).trans (payload i hi)
   · intro i hi
     exact first_upper_prehash_counter_bytes state counter counterWord i hi
+
+theorem first_upper_encoding_query_after_frame
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest)
+    (pc : state.pc = 0x6d1c)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (witness : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (payload : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+        message.extractLsb' (8*i) 8) :
+    hashInput (firstUpperPrehashState state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message
+        (signature.layers topLayer).counter) := by
+  have counterWord := honest_first_upper_counter_word_after_frame
+    publicKey inputMessage pk signature initial state loaded frame
+  have small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0 := by
+    rw [counterWord]
+    exact first_upper_honest_counter_small _
+  exact first_upper_encoding_query state pk lay tree leaf message
+    (signature.layers topLayer).counter pc small layerCell positionZero
+    treeCell leafCell witness payload counterWord
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_of_parts' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
@@ -3558,5 +3686,29 @@ theorem first_upper_encoding_query (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_first_upper_counter_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms loaded_first_upper_counter_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_counter_word_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_counter_word_after_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.honest_first_upper_counter_word_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms honest_first_upper_counter_word_after_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_handoff_low_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_handoff_low_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.honest_first_upper_handoff_counter_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms honest_first_upper_handoff_counter_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_honest_counter_small' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_honest_counter_small
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_encoding_query_after_frame
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
