@@ -2,11 +2,18 @@ import SigGolf
 import SigGolfCandidate.Hypertree.Images
 import RiscvZkvm.Rv64.Logic.MemRegion
 
+namespace SigGolfCandidate.Legacy
+abbrev Query := (n : Nat) × BitVec n
+abbrev HashSpec : OracleSpec Query := Query →ₒ BitVec 256
+abbrev Hash := QueryImpl HashSpec Id
+abbrev World := unifSpec + HashSpec
+end SigGolfCandidate.Legacy
+
 namespace SigGolfCandidate
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
 
 /-- The pre-64-byte HASH query made by the original-PC proof corpus. -/
-def hashInput (state : MachineState) : Query :=
+def hashInput (state : MachineState) : Legacy.Query :=
   let n := (state.getReg .x11).toNat
   ⟨n, BitVec.ofNat n ((List.range n).foldl (fun acc i =>
     acc + if (state.getByte (state.getReg .x10 + BitVec.ofNat 64 (i / 8))).getLsbD (i % 8)
