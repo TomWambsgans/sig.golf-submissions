@@ -107,3 +107,174 @@ theorem observedRun_source_hashCalls_le {Result : Type} {inputs : Finset HashInp
   exact fixedSourceRun_hashCalls_le context computation q hbound state.memory (forgetState result) h
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.WeightedCutoff
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+variable {Index : Type} {spec : OracleSpec Index}
+
+noncomputable def run {Result : Type} (charge : spec.Domain → Nat)
+    (program : OracleComp spec Result) : Nat → OracleComp spec (Option Result) :=
+  OracleComp.construct (fun value _ => pure (some value))
+    (fun query _ next budget => if charge query ≤ budget then do
+      let answer ← liftM (spec.query query)
+      next answer (budget - charge query)
+    else pure none) program
+
+@[simp] theorem run_pure {Result : Type} (charge : spec.Domain → Nat) (value : Result) (budget : Nat) :
+    run charge (pure value : OracleComp spec Result) budget = pure (some value) := rfl
+
+theorem run_query_bind {Result : Type} (charge : spec.Domain → Nat)
+    (query : spec.Domain) (next : spec.Range query → OracleComp spec Result) (budget : Nat) :
+    run charge (liftM (spec.query query) >>= next) budget =
+      if charge query ≤ budget then do
+        let answer ← liftM (spec.query query)
+        run charge (next answer) (budget - charge query)
+      else pure none := rfl
+
+noncomputable def counted {Result : Type} (charge : spec.Domain → Nat)
+    (program : OracleComp spec Result) : OracleComp spec (Result × Nat) :=
+  OracleComp.construct (fun value => pure (value, 0))
+    (fun query _ next => do
+      let answer ← liftM (spec.query query)
+      let result ← next answer
+      pure (result.1, result.2 + charge query)) program
+
+@[simp] theorem counted_pure {Result : Type} (charge : spec.Domain → Nat) (value : Result) :
+    counted charge (pure value : OracleComp spec Result) = pure (value, 0) := rfl
+
+theorem counted_query_bind {Result : Type} (charge : spec.Domain → Nat)
+    (query : spec.Domain) (next : spec.Range query → OracleComp spec Result) :
+    counted charge (liftM (spec.query query) >>= next) = (do
+      let answer ← liftM (spec.query query)
+      let result ← counted charge (next answer)
+      pure (result.1, result.2 + charge query)) := rfl
+
+private theorem run'_query_bind {State Result : Type}
+    (implementation : QueryImpl spec (StateT State ProbComp)) (query : spec.Domain)
+    (next : spec.Range query → OracleComp spec Result) (state : State) :
+    (simulateQ implementation (liftM (spec.query query) >>= next)).run' state =
+      ((implementation query).run state >>= fun result =>
+        (simulateQ implementation (next result.1)).run' result.2) := by
+  simp only [simulateQ_bind, simulateQ_query, OracleQuery.input_query,
+    OracleQuery.cont_query, id_map, StateT.run'_eq, StateT.run_bind, map_bind]
+
+/-- Exact total-charge cutoff event for an arbitrary stateful probabilistic oracle. -/
+theorem prob_run_eq_counted {State Result : Type}
+    (charge : spec.Domain → Nat)
+    (implementation : QueryImpl spec (StateT State ProbComp))
+    (program : OracleComp spec Result) (state : State) (budget : Nat)
+    (event : Result → Prop) :
+    Pr[fun value => ∃ x, value = some x ∧ event x |
+      (simulateQ implementation (run charge program budget)).run' state] =
+    Pr[fun result => event result.1 ∧ result.2 ≤ budget |
+      (simulateQ implementation (counted charge program)).run' state] := by
+  induction program using OracleComp.inductionOn generalizing state budget with
+  | pure value => simp [probEvent_pure]
+  | query_bind query next ih =>
+      rw [run_query_bind, counted_query_bind]
+      by_cases allowed : charge query ≤ budget
+      · rw [if_pos allowed, run'_query_bind, run'_query_bind]
+        simp only [probEvent_bind_eq_tsum]
+        apply tsum_congr
+        intro step
+        rw [ih step.1 step.2 (budget - charge query)]
+        congr 1
+        simp only [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
+          Functor.map_map, probEvent_map, Function.comp_def]
+        apply probEvent_congr' _ rfl
+        intro result _
+        have arithmetic : result.1.2 ≤ budget - charge query ↔ result.1.2 + charge query ≤ budget := by omega
+        exact and_congr_right fun _ => arithmetic
+      · rw [if_neg allowed, run'_query_bind]
+        have exceeded (count : Nat) : ¬count + charge query ≤ budget := by omega
+        simp [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
+          Functor.map_map, probEvent_bind_eq_tsum, probEvent_map, Function.comp_def, exceeded]
+
+/-- Any completed capped execution has spent no more than its initial budget. -/
+theorem run_counted_support_le {State Result : Type}
+    (charge : spec.Domain → Nat)
+    (implementation : QueryImpl spec (StateT State ProbComp))
+    (program : OracleComp spec Result) (state : State) (budget : Nat)
+    (result : Option Result × Nat)
+    (hr : result ∈ support
+      ((simulateQ implementation (counted charge (run charge program budget))).run' state)) :
+    result.2 ≤ budget := by
+  induction program using OracleComp.inductionOn generalizing state budget result with
+  | pure value =>
+      simp only [run_pure, counted_pure, simulateQ_pure, StateT.run'_eq,
+        StateT.run_pure, map_pure, support_pure, Set.mem_singleton_iff] at hr
+      cases hr
+      simp
+  | query_bind query next ih =>
+      rw [run_query_bind] at hr
+      by_cases allowed : charge query ≤ budget
+      · rw [if_pos allowed, counted_query_bind, run'_query_bind] at hr
+        rw [mem_support_bind_iff] at hr
+        obtain ⟨step, _, htail⟩ := hr
+        simp only [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
+          Functor.map_map, support_map, Set.mem_image] at htail
+        obtain ⟨tail, ht, rfl⟩ := htail
+        have ht' : tail.1 ∈ support
+            ((simulateQ implementation
+              (counted charge (run charge (next step.1) (budget - charge query)))).run' step.2) := by
+          rw [StateT.run'_eq, support_map, Set.mem_image]
+          exact ⟨tail, ht, rfl⟩
+        have bound := ih step.1 step.2 (budget - charge query) tail.1 ht'
+        omega
+      · rw [if_neg allowed] at hr
+        simp only [counted_pure, simulateQ_pure, StateT.run'_eq,
+          StateT.run_pure, map_pure, support_pure, Set.mem_singleton_iff] at hr
+        cases hr
+        simp
+
+end SphincsSecurity.WeightedCutoff
+
+namespace SphincsSecurity.WeightedCutoff
+
+/-- The residual World's observable hash-call costs. -/
+def residualCharge (inputs : Finset HashInput) :
+    (Concrete.RetainedResidual.World inputs).Domain → Nat
+  | .inl (.byte _ (.prepare _)) => 1
+  | .inl (.byte _ (.account cost)) => cost
+  | _ => 0
+
+theorem residual_run_eq_counted {State Result : Type} (inputs : Finset HashInput)
+    (implementation : QueryImpl (Concrete.RetainedResidual.World inputs) (StateT State ProbComp))
+    (program : OracleComp (Concrete.RetainedResidual.World inputs) Result)
+    (state : State) (budget : Nat) (event : Result → Prop) :
+    Pr[fun value => ∃ x, value = some x ∧ event x |
+      (simulateQ implementation (run (residualCharge inputs) program budget)).run' state] =
+    Pr[fun result => event result.1 ∧ result.2 ≤ budget |
+      (simulateQ implementation (counted (residualCharge inputs) program)).run' state] :=
+  prob_run_eq_counted (residualCharge inputs) implementation program state budget event
+
+theorem residual_run_counted_support_le {State Result : Type} (inputs : Finset HashInput)
+    (implementation : QueryImpl (Concrete.RetainedResidual.World inputs) (StateT State ProbComp))
+    (program : OracleComp (Concrete.RetainedResidual.World inputs) Result)
+    (state : State) (budget : Nat) (result : Option Result × Nat)
+    (hr : result ∈ support
+      ((simulateQ implementation
+        (counted (residualCharge inputs) (run (residualCharge inputs) program budget))).run' state)) :
+    result.2 ≤ budget :=
+  run_counted_support_le (residualCharge inputs) implementation program state budget result hr
+
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.prob_run_eq_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.prob_run_eq_counted
+
+/-- info: 'SphincsSecurity.WeightedCutoff.run_counted_support_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.run_counted_support_le
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_eq_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_eq_counted
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_counted_support_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_counted_support_le
