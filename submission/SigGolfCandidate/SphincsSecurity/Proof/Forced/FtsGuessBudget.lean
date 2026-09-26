@@ -156,3 +156,34 @@ theorem lazy_original_completedRun_probes (dummy : OtsReferenceWords) (adversary
   omega
 
 end SphincsSecurity.Concrete.FtsGuessHash
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State Environment fixedRun)
+
+theorem lazy_original_completedRun_probes_le_work (dummy : OtsReferenceWords)
+    (adversary : Adversary) (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
+    (result : Completed × State Coordinate Digest PUnit)
+    (hr : SecretGuessObservation.lazyRun
+      (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+      (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+      (SecretGuessObservation.initialState PUnit.unit) result ≠ 0) :
+    result.2.probes ≤ completedWork result.1 := by
+  rw [← SecretGuessObservation.run_erasure _ _ _ (fun _ => Finset.univ_nonempty),
+    RetainedObservation.bind_nonzero] at hr
+  obtain ⟨secrets, _, hr⟩ := hr
+  have hc := fixed_completedRun_probes
+    (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+    secrets parameter (canonicalGraphRoot labels) labels adversary
+    (SecretGuessObservation.initialState PUnit.unit) result hr
+  simpa only [SecretGuessObservation.initialState, Nat.zero_add] using hc
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.lazy_original_completedRun_probes_le_work' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.lazy_original_completedRun_probes_le_work
