@@ -8045,3 +8045,30 @@ theorem first_bottom_all_chains_at (outputBase : Nat) (hash : Hash) (s : Machine
 
 #print axioms first_bottom_all_chains_at
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+def signerOutputBase (location : Fin 5) : Nat :=
+  match location.val with
+  | 0 => 0x21670
+  | 1 => 0x21ae8
+  | 2 => 0x21f60
+  | 3 => 0x223d8
+  | _ => 0x2283c
+
+theorem signerOutputBase_low (location : Fin 5) :
+    0x100 ≤ signerOutputBase location := by
+  fin_cases location <;> decide
+
+theorem signerOutputBase_aligned (location : Fin 5) :
+    signerOutputBase location % 4 = 0 := by
+  fin_cases location <;> decide
+
+theorem signerOutputBase_bound (location : Fin 5) :
+    signerOutputBase location + 20 * 52 ≤ 0x40000 := by
+  fin_cases location <;> decide
+
+#print axioms signerOutputBase_low
+#print axioms signerOutputBase_aligned
+#print axioms signerOutputBase_bound
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
