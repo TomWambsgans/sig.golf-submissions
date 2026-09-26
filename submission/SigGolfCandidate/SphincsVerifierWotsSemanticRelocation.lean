@@ -3604,6 +3604,30 @@ theorem path_global_index_cell (hash : Hash) (lay : Layer)
       rw [SphincsVerifierXmssPathControl.pathState_succ, ih]
       exact round_global_index_cell hash lay state
 
+theorem upper_handoff_global_index_cell (target : Fin 5)
+    (state : MachineState) :
+    (SphincsVerifierXmssTransitionMessage.handoffState target state).getMem
+      0x43078 = state.getMem 0x43078 := by
+  let middle := SphincsVerifierXmssTransition.transitionState target state
+  let pointers := SphincsVerifierXmssTransitionMessage.pointerState target middle
+  change (SphincsVerifierCopy.copyRootState pointers).getMem 0x43078 = _
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame pointers 0x43078 (by
+      intro offset
+      rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+      fin_cases offset <;> decide),
+    SphincsVerifierXmssTransitionMessage.pointer_mem target middle 0x43078,
+    SphincsVerifierXmssTransition.transition_global_index]
+
+theorem upper_path_handoff_global_index_cell (target : Fin 5)
+    (hash : Hash) (state : MachineState) :
+    (SphincsVerifierXmssTransitionMessage.handoffState target
+      (SphincsVerifierXmssPathControl.pathState hash
+        (SphincsVerifierXmssTransition.previousLayer target)
+        (layerHeight (SphincsVerifierXmssTransition.previousLayer target))
+        state)).getMem 0x43078 = state.getMem 0x43078 := by
+  rw [upper_handoff_global_index_cell,
+    path_global_index_cell]
+
 theorem first_upper_encoding_query_with_index (hash : Hash)
     (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
     (initial state nextState : MachineState)
@@ -3996,6 +4020,14 @@ theorem first_upper_encoding_query_with_index (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.path_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms path_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_handoff_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_path_handoff_global_index_cell
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_with_index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

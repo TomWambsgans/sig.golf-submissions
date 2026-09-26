@@ -1900,4 +1900,168 @@ theorem first_bottom_secret_answer_words (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_answer_words
 
+/-- The signing image's seed-derivation fields use its own control-cell layout. -/
+def firstBottomSecretQueryWord (s : MachineState) (i : Fin 18) : BitVec 32 :=
+  if i.val = 0 then (1#64 + (s.getMem 0x43000 <<< 16)).setWidth 32
+  else if i.val = 1 then (s.getMem 0x43010).setWidth 32
+  else if i.val = 2 then extractWord32 (s.getMem 0x43008) 0
+  else if i.val = 3 then extractWord32 (s.getMem 0x43008) 1
+  else if i.val = 4 then (s.getMem 0x43018).setWidth 32
+  else if i.val < 10 then s.getWord32 (BitVec.ofNat 64 (0x74 + 4 * (i.val - 5)))
+  else s.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * (i.val - 10)))
+
+theorem first_bottom_secret_prepared_word (s : MachineState) (i : Fin 18) :
+    (firstBottomSecretHashPrep s).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * i.val)) = firstBottomSecretQueryWord s i := by
+  fin_cases i <;>
+    simp [firstBottomSecretHashPrep, firstBottomSecretHashCode,
+      firstBottomSecretQueryWord, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.setWord32, MachineState.getWord32, alignToDword, byteOffset,
+      SphincsMaskedChainStep.extract_replace_low,
+      SphincsMaskedChainStep.extract_replace_high,
+      SphincsMaskedChainStep.extract_replace_low_other,
+      SphincsMaskedChainStep.extract_replace_high_other]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_prepared_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_prepared_word
+
+theorem first_bottom_secret_prepared_byte (s : MachineState) (i : Fin 72) :
+    (firstBottomSecretHashPrep s).getByte (BitVec.ofNat 64 (0x40000 + i.val)) =
+      (firstBottomSecretQueryWord s ⟨i.val / 4, by omega⟩).extractLsb'
+        (8 * (i.val % 4)) 8 := by
+  have h := SphincsVerifierFtsGenericBytes.variableWord_byte
+    (firstBottomSecretHashPrep s) (0x40000 + 4 * (i.val / 4))
+    (by omega) (by omega) 0 ⟨i.val % 4, Nat.mod_lt _ (by decide)⟩
+  simp only [Fin.val_zero, Nat.mul_zero, Nat.add_zero] at h
+  rw [show 0x40000 + 4 * (i.val / 4) + i.val % 4 = 0x40000 + i.val by omega] at h
+  rw [h, first_bottom_secret_prepared_word s ⟨i.val / 4, by omega⟩]
+
+/-- Signing's secret derivation has a different control-cell layout from keygen. -/
+def FirstBottomSecretContext (s : MachineState) (parameter : PublicParameter)
+    (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) : Prop :=
+  s.getMem 0x43000 = BitVec.ofNat 64 lay.val ∧
+  s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
+  s.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+  s.getMem 0x43010 = BitVec.ofNat 64 chain.val ∧
+  Words20 s 0x74 parameter ∧
+  SphincsMaskedSecretDomain.Words32 s seed ∧
+  (∀ i : Fin 8, s.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+    seed.extractLsb' (32 * i.val) 32)
+
+def firstBottomSecretKeygenView (s : MachineState) : MachineState :=
+  (s.setMem 0x43020 (s.getMem 0x43018)).setMem 0x43050 (s.getMem 0x43010)
+
+theorem first_bottom_secret_view_context (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain) :
+    SphincsMaskedSignOtsDomain.Secret.Context (firstBottomSecretKeygenView s)
+      parameter seed lay treeIdx leaf chain := by
+  obtain ⟨layer, tree, index, counter, par, original, copied⟩ := ctx
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa [firstBottomSecretKeygenView, MachineState.getMem_setMem_ne] using layer
+  · simpa [firstBottomSecretKeygenView, MachineState.getMem_setMem_ne] using tree
+  · simpa [firstBottomSecretKeygenView, MachineState.getMem_setMem_eq,
+      MachineState.getMem_setMem_ne] using index
+  · simpa [firstBottomSecretKeygenView, MachineState.getMem_setMem_eq] using counter
+  · intro i
+    have frame : (firstBottomSecretKeygenView s).getWord32
+        (BitVec.ofNat 64 (0x74 + 4 * i.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x74 + 4 * i.val)) := by
+      fin_cases i <;>
+        simp [firstBottomSecretKeygenView, MachineState.getWord32,
+          MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+    exact (frame.trans (par i))
+  · intro i
+    have frame : (firstBottomSecretKeygenView s).getWord32
+        (BitVec.ofNat 64 (0x20 + 4 * i.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x20 + 4 * i.val)) := by
+      fin_cases i <;>
+        simp [firstBottomSecretKeygenView, MachineState.getWord32,
+          MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+    exact frame.trans (original i)
+
+theorem first_bottom_secret_view_word (s : MachineState) (seed : MasterSeed)
+    (original : SphincsMaskedSecretDomain.Words32 s seed)
+    (copied : ∀ i : Fin 8,
+      s.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+        seed.extractLsb' (32 * i.val) 32)
+    (i : Fin 18) :
+    firstBottomSecretQueryWord s i =
+      SphincsMaskedSecretDomain.queryWord (firstBottomSecretKeygenView s) i := by
+  have k0 := copied 0
+  have k1 := copied 1
+  have k2 := copied 2
+  have k3 := copied 3
+  have k4 := copied 4
+  have k5 := copied 5
+  have k6 := copied 6
+  have k7 := copied 7
+  have o0 := original 0
+  have o1 := original 1
+  have o2 := original 2
+  have o3 := original 3
+  have o4 := original 4
+  have o5 := original 5
+  have o6 := original 6
+  have o7 := original 7
+  fin_cases i <;>
+    simp [firstBottomSecretQueryWord, SphincsMaskedSecretDomain.queryWord,
+      firstBottomSecretKeygenView, MachineState.getWord32,
+      MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne,
+      alignToDword, byteOffset,
+      k0, k1, k2, k3, k4, k5, k6, k7,
+      o0, o1, o2, o3, o4, o5, o6, o7]
+  all_goals first
+    | exact k0.trans o0.symm
+    | exact k1.trans o1.symm
+    | exact k2.trans o2.symm
+    | exact k3.trans o3.symm
+    | exact k4.trans o4.symm
+    | exact k5.trans o5.symm
+    | exact k6.trans o6.symm
+    | exact k7.trans o7.symm
+
+theorem first_bottom_secret_context_byte (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
+    (i : Fin 72) :
+    (firstBottomSecretQueryWord s ⟨i.val / 4, by omega⟩).extractLsb'
+      (8 * (i.val % 4)) 8 =
+    (SphincsMaskedSignOtsDomain.Secret.payload parameter seed lay treeIdx leaf chain)[i.val]'
+      (by rw [SphincsMaskedSignOtsDomain.Secret.payload_length]; exact i.isLt) := by
+  have ctxCopy := ctx
+  obtain ⟨_, _, _, _, _, original, copied⟩ := ctxCopy
+  rw [first_bottom_secret_view_word s seed original copied]
+  exact SphincsMaskedSignOtsDomain.Secret.context_byte
+    (firstBottomSecretKeygenView s) parameter seed lay treeIdx leaf chain
+    (first_bottom_secret_view_context s parameter seed lay treeIdx leaf chain ctx) i
+
+theorem first_bottom_secret_query (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3b20)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain) :
+    hashInput (firstBottomSecretHashPrep s) =
+      toQuery (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed) := by
+  apply Serialization.hashInput_of_list (firstBottomSecretHashPrep s) 0x40000
+    (SphincsMaskedSignOtsDomain.Secret.payload parameter seed lay treeIdx leaf chain)
+  · exact (first_bottom_secret_hash_registers s pc).2.1
+  · rw [SphincsMaskedSignOtsDomain.Secret.payload_length]
+    simp [(first_bottom_secret_hash_registers s pc).2.2.1]
+  · intro i hi
+    have bound : i < 72 := by
+      simpa only [SphincsMaskedSignOtsDomain.Secret.payload_length] using hi
+    rw [first_bottom_secret_prepared_byte s ⟨i, bound⟩]
+    exact first_bottom_secret_context_byte s parameter seed lay treeIdx leaf chain ctx
+      ⟨i, bound⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_query
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
