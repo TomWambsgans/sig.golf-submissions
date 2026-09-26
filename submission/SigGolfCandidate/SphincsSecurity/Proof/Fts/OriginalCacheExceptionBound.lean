@@ -2239,6 +2239,291 @@ theorem stoppedWorldRun_hit_le_Q {Result : Type} (key : SecretKey)
       _ ≤ _ := mul_le_mul' le_rfl le_self_add
   · simp [hevent]
 
+
+noncomputable def stoppedGhostPotential (key : SecretKey)
+    (state : CertificateStoppedCacheState) : ENNReal :=
+  stoppedCacheHistoryWeight key state +
+    (state.2.2 : ENNReal) * certificateCacheExceptionRate
+
+noncomputable def optionGhostPotential {A : Type} (key : SecretKey)
+    (result : Option (A × CertificateStoppedCacheState)) : ENNReal :=
+  result.elim 0 (fun x => stoppedGhostPotential key x.2)
+
+theorem expected_option_kernel_same_ghost {A B C : Type} (key : SecretKey)
+    (law : PMF (Option (A × CertificateStoppedCacheState)))
+    (kernel : A × CertificateStoppedCacheState → PMF B)
+    (out : A × CertificateStoppedCacheState → B → C) :
+    (∑' result, Pr[= result |
+      law.bind (fun source => match source with
+        | none => PMF.pure none
+        | some x => (kernel x).map (fun b => some (out x b, x.2)))] *
+      optionGhostPotential key result) =
+    ∑' source, Pr[= source | law] * optionGhostPotential key source := by
+  rw [← PMF.monad_bind_eq_bind, tsum_probOutput_bind_mul]
+  apply tsum_congr
+  intro source
+  congr 1
+  cases source with
+  | none =>
+      rw [← PMF.monad_pure_eq_pure, tsum_probOutput_pure_mul]
+      rfl
+  | some x =>
+      change (∑' z, Pr[= z | (kernel x).map (fun b => some (out x b, x.2))] *
+        optionGhostPotential key z) = optionGhostPotential key (some x)
+      rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+      simp only [optionGhostPotential, Option.elim_some]
+      rw [ENNReal.tsum_mul_right]
+      have htotal : (∑' b, Pr[= b | kernel x]) = 1 := by
+        simp only [PMF.probOutput_eq_apply]
+        exact PMF.tsum_coe (kernel x)
+      rw [htotal, one_mul]
+
+theorem stoppedSigningProjected_potential (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    (∑' result, Pr[= result | stoppedSigningProjected key message state] *
+      optionGhostPotential key result) =
+    ∑' result, Pr[= result | stoppedTracedSigningRun key message state] *
+      stoppedSuccessPotential key result := by
+  rw [stoppedSigningProjected, ← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+  apply tsum_congr
+  intro result
+  congr 1
+  cases result with
+  | mk selected ghost => cases selected <;> rfl
+
+theorem enrichedStoppedSigningRecord_potential (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) (hfinite : Finite state.1) :
+    (∑' result, Pr[= result | enrichedStoppedSigningRecord key message state] *
+      optionGhostPotential key result) ≤ stoppedGhostPotential key state := by
+  rw [enrichedStoppedSigningRecord_kernel]
+  rw [← PMF.monad_bind_eq_bind, tsum_probOutput_bind_mul]
+  calc
+    _ = ∑' source, Pr[= source | stoppedSigningProjected key message state] *
+        optionGhostPotential key source := by
+      apply tsum_congr
+      intro source
+      congr 1
+      cases source with
+      | none =>
+          rw [← PMF.monad_pure_eq_pure, tsum_probOutput_pure_mul]
+          rfl
+      | some x =>
+          change (∑' result, Pr[= result |
+            (signingRecordKernel key message x).map some] *
+            optionGhostPotential key result) = optionGhostPotential key (some x)
+          rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+          unfold signingRecordKernel
+          rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+          simp only [optionGhostPotential, Option.elim_some]
+          rw [ENNReal.tsum_mul_right]
+          have htotal : (∑' index, Pr[= index |
+              (liftM (completeSelectedIndex x.1.1.2) : PMF Index)]) = 1 := by
+            simp only [PMF.probOutput_eq_apply]
+            exact PMF.tsum_coe _
+          rw [htotal, one_mul]
+    _ = ∑' result, Pr[= result | stoppedTracedSigningRun key message state] *
+        stoppedSuccessPotential key result :=
+      stoppedSigningProjected_potential key message state
+    _ ≤ _ := stoppedWorldRun_potential key
+      (boundaryComputation key.parameter (signWithView key message))
+      state.2.2 state rfl hfinite
+
+noncomputable def optionJointPotential {input : (OracleWorld + SigningSpec).Domain}
+    (key : SecretKey) (result : Option (CertificateStoppedJointOutput input)) : ENNReal :=
+  result.elim 0 (fun x => stoppedGhostPotential key x.2.2.2)
+
+theorem certificateStoppedSigningJointStep_potential (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (hfinite : Finite ghost.1) :
+    (∑' result, Pr[= result |
+      certificateStoppedSigningJointStep key budget required stopAfter message state ghost] *
+      optionJointPotential key result) ≤ stoppedGhostPotential key ghost := by
+  rw [certificateStoppedSigningJointStep]
+  rw [← PMF.monad_bind_eq_bind, tsum_probOutput_bind_mul]
+  calc
+    _ = ∑' source, Pr[= source | enrichedStoppedSigningRecord key message ghost] *
+        optionGhostPotential key source := by
+      apply tsum_congr
+      intro source
+      congr 1
+      cases source with
+      | none =>
+          rw [← PMF.monad_pure_eq_pure, tsum_probOutput_pure_mul]
+          rfl
+      | some x =>
+          change (∑' result, Pr[= result |
+            (certificateStoppedSigningJointKernel key budget required stopAfter
+              message state x).map some] *
+            optionJointPotential key result) = optionGhostPotential key (some x)
+          rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+          unfold certificateStoppedSigningJointKernel
+          rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+          simp only [optionJointPotential, Option.elim_some,
+            optionGhostPotential]
+          rw [ENNReal.tsum_mul_right]
+          have htotal : (∑' length, Pr[= length |
+              certificateSigningLengthLaw key budget required stopAfter message state]) = 1 := by
+            simp only [PMF.probOutput_eq_apply]
+            exact PMF.tsum_coe _
+          rw [htotal, one_mul]
+    _ ≤ _ := enrichedStoppedSigningRecord_potential key message ghost hfinite
+
+theorem certificateStoppedWorldJointStep_potential (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (world : OracleWorld.Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (hfinite : Finite ghost.1) :
+    (∑' result, Pr[= result |
+      certificateStoppedWorldJointStep key budget required stopAfter world state ghost] *
+      optionJointPotential key result) ≤ stoppedGhostPotential key ghost := by
+  rw [certificateStoppedWorldJointStep,
+    ← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+  calc
+    _ = ∑' result, Pr[= result |
+        (simulateQ (certificateStoppedRomImpl key) (QueryCap.run
+          (fun query : OracleWorld.Domain => query matches .inr _)
+          (liftM (OracleWorld.query world)) ghost.2.2)).run ghost] *
+        stoppedSuccessPotential key result := by
+      apply tsum_congr
+      intro result
+      congr 1
+      cases result with
+      | mk selected finalState =>
+          cases selected with
+          | none => rfl
+          | some answer => rfl
+    _ ≤ _ := stoppedWorldRun_potential key (liftM (OracleWorld.query world))
+      ghost.2.2 ghost rfl hfinite
+
+theorem certificateStoppedJointStep_potential (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (hfinite : Finite ghost.1) :
+    (∑' result, Pr[= result |
+      certificateStoppedJointStep key budget required stopAfter input state ghost] *
+      optionJointPotential key result) ≤ stoppedGhostPotential key ghost := by
+  cases input with
+  | inl world =>
+      exact certificateStoppedWorldJointStep_potential key budget required stopAfter
+        world state ghost hfinite
+  | inr message =>
+      exact certificateStoppedSigningJointStep_potential key budget required stopAfter
+        message state ghost hfinite
+
+theorem certificateStoppedJointStep_cache_finite (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (hcache : ghost.1 = state.1) (hfinite : Finite ghost.1)
+    (x : CertificateStoppedJointOutput input)
+    (hx : some x ∈ (certificateStoppedJointStep key budget required stopAfter
+      input state ghost).support) :
+    x.2.2.2.1 = x.2.2.1.1 ∧ Finite x.2.2.2.1 := by
+  have hsome := (PMF.mem_support_iff _ _).1 hx
+  rw [certificateStoppedJointStep_some] at hsome
+  have hcost : x.1.trace.hashCalls ≤ ghost.2.2 := by
+    by_contra hn
+    simp [hn] at hsome
+  simp only [if_pos hcost] at hsome
+  have hunbounded : x ∈ (certificateUnboundedJointStep key budget required
+      stopAfter input state ghost).support := (PMF.mem_support_iff _ _).2 hsome
+  have hsame := certificateUnboundedJointStep_cache key budget required
+    stopAfter input state ghost x hunbounded
+  have hproject : (x.1.output, x.2.2.1) ∈
+      ((certificateCountedLengthImpl key budget required stopAfter input).run state).support := by
+    rw [← certificateUnboundedJointStep_project key budget required stopAfter
+      input state ghost hcache, PMF.mem_support_map_iff]
+    exact ⟨x, hunbounded, rfl⟩
+  have hproject' : (x.1.output, certificateCountedProject x.2.2.1) ∈
+      ((certificateCacheLengthImpl key budget required stopAfter input).run
+        (certificateCountedProject state)).support := by
+    rw [← certificateCountedLengthImpl_project key budget required stopAfter
+      input state, PMF.monad_map_eq_map, PMF.mem_support_map_iff]
+    exact ⟨(x.1.output, x.2.2.1), hproject, rfl⟩
+  have hfin := certificateCacheLengthImpl_finite key budget required stopAfter
+    input (certificateCountedProject state) (by
+      have hf : Finite state.1 := by rw [← hcache]; exact hfinite
+      simpa [certificateCountedProject] using hf)
+    (x.1.output, certificateCountedProject x.2.2.1) hproject'
+  exact ⟨hsame, by simpa [certificateCountedProject, hsame] using hfin⟩
+
+noncomputable def optionOuterPotential {Result : Type} (key : SecretKey)
+    (result : Option (Result × CertificateJointState)) : ENNReal :=
+  result.elim 0 (fun x => stoppedGhostPotential key x.2.2)
+
+theorem certificateStoppedOuterRun_potential {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    ∀ (state : CertificateJointState),
+      state.2.1 = state.1.1 → Finite state.2.1 →
+      (∑' result, Pr[= result |
+        certificateStoppedOuterRun key budget required stopAfter computation state] *
+        optionOuterPotential key result) ≤ stoppedGhostPotential key state.2 := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state hcache hfinite
+      rw [certificateStoppedOuterRun_pure, ← PMF.monad_pure_eq_pure,
+        tsum_probOutput_pure_mul]
+      rfl
+  | query_bind input next ih =>
+      intro state hcache hfinite
+      rw [certificateStoppedOuterRun_query_bind,
+        ← PMF.monad_bind_eq_bind, tsum_probOutput_bind_mul]
+      calc
+        _ ≤ ∑' middle, Pr[= middle |
+            certificateStoppedJointStep key budget required stopAfter
+              input state.1 state.2] * optionJointPotential key middle := by
+          apply ENNReal.tsum_le_tsum
+          intro middle
+          by_cases hm : middle ∈ (certificateStoppedJointStep key budget required
+              stopAfter input state.1 state.2).support
+          · apply mul_le_mul' le_rfl
+            cases middle with
+            | none =>
+                rw [← PMF.monad_pure_eq_pure, tsum_probOutput_pure_mul]
+                rfl
+            | some x =>
+                obtain ⟨hsame, hfin⟩ := certificateStoppedJointStep_cache_finite key
+                  budget required stopAfter input state.1 state.2 hcache hfinite x hm
+                exact ih x.1.output (x.2.2.1, x.2.2.2) hsame hfin
+          · have hz : (certificateStoppedJointStep key budget required stopAfter
+                input state.1 state.2) middle = 0 := by
+              simpa only [PMF.mem_support_iff, not_not] using hm
+            rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
+        _ ≤ _ := certificateStoppedJointStep_potential key budget required
+          stopAfter input state.1 state.2 hfinite
+
+theorem certificateStoppedOuterRun_hit_le_budget {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateJointState) (hcache : state.2.1 = state.1.1)
+    (hfinite : Finite state.2.1)
+    (hzero : stoppedCacheHistoryWeight key state.2 = 0) :
+    Pr[fun result => result.elim False (fun value => value.2.2.2.1 = true) |
+      certificateStoppedOuterRun key budget required stopAfter computation state] ≤
+      (state.2.2.2 : ENNReal) * certificateCacheExceptionRate := by
+  classical
+  have hpotential := certificateStoppedOuterRun_potential key budget required
+    stopAfter computation state hcache hfinite
+  rw [stoppedGhostPotential, hzero, zero_add] at hpotential
+  apply le_trans _ hpotential
+  rw [probEvent_eq_tsum_ite]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  by_cases hevent : result.elim False (fun value => value.2.2.2.1 = true)
+  · cases result with
+    | none => simp at hevent
+    | some value =>
+        simp only [Option.elim_some] at hevent
+        simp only [hevent, if_true, optionOuterPotential, Option.elim_some,
+          stoppedGhostPotential]
+        rw [stoppedCacheHistoryWeight, if_pos hevent]
+        calc
+          _ = Pr[= some value |
+              certificateStoppedOuterRun key budget required stopAfter computation state] * 1 := by simp
+          _ ≤ _ := mul_le_mul' le_rfl le_self_add
+  · simp [hevent]
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2444,3 +2729,27 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.stoppedWorldRun_hit_le_Q' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.stoppedWorldRun_hit_le_Q
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_potential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_potential
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedSigningJointStep_potential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedSigningJointStep_potential
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedWorldJointStep_potential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedWorldJointStep_potential
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedJointStep_cache_finite' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedJointStep_cache_finite
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_potential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_potential
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_le_budget
