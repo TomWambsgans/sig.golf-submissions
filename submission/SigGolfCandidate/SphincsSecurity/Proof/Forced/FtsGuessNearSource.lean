@@ -207,3 +207,71 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_original_near_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_original_near_witnesses_budget_event
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+attribute [local instance] Classical.propDecidable
+set_option maxHeartbeats 2000000
+noncomputable def referenceNearWitnessRestCost (key : SecretKey)
+    (f : QueryImpl HashSpec Id) (labels : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (dummy : OtsReferenceWords)
+    (adversary : Adversary) : ProbComp (Bool × Nat) :=
+  (fun before =>
+    (decide (sourceNearWitness key f labels selections dummy before),
+      (completedReferenceContact key.parameter f
+        (referenceFamilyWords selections dummy)
+        (canonicalGraphFrontier key.otsSecret labels
+          (referenceFamilyWords selections dummy)) before).output.2.hashCalls)) <$>
+    referenceForgeryRest key f labels selections dummy adversary
+
+theorem referenceNearWitnessRestCost_program (key : SecretKey)
+    (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary inputs)
+    (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
+    (dummy : OtsReferenceWords) (adversary : Adversary) :
+    let f := programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs
+        (canonicalReferenceResidual key.parameter inputs hencoding labels
+          auxiliary.rows auxiliary.seed))
+    referenceNearWitnessRestCost key f labels auxiliary.selections dummy adversary =
+      (fun result =>
+        (decide (completedNearGuess { key with root := canonicalGraphRoot labels } f result),
+          keygenHashCost + completedWork result)) <$>
+        simulateQ (fixedAnswers
+          (referenceAnswers key.parameter (canonicalGraphRoot labels)
+            key.otsSecret labels inputs hencoding auxiliary dummy)
+          (FtsGuessSigning.secretTable key.ftsSecret))
+          (completedRun key.parameter (canonicalGraphRoot labels) labels adversary) := by
+  dsimp only
+  rw [fixed_reference_completedForgeryRest key inputs hencoding labels auxiliary
+    hauxiliary dummy adversary, referenceNearWitnessRestCost, Functor.map_map]
+  congr 1
+  funext before
+  have hfirst :
+      sourceNearWitness key
+        (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+          (finiteHashAnswer ∅ inputs
+            (canonicalReferenceResidual key.parameter inputs hencoding labels
+              auxiliary.rows auxiliary.seed))) labels auxiliary.selections dummy before =
+      completedNearGuess { key with root := canonicalGraphRoot labels }
+        (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+          (finiteHashAnswer ∅ inputs
+            (canonicalReferenceResidual key.parameter inputs hencoding labels
+              auxiliary.rows auxiliary.seed)))
+        (completedAtRoot key.parameter (canonicalGraphRoot labels)
+          (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+            (finiteHashAnswer ∅ inputs
+              (canonicalReferenceResidual key.parameter inputs hencoding labels
+                auxiliary.rows auxiliary.seed))) before) := by
+    rw [sourceNearWitness, rootedKey_programmedHash key labels _ dummy]
+    simp only [completedReferenceContact, reference_root, completedNearGuess, completedAtRoot]
+  simp only [hfirst, completedReferenceContact_programmed_cost]
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_program' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_program
