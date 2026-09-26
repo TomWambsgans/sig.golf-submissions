@@ -79,3 +79,42 @@ theorem small_bound_le_security128 (q : Nat) (hq : 1 ≤ q) (hsmall : q ≤ budg
   convert smallRangeClosing ((q : ℝ) / 2 ^ 128) hlow hhigh using 1 <;> ring
 
 end SphincsSecurity.Concrete
+namespace SphincsSecurity.Concrete
+open ENNReal
+
+theorem small_budget_uniform_near_le_security127
+    (q : Nat) (hq : 1 ≤ q) (hsmall : q ≤ budgetSplit) :
+    primitiveCoefficient * ((q : ENNReal) / 2 ^ 144) +
+      (q : ENNReal) * fullCertificateExcessRate +
+      proposalPrefixExceptionBound +
+      ((q : ENNReal) / 2 ^ 128) ^ 2 /
+        (2 * (1 - (q : ENNReal) / 2 ^ 128) ^ 2) +
+      (q : ENNReal) / 2 ^ 159 ≤
+      (q : ENNReal) / 2 ^ 127 := by
+  let base : ENNReal :=
+    primitiveCoefficient * ((q : ENNReal) / 2 ^ 144) +
+      (q : ENNReal) * fullCertificateExcessRate +
+      proposalPrefixExceptionBound +
+      ((q : ENNReal) / 2 ^ 128) ^ 2 /
+        (2 * (1 - (q : ENNReal) / 2 ^ 128) ^ 2)
+  have hbase : base ≤ (q : ENNReal) / 2 ^ 128 := by
+    have h := small_bound_le_security128 q hq hsmall
+    change base + _ ≤ _ at h
+    exact (le_self_add).trans h
+  have hnear : (q : ENNReal) / 2 ^ 159 ≤ (q : ENNReal) / 2 ^ 128 := by
+    rw [div_eq_mul_inv, div_eq_mul_inv]
+    exact mul_le_mul' le_rfl (ENNReal.inv_le_inv.mpr (by norm_num))
+  change base + (q : ENNReal) / 2 ^ 159 ≤ _
+  calc
+    _ ≤ (q : ENNReal) / 2 ^ 128 + (q : ENNReal) / 2 ^ 128 :=
+      add_le_add hbase hnear
+    _ = (q : ENNReal) / 2 ^ 127 := by
+      apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
+      simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_div, ENNReal.toReal_natCast, ENNReal.toReal_ofNat, ENNReal.toReal_pow]
+      ring
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.small_budget_uniform_near_le_security127' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.small_budget_uniform_near_le_security127

@@ -609,3 +609,43 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_event_forced_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_event_forced_cost
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp ENNReal
+
+theorem referenceForgeryGame_near_guess_budget_le_uniform
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hq : q ≤ 2 ^ 159) :
+    Pr[fun sample => ReferenceForgerySample.nearGuess dummy sample ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+      (q : ENNReal) / 2 ^ 159 := by
+  have h := referenceForgeryGame_near_guess_budget_event dummy adversary q
+  have hsum :
+      (∑ slot ∈ Finset.range q,
+        Pr[fun hit => hit = true | forcedNearGame dummy adversary slot]) ≤
+      (q : ENNReal) := by
+    calc
+      _ ≤ ∑ _slot ∈ Finset.range q, (1 : ENNReal) := by
+        apply Finset.sum_le_sum
+        intro slot _
+        exact probEvent_le_one
+      _ = (q : ENNReal) := by simp
+  have hdenom : (2 ^ 159 : Nat) ≤ 2 ^ 160 - q := by omega
+  have hinv : ((2 ^ 160 - q : Nat) : ENNReal)⁻¹ ≤
+      ((2 ^ 159 : Nat) : ENNReal)⁻¹ :=
+    ENNReal.inv_le_inv.mpr (by exact_mod_cast hdenom)
+  calc
+    _ ≤ ((2 ^ 160 - q : Nat) : ENNReal)⁻¹ *
+        ∑ slot ∈ Finset.range q,
+          Pr[fun hit => hit = true | forcedNearGame dummy adversary slot] := h
+    _ ≤ ((2 ^ 159 : Nat) : ENNReal)⁻¹ * (q : ENNReal) :=
+      mul_le_mul' hinv hsum
+    _ = (q : ENNReal) / 2 ^ 159 := by simp only [Nat.cast_pow, Nat.cast_ofNat, div_eq_mul_inv, mul_comm]
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_le_uniform' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_le_uniform
