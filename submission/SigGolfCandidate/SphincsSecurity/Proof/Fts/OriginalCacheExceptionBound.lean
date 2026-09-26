@@ -2063,6 +2063,182 @@ theorem expected_stoppedCacheHistoryWeight_step (key : SecretKey)
           rw [hpoint]
         _ ≤ _ := hraw
 
+
+open FtsProbeSimulation (messageHashCharge)
+
+noncomputable def stoppedSuccessPotential {Result : Type} (key : SecretKey)
+    (result : Option (Result × Nat) × CertificateStoppedCacheState) : ENNReal :=
+  if result.1.isSome then
+    stoppedCacheHistoryWeight key result.2 +
+      (result.2.2.2 : ENNReal) * certificateCacheExceptionRate else 0
+
+theorem certificateStoppedRomImpl_finite (key : SecretKey)
+    (input : OracleWorld.Domain) (state : CertificateStoppedCacheState)
+    (hfinite : Finite state.1)
+    (result : OracleWorld.Range input × CertificateStoppedCacheState)
+    (hr : result ∈ ((certificateStoppedRomImpl key input).run state).support) :
+    Finite result.2.1 := by
+  have hm : (result.1, result.2.1) ∈ ((romPmfImpl input).run state.1).support := by
+    rw [← certificateStoppedRomImpl_cache_project key input state,
+      PMF.monad_map_eq_map, PMF.mem_support_map_iff]
+    exact ⟨result, hr, rfl⟩
+  have hs : (result.1, result.2.1) ∈ support ((romImpl input).run state.1) := by
+    simpa only [romPmfImpl, StateT.run_mk, probCompLift_support] using hm
+  exact finite_of_mem_support_romImpl hfinite hs
+
+theorem stoppedWorldRun_potential {Result : Type} (key : SecretKey)
+    (computation : OracleComp OracleWorld Result) :
+    ∀ (budget : Nat) (state : CertificateStoppedCacheState),
+      state.2.2 = budget → Finite state.1 →
+      (∑' result, Pr[= result |
+        (simulateQ (certificateStoppedRomImpl key)
+          (QueryCap.run (fun input : OracleWorld.Domain => input matches .inr _)
+            computation budget)).run state] * stoppedSuccessPotential key result) ≤
+      stoppedCacheHistoryWeight key state +
+        (budget : ENNReal) * certificateCacheExceptionRate := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro budget state hremaining hfinite
+      rw [QueryCap.run_pure, simulateQ_pure]
+      rw [StateT.run_pure, tsum_probOutput_pure_mul]
+      simp only [stoppedSuccessPotential, Option.isSome_some, if_true]
+      simp [hremaining]
+  | query_bind input next ih =>
+      intro budget state hremaining hfinite
+      rw [QueryCap.run_query_bind]
+      by_cases hselected : (fun input : OracleWorld.Domain => input matches .inr _) input
+      · simp only [if_pos hselected]
+        cases budget with
+        | zero =>
+            rw [simulateQ_pure]
+            rw [StateT.run_pure, tsum_probOutput_pure_mul]
+            simp [stoppedSuccessPotential]
+        | succ rem =>
+            rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+              tsum_probOutput_bind_mul]
+            let law := (certificateStoppedRomImpl key input).run state
+            have hcharge : hashQueryCharge
+                (fun cache hash => messageHashCharge key.parameter cache hash *
+                  certificateCacheExceptionRate) state.1 input ≤
+                certificateCacheExceptionRate := by
+              cases input with
+              | inl world => simp at hselected
+              | inr hash =>
+                  simp only [hashQueryCharge, Sum.elim_inr]
+                  unfold messageHashCharge
+                  split <;> simp
+            calc
+              _ ≤ ∑' x, Pr[= x | law] *
+                  (stoppedCacheHistoryWeight key x.2 +
+                    (rem : ENNReal) * certificateCacheExceptionRate) := by
+                apply ENNReal.tsum_le_tsum
+                intro x
+                by_cases hx : x ∈ law.support
+                · apply mul_le_mul' le_rfl
+                  have hrem := certificateStoppedRomImpl_remaining_step key input state x hx
+                  have hrem' : x.2.2.2 = rem := by
+                    cases input with
+                    | inl world => simp at hselected
+                    | inr hash => simpa [hremaining] using hrem
+                  exact ih x.1 rem x.2 hrem'
+                    (certificateStoppedRomImpl_finite key input state hfinite x hx)
+                · have hz : law x = 0 := by
+                    simpa only [PMF.mem_support_iff, not_not] using hx
+                  change Pr[= x | law] * _ ≤ Pr[= x | law] * _
+                  rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
+              _ = (∑' x, Pr[= x | law] * stoppedCacheHistoryWeight key x.2) +
+                    (rem : ENNReal) * certificateCacheExceptionRate := by
+                simp_rw [mul_add, ENNReal.tsum_add]
+                rw [ENNReal.tsum_mul_right]
+                have htotal : (∑' x, Pr[= x | law]) = 1 := by
+                  simp only [PMF.probOutput_eq_apply]
+                  exact PMF.tsum_coe law
+                rw [htotal, one_mul]
+              _ ≤ (stoppedCacheHistoryWeight key state +
+                    hashQueryCharge
+                      (fun cache hash => messageHashCharge key.parameter cache hash *
+                        certificateCacheExceptionRate) state.1 input) +
+                    (rem : ENNReal) * certificateCacheExceptionRate := by
+                exact add_le_add
+                  (expected_stoppedCacheHistoryWeight_step key input state hfinite) le_rfl
+              _ ≤ _ := by
+                calc
+                  _ ≤ (stoppedCacheHistoryWeight key state + certificateCacheExceptionRate) +
+                      (rem : ENNReal) * certificateCacheExceptionRate :=
+                    add_le_add (add_le_add le_rfl hcharge) le_rfl
+                  _ = _ := by
+                    push_cast
+                    ring
+      · simp only [if_neg hselected]
+        rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+          tsum_probOutput_bind_mul]
+        let law := (certificateStoppedRomImpl key input).run state
+        have hcharge : hashQueryCharge
+            (fun cache hash => messageHashCharge key.parameter cache hash *
+              certificateCacheExceptionRate) state.1 input = 0 := by
+          cases input with
+          | inl world => rfl
+          | inr hash => simp at hselected
+        calc
+          _ ≤ ∑' x, Pr[= x | law] *
+              (stoppedCacheHistoryWeight key x.2 +
+                (budget : ENNReal) * certificateCacheExceptionRate) := by
+            apply ENNReal.tsum_le_tsum
+            intro x
+            by_cases hx : x ∈ law.support
+            · apply mul_le_mul' le_rfl
+              have hrem := certificateStoppedRomImpl_remaining_step key input state x hx
+              have hrem' : x.2.2.2 = budget := by
+                cases input with
+                | inl world => simpa [hremaining] using hrem
+                | inr hash => simp at hselected
+              exact ih x.1 budget x.2 hrem'
+                (certificateStoppedRomImpl_finite key input state hfinite x hx)
+            · have hz : law x = 0 := by
+                simpa only [PMF.mem_support_iff, not_not] using hx
+              change Pr[= x | law] * _ ≤ Pr[= x | law] * _
+              rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
+          _ = (∑' x, Pr[= x | law] * stoppedCacheHistoryWeight key x.2) +
+                (budget : ENNReal) * certificateCacheExceptionRate := by
+            simp_rw [mul_add, ENNReal.tsum_add]
+            rw [ENNReal.tsum_mul_right]
+            have htotal : (∑' x, Pr[= x | law]) = 1 := by
+              simp only [PMF.probOutput_eq_apply]
+              exact PMF.tsum_coe law
+            rw [htotal, one_mul]
+          _ ≤ _ := by
+            have hstep := expected_stoppedCacheHistoryWeight_step key input state hfinite
+            rw [hcharge, add_zero] at hstep
+            exact add_le_add hstep le_rfl
+
+theorem stoppedWorldRun_hit_le_Q {Result : Type} (key : SecretKey)
+    (computation : OracleComp OracleWorld Result)
+    (budget : Nat) (state : CertificateStoppedCacheState)
+    (hremaining : state.2.2 = budget) (hfinite : Finite state.1)
+    (hzero : stoppedCacheHistoryWeight key state = 0) :
+    Pr[fun result => result.1.isSome ∧ result.2.2.1 = true |
+      (simulateQ (certificateStoppedRomImpl key)
+        (QueryCap.run (fun input : OracleWorld.Domain => input matches .inr _)
+          computation budget)).run state] ≤
+      (budget : ENNReal) * certificateCacheExceptionRate := by
+  have hpotential := stoppedWorldRun_potential key computation budget state
+    hremaining hfinite
+  rw [hzero, zero_add] at hpotential
+  apply le_trans _ hpotential
+  rw [probEvent_eq_tsum_ite]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  by_cases hevent : result.1.isSome ∧ result.2.2.1 = true
+  · simp only [hevent, if_true, stoppedSuccessPotential]
+    rw [stoppedCacheHistoryWeight, if_pos hevent.2]
+    calc
+      _ = Pr[= result |
+          (simulateQ (certificateStoppedRomImpl key)
+            (QueryCap.run (fun input : OracleWorld.Domain => input matches .inr _)
+              computation budget)).run state] * 1 := by simp
+      _ ≤ _ := mul_le_mul' le_rfl le_self_add
+  · simp [hevent]
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2260,3 +2436,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.expected_stoppedCacheHistoryWeight_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.expected_stoppedCacheHistoryWeight_step
+
+/-- info: 'SphincsSecurity.Concrete.stoppedWorldRun_potential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.stoppedWorldRun_potential
+
+/-- info: 'SphincsSecurity.Concrete.stoppedWorldRun_hit_le_Q' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.stoppedWorldRun_hit_le_Q
