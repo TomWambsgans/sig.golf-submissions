@@ -388,6 +388,76 @@ theorem enrichedStoppedSigningRecord_original_budget_event (key : SecretKey)
     intro i hi
     cases i <;> simp at *
 
+/-- The full proposal record and the monitored cache have the same joint law
+    on successful within-budget executions. -/
+theorem enrichedStoppedSigningRecord_unbounded_budget_event (key : SecretKey)
+    (message : Message) (state : CertificateStoppedCacheState)
+    (event : (ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) → Prop) :
+    Pr[fun result => result.elim False event |
+      enrichedStoppedSigningRecord key message state] =
+    Pr[fun record => record.1.trace.hashCalls ≤ state.2.2 ∧ event record |
+      enrichedSigningRecord key message state] := by
+  classical
+  have h := enrichedStoppedSigningRecord_budget_event key message state event
+  rw [enrichedSigningRecord_kernel]
+  rw [h]
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+    ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  apply tsum_congr
+  intro x
+  congr 1
+  by_cases hb : x.1.2.hashCalls ≤ state.2.2
+  · simp only [if_pos hb, ← PMF.monad_map_eq_map, probEvent_map,
+      Function.comp_def, Option.elim_some, signingRecordKernel]
+    simp [hb]
+  · simp only [if_neg hb]
+    simp only [← PMF.monad_map_eq_map, probEvent_map, signingRecordKernel,
+      Function.comp_def]
+    simp [hb, probEvent_eq_tsum_ite]
+    intro i hi
+    cases i <;> simp at *
+
+theorem enrichedStoppedSigningRecord_some (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (x : ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) :
+    enrichedStoppedSigningRecord key message state (some x) =
+      if x.1.trace.hashCalls ≤ state.2.2 then
+        enrichedSigningRecord key message state x else 0 := by
+  classical
+  have h := enrichedStoppedSigningRecord_unbounded_budget_event key message state
+    (fun record => record = x)
+  have hleft : (fun result : Option (ProposalExecutionRecord (.inr message) ×
+      CertificateStoppedCacheState) => result.elim False (fun record => record = x)) =
+      (fun result => result = some x) := by
+    funext result
+    cases result <;> simp
+  rw [hleft, probEvent_eq_eq_probOutput] at h
+  simp only [probOutput_def] at h
+  by_cases hb : x.1.trace.hashCalls ≤ state.2.2
+  · have hpred : (fun record => record.1.trace.hashCalls ≤ state.2.2 ∧ record = x) =
+        (fun record => record = x) := by
+      funext record
+      apply propext
+      constructor
+      · exact And.right
+      · intro heq
+        subst record
+        exact ⟨hb, rfl⟩
+    rw [hpred, probEvent_eq_eq_probOutput] at h
+    simpa [hb, probOutput_def] using h
+  · have hpred : (fun record : ProposalExecutionRecord (.inr message) ×
+        CertificateStoppedCacheState => record.1.trace.hashCalls ≤ state.2.2 ∧ record = x) =
+        (fun _ => False) := by
+      funext record
+      apply propext
+      constructor
+      · intro hr
+        rw [hr.2] at hr
+        exact hb hr.1
+      · exact False.elim
+    rw [hpred] at h
+    simpa [hb, probEvent_eq_tsum_ite] using h
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -1183,3 +1253,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_original_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_original_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_unbounded_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_unbounded_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_some' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_some
