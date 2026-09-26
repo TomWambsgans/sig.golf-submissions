@@ -3066,3 +3066,46 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialSource_fault_within_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.initialSource_fault_within_budget_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+/-- The stopped source potential pays for faults and message calls on all
+completed paths; a budget cut itself earns no payoff. -/
+theorem stop_add_completed_messages_le_expected_stoppedPotential
+    {Result : Type} {inputs : Finset HashInput} (budget : Nat)
+    (law : SPMF (Option (Option Result) × State inputs)) :
+    Pr[fun result => result.1 = none | law] +
+      (∑' result, Pr[= result | law] *
+        (if result.1 = some none then 0 else
+          (result.2.memory.messageCalls.length : ENNReal))) / 2 ^ digestBits ≤
+      ∑' result, Pr[= result | law] *
+        stoppedPrimitiveResultPotential inputs budget result := by
+  rw [probEvent_eq_tsum_ite, div_eq_mul_inv,
+    ← ENNReal.tsum_mul_right, ← ENNReal.tsum_add]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  rcases result with ⟨answer, after⟩
+  cases answer with
+  | none =>
+      simp [stoppedPrimitiveResultPotential, primitiveResultPotential,
+        div_eq_mul_inv, mul_add, mul_assoc, add_comm, add_left_comm, add_assoc]
+  | some answer =>
+      cases answer with
+      | none => simp [stoppedPrimitiveResultPotential]
+      | some value =>
+          have h : (some (some value) : Option (Option Result)) ≠ some none := by simp
+          simp only [h, ite_false,
+            stoppedPrimitiveResultPotential, primitiveResultPotential,
+            Option.elim_some, mul_add, div_eq_mul_inv, mul_assoc, zero_add]
+          simp only [Option.some_ne_none, ite_false, zero_add]
+          exact le_add_of_nonneg_right (zero_le :
+            0 ≤ Pr[= (some (some value), after) | law] *
+              primitiveContinuation budget after.memory)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.stop_add_completed_messages_le_expected_stoppedPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.stop_add_completed_messages_le_expected_stoppedPotential
