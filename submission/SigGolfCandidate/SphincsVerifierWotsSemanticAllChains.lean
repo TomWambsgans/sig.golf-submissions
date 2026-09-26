@@ -66,7 +66,8 @@ theorem chainEnd_lowFrame (state : MachineState) (chain : Fin 52)
   exact advanceFrame.trans (copyFrame.trans pointerFrame)
 
 def ContextAddr (address : Word) : Prop :=
-  address = 0x43000 ∨ address = 0x43008 ∨ address = 0x43018
+  address = 0x43000 ∨ address = 0x43008 ∨
+    address = 0x43018 ∨ address = 0x43020
 
 theorem chainEnd_contextFrame (state : MachineState) (chain : Fin 52)
     (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
@@ -81,14 +82,14 @@ theorem chainEnd_contextFrame (state : MachineState) (chain : Fin 52)
   have copyFrame := copyRoot_mem_frame pointers address (by
     intro offset
     rw [destination]
-    rcases context with rfl | rfl | rfl <;>
+    rcases context with rfl | rfl | rfl | rfl <;>
       fin_cases chain <;> fin_cases offset <;> decide)
   have pointerFrame : pointers.getMem address = state.getMem address := by
     simp [pointers, endpointSourceState, endpointPointersState, execInstrBr]
   have distinctPointer : address ≠ 0x43028 := by
-    rcases context with rfl | rfl | rfl <;> decide
+    rcases context with rfl | rfl | rfl | rfl <;> decide
   have distinctCounter : address ≠ 0x43050 := by
-    rcases context with rfl | rfl | rfl <;> decide
+    rcases context with rfl | rfl | rfl | rfl <;> decide
   have advanceFrame :
       (chainBranchState (chainAdvanceState
         (pointerAdvanceState (copyRootState pointers)))).getMem address =
@@ -103,23 +104,23 @@ theorem chainEnd_contextFrame (state : MachineState) (chain : Fin 52)
   exact advanceFrame.trans (copyFrame.trans pointerFrame)
 
 def StableAddr (address : Word) : Prop :=
-  address.toNat < 0x40000 ∨ ScratchAddr address
+  SafeAddr address ∨ ScratchAddr address
 
 theorem stepRound_stableFrame (hash : Hash) (state : MachineState)
     (address : Word) (stable : StableAddr address) :
     (stepRound hash state).getMem address = state.getMem address := by
-  rcases stable with low | scratch
+  rcases stable with safe | scratch
   · rw [stepRound]
     exact (stepNext_safeFrame hash
       (SphincsVerifierWotsStepCheck.stepCheckState state) address
-      (Or.inl low)).trans (stepCheck_mem state address)
+      safe).trans (stepCheck_mem state address)
   · exact stepRound_scratchFrame hash state address scratch
 
 theorem chainEntry_stableFrame (state : MachineState)
     (address : Word) (stable : StableAddr address) :
     (chainEntryState state).getMem address = state.getMem address := by
-  rcases stable with low | scratch
-  · exact chainEntry_safeFrame state address (Or.inl low)
+  rcases stable with safe | scratch
+  · exact chainEntry_safeFrame state address safe
   · exact chainEntry_scratchFrame state address scratch
 
 /-- The semantic WOTS loop also leaves all witness bytes and prior endpoints intact. -/
@@ -330,7 +331,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
   have lowFrame (address : Word) (low : address.toNat < 0x40000) :
       (chainEndState middle).getMem address = state.getMem address :=
     (chainEnd_lowFrame middle chain middleCounter address low).trans
-      (middleFrame address (Or.inl low))
+      (middleFrame address (Or.inl (Or.inl low)))
   have digitFrame (address : Word)
       (inside : SphincsVerifierWotsDigitFrame.DigitAddr address) :
       (chainEndState middle).getMem address = state.getMem address := by
@@ -369,7 +370,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     exact finalInv.layerCell
   · rw [context 0x43008 (Or.inr (Or.inl rfl)), stepCheck_mem]
     exact finalInv.treeCell
-  · rw [context 0x43018 (Or.inr (Or.inr rfl)), stepCheck_mem]
+  · rw [context 0x43018 (Or.inr (Or.inr (Or.inl rfl))), stepCheck_mem]
     exact finalInv.leafCell
   · have preTrace := entry.1.trace (hash := hash)
     have suffix := (checked.1.append endTrace).trace (hash := hash)

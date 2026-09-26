@@ -206,6 +206,7 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      final.getMem 0x43020 = state.getMem 0x43020 ∧
       (∀ address, address.toNat < 0x40000 →
         final.getMem address = state.getMem address) ∧
       (∀ address, DigitAddr address →
@@ -239,7 +240,7 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
   have lowFrame (address : Word) (low : address.toNat < 0x40000) :
       (chainEndState middle).getMem address = state.getMem address :=
     (chainEnd_lowFrame middle chain middleCounter address low).trans
-      (middleFrame address (Or.inl low))
+      (middleFrame address (Or.inl (Or.inl low)))
   have digitFrame (address : Word) (inside : DigitAddr address) :
       (chainEndState middle).getMem address = state.getMem address := by
     have scratch : ScratchAddr address := by
@@ -280,12 +281,15 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
       preTrace tailTrace preInside tailInside
   refine ⟨chainEndState middle, preSteps + 40, preCycles + 40,
     preCalls + 0, preBlocks + 0, run,
-    endPc, endCounter, endPointer, ?_, ?_, ?_,
+    endPc, endCounter, endPointer, ?_, ?_, ?_, ?_,
     lowFrame, digitFrame, otherFrame, endpointByte,
     by omega, by omega, by omega, by omega, ?_⟩
   · rw [context 0x43000 (Or.inl rfl)]; exact middleLayer
   · rw [context 0x43008 (Or.inr (Or.inl rfl))]; exact middleTree
-  · rw [context 0x43018 (Or.inr (Or.inr rfl))]; exact middleLeaf
+  · rw [context 0x43018 (Or.inr (Or.inr (Or.inl rfl)))]; exact middleLeaf
+  · rw [context 0x43020 (Or.inr (Or.inr (Or.inr rfl)))]
+    exact middleFrame 0x43020
+      (Or.inl (Or.inr ⟨by decide, by decide, by decide, by decide⟩))
   · simpa [run, tailTrace] using inside
 
 private structure History (hash : Hash)
@@ -299,6 +303,7 @@ private structure History (hash : Hash)
   layerCell : current.getMem 0x43000 = BitVec.ofNat 64 layer.val
   treeCell : current.getMem 0x43008 = BitVec.ofNat 64 tree.val
   leafCell : current.getMem 0x43018 = BitVec.ofNat 64 leaf.val
+  bitCell : current.getMem 0x43020 = initial.getMem 0x43020
   lowFrame : ∀ address, address.toNat < 0x40000 →
     current.getMem address = initial.getMem address
   digitFrame : ∀ address, DigitAddr address →
@@ -337,6 +342,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      final.getMem 0x43020 = state.getMem 0x43020 ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -381,7 +387,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
         (sourceByteSmall base baseBound chain j hj)]
       exact source chain j hj
     obtain ⟨following, a, b, c, d, trace, nextPc, nextCounter,
-      nextPointer, nextLayer, nextTree, nextLeaf, nextLow, nextDigit,
+      nextPointer, nextLayer, nextTree, nextLeaf, nextBit, nextLow, nextDigit,
       otherSlots, newEndpoint, stepBound, cycleBound, callBound,
       blockBound, inside⟩ :=
       chain_round_semantic_inside hash current pk layer tree leaf chain digit
@@ -398,6 +404,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
     · exact nextLayer
     · exact nextTree
     · exact nextLeaf
+    · exact nextBit.trans inv.bitCell
     · intro address low
       exact (nextLow address low).trans (inv.lowFrame address low)
     · intro address inside
@@ -432,7 +439,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
       ⟨by simpa [Inv, History] using pc,
        by simpa [Inv, History] using counter,
        by simpa [Inv, History] using pointer,
-       layerCell, treeCell, leafCell,
+       layerCell, treeCell, leafCell, rfl,
        by intro address _; rfl,
        by intro address _; rfl,
        by intro chain impossible; omega⟩
@@ -440,7 +447,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
     by simpa [Inv, History] using inv.pc,
     by simpa using inv.counter,
     by simpa using inv.pointer,
-    inv.layerCell, inv.treeCell, inv.leafCell,
+    inv.layerCell, inv.treeCell, inv.leafCell, inv.bitCell,
     ?_, inv.lowFrame, stepBound, cycleBound,
     callBound, blockBound, inside⟩
   intro chain j hj
@@ -477,6 +484,7 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      final.getMem 0x43020 = state.getMem 0x43020 ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -487,13 +495,13 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
       calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 := by
   obtain ⟨final, steps, cycles, calls, blocks, run, done, count,
-    sourcePointer, layerFinal, treeFinal, leafFinal, valuesDone, lowFrame,
+    sourcePointer, layerFinal, treeFinal, leafFinal, bitFinal, valuesDone, lowFrame,
     stepBound, cycleBound, callBound, blockBound, inside⟩ :=
     all_chains_inside_semantics hash state pk layer tree leaf digits values
       base baseBound baseAligned pc counter pointer layerCell treeCell
       leafCell hprefix decoded source
   refine ⟨shift (delta target) final, steps, cycles, calls, blocks,
-    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     stepBound, cycleBound, callBound, blockBound⟩
   · simp [shift_pc, done]
   · simpa using count
@@ -501,6 +509,7 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
   · simpa using layerFinal
   · simpa using treeFinal
   · simpa using leafFinal
+  · simpa using bitFinal
   · intro chain j hj
     simpa using valuesDone chain j hj
   · intro address low
@@ -559,6 +568,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      final.getMem 0x43020 = ready.getMem 0x43020 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
@@ -574,7 +584,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
   have shiftedStart : shift (delta target) base = ready := by
     simp [base, shift, MachineState.setPC]
   obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
-    _counter, _pointer, layerFinal, treeFinal, leafFinal, endpoints, lowFrame,
+    _counter, _pointer, layerFinal, treeFinal, leafFinal, bitFinal, endpoints, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_semantics target hash base pk layer tree leaf digits values
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
@@ -598,7 +608,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     intro address low
     simpa [base] using lowFrame address low
   refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc,
-    layerFinal, treeFinal, leafFinal,
+    layerFinal, treeFinal, leafFinal, by simpa [base] using bitFinal,
     witnessPrefix_frame ready final pk hprefix lowFrameReady, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩
   simpa only [shiftedStart] using run
@@ -793,6 +803,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      final.getMem 0x43020 = ready.getMem 0x43020 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
@@ -814,7 +825,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
         (values chain).extractLsb' (8 * j) 8 := by
     simpa only [readyEq] using upper_ready_source target state values source
   obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
-    done, layerFinal, treeFinal, leafFinal, finalPrefix, endpoints,
+    done, layerFinal, treeFinal, leafFinal, bitFinal, finalPrefix, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_from_ready target hash ready pk layer tree leaf digits values
       (by simpa only [readyEq] using preparedPc)
@@ -822,7 +833,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       (by simpa only [readyEq] using preparedPointer)
       layerCell treeCell leafCell readyPrefix decoded readySource
   refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
-    ?_, done, layerFinal, treeFinal, leafFinal, finalPrefix, endpoints,
+    ?_, done, layerFinal, treeFinal, leafFinal, bitFinal, finalPrefix, endpoints,
     by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
 
@@ -1338,11 +1349,12 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
                 (Concrete.recoverChain pk.parameter layer tree leaf chain
                   (digits chain) (values chain))))).extractLsb' (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
+      final.getMem 0x43070 = ready.getMem 0x43020 ∧
       steps ≤ 507 + 728 * 52 + 856 ∧
       cycles ≤ 507 + 777 * 52 + 991 ∧
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
   obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
-    chainRun, chainsPc, layerFinal, treeFinal, leafFinal,
+    chainRun, chainsPc, layerFinal, treeFinal, leafFinal, bitFinal,
     prefixFinal, endpointBytes, stepBound, cycleBound,
     callBound, blockBound⟩ :=
     upper_decoder_chains_semantics target hash state ready pk layer tree leaf
@@ -1352,12 +1364,13 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     evalWithAnswerFn (adaptOracle hash)
       (Concrete.recoverChain pk.parameter layer tree leaf chain
         (digits chain) (values chain))
-  obtain ⟨final, leafRun, done, digest, level, _bit, _frame⟩ :=
+  obtain ⟨final, leafRun, done, digest, level, bitDone, _frame⟩ :=
     upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
       chainsPc layerFinal treeFinal leafFinal prefixFinal
       (by intro chain j hj; exact endpointBytes chain j hj)
   refine ⟨final, chainSteps + 856, chainCycles + 991,
     chainCalls + 1, chainBlocks + 17, ?_, done, digest, level,
+    bitDone.trans bitFinal,
     by omega, by omega, by omega, by omega⟩
   simpa [Nat.add_assoc] using chainRun.trans leafRun
 
