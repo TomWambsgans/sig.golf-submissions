@@ -3109,3 +3109,100 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.stop_add_completed_messages_le_expected_stoppedPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.stop_add_completed_messages_le_expected_stoppedPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+/-- Pointwise form of the weighted cutoff law, including the final state.
+This is the form needed to transfer nonnegative payoffs such as message counts. -/
+theorem lazyRun_stopped_success_point_eq_budget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (value : Result) (after : State inputs) :
+    Pr[= (some (some value), after) |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining) state] =
+      if after.memory.external.hashCalls ≤ budget then
+        Pr[= (some value, after) |
+          lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+            program state] else 0 := by
+  have h := lazyRun_stopped_success_event_eq_budget parameter inputs
+    hencoding words publicReplies selections rows program state budget remaining
+    hremaining (fun v s => v = value ∧ s = after)
+  have hleft :
+      (fun result : Option (Option Result) × State inputs =>
+        ∃ v, result.1 = some (some v) ∧ v = value ∧ result.2 = after) =
+      (fun result => result = (some (some value), after)) := by
+    funext result
+    apply propext
+    rcases result with ⟨answer, final⟩
+    simp [Prod.mk.injEq, and_assoc, and_comm, and_left_comm]
+  have hright :
+      (fun result : Option Result × State inputs =>
+        ∃ v, result.1 = some v ∧ result.2.memory.external.hashCalls ≤ budget ∧
+          v = value ∧ result.2 = after) =
+      (fun result => result = (some value, after) ∧
+        after.memory.external.hashCalls ≤ budget) := by
+    funext result
+    apply propext
+    rcases result with ⟨answer, final⟩
+    simp [Prod.mk.injEq, and_assoc, and_comm, and_left_comm]
+    intro _ hfinal
+    subst final
+    rfl
+  rw [hleft, hright] at h
+  by_cases hb : after.memory.external.hashCalls ≤ budget
+  · simpa [hb, probEvent_eq_eq_probOutput] using h
+  · simpa [hb, probEvent_eq_eq_probOutput] using h
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_point_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_point_eq_budget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+/-- Nonnegative payoffs on completed paths transfer exactly between the
+weighted-stopped source and the original source gated by its actual cost. -/
+theorem lazyRun_stopped_success_weight_eq_budget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (weight : Result → State inputs → ENNReal) :
+    (∑' (value : Result), ∑' (after : State inputs),
+      Pr[= (some (some value), after) |
+        lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+          (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining) state] *
+        weight value after) =
+    (∑' (value : Result), ∑' (after : State inputs),
+      if after.memory.external.hashCalls ≤ budget then
+        Pr[= (some value, after) |
+          lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+            program state] * weight value after else 0) := by
+  apply tsum_congr
+  intro value
+  apply tsum_congr
+  intro after
+  rw [lazyRun_stopped_success_point_eq_budget parameter inputs hencoding
+    words publicReplies selections rows program state budget remaining
+    hremaining value after]
+  split_ifs <;> simp
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_weight_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_weight_eq_budget
