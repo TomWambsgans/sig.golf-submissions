@@ -2737,6 +2737,44 @@ theorem first_bottom_chain_answer_copy_value (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_answer_copy_value
 
+theorem first_bottom_chain_hash_frame (hash : Hash) (s : MachineState)
+    (a : Word) (outside : a ∉ SphincsMaskedChainStep.prepareWrites)
+    (h0 : a ≠ (0x42000#64)) (h8 : a ≠ (0x42008#64))
+    (h16 : a ≠ (0x42010#64)) (h24 : a ≠ (0x42018#64)) :
+    (firstBottomChainHashAnswer hash s).getMem a = s.getMem a := by
+  let prep := firstBottomChainHashPrep s
+  have dst : prep.getReg .x12 = 0x42000 := by
+    simpa [prep, firstBottomChainHashPrep] using
+      (SphincsMaskedChainStep.prepare_registers (s.setPC (0x1270#64))).2.2.1
+  change (writeHash prep (hash (hashInput prep))).getMem a = s.getMem a
+  rw [SphincsVerifierFtsLevelInit.writeHash_mem_frame prep _ dst a h0 h8 h16 h24]
+  simpa [prep, firstBottomChainHashPrep] using
+    SphincsMaskedChainStep.prepare_frame (s.setPC (0x1270#64)) a outside
+
+theorem first_bottom_chain_answer_copy_frame (s : MachineState)
+    (pc : s.pc = 0x3d58) (a : Word)
+    (h0 : a ≠ (0x44b00#64)) (h8 : a ≠ (0x44b08#64))
+    (h16 : a ≠ (0x44b10#64)) :
+    (firstBottomChainAnswerCopy s).getMem a = s.getMem a := by
+  let setup := firstBottomChainAnswerSetup s
+  have dst : setup.getReg .x7 = 0x44b00 :=
+    (first_bottom_chain_answer_setup_registers s pc).2.2
+  change (copyRootState setup).getMem a = s.getMem a
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame]
+  · simp [setup, firstBottomChainAnswerSetup,
+      firstBottomChainAnswerSetupCode, runSchedule, execInstrBr]
+  · intro i
+    rw [dst]
+    fin_cases i <;> simp_all [signExtend12, alignToDword]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_hash_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_hash_frame
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_answer_copy_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_answer_copy_frame
+
 /-- The signer increments the chain step and returns to the digit comparison. -/
 def firstBottomChainContinueCode : List (Word × Instr) := [
   (0x3d90, .LUI .x28 0x43),
@@ -2882,5 +2920,27 @@ theorem first_bottom_chain_iteration_trace (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_iteration_trace
+
+theorem first_bottom_chain_iteration_frame (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) (a : Word)
+    (prep : a ∉ SphincsMaskedChainStep.prepareWrites)
+    (answer0 : a ≠ (0x42000#64)) (answer8 : a ≠ (0x42008#64))
+    (answer16 : a ≠ (0x42010#64)) (answer24 : a ≠ (0x42018#64))
+    (copy0 : a ≠ (0x44b00#64)) (copy8 : a ≠ (0x44b08#64))
+    (copy16 : a ≠ (0x44b10#64)) (counter : a ≠ (0x43058#64)) :
+    (firstBottomChainIteration hash s).getMem a = s.getMem a := by
+  let answer := firstBottomChainHashAnswer hash s
+  let copied := firstBottomChainAnswerCopy answer
+  let advanced := firstBottomChainContinue copied
+  have answerPc := (first_bottom_chain_hash hash s pc).2
+  simp only [firstBottomChainIteration]
+  rw [first_bottom_chain_check_frame advanced a,
+    first_bottom_chain_continue_frame copied a counter,
+    first_bottom_chain_answer_copy_frame answer answerPc a copy0 copy8 copy16,
+    first_bottom_chain_hash_frame hash s a prep answer0 answer8 answer16 answer24]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_iteration_frame
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
