@@ -6498,3 +6498,57 @@ theorem signer_continue_shift (location : Fin 5) (s : MachineState)
 
 #print axioms signer_continue_shift
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy SphincsMaskedChainLoop
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+/-- Digit decode and branch are identical at each relocated signer layer. -/
+theorem signer_digit_shift (location : Fin 5) (s : MachineState)
+    (i : Fin 52) (pc : s.pc = 0x3bfc)
+    (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s) 21
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomChainDigit s)) := by
+  have baseSupport : ∀ e ∈ firstBottomChainDigitCode,
+      SphincsMaskedSignOtsShift.Supported e.2 := by decide
+  have supported : ∀ e ∈ firstBottomChainDigitCode,
+      signerSupported e.2 := by
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomChainDigitCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := signer_block_shift location firstBottomChainDigitCode
+    supported inside first_bottom_chain_digit_code s
+    (first_bottom_chain_digit_checked_any s i pc chain)
+  simpa [firstBottomChainDigit, firstBottomChainDigitCode] using run
+
+#print axioms signer_digit_shift
+
+/-- The seven-instruction compare after each nonfinal WOTS chain iteration relocates. -/
+theorem signer_check_shift (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3c34) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s) 7
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomChainCheck s)) := by
+  have baseSupport : ∀ e ∈ firstBottomChainCheckCode,
+      SphincsMaskedSignOtsShift.Supported e.2 := by decide
+  have supported : ∀ e ∈ firstBottomChainCheckCode,
+      signerSupported e.2 := by
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomChainCheckCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := signer_block_shift location firstBottomChainCheckCode
+    supported inside first_bottom_chain_check_code s
+    (first_bottom_chain_check_checked s pc)
+  simpa [firstBottomChainCheck, firstBottomChainCheckCode] using run
+
+#print axioms signer_check_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
