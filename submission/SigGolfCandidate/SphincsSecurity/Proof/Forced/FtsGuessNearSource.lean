@@ -162,3 +162,48 @@ theorem forgeAdvantage_le_forcedNear_small_budget (dummy : OtsReferenceWords)
     (add_le_add le_rfl (FtsGuessHash.referenceForgeryGame_near_guess_le_forced dummy adversary q hbound))
 
 end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+attribute [local instance] Classical.propDecidable
+
+theorem initial_original_near_witnesses_budget_event
+    (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
+    (hauxiliary : auxiliary ∈
+      (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
+    let inputs := canonicalGraphGameInputs adversary
+    let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
+    let residual := finiteHashAnswer ∅ inputs
+      (canonicalReferenceResidual parameter inputs hencoding labels
+        auxiliary.rows auxiliary.seed)
+    Pr[fun result => completedNearGuess
+      ⟨parameter, canonicalGraphRoot labels, otsSecret,
+        FtsGuessSigning.secretTable.symm result.1⟩
+      (programmedHash parameter otsSecret
+        (FtsGuessSigning.secretTable.symm result.1) labels residual) result.2 ∧
+      keygenHashCost + completedWork result.2 ≤ budget |
+      complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
+        (fun value => (secrets, value)) <$> 𝒮[simulateQ
+          (fixedAnswers (originalAnswers dummy adversary parameter otsSecret
+            labels auxiliary) secrets)
+          (completedRun parameter (canonicalGraphRoot labels) labels adversary)]] ≤
+      ((2 ^ 160 - budget : Nat) : ENNReal)⁻¹ *
+        ∑ slot ∈ Finset.range budget,
+          forcedNearProbability dummy adversary slot parameter otsSecret labels auxiliary := by
+  exact (initial_reference_near_witnesses_budget_event parameter otsSecret
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+    labels auxiliary hauxiliary dummy adversary budget).trans
+    (lazy_original_near_event_budget_le dummy adversary budget parameter
+      otsSecret labels auxiliary)
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_original_near_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_original_near_witnesses_budget_event

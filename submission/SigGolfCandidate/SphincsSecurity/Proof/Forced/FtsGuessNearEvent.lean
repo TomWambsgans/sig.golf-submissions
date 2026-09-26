@@ -129,3 +129,76 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.lazy_original_near_event_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.lazy_original_near_event_budget_le
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State lazyRun forcedRun initialState)
+attribute [local instance] Classical.propDecidable
+
+theorem initial_reference_near_witnesses_budget_event
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary inputs)
+    (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun result => completedNearGuess
+      ⟨parameter, canonicalGraphRoot labels, otsSecret,
+        FtsGuessSigning.secretTable.symm result.1⟩
+      (programmedHash parameter otsSecret
+        (FtsGuessSigning.secretTable.symm result.1) labels
+        (finiteHashAnswer ∅ inputs
+          (canonicalReferenceResidual parameter inputs hencoding labels
+            auxiliary.rows auxiliary.seed))) result.2 ∧
+      keygenHashCost + completedWork result.2 ≤ q |
+      complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
+        (fun value => (secrets, value)) <$> 𝒮[simulateQ
+          (fixedAnswers (referenceAnswers parameter (canonicalGraphRoot labels)
+            otsSecret labels inputs hencoding auxiliary dummy) secrets)
+          (completedRun parameter (canonicalGraphRoot labels) labels adversary)]] ≤
+      Pr[fun result =>
+        result.2.guesses.Nonempty ∧
+        completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+        keygenHashCost + completedWork result.1 ≤ q |
+        lazyRun
+          (SecretGuessObservation.environment
+            (referenceAnswers parameter (canonicalGraphRoot labels)
+              otsSecret labels inputs hencoding auxiliary dummy))
+          (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+          (initialState PUnit.unit)] := by
+  apply initialEvent_le _ _
+    (fun secrets result => completedNearGuess
+      ⟨parameter, canonicalGraphRoot labels, otsSecret,
+        FtsGuessSigning.secretTable.symm secrets⟩
+      (programmedHash parameter otsSecret
+        (FtsGuessSigning.secretTable.symm secrets) labels
+        (finiteHashAnswer ∅ inputs
+          (canonicalReferenceResidual parameter inputs hencoding labels
+            auxiliary.rows auxiliary.seed))) result ∧
+      keygenHashCost + completedWork result ≤ q)
+    (fun result =>
+      result.2.guesses.Nonempty ∧
+      completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+      keygenHashCost + completedWork result.1 ≤ q)
+  intro result hr secrets hs hevent
+  have htable : FtsGuessSigning.secretTable
+      (⟨parameter, canonicalGraphRoot labels, otsSecret,
+        FtsGuessSigning.secretTable.symm secrets⟩ : SecretKey).ftsSecret = secrets :=
+    Equiv.apply_symm_apply FtsGuessSigning.secretTable secrets
+  have hs' := (congrArg
+    (fun table => complete result.2.allowed table ≠ 0) htable).mpr hs
+  have hnear := lazy_reference_near_witnesses
+    ⟨parameter, canonicalGraphRoot labels, otsSecret,
+      FtsGuessSigning.secretTable.symm secrets⟩
+    inputs hencoding labels auxiliary hauxiliary dummy adversary
+    result hr hs' hevent.1
+  exact ⟨hnear.1, hnear.2, hevent.2⟩
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_reference_near_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_reference_near_witnesses_budget_event
