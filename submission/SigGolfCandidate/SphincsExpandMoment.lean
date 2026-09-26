@@ -101,6 +101,51 @@ theorem terminates_of_keygen_sign_verify
   | expand => exact runWith_termination hash input
   | verify => exact hverify hash input
 
+
+theorem honest_keygen_cost_of_runWith
+    (hrun : ∀ (hash : SigGolf.Hash) (secretKey : SecretKey),
+      (Candidate64.submission.runWith hash .keygen secretKey).hashCompressions = 1007616)
+    (hash : SigGolf.Hash) (secretKey : SecretKey) (message : Message) :
+    (evalWithAnswerFn hash
+      (Candidate64.submission.honest secretKey message)).costs .keygen = 1007616 := by
+  have hcost := hrun hash secretKey
+  unfold Submission.runWith at hcost
+  simp [Submission.honest, evalWithAnswerFn_bind, hcost]
+  split <;> simp [evalWithAnswerFn_bind, evalWithAnswerFn_pure, recordCost]
+  split <;> simp [evalWithAnswerFn_bind, evalWithAnswerFn_pure, recordCost]
+  split <;> simp [evalWithAnswerFn_pure, recordCost]
+
+theorem keygen_compression_bound_of_runWith
+    (hrun : ∀ (hash : SigGolf.Hash) (secretKey : SecretKey),
+      (Candidate64.submission.runWith hash .keygen secretKey).hashCompressions = 1007616)
+    (secretKey : SecretKey) :
+    OracleComp.EvalDist.expectedValue
+      (Candidate64.submission.honestWorkload secretKey)
+      (fun result => ENNReal.ofReal (Real.rpow 2
+        ((result.costs .keygen : ℝ) / (Phase.keygen.budget : ℝ)))) ≤ 2 := by
+  apply expectedValue_le_of_support
+  intro result mem
+  unfold Submission.honestWorkload at mem
+  rw [mem_support_bind_iff] at mem
+  obtain ⟨message, _, hresult⟩ := mem
+  obtain ⟨hash, heval⟩ := fixed_hash_of_support
+    (Candidate64.submission.honest secretKey message) result hresult
+  rw [← heval, honest_keygen_cost_of_runWith hrun hash secretKey message]
+  have hreal : Real.rpow 2 ((1007616 : ℝ) / (BUDGET_KEYGEN : ℝ)) ≤ (2 : ℝ) := by
+    calc
+      _ ≤ Real.rpow 2 1 :=
+        Real.rpow_le_rpow_of_exponent_le (by norm_num) (by norm_num [BUDGET_KEYGEN])
+      _ = 2 := by norm_num
+  exact (ENNReal.ofReal_le_ofReal hreal).trans (by norm_num)
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.honest_keygen_cost_of_runWith' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms honest_keygen_cost_of_runWith
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_compression_bound_of_runWith' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms keygen_compression_bound_of_runWith
+
 #print axioms runWith_termination
 #print axioms compressionBounds_of_keygen_sign
 #print axioms terminates_of_keygen_sign_verify

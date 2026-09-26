@@ -1,0 +1,4 @@
+output/
+pc64-beta-*.hex
+pc64-padding-report.json
+__pycache__/
