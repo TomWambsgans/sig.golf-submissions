@@ -2943,4 +2943,79 @@ theorem first_bottom_chain_iteration_frame (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_iteration_frame
 
+theorem first_bottom_chain_iteration_controls (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    (firstBottomChainIteration hash s).getMem 0x43058 =
+      s.getMem 0x43058 + 1 ∧
+    (firstBottomChainIteration hash s).pc =
+      if s.getMem 0x43058 + 1 = s.getMem 0x430c8
+      then 0x3db0 else 0x3c50 := by
+  let answer := firstBottomChainHashAnswer hash s
+  let copied := firstBottomChainAnswerCopy answer
+  let advanced := firstBottomChainContinue copied
+  have answerPc := (first_bottom_chain_hash hash s pc).2
+  have copiedPc := (first_bottom_chain_answer_copy answer answerPc).2
+  have advancedPc := (first_bottom_chain_continue_controls copied copiedPc).1
+  have advancedCounter := (first_bottom_chain_continue_controls copied copiedPc).2
+  have hashCounter : answer.getMem 0x43058 = s.getMem 0x43058 := by
+    exact first_bottom_chain_hash_frame hash s _ (by decide)
+      (by decide) (by decide) (by decide) (by decide)
+  have copiedCounter : copied.getMem 0x43058 = answer.getMem 0x43058 := by
+    exact first_bottom_chain_answer_copy_frame answer answerPc _
+      (by decide) (by decide) (by decide)
+  have hashDigit : answer.getMem 0x430c8 = s.getMem 0x430c8 := by
+    exact first_bottom_chain_hash_frame hash s _ (by decide)
+      (by decide) (by decide) (by decide) (by decide)
+  have copiedDigit : copied.getMem 0x430c8 = answer.getMem 0x430c8 := by
+    exact first_bottom_chain_answer_copy_frame answer answerPc _
+      (by decide) (by decide) (by decide)
+  have advancedDigit : advanced.getMem 0x430c8 = copied.getMem 0x430c8 := by
+    exact first_bottom_chain_continue_frame copied _ (by decide)
+  have checkPc := first_bottom_chain_check_controls advanced advancedPc
+  have checkCounter : (firstBottomChainCheck advanced).getMem 0x43058 =
+      advanced.getMem 0x43058 := by
+    simpa using first_bottom_chain_check_frame advanced (0x43058#64)
+  constructor
+  · change (firstBottomChainCheck advanced).getMem 0x43058 = _
+    rw [checkCounter, advancedCounter, copiedCounter, hashCounter]
+  · change (firstBottomChainCheck advanced).pc = _
+    rw [checkPc, advancedCounter, copiedCounter, hashCounter,
+      advancedDigit, copiedDigit, hashDigit]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_controls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_iteration_controls
+
+theorem first_bottom_chain_post_copy_word_frame (s : MachineState)
+    (i : Fin 5) :
+    (firstBottomChainCheck (firstBottomChainContinue s)).getWord32
+      (BitVec.ofNat 64 (0x44b00 + 4 * i.val)) =
+      s.getWord32 (BitVec.ofNat 64 (0x44b00 + 4 * i.val)) := by
+  simp only [MachineState.getWord32]
+  rw [first_bottom_chain_check_frame (firstBottomChainContinue s),
+    first_bottom_chain_continue_frame s]
+  fin_cases i <;> decide
+
+theorem first_bottom_chain_iteration_value (hash : Hash) (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step) :
+    Words20 (firstBottomChainIteration hash s) 0x44b00
+      (truncateHash (hash (toQuery
+        (tweakableHashInput parameter (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 value))))) := by
+  intro i
+  let answer := firstBottomChainHashAnswer hash s
+  let copied := firstBottomChainAnswerCopy answer
+  change (firstBottomChainCheck (firstBottomChainContinue copied)).getWord32 _ = _
+  rw [first_bottom_chain_post_copy_word_frame copied i]
+  exact (first_bottom_chain_answer_copy_value hash s parameter value lay
+    treeIdx leaf chain step pc ctx).2.2 i
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_iteration_value
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
