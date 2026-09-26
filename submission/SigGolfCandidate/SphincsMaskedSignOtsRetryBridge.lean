@@ -4105,3 +4105,131 @@ theorem first_bottom_chain_positive_any (hash : Hash) (s : MachineState)
 #print axioms first_bottom_chain_positive_any
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem first_bottom_chain_walk_pointer_any (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val)
+    (dest : Word) (pointer : s.getMem 0x430a0 = dest) :
+    ∀ n ≤ digit.val,
+      (firstBottomChainWalk hash n s).getMem 0x430a0 = dest := by
+  intro n hn
+  induction n with
+  | zero => simpa [firstBottomChainWalk] using pointer
+  | succ n ih =>
+    have nlt : n < digit.val := by omega
+    have pcN := (first_bottom_chain_nonfinal hash s parameter initial
+      lay treeIdx leaf chain digit pc ctx loaded n nlt).2.2.1
+    change (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).getMem
+      0x430a0 = dest
+    rw [first_bottom_chain_iteration_frame hash (firstBottomChainWalk hash n s)
+      pcN 0x430a0 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide)]
+    exact ih (by omega)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_walk_pointer_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_walk_pointer_any
+
+theorem first_bottom_zero_chain_serialized_any (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (digitZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+    let emitted := firstBottomEmitCopy (firstBottomChainDigit s)
+    Trace hash SphincsMaskedImages.sign s 36 36 0 0 emitted ∧
+    Words20 emitted (0x20060 + 20 * chain.val)
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
+  let walked := firstBottomChainDigit s
+  let emitted := firstBottomEmitCopy walked
+  have zero := first_bottom_chain_zero_any hash s parameter initial lay treeIdx leaf
+    chain pc ctx digitZero
+  have pointerWalked : walked.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+    change (firstBottomChainDigit s).getMem 0x430a0 = _
+    rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
+    exact pointer
+  have copied := first_bottom_emit_copy_trace_generic walked chain zero.2.1
+    pointerWalked
+  have bytes := first_bottom_emit_copy_words_generic walked chain zero.2.1
+    pointerWalked
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0)
+    zero.2.2
+  exact ⟨by simpa [walked, emitted] using zero.1.trans (copied.trace (hash := hash)),
+    by simpa [walked, emitted] using bytes⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_zero_chain_serialized_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_zero_chain_serialized_any
+
+theorem first_bottom_positive_chain_serialized_any (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (digitValue : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val)
+    (positive : 0 < digit.val)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+    let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
+    let emitted := firstBottomEmitCopy walked
+    Trace hash SphincsMaskedImages.sign s (36 + 95 * digit.val)
+      (36 + 102 * digit.val) digit.val digit.val emitted ∧
+    Words20 emitted (0x20060 + 20 * chain.val)
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
+  let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
+  let emitted := firstBottomEmitCopy walked
+  have run := first_bottom_chain_positive_any hash s parameter initial lay treeIdx
+    leaf chain digit pc ctx digitValue positive
+  have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val) := by
+    rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
+    exact pointer
+  have controls := first_bottom_chain_digit_controls_any s chain pc ctx.2.2.2.1
+  have notZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) ≠ 0 := by
+    rw [digitValue]
+    have small : digit.val < 8 := by simpa [chainLength, winternitzBits] using digit.isLt
+    bv_omega
+  have entryPc : (firstBottomChainDigit s).pc = 0x3c50 := by
+    rw [controls.2.2, if_neg notZero]
+  have entryDigit : (firstBottomChainDigit s).getMem 0x430c8 =
+      BitVec.ofNat 64 digit.val := by
+    rw [controls.1, digitValue]
+    have small : digit.val < 8 := by simpa [chainLength, winternitzBits] using digit.isLt
+    bv_omega
+  have entryContext := first_bottom_chain_digit_context_any s parameter initial
+    lay treeIdx leaf chain pc ctx
+  have pointerWalked := first_bottom_chain_walk_pointer_any hash
+    (firstBottomChainDigit s) parameter initial lay treeIdx leaf chain digit
+    entryPc entryContext entryDigit
+    (BitVec.ofNat 64 (0x20060 + 20 * chain.val)) pointerDigit digit.val (le_refl _)
+  have copied := first_bottom_emit_copy_trace_generic walked chain run.2.1
+    (by simpa [walked] using pointerWalked)
+  have bytes := first_bottom_emit_copy_words_generic walked chain run.2.1
+    (by simpa [walked] using pointerWalked)
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val)
+    run.2.2
+  refine ⟨?_, by simpa [walked, emitted] using bytes⟩
+  have trace := run.1.trans (copied.trace (hash := hash))
+  convert trace using 1 <;> omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_positive_chain_serialized_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_positive_chain_serialized_any
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
