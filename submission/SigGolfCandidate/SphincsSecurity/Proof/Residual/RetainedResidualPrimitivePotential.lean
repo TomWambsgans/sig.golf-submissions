@@ -2550,3 +2550,118 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialStoppedSource_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.initialStoppedSource_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyRun_stopped_success_event_eq_counted {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (remaining : Nat)
+    (event : Result → State inputs → Prop) :
+    Pr[fun result => ∃ value, result.1 = some (some value) ∧ event value result.2 |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining) state] =
+    Pr[fun result => ∃ value cost, result.1 = some (value, cost) ∧
+      cost ≤ remaining ∧ event value result.2 |
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) program) state] := by
+  induction program using OracleComp.inductionOn generalizing state remaining with
+  | pure value =>
+      simp [WeightedCutoff.run_pure, WeightedCutoff.counted_pure, lazyRun, runWith_pure,
+        probEvent_pure]
+  | query_bind query next ih =>
+      rw [WeightedCutoff.run_query_bind, WeightedCutoff.counted_query_bind]
+      by_cases allowed : WeightedCutoff.residualCharge inputs query ≤ remaining
+      · rw [if_pos allowed, lazyRun_bind, lazyRun_bind,
+          probEvent_bind_eq_tsum, probEvent_bind_eq_tsum]
+        apply tsum_congr
+        intro middle
+        rcases middle with ⟨option, after⟩
+        cases option with
+        | none =>
+            simp [probEvent_pure]
+        | some answer =>
+            simp only [Option.elim_some]
+            congr 1
+            rw [ih answer after (remaining - WeightedCutoff.residualCharge inputs query)]
+            have hmap : (do
+              let result ← WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) (next answer)
+              pure (result.1, result.2 + WeightedCutoff.residualCharge inputs query)) =
+              ((fun result : Result × Nat =>
+                (result.1, result.2 + WeightedCutoff.residualCharge inputs query)) <$>
+                WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) (next answer)) := by
+              rw [map_eq_bind_pure_comp]
+              rfl
+            rw [hmap, lazyRun_map_value, probEvent_map]
+            congr 1
+            funext result
+            apply propext
+            rcases result with ⟨option, final⟩
+            cases option with
+            | none => simp
+            | some pair =>
+                rcases pair with ⟨value, cost⟩
+                simp only [Function.comp_def, Option.map_some,
+                  Option.some.injEq, Prod.mk.injEq]
+                constructor
+                · rintro ⟨target, total, ⟨hv, hc⟩, hle, he⟩
+                  subst target
+                  subst total
+                  exact ⟨value, cost + WeightedCutoff.residualCharge inputs query,
+                    ⟨rfl, rfl⟩, by omega, he⟩
+                · rintro ⟨target, total, ⟨hv, hc⟩, hle, he⟩
+                  subst target
+                  subst total
+                  exact ⟨value, cost, ⟨rfl, rfl⟩, by omega, he⟩
+      · rw [if_neg allowed]
+        simp only [lazyRun, runWith_pure, probEvent_pure]
+        rw [← lazyRun, lazyRun_bind, probEvent_bind_eq_tsum]
+        have hfalse : (∃ value, some none = some (some value) ∧ event value state) = False := by simp
+        rw [hfalse]
+        simp only [↓reduceIte]
+        symm
+        rw [ENNReal.tsum_eq_zero]
+        intro middle
+        rcases middle with ⟨option, after⟩
+        cases option with
+        | none => simp [probEvent_pure]
+        | some answer =>
+            simp only [Option.elim_some]
+            have hmap : (do
+              let result ← WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) (next answer)
+              pure (result.1, result.2 + WeightedCutoff.residualCharge inputs query)) =
+              ((fun result : Result × Nat =>
+                (result.1, result.2 + WeightedCutoff.residualCharge inputs query)) <$>
+                WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) (next answer)) := by
+              rw [map_eq_bind_pure_comp]
+              rfl
+            rw [hmap, lazyRun_map_value, probEvent_map]
+            have hnever (result : Option (Result × Nat) × State inputs) :
+                ¬(∃ value cost,
+                  (result.1.map (fun pair =>
+                    (pair.1, pair.2 + WeightedCutoff.residualCharge inputs query))) =
+                    some (value, cost) ∧ cost ≤ remaining ∧ event value result.2) := by
+              rcases result with ⟨option, final⟩
+              cases option with
+              | none => simp
+              | some pair =>
+                  rcases pair with ⟨value, cost⟩
+                  intro hex
+                  obtain ⟨target, total, heq, htotal, _⟩ := hex
+                  simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at heq
+                  exact allowed (by omega)
+            simp only [Function.comp_def, probEvent_eq_tsum_ite]
+            simp only [hnever, ↓reduceIte, tsum_zero, mul_zero]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_success_event_eq_counted
