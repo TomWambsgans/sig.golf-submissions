@@ -1599,3 +1599,195 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_stopped_jointSigningProgram_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_stopped_jointSigningProgram_jointPotential
+
+namespace SphincsSecurity.WeightedCutoff
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+variable {Index : Type} {spec : OracleSpec Index}
+
+theorem run_bind_zero_suffix {First Result : Type} (charge : spec.Domain → Nat)
+    (program : OracleComp spec First) (tail : First → OracleComp spec Result)
+    (budget : Nat)
+    (hzero : ∀ value, AllQueriesSatisfy (tail value) (fun query => charge query = 0)) :
+    run charge (program >>= tail) budget =
+      (do
+        let value ← run charge program budget
+        match value with
+        | none => pure none
+        | some value => do let result ← tail value; pure (some result)) := by
+  induction program using OracleComp.inductionOn generalizing budget with
+  | pure value =>
+      simpa only [pure_bind, run_pure, pure_bind] using run_all_zero charge (tail value) budget (hzero value)
+  | query_bind query next ih =>
+      rw [bind_assoc, run_query_bind, run_query_bind]
+      split_ifs <;> simp only [bind_assoc, pure_bind]
+      congr 1
+      funext answer
+      exact ih answer (budget - charge query)
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.run_bind_zero_suffix' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.run_bind_zero_suffix
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem recordSigning_tail_all_zero (inputs : Finset HashInput) (message : Message)
+    (result : InterleavedResidual.SigningRecord) :
+    AllQueriesSatisfy
+      (recordSigning inputs message result >>= fun _ => pure result.1.1)
+      (fun query => WeightedCutoff.residualCharge inputs query = 0) := by
+  unfold recordSigning
+  apply allQueriesSatisfy_bind
+  · exact (allQueriesSatisfy_query_iff _ _).2 rfl
+  · intro _
+    exact allQueriesSatisfy_pure _ _
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.recordSigning_tail_all_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.recordSigning_tail_all_zero
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem currentRouting_all_zero (inputs : Finset HashInput) :
+    AllQueriesSatisfy (currentRouting inputs)
+      (fun query => WeightedCutoff.residualCharge inputs query = 0) := by
+  simp only [currentRouting, allQueriesSatisfy_query_iff, WeightedCutoff.residualCharge]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.currentRouting_all_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.currentRouting_all_zero
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem lazyRun_stopped_signingProgram (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (message : Message) (state : State inputs) (remaining : Nat) :
+    lazyRun (environment key.parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (signingProgram inputs key.parameter key.root words selections message) remaining) state =
+    (fun result : Option (Option InterleavedResidual.SigningRecord) × State inputs =>
+      match result.1 with
+      | none => (none, result.2)
+      | some none => (some none, result.2)
+      | some (some record) =>
+          (some (some record.1.1),
+            { result.2 with memory := result.2.memory.recordSigning message record })) <$>
+      lazyRun (environment key.parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+          (simulateQ (embed inputs state.memory.routing)
+            (ResidualByteFrontend.jointSigningProgram inputs key.parameter key.root state.memory.routing.known words selections message))
+          remaining) state := by
+  rw [signingProgram]
+  rw [WeightedCutoff.run_bind_zero_prefix (WeightedCutoff.residualCharge inputs)
+    (currentRouting inputs) _ remaining (currentRouting_all_zero inputs)]
+  rw [lazyRun_routing_bind]
+  rw [WeightedCutoff.run_bind_zero_suffix (WeightedCutoff.residualCharge inputs)
+    (simulateQ (embed inputs state.memory.routing)
+      (ResidualByteFrontend.jointSigningProgram inputs key.parameter key.root state.memory.routing.known words selections message))
+    (fun result => recordSigning inputs message result >>= fun _ => pure result.1.1)
+    remaining (recordSigning_tail_all_zero inputs message)]
+  rw [lazyRun_bind, map_eq_bind_pure_comp]
+  apply RetainedObservation.bind_congr
+  rintro ⟨answer, after⟩ _
+  cases answer with
+  | none => rfl
+  | some value =>
+      cases value with
+      | none => rfl
+      | some record =>
+          simp only [Option.elim_some, bind_assoc, pure_bind]
+          rw [lazyRun_record_bind]
+          exact runWith_pure _ _ _
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem stoppedPrimitiveResultPotential_signingMap (inputs : Finset HashInput)
+    (message : Message) (budget : Nat)
+    (raw : Option (Option InterleavedResidual.SigningRecord) × State inputs) :
+    stoppedPrimitiveResultPotential inputs budget
+      (match raw.1 with
+      | none => (none, raw.2)
+      | some none => (some none, raw.2)
+      | some (some record) =>
+          (some (some record.1.1),
+            { raw.2 with memory := raw.2.memory.recordSigning message record })) =
+      stoppedPrimitiveResultPotential inputs budget raw := by
+  rcases raw with ⟨answer, after⟩
+  cases answer with
+  | none => rfl
+  | some value =>
+      cases value with
+      | none => rfl
+      | some record => rfl
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.stoppedPrimitiveResultPotential_signingMap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.stoppedPrimitiveResultPotential_signingMap
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+set_option maxHeartbeats 1000000
+
+theorem lazyRun_stopped_signingProgram_jointPotential
+    (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (message : Message) (hinputs : hashInputs (signWithView key message) ⊆ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (hselect : ∀ position, FirstSuccessTable.select decodeEncodingOutput
+      (fun counter => rows (position, counter)) = selections position)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcandidates : ResidualByteFrontend.HiddenCandidateBound words state.memory.routing.disclosed (project state))
+    (hclean : ResidualByteFrontend.ReplyClean
+      (PublicEncodingMatch.Match key.parameter (knownEncodingMessage state.memory.routing.known) words selections)
+      state.memory.external.cache)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits) :
+    (∑' result, Pr[= result | lazyRun
+      (environment key.parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (signingProgram inputs key.parameter key.root words selections message) remaining) state] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  rw [lazyRun_stopped_signingProgram key inputs hencoding words publicReplies selections rows message state remaining,
+    tsum_probOutput_map_mul]
+  simp_rw [stoppedPrimitiveResultPotential_signingMap inputs message budget]
+  exact lazyByteRun_stopped_jointSigningProgram_jointPotential key state.memory.routing.known words
+    selections message inputs hencoding hinputs publicReplies rows state.memory.routing rfl
+    state budget remaining hselect ha hcovered hcandidates hclean hresources hremaining hbudget
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram_jointPotential
