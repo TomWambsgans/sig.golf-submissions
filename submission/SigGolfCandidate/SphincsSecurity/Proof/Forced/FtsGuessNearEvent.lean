@@ -202,3 +202,86 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_reference_near_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_reference_near_witnesses_budget_event
+namespace SphincsSecurity.Concrete.FtsGuessHash
+
+open _root_.OracleComp OracleSpec ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State lazyRun forcedRun initialState)
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs canonicalGraphGameInputs instFintypePosition
+  frontierRoot maskOtsPrefixes frontierSigningRun boundaryEval
+
+noncomputable def forcedNearProbabilityBudget (dummy : OtsReferenceWords)
+    (adversary : Adversary) (slot budget : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary)) : ENNReal :=
+  Pr[fun result =>
+    completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+    keygenHashCost + completedWork result.1 ≤ budget |
+    forcedRun
+      (SecretGuessObservation.environment
+        (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+      slot (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+      (initialState PUnit.unit)]
+
+theorem lazy_original_near_event_budget_le_cost_forced
+    (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary)) :
+    Pr[fun result =>
+      result.2.guesses.Nonempty ∧
+      completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+      keygenHashCost + completedWork result.1 ≤ budget |
+      lazyRun
+        (SecretGuessObservation.environment
+          (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+        (initialState PUnit.unit)] ≤
+      ((2 ^ 160 - budget : Nat) : ENNReal)⁻¹ *
+        ∑ slot ∈ Finset.range budget,
+          forcedNearProbabilityBudget dummy adversary slot budget parameter otsSecret labels auxiliary := by
+  let law := lazyRun
+    (SecretGuessObservation.environment
+      (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+    (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+    (initialState PUnit.unit)
+  have hsub : Pr[fun result => result.2.guesses.Nonempty ∧
+      completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+      keygenHashCost + completedWork result.1 ≤ budget | law] ≤
+      Pr[fun result => (result.2.guesses.Nonempty ∧
+        completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+        keygenHashCost + completedWork result.1 ≤ budget) ∧
+        result.2.probes ≤ budget | law] := by
+    apply _root_.probEvent_mono
+    intro result hr hevent
+    have hp := lazy_original_completedRun_probes_le_work dummy adversary
+      parameter otsSecret labels auxiliary result
+      (by simpa only [mem_support_iff, SPMF.probOutput_eq_apply] using hr)
+    exact ⟨hevent, by omega⟩
+  have h := SecretGuessObservation.lazyRun_event_budget_le_forced
+    (SecretGuessObservation.environment
+      (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+    (completedRun parameter (canonicalGraphRoot labels) labels adversary)
+    PUnit.unit budget
+    (fun result => result.2.guesses.Nonempty ∧
+      completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+      keygenHashCost + completedWork result.1 ≤ budget)
+    (fun result =>
+      if completedNearCertificate parameter (canonicalGraphRoot labels) result.1 ∧
+          keygenHashCost + completedWork result.1 ≤ budget then 1 else 0)
+    (fun _ _ he => ⟨he.1, by rw [if_pos ⟨he.2.1, he.2.2⟩]⟩)
+  apply hsub.trans
+  simpa only [forcedNearProbabilityBudget, probEvent_eq_tsum_ite, mul_ite,
+    mul_one, mul_zero,
+    show Fintype.card Digest = 2 ^ 160 by simp [digestBits]] using h
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.lazy_original_near_event_budget_le_cost_forced' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.lazy_original_near_event_budget_le_cost_forced
