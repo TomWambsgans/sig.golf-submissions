@@ -1,4 +1,5 @@
 import SigGolf.Statements
+import SigGolfCandidate.SphincsSecurity.Scheme
 import RiscvZkvm.Rv64.Logic.MemRegion
 import SigGolfCandidate.SphincsImages
 set_option linter.unusedSimpArgs false
@@ -9401,3 +9402,2793 @@ def sign_12a0 : AlignedMacStubClass.Site where
 #print axioms sign_12a0
 
 end AlignedMacSites
+
+
+set_option linter.unnecessarySimpa false
+
+
+namespace Padding64Bytes
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity
+
+private def byteValue (data : Nat → UInt8) (n : Nat) : Nat :=
+  (List.range n).foldl (fun acc i => acc + (data i).toNat * 2 ^ (8 * i)) 0
+
+private theorem byteValue_succ (data : Nat → UInt8) (n : Nat) :
+    byteValue data (n + 1) = byteValue data n + (data n).toNat * 2 ^ (8 * n) := by
+  simp [byteValue, List.range_succ, List.foldl_append]
+
+private theorem ofDigits_range (data : Nat → UInt8) (n : Nat) :
+    byteValue data n = Nat.ofDigits 256 ((List.range n).map fun i => (data i).toNat) := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [byteValue_succ, ih, List.range_succ, List.map_append,
+        Nat.ofDigits_append]
+      simp only [List.map_singleton, Nat.ofDigits_singleton, List.length_map,
+        List.length_range, Nat.pow_mul]
+      norm_num
+      ac_rfl
+
+#print axioms ofDigits_range
+
+private theorem byteValue_digit (data : Nat → UInt8) (n i : Nat) (hi : i < n) :
+    (byteValue data n / 256 ^ i) % 256 = (data i).toNat := by
+  let ds := (List.range n).map fun j => (data j).toNat
+  have bound : ∀ l ∈ ds, l < 256 := by
+    intro l hl
+    obtain ⟨j, _, rfl⟩ := List.mem_map.mp hl
+    exact (data j).toBitVec.isLt
+  have hlen : ds.length = n := by simp [ds]
+  have get : ds[i]'(by omega) = (data i).toNat := by simp [ds]
+  have hdrop : ds.drop i = (data i).toNat :: ds.drop (i + 1) := by
+    rw [List.drop_eq_getElem_cons (by omega)]
+    rw [get]
+  rw [ofDigits_range, Nat.ofDigits_div_pow_eq_ofDigits_drop i (by decide) ds bound,
+    hdrop, Nat.ofDigits_cons]
+  simp [Nat.add_mod]
+
+#print axioms byteValue_digit
+
+private theorem byteValue_bound (data : Nat → UInt8) (n : Nat) :
+    byteValue data n < 2 ^ (8 * n) := by
+  rw [ofDigits_range]
+  have h := Nat.ofDigits_lt_base_pow_length (b := 256)
+    (l := (List.range n).map fun i => (data i).toNat) (by decide)
+    (by
+      intro x hx
+      obtain ⟨i, _, rfl⟩ := List.mem_map.mp hx
+      exact (data i).toBitVec.isLt)
+  simpa [Nat.pow_mul] using h
+
+theorem bytesLE_byteValue (data : Nat → UInt8) (n : Nat) :
+    SphincsSecurity.bytesLE n (BitVec.ofNat (8 * n) (byteValue data n)) =
+      (List.range n).map data := by
+  apply List.ext_getElem
+  · simp [SphincsSecurity.bytesLE]
+  · intro i hi hj
+    have hi' : i < n := by simpa [SphincsSecurity.bytesLE] using hi
+    have hdigit :
+        ((BitVec.ofNat (8 * n) (byteValue data n)).extractLsb' (8 * i) 8).toNat =
+          (data i).toNat := by
+      rw [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow,
+        BitVec.toNat_ofNat, Nat.mod_eq_of_lt (byteValue_bound data n)]
+      simpa [Nat.pow_mul] using byteValue_digit data n i hi'
+    have hbv : (BitVec.ofNat (8 * n) (byteValue data n)).extractLsb' (8 * i) 8 =
+        (data i).toBitVec := BitVec.eq_of_toNat_eq hdigit
+    simpa [SphincsSecurity.bytesLE, List.getElem_ofFn] using
+      congrArg UInt8.ofBitVec hbv
+
+#print axioms bytesLE_byteValue
+
+/-- Serializing the VM's dependent HASH query recovers exactly the bytes it read. -/
+theorem queryBytes_hashInput (s : MachineState) :
+    SphincsSecurity.bytesLE (64 * ((SigGolf.Riscv.hashInput s).1 + 1))
+      (SigGolf.Riscv.hashInput s).2 =
+    (List.range (64 * (((s.getReg .x11).toNat / 64 - 1) + 1))).map
+      (fun i => UInt8.ofBitVec
+        (s.getByte (s.getReg .x10 + BitVec.ofNat 64 i))) := by
+  let n := 64 * (((s.getReg .x11).toNat / 64 - 1) + 1)
+  change SphincsSecurity.bytesLE n
+      (BitVec.ofNat (8 * n) ((List.range n).foldl (fun acc i =>
+        acc + (s.getByte (s.getReg .x10 + BitVec.ofNat 64 i)).toNat * 2 ^ (8 * i)) 0)) =
+      (List.range n).map (fun i => UInt8.ofBitVec
+        (s.getByte (s.getReg .x10 + BitVec.ofNat 64 i)))
+  simpa [byteValue, UInt8.toNat, UInt8.ofBitVec] using
+    (bytesLE_byteValue (fun i => UInt8.ofBitVec
+      (s.getByte (s.getReg .x10 + BitVec.ofNat 64 i))) n)
+
+#print axioms queryBytes_hashInput
+
+end Padding64Bytes
+
+
+namespace Padding64Decode
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def ready60 (s : MachineState) (base : Word) : MachineState :=
+  (Padding64Half.padWord s (base + 60)).setReg .x11 64
+
+theorem queryBytes_pad60 (s : MachineState) (base : Word)
+    (source : s.getReg .x10 = base)
+    (aligned : base.toNat % 8 = 0)
+    (range : base.toNat + 64 < 2 ^ 64) :
+    SphincsSecurity.bytesLE (64 * ((hashInput (ready60 s base)).1 + 1))
+      (hashInput (ready60 s base)).2 =
+      (List.range 60).map (fun i => UInt8.ofBitVec
+        (s.getByte (base + BitVec.ofNat 64 i))) ++ List.replicate 4 0 := by
+  have hsource : (ready60 s base).getReg .x10 = base := by
+    simpa [ready60, Padding64Half.padWord, MachineState.setWord32,
+      MachineState.setMem, MachineState.setReg, MachineState.getReg] using source
+  have hbytes := Padding64Bytes.queryBytes_hashInput (ready60 s base)
+  have hrange : 64 * ((64 : Word).toNat / 64 - 1 + 1) = 64 := by decide
+  simp only [show (ready60 s base).getReg .x11 = (64 : Word) by
+    exact MachineState.getReg_setReg_eq (by decide), hrange, hsource] at hbytes
+  rw [hbytes]
+  apply List.ext_getElem
+  · simp
+  · intro i hi hj
+    have hi' : i < 64 := by simpa using hi
+    have hpad := Padding64Half.padded_byte s base 60 i
+      aligned (by omega) (by decide) hi'
+    by_cases h : i < 60
+    · simpa [List.getElem_append, ready60, MachineState.getByte,
+        MachineState.getMem, MachineState.setReg, h] using congrArg UInt8.ofBitVec hpad
+    · have hright : i - 60 < 4 := by omega
+      have htail : ([0, 0, 0, 0] : List UInt8)[i - 60]'hright = 0 := by
+        interval_cases i <;> rfl
+      simpa [List.getElem_append, ready60, MachineState.getByte,
+        MachineState.getMem, MachineState.setReg, h, hright, htail] using
+        congrArg UInt8.ofBitVec hpad
+
+#print axioms queryBytes_pad60
+
+def ready72 (s : MachineState) : MachineState :=
+  (Padding64Cells.padMany s Padding64Cells.cells72).setReg .x11 128
+
+theorem queryBytes_pad72 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    SphincsSecurity.bytesLE (64 * ((hashInput (ready72 s)).1 + 1))
+      (hashInput (ready72 s)).2 =
+      (List.range 72).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 56 0 := by
+  have hlen : (hashInput (ready72 s)).1 = 1 := by
+    simp [hashInput, ready72, MachineState.getReg_setReg_eq]
+  have hsource : (ready72 s).getReg .x10 = 0x40000 := by
+    exact Padding64Cells.pad72_source s source
+  have hbytes := Padding64Bytes.queryBytes_hashInput (ready72 s)
+  have hrange : 64 * ((128 : Word).toNat / 64 - 1 + 1) = 128 := by decide
+  simp only [show (ready72 s).getReg .x11 = (128 : Word) by
+    exact MachineState.getReg_setReg_eq (by decide), hrange, hsource] at hbytes
+  rw [hbytes]
+  rw [show 128 = 72 + 56 by decide, List.range_add, List.map_append]
+  congr 1
+  apply List.ext_getElem
+  · simp
+  · intro i hi hj
+    have hi' : i < 56 := by simpa using hi
+    simp only [List.getElem_map, List.getElem_range, List.getElem_replicate]
+    have hpad := Padding64Cells.pad72_byte s (72 + i) (by omega)
+    simpa [ready72, MachineState.getByte, MachineState.getMem_setReg,
+      hsource] using congrArg UInt8.ofBitVec hpad
+
+#print axioms queryBytes_pad72
+
+end Padding64Decode
+
+namespace Pad72StubClass
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def block (lastWord : BitVec 32) : List (BitVec 32) := [
+  0x4853803, 0x4053423, 0x5053883, 0x4053823, 0x5853903, 0x4053c23, 0x6053983, 0x6053023, 0x6853a03, 0x6053423, 0x7053a83, 0x6053823, 0x7853b03, 0x6053c23, 0x35d593, 0x3858593, 0x293, 0x73, 0xfc858593, 0x359593, 0x100293, 0x7653c23, 0xb13, 0x7553823, 0xa93, 0x7453423, 0xa13, 0x7353023, 0x993, 0x5253c23, 0x913, 0x5153823, 0x893, 0x5053423, 0x813 , lastWord]
+
+structure Site where
+  image : Image
+  start : Nat
+  stubPC : Word
+  oldPC : Word
+  lastWord : BitVec 32
+  jump : BitVec 21
+  slice : (image.code.drop start).take 36 = block lastWord
+  stubNat : stubPC.toNat = 0x1000 + 4 * start
+  bound : stubPC.toNat + 144 < 2 ^ 64
+  lastDecode : decodeInstruction lastWord = some (.base (.JAL .x0 jump))
+  returns : stubPC + 140 + signExtend21 jump = oldPC + 4
+
+theorem Site.fetchAt (site : Site) (s : MachineState) (j : Nat)
+    {instruction : Instruction}
+    (inside : j < 36)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (decoded : ((block site.lastWord)[j]?).bind decodeInstruction = some instruction) :
+    fetch site.image s = some instruction := by
+  apply Padding64Trace.fetch_of_block site.image s (block site.lastWord)
+    site.start 36 j site.slice inside
+  · rw [site.stubNat] at pc
+    omega
+  · exact decoded
+
+theorem Site.padPairTrace (site : Site) (s : MachineState)
+    (j : Nat) (r : Reg) (off : BitVec 12) (cell : Word)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (inside : j + 1 < 36)
+    (decodeLoad : ((block site.lastWord)[j]?).bind decodeInstruction =
+      some (.base (.LD r .x10 off)))
+    (decodeZero : ((block site.lastWord)[j+1]?).bind decodeInstruction =
+      some (.base (.SD .x10 .x0 off)))
+    (different : r ≠ .x10)
+    (loadValid : memoryArgumentsValid s (.LD r .x10 off) = true)
+    (storeValid : memoryArgumentsValid s (.SD .x10 .x0 off) = true)
+    (address : s.getReg .x10 + signExtend12 off = cell) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.padDword s r cell).setPC (s.pc + 8)) := by
+  let loaded := (s.setReg r (s.getMem cell)).setPC (s.pc + 4)
+  have pcLoaded : loaded.pc.toNat = site.stubPC.toNat + 4 * (j+1) := by
+    simp [loaded, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have pair := Padding64Cells.aligned_padDword_pair s r off cell
+    different loadValid storeValid address
+  apply Padding64Trace.OrdinaryTrace.step (.base (.LD r .x10 off))
+    (site.fetchAt s j (by omega) pc decodeLoad)
+    (by intro h; cases h) pair.1 (by simp [instructionCycles])
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SD .x10 .x0 off))
+    (site.fetchAt loaded (j+1) inside pcLoaded decodeZero)
+    (by intro h; cases h) pair.2 (by simp [instructionCycles])
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.padPairTrace
+
+theorem Site.firstPair (site : Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)) := by
+  apply site.padPairTrace s 0 .x16 72 0x40048
+  · simp [pc]
+  · decide
+  · rfl
+  · rfl
+  · decide
+  · simp [memoryArgumentsValid, source, accessValid, rangeValid,
+      signExtend12, MEMORY_BYTES]
+  · simp [memoryArgumentsValid, source, accessValid, rangeValid,
+      signExtend12, MEMORY_BYTES]
+  · simpa [source, signExtend12]
+
+#print axioms Site.firstPair
+
+theorem Site.firstTwoPairs (site : Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40050).setPC (p1.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 4 s p2 := by
+  dsimp only
+  let p1 := (Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)
+  let p2 := (Padding64Cells.padDword p1 .x17 0x40050).setPC (p1.pc + 8)
+  have source1 : p1.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne s .x16 .x10 0x40048 (by decide)
+    simpa only [p1, MachineState.getReg_setPC, h] using source
+  have pc1 : p1.pc.toNat = site.stubPC.toNat + 8 := by
+    simp [p1, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s p1 :=
+    site.firstPair s pc source
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 p1 p2 := by
+    apply site.padPairTrace p1 2 .x17 80 0x40050
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  simpa only [p1, p2] using
+    Padding64Trace.OrdinaryTrace.append site.image t1 t2
+
+#print axioms Site.firstTwoPairs
+
+theorem Site.restorePairTrace (site : Site) (s : MachineState)
+    (j : Nat) (r : Reg) (off : BitVec 12) (cell : Word)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (inside : j + 1 < 36)
+    (decodeStore : ((block site.lastWord)[j]?).bind decodeInstruction =
+      some (.base (.SD .x10 r off)))
+    (decodeClear : ((block site.lastWord)[j+1]?).bind decodeInstruction =
+      some (.base (.ADDI r .x0 0)))
+    (storeValid : memoryArgumentsValid s (.SD .x10 r off) = true)
+    (address : s.getReg .x10 + signExtend12 off = cell) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.restoreDword s r cell).setPC (s.pc + 8)) := by
+  let stored := (s.setMem cell (s.getReg r)).setPC (s.pc + 4)
+  have pcStored : stored.pc.toNat = site.stubPC.toNat + 4 * (j+1) := by
+    simp [stored, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have pair := Padding64Cells.aligned_restoreDword_pair s r off cell
+    storeValid address
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SD .x10 r off))
+    (site.fetchAt s j (by omega) pc decodeStore)
+    (by intro h; cases h) pair.1 (by simp [instructionCycles])
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI r .x0 0))
+    (site.fetchAt stored (j+1) inside pcStored decodeClear)
+    (by intro h; cases h) pair.2 (by simp [instructionCycles])
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.restorePairTrace
+
+end Pad72StubClass
+
+namespace Pad72SevenPairs
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+
+theorem sevenPairs (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40050).setPC (p1.pc + 8)
+    let p3 := (Padding64Cells.padDword p2 .x18 0x40058).setPC (p2.pc + 8)
+    let p4 := (Padding64Cells.padDword p3 .x19 0x40060).setPC (p3.pc + 8)
+    let p5 := (Padding64Cells.padDword p4 .x20 0x40068).setPC (p4.pc + 8)
+    let p6 := (Padding64Cells.padDword p5 .x21 0x40070).setPC (p5.pc + 8)
+    let p7 := (Padding64Cells.padDword p6 .x22 0x40078).setPC (p6.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 14 s p7 := by
+  dsimp only
+  let p1 := (Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)
+  let p2 := (Padding64Cells.padDword p1 .x17 0x40050).setPC (p1.pc + 8)
+  let p3 := (Padding64Cells.padDword p2 .x18 0x40058).setPC (p2.pc + 8)
+  let p4 := (Padding64Cells.padDword p3 .x19 0x40060).setPC (p3.pc + 8)
+  let p5 := (Padding64Cells.padDword p4 .x20 0x40068).setPC (p4.pc + 8)
+  let p6 := (Padding64Cells.padDword p5 .x21 0x40070).setPC (p5.pc + 8)
+  let p7 := (Padding64Cells.padDword p6 .x22 0x40078).setPC (p6.pc + 8)
+  have source0 : s.getReg .x10 = 0x40000 := source
+  have pc0 : s.pc.toNat = site.stubPC.toNat := by simp [pc]
+  have source1 : p1.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne s .x16 .x10 0x40048 (by decide)
+    simpa only [p1, MachineState.getReg_setPC, h] using source0
+  have pc1 : p1.pc.toNat = site.stubPC.toNat + 8 := by
+    simp [p1, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have source2 : p2.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p1 .x17 .x10 0x40050 (by decide)
+    simpa only [p2, MachineState.getReg_setPC, h] using source1
+  have pc2 : p2.pc.toNat = site.stubPC.toNat + 16 := by
+    simp [p2, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  have source3 : p3.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p2 .x18 .x10 0x40058 (by decide)
+    simpa only [p3, MachineState.getReg_setPC, h] using source2
+  have pc3 : p3.pc.toNat = site.stubPC.toNat + 24 := by
+    simp [p3, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc2
+    bv_omega
+  have source4 : p4.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p3 .x19 .x10 0x40060 (by decide)
+    simpa only [p4, MachineState.getReg_setPC, h] using source3
+  have pc4 : p4.pc.toNat = site.stubPC.toNat + 32 := by
+    simp [p4, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc3
+    bv_omega
+  have source5 : p5.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p4 .x20 .x10 0x40068 (by decide)
+    simpa only [p5, MachineState.getReg_setPC, h] using source4
+  have pc5 : p5.pc.toNat = site.stubPC.toNat + 40 := by
+    simp [p5, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc4
+    bv_omega
+  have source6 : p6.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p5 .x21 .x10 0x40070 (by decide)
+    simpa only [p6, MachineState.getReg_setPC, h] using source5
+  have pc6 : p6.pc.toNat = site.stubPC.toNat + 48 := by
+    simp [p6, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc5
+    bv_omega
+  have source7 : p7.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p6 .x22 .x10 0x40078 (by decide)
+    simpa only [p7, MachineState.getReg_setPC, h] using source6
+  have pc7 : p7.pc.toNat = site.stubPC.toNat + 56 := by
+    simp [p7, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc6
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s p1 := by
+    apply site.padPairTrace s 0 .x16 72 0x40048
+    · simpa using pc0
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source0, signExtend12]
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 p1 p2 := by
+    apply site.padPairTrace p1 2 .x17 80 0x40050
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  have t3 : Padding64Trace.OrdinaryTrace site.image 2 p2 p3 := by
+    apply site.padPairTrace p2 4 .x18 88 0x40058
+    · simpa using pc2
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source2, signExtend12]
+  have t4 : Padding64Trace.OrdinaryTrace site.image 2 p3 p4 := by
+    apply site.padPairTrace p3 6 .x19 96 0x40060
+    · simpa using pc3
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source3, signExtend12]
+  have t5 : Padding64Trace.OrdinaryTrace site.image 2 p4 p5 := by
+    apply site.padPairTrace p4 8 .x20 104 0x40068
+    · simpa using pc4
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source4, signExtend12]
+  have t6 : Padding64Trace.OrdinaryTrace site.image 2 p5 p6 := by
+    apply site.padPairTrace p5 10 .x21 112 0x40070
+    · simpa using pc5
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source5, signExtend12]
+  have t7 : Padding64Trace.OrdinaryTrace site.image 2 p6 p7 := by
+    apply site.padPairTrace p6 12 .x22 120 0x40078
+    · simpa using pc6
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source6, signExtend12]
+  have t12 := Padding64Trace.OrdinaryTrace.append site.image t1 t2
+  have t13 := Padding64Trace.OrdinaryTrace.append site.image t12 t3
+  have t14 := Padding64Trace.OrdinaryTrace.append site.image t13 t4
+  have t15 := Padding64Trace.OrdinaryTrace.append site.image t14 t5
+  have t16 := Padding64Trace.OrdinaryTrace.append site.image t15 t6
+  have t17 := Padding64Trace.OrdinaryTrace.append site.image t16 t7
+  simpa only [show 2 + 2 + 2 + 2 + 2 + 2 + 2 = 14 by decide] using t17
+
+#print axioms sevenPairs
+end Pad72SevenPairs
+
+namespace Pad72Join
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 3000000
+
+private theorem setPC_setPC (s : MachineState) (a b : Word) :
+    (s.setPC a).setPC b = s.setPC b := by
+  rfl
+
+private theorem padDword_setPC (s : MachineState) (r : Reg) (addr pc : Word) :
+    Padding64Cells.padDword (s.setPC pc) r addr =
+      (Padding64Cells.padDword s r addr).setPC pc := by
+  cases r <;> simp [Padding64Cells.padDword, MachineState.setPC,
+    MachineState.setReg, MachineState.setMem, MachineState.getMem]
+
+private theorem padDword_pc (s : MachineState) (r : Reg) (addr : Word) :
+    (Padding64Cells.padDword s r addr).pc = s.pc := by
+  cases r <;> simp [Padding64Cells.padDword, MachineState.setReg,
+    MachineState.setMem]
+
+#print axioms padDword_setPC
+
+theorem sevenPairs_normalized (s : MachineState) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40048).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40050).setPC (p1.pc + 8)
+    let p3 := (Padding64Cells.padDword p2 .x18 0x40058).setPC (p2.pc + 8)
+    let p4 := (Padding64Cells.padDword p3 .x19 0x40060).setPC (p3.pc + 8)
+    let p5 := (Padding64Cells.padDword p4 .x20 0x40068).setPC (p4.pc + 8)
+    let p6 := (Padding64Cells.padDword p5 .x21 0x40070).setPC (p5.pc + 8)
+    let p7 := (Padding64Cells.padDword p6 .x22 0x40078).setPC (p6.pc + 8)
+    p7 = (Padding64Cells.padMany s Padding64Cells.cells72).setPC (s.pc + 56) := by
+  dsimp [Padding64Cells.padMany, Padding64Cells.cells72]
+  simp only [padDword_setPC, setPC_setPC, MachineState.setPC,
+    padDword_pc]
+  congr 1
+  bv_omega
+
+#print axioms sevenPairs_normalized
+end Pad72Join
+
+namespace Pad72PreHash
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+set_option maxHeartbeats 1000000
+
+theorem add56 (s : MachineState) :
+    ordinaryStep s (.base (.ADDI .x11 .x11 56)) =
+      some ((s.setReg .x11 (s.getReg .x11 + 56)).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12]
+
+def ready (s : MachineState) : MachineState :=
+  let p := (Padding64Cells.padMany s Padding64Cells.cells72).setPC (s.pc + 56)
+  let q := (p.setReg .x11 (p.getReg .x11 >>> 3)).setPC (p.pc + 4)
+  let r := (q.setReg .x11 (q.getReg .x11 + 56)).setPC (q.pc + 4)
+  (r.setReg .x5 0).setPC (r.pc + 4)
+
+theorem Site.pre_hash (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    Padding64Trace.OrdinaryTrace site.image 17 s (ready s) := by
+  let p := (Padding64Cells.padMany s Padding64Cells.cells72).setPC (s.pc + 56)
+  let q := (p.setReg .x11 (p.getReg .x11 >>> 3)).setPC (p.pc + 4)
+  let r := (q.setReg .x11 (q.getReg .x11 + 56)).setPC (q.pc + 4)
+  let t := (r.setReg .x5 0).setPC (r.pc + 4)
+  have pre : Padding64Trace.OrdinaryTrace site.image 14 s p := by
+    have h := Pad72SevenPairs.sevenPairs site s pc source
+    simpa only [Pad72Join.sevenPairs_normalized] using h
+  have ppc : p.pc.toNat = site.stubPC.toNat + 56 := by
+    simp [p, MachineState.setPC, pc]
+    have h := site.bound
+    bv_omega
+  have qpc : q.pc.toNat = site.stubPC.toNat + 60 := by
+    simp [q, MachineState.setPC]
+    have h := site.bound
+    have h2 := ppc
+    bv_omega
+  have rpc : r.pc.toNat = site.stubPC.toNat + 64 := by
+    simp [r, MachineState.setPC]
+    have h := site.bound
+    have h2 := qpc
+    bv_omega
+  have rest : Padding64Trace.OrdinaryTrace site.image 3 p t := by
+    apply Padding64Trace.OrdinaryTrace.step (.base (.SRLI .x11 .x11 3))
+      (site.fetchAt p 14 (by decide) (by simpa using ppc) (by rfl))
+      (by intro h; cases h) (FirstStubFetch.shift_a1 p) (by decide)
+    apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x11 .x11 56))
+      (site.fetchAt q 15 (by decide) (by simpa using qpc) (by rfl))
+      (by intro h; cases h) (add56 q) (by decide)
+    apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x5 .x0 0))
+      (site.fetchAt r 16 (by decide) (by simpa using rpc) (by rfl))
+      (by intro h; cases h) (FirstStubFetch.set_hash_selector r) (by decide)
+    exact Padding64Trace.OrdinaryTrace.refl _
+  simpa only [show 14 + 3 = 17 by decide, ready, p, q, r, t] using
+    Padding64Trace.OrdinaryTrace.append site.image pre rest
+
+#print axioms Site.pre_hash
+end Pad72PreHash
+
+namespace Pad72PostHash
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+set_option maxHeartbeats 1000000
+
+theorem sub56 (s : MachineState) :
+    ordinaryStep s (.base (.ADDI .x11 .x11 (-56))) =
+      some ((s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12]
+  have h : s.getReg .x11 + (18446744073709551560 : Word) =
+      s.getReg .x11 - 56 := by bv_decide
+  exact congrArg (fun w : Word => (s.setReg .x11 w).setPC (s.pc + 4)) h
+
+theorem restoreDword_source (s : MachineState) (r : Reg) (cell : Word)
+    (ne : r ≠ .x10) :
+    (Padding64Cells.restoreDword s r cell).getReg .x10 = s.getReg .x10 := by
+  rw [Padding64Cells.restoreDword,
+    MachineState.getReg_setReg_ne (s.setMem cell (s.getReg r)) r .x10 0 ne]
+  rfl
+
+theorem Site.post_conversion (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 72) :
+    let u1 := (s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)
+    let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+    let u3 := (u2.setReg .x5 1).setPC (u2.pc + 4)
+    Padding64Trace.OrdinaryTrace site.image 3 s u3 := by
+  dsimp only
+  let u1 := (s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)
+  let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+  have pc0 : s.pc.toNat = site.stubPC.toNat + 72 := by
+    rw [pc]
+    have h := site.bound
+    bv_omega
+  have pc1 : u1.pc.toNat = site.stubPC.toNat + 76 := by
+    simp [u1, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have pc2 : u2.pc.toNat = site.stubPC.toNat + 80 := by
+    simp [u2, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x11 .x11 (-56)))
+    (site.fetchAt s 18 (by decide) (by simpa using pc0) (by rfl))
+    (by intro h; cases h) (sub56 s) (by decide)
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SLLI .x11 .x11 3))
+    (site.fetchAt u1 19 (by decide) (by simpa using pc1) (by rfl))
+    (by intro h; cases h) (FirstStubFetch.shl_a1 u1) (by decide)
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x5 .x0 1))
+    (site.fetchAt u2 20 (by decide) (by simpa using pc2) (by rfl))
+    (by intro h; cases h) (FirstStubFetch.set_old_selector u2) (by decide)
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.post_conversion
+end Pad72PostHash
+
+namespace Pad72RestoreSeven
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+set_option maxHeartbeats 2000000
+
+theorem sevenPairs (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 84)
+    (source : s.getReg .x10 = 0x40000) :
+    let r1 := (Padding64Cells.restoreDword s .x22 0x40078).setPC (s.pc + 8)
+    let r2 := (Padding64Cells.restoreDword r1 .x21 0x40070).setPC (r1.pc + 8)
+    let r3 := (Padding64Cells.restoreDword r2 .x20 0x40068).setPC (r2.pc + 8)
+    let r4 := (Padding64Cells.restoreDword r3 .x19 0x40060).setPC (r3.pc + 8)
+    let r5 := (Padding64Cells.restoreDword r4 .x18 0x40058).setPC (r4.pc + 8)
+    let r6 := (Padding64Cells.restoreDword r5 .x17 0x40050).setPC (r5.pc + 8)
+    let r7 := (Padding64Cells.restoreDword r6 .x16 0x40048).setPC (r6.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 14 s r7 := by
+  dsimp only
+  let r1 := (Padding64Cells.restoreDword s .x22 0x40078).setPC (s.pc + 8)
+  let r2 := (Padding64Cells.restoreDword r1 .x21 0x40070).setPC (r1.pc + 8)
+  let r3 := (Padding64Cells.restoreDword r2 .x20 0x40068).setPC (r2.pc + 8)
+  let r4 := (Padding64Cells.restoreDword r3 .x19 0x40060).setPC (r3.pc + 8)
+  let r5 := (Padding64Cells.restoreDword r4 .x18 0x40058).setPC (r4.pc + 8)
+  let r6 := (Padding64Cells.restoreDword r5 .x17 0x40050).setPC (r5.pc + 8)
+  let r7 := (Padding64Cells.restoreDword r6 .x16 0x40048).setPC (r6.pc + 8)
+  have pc0 : s.pc.toNat = site.stubPC.toNat + 84 := by
+    rw [pc]
+    have h := site.bound
+    bv_omega
+  have source0 : s.getReg .x10 = 0x40000 := source
+  have source1 : r1.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source s .x22 0x40078 (by decide)
+    simpa only [r1, MachineState.getReg_setPC, h] using source0
+  have pc1 : r1.pc.toNat = site.stubPC.toNat + 92 := by
+    simp [r1, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have source2 : r2.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r1 .x21 0x40070 (by decide)
+    simpa only [r2, MachineState.getReg_setPC, h] using source1
+  have pc2 : r2.pc.toNat = site.stubPC.toNat + 100 := by
+    simp [r2, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  have source3 : r3.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r2 .x20 0x40068 (by decide)
+    simpa only [r3, MachineState.getReg_setPC, h] using source2
+  have pc3 : r3.pc.toNat = site.stubPC.toNat + 108 := by
+    simp [r3, MachineState.setPC]
+    have h := site.bound
+    have hp := pc2
+    bv_omega
+  have source4 : r4.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r3 .x19 0x40060 (by decide)
+    simpa only [r4, MachineState.getReg_setPC, h] using source3
+  have pc4 : r4.pc.toNat = site.stubPC.toNat + 116 := by
+    simp [r4, MachineState.setPC]
+    have h := site.bound
+    have hp := pc3
+    bv_omega
+  have source5 : r5.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r4 .x18 0x40058 (by decide)
+    simpa only [r5, MachineState.getReg_setPC, h] using source4
+  have pc5 : r5.pc.toNat = site.stubPC.toNat + 124 := by
+    simp [r5, MachineState.setPC]
+    have h := site.bound
+    have hp := pc4
+    bv_omega
+  have source6 : r6.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r5 .x17 0x40050 (by decide)
+    simpa only [r6, MachineState.getReg_setPC, h] using source5
+  have pc6 : r6.pc.toNat = site.stubPC.toNat + 132 := by
+    simp [r6, MachineState.setPC]
+    have h := site.bound
+    have hp := pc5
+    bv_omega
+  have source7 : r7.getReg .x10 = 0x40000 := by
+    have h := Pad72PostHash.restoreDword_source r6 .x16 0x40048 (by decide)
+    simpa only [r7, MachineState.getReg_setPC, h] using source6
+  have pc7 : r7.pc.toNat = site.stubPC.toNat + 140 := by
+    simp [r7, MachineState.setPC]
+    have h := site.bound
+    have hp := pc6
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s r1 := by
+    apply site.restorePairTrace s 21 .x22 120 0x40078
+    · simpa using pc0
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source0, signExtend12]
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 r1 r2 := by
+    apply site.restorePairTrace r1 23 .x21 112 0x40070
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  have t3 : Padding64Trace.OrdinaryTrace site.image 2 r2 r3 := by
+    apply site.restorePairTrace r2 25 .x20 104 0x40068
+    · simpa using pc2
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source2, signExtend12]
+  have t4 : Padding64Trace.OrdinaryTrace site.image 2 r3 r4 := by
+    apply site.restorePairTrace r3 27 .x19 96 0x40060
+    · simpa using pc3
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source3, signExtend12]
+  have t5 : Padding64Trace.OrdinaryTrace site.image 2 r4 r5 := by
+    apply site.restorePairTrace r4 29 .x18 88 0x40058
+    · simpa using pc4
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source4, signExtend12]
+  have t6 : Padding64Trace.OrdinaryTrace site.image 2 r5 r6 := by
+    apply site.restorePairTrace r5 31 .x17 80 0x40050
+    · simpa using pc5
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source5, signExtend12]
+  have t7 : Padding64Trace.OrdinaryTrace site.image 2 r6 r7 := by
+    apply site.restorePairTrace r6 33 .x16 72 0x40048
+    · simpa using pc6
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source6, signExtend12]
+  have t12 := Padding64Trace.OrdinaryTrace.append site.image t1 t2
+  have t13 := Padding64Trace.OrdinaryTrace.append site.image t12 t3
+  have t14 := Padding64Trace.OrdinaryTrace.append site.image t13 t4
+  have t15 := Padding64Trace.OrdinaryTrace.append site.image t14 t5
+  have t16 := Padding64Trace.OrdinaryTrace.append site.image t15 t6
+  have t17 := Padding64Trace.OrdinaryTrace.append site.image t16 t7
+  simpa only [show 2 + 2 + 2 + 2 + 2 + 2 + 2 = 14 by decide] using t17
+
+#print axioms sevenPairs
+end Pad72RestoreSeven
+
+namespace Pad72RestoreJoin
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 3000000
+
+theorem restoreDword_setPC (s : MachineState) (r : Reg) (addr pc : Word) :
+    Padding64Cells.restoreDword (s.setPC pc) r addr =
+      (Padding64Cells.restoreDword s r addr).setPC pc := by
+  cases r <;> simp [Padding64Cells.restoreDword, MachineState.setPC,
+    MachineState.setReg, MachineState.setMem, MachineState.getReg]
+
+private theorem restoreDword_pc (s : MachineState) (r : Reg) (addr : Word) :
+    (Padding64Cells.restoreDword s r addr).pc = s.pc := by
+  cases r <;> simp [Padding64Cells.restoreDword, MachineState.setReg,
+    MachineState.setMem]
+
+theorem sevenPairs_normalized (s : MachineState) :
+    let r1 := (Padding64Cells.restoreDword s .x22 0x40078).setPC (s.pc + 8)
+    let r2 := (Padding64Cells.restoreDword r1 .x21 0x40070).setPC (r1.pc + 8)
+    let r3 := (Padding64Cells.restoreDword r2 .x20 0x40068).setPC (r2.pc + 8)
+    let r4 := (Padding64Cells.restoreDword r3 .x19 0x40060).setPC (r3.pc + 8)
+    let r5 := (Padding64Cells.restoreDword r4 .x18 0x40058).setPC (r4.pc + 8)
+    let r6 := (Padding64Cells.restoreDword r5 .x17 0x40050).setPC (r5.pc + 8)
+    let r7 := (Padding64Cells.restoreDword r6 .x16 0x40048).setPC (r6.pc + 8)
+    r7 = (Padding64Cells.restoreMany s Padding64Cells.cells72).setPC (s.pc + 56) := by
+  dsimp [Padding64Cells.restoreMany, Padding64Cells.cells72]
+  simp only [restoreDword_setPC, MachineState.setPC, restoreDword_pc]
+  congr 1
+  bv_omega
+
+#print axioms sevenPairs_normalized
+end Pad72RestoreJoin
+
+namespace Pad72ReadyFacts
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 1000000
+
+theorem padReg (s : MachineState) (q : Reg)
+    (outside : q ∉ Padding64Cells.cells72.map Prod.fst) :
+    (Padding64Cells.padMany s Padding64Cells.cells72).getReg q = s.getReg q := by
+  apply Padding64Cells.padMany_getReg_outside
+  intro pair member eq
+  apply outside
+  rw [← eq]
+  exact List.mem_map.mpr ⟨pair, member, rfl⟩
+
+theorem ready_normalized (s : MachineState)
+    (length : s.getReg .x11 = 576) :
+    Pad72PreHash.ready s =
+      ((Padding64Decode.ready72 s).setReg .x5 0).setPC (s.pc + 68) := by
+  have hp : (Padding64Cells.padMany s Padding64Cells.cells72).getReg .x11 = 576 := by
+    rw [padReg s .x11 (by decide)]
+    exact length
+  simp [Pad72PreHash.ready, Padding64Decode.ready72,
+    MachineState.getReg_setPC, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, padReg s .x11 (by decide), length,
+    MachineState.setPC, MachineState.setReg]
+  constructor
+  · funext q
+    by_cases h5 : q = .x5
+    · simp [h5]
+    by_cases h11 : q = .x11
+    · subst q
+      change (Padding64Cells.padMany s Padding64Cells.cells72).regs .x11 >>> 3 + 56 = 128
+      simpa only [MachineState.getReg, show (576 : Word) >>> 3 + 56 = 128 by decide] using
+        congrArg (fun w : Word => (w >>> 3) + 56) hp
+    · simp [h5, h11]
+  · bv_decide
+
+theorem ready_source (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    (Pad72PreHash.ready s).getReg .x10 = 0x40000 := by
+  simp [Pad72PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_ne, padReg s .x10 (by decide), source]
+
+theorem ready_length (s : MachineState)
+    (length : s.getReg .x11 = 576) :
+    (Pad72PreHash.ready s).getReg .x11 = 128 := by
+  simp [Pad72PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    padReg s .x11 (by decide), length]
+
+theorem ready_destination (s : MachineState)
+    (destination : s.getReg .x12 = 0x42000) :
+    (Pad72PreHash.ready s).getReg .x12 = 0x42000 := by
+  simp [Pad72PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_ne, padReg s .x12 (by decide), destination]
+
+theorem ready_selector (s : MachineState) :
+    (Pad72PreHash.ready s).getReg .x5 = 0 := by
+  simp [Pad72PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq]
+
+theorem ready_pc (s : MachineState) :
+    (Pad72PreHash.ready s).pc = s.pc + 68 := by
+  simp [Pad72PreHash.ready, MachineState.setPC]
+  bv_omega
+
+theorem ready_valid (s : MachineState)
+    (source : s.getReg .x10 = 0x40000)
+    (length : s.getReg .x11 = 576)
+    (destination : s.getReg .x12 = 0x42000) :
+    hashArgumentsValid (Pad72PreHash.ready s) = true := by
+  simp [hashArgumentsValid, ready_source s source,
+    ready_length s length, ready_destination s destination,
+    accessValid, rangeValid, MEMORY_BYTES]
+
+theorem ready_blocks (s : MachineState)
+    (length : s.getReg .x11 = 576) :
+    (hashInput (Pad72PreHash.ready s)).blocks = 2 := by
+  simp [hashInput, SigGolf.Query.blocks, ready_length s length]
+
+private theorem hashInput_setPC (s : MachineState) (pc : Word) :
+    hashInput (s.setPC pc) = hashInput s := by
+  rfl
+
+private theorem hashInput_setX5 (s : MachineState) (w : Word) :
+    hashInput (s.setReg .x5 w) = hashInput s := by
+  rfl
+
+theorem ready_queryBytes (s : MachineState)
+    (source : s.getReg .x10 = 0x40000)
+    (length : s.getReg .x11 = 576) :
+    SphincsSecurity.bytesLE
+      (64 * ((hashInput (Pad72PreHash.ready s)).1 + 1))
+      (hashInput (Pad72PreHash.ready s)).2 =
+      (List.range 72).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 56 0 := by
+  rw [ready_normalized s length, hashInput_setPC, hashInput_setX5]
+  exact Padding64Decode.queryBytes_pad72 s source
+
+#print axioms ready_source
+#print axioms ready_length
+#print axioms ready_destination
+#print axioms ready_selector
+#print axioms ready_pc
+#print axioms ready_valid
+#print axioms ready_blocks
+#print axioms ready_queryBytes
+end Pad72ReadyFacts
+
+namespace Pad72StateAlgebra
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+theorem setMem_setReg (s : MachineState) (a : Word) (w : Word)
+    (r : Reg) (v : Word) :
+    (s.setReg r v).setMem a w = (s.setMem a w).setReg r v := by
+  cases r <;> rfl
+
+theorem setMem_setPC (s : MachineState) (a w pc : Word) :
+    (s.setPC pc).setMem a w = (s.setMem a w).setPC pc := by
+  rfl
+
+theorem writeWords_setReg (s : MachineState) (base : Word)
+    (words : List Word) (r : Reg) (v : Word) :
+    (s.setReg r v).writeWords base words = (s.writeWords base words).setReg r v := by
+  induction words generalizing s base with
+  | nil => rfl
+  | cons w ws ih =>
+      simp only [MachineState.writeWords]
+      rw [setMem_setReg, ih]
+
+theorem writeWords_setPC (s : MachineState) (base : Word)
+    (words : List Word) (pc : Word) :
+    (s.setPC pc).writeWords base words = (s.writeWords base words).setPC pc := by
+  induction words generalizing s base with
+  | nil => rfl
+  | cons w ws ih =>
+      simp only [MachineState.writeWords]
+      rw [setMem_setPC, ih]
+
+theorem writeHash_setPC (s : MachineState) (answer : BitVec 256) (pc : Word) :
+    writeHash (s.setPC pc) answer = (writeHash s answer).setPC (pc + 4) := by
+  simp only [writeHash, MachineState.getReg_setPC, writeWords_setPC]
+  rfl
+
+theorem writeHash_setReg (s : MachineState) (answer : BitVec 256)
+    (r : Reg) (v : Word) (ne : r ≠ .x12) :
+    writeHash (s.setReg r v) answer = (writeHash s answer).setReg r v := by
+  have dest : (s.setReg r v).getReg .x12 = s.getReg .x12 :=
+    MachineState.getReg_setReg_ne s r .x12 v ne
+  simp only [writeHash, dest, writeWords_setReg]
+  cases r <;> simp_all [MachineState.setPC, MachineState.setReg]
+
+theorem writeHash_getReg (s : MachineState) (answer : BitVec 256) (r : Reg) :
+    (writeHash s answer).getReg r = s.getReg r := by
+  rfl
+
+#print axioms writeWords_setReg
+#print axioms writeWords_setPC
+#print axioms writeHash_setPC
+#print axioms writeHash_setReg
+#print axioms writeHash_getReg
+end Pad72StateAlgebra
+
+namespace Pad72Boundary
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 2000000
+
+def converted (u : MachineState) : MachineState :=
+  let u1 := (u.setReg .x11 (u.getReg .x11 - 56)).setPC (u.pc + 4)
+  let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+  (u2.setReg .x5 1).setPC (u2.pc + 4)
+
+theorem converted_restore (v : MachineState) (pc : Word)
+    (length : v.getReg .x11 = 576)
+    (selector : v.getReg .x5 = 1) :
+    converted (((v.setReg .x11 128).setReg .x5 0).setPC pc) =
+      v.setPC (pc + 12) := by
+  simp [converted, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setPC, MachineState.setReg]
+  constructor
+  · funext r
+    by_cases h5 : r = .x5
+    · simpa [h5, MachineState.getReg] using selector.symm
+    by_cases h11 : r = .x11
+    · simpa [h5, h11, MachineState.getReg] using length.symm
+    · simp [h5, h11]
+  · bv_decide
+
+#print axioms converted_restore
+
+theorem converted_normalized (s : MachineState) (answer : BitVec 256)
+    (length : s.getReg .x11 = 576)
+    (selector : s.getReg .x5 = 1) :
+    converted (writeHash (Pad72PreHash.ready s) answer) =
+      (writeHash (Padding64Cells.padMany s Padding64Cells.cells72) answer).setPC
+        (s.pc + 84) := by
+  rw [Pad72ReadyFacts.ready_normalized s length]
+  have pad5 : (Padding64Cells.padMany s Padding64Cells.cells72).regs .x5 = 1 := by
+    have h := Pad72ReadyFacts.padReg s .x5 (by decide)
+    simpa only [MachineState.getReg] using h.trans selector
+  have pad11 : (Padding64Cells.padMany s Padding64Cells.cells72).regs .x11 = 576 := by
+    have h := Pad72ReadyFacts.padReg s .x11 (by decide)
+    simpa only [MachineState.getReg] using h.trans length
+  let u := Padding64Cells.padMany s Padding64Cells.cells72
+  have hu5 : (writeHash u answer).getReg .x5 = 1 := by
+    rw [Pad72StateAlgebra.writeHash_getReg]
+    simpa [u, MachineState.getReg] using pad5
+  have hu11 : (writeHash u answer).getReg .x11 = 576 := by
+    rw [Pad72StateAlgebra.writeHash_getReg]
+    simpa [u, MachineState.getReg] using pad11
+  have h5 := Pad72StateAlgebra.writeHash_setReg (u.setReg .x11 128) answer
+    .x5 0 (by decide)
+  have h11 := Pad72StateAlgebra.writeHash_setReg u answer .x11 128 (by decide)
+  simp only [Padding64Decode.ready72, Pad72StateAlgebra.writeHash_setPC]
+  change converted ((writeHash ((u.setReg .x11 128).setReg .x5 0) answer).setPC
+    (s.pc + 68 + 4)) = (writeHash u answer).setPC (s.pc + 84)
+  rw [h5, h11]
+  rw [converted_restore (writeHash u answer) (s.pc + 68 + 4) hu11 hu5]
+  congr 1
+  bv_decide
+
+#print axioms converted_normalized
+
+theorem restoreMany_setPC (s : MachineState)
+    (cells : List (Reg × Word)) (pc : Word) :
+    Padding64Cells.restoreMany (s.setPC pc) cells =
+      (Padding64Cells.restoreMany s cells).setPC pc := by
+  induction cells with
+  | nil => rfl
+  | cons pair rest ih =>
+      rcases pair with ⟨r, addr⟩
+      simp only [Padding64Cells.restoreMany]
+      rw [ih, Pad72RestoreJoin.restoreDword_setPC]
+
+theorem restore_boundary (s : MachineState) (answer : BitVec 256)
+    (length : s.getReg .x11 = 576)
+    (selector : s.getReg .x5 = 1)
+    (destination : s.getReg .x12 = 0x42000)
+    (scratch : ∀ r ∈ Padding64Cells.cells72.map Prod.fst, s.getReg r = 0) :
+    Padding64Cells.restoreMany
+      (converted (writeHash (Pad72PreHash.ready s) answer))
+      Padding64Cells.cells72 =
+      (writeHash s answer).setPC (s.pc + 84) := by
+  rw [converted_normalized s answer length selector]
+  rw [restoreMany_setPC]
+  rw [Padding64Cells.restore_72 s answer destination scratch]
+
+#print axioms restoreMany_setPC
+#print axioms restore_boundary
+end Pad72Boundary
+
+namespace Pad72PostTrace
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+set_option maxHeartbeats 1000000
+
+theorem Site.jump_to_old_pc (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 140) :
+    ordinaryStep s (.base (.JAL .x0 site.jump)) =
+      some (s.setPC (site.oldPC + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr,
+    MachineState.setReg, pc]
+  congr 1
+  have h := site.returns
+  bv_omega
+
+theorem Site.post_hash (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 72)
+    (source : s.getReg .x10 = 0x40000) :
+    let u3 := Pad72Boundary.converted s
+    let r7 := (Padding64Cells.restoreMany u3 Padding64Cells.cells72).setPC
+      (u3.pc + 56)
+    Padding64Trace.OrdinaryTrace site.image 18 s
+      (r7.setPC (site.oldPC + 4)) := by
+  dsimp only
+  let u3 := Pad72Boundary.converted s
+  let r7 := (Padding64Cells.restoreMany u3 Padding64Cells.cells72).setPC
+    (u3.pc + 56)
+  have hconv : Padding64Trace.OrdinaryTrace site.image 3 s u3 := by
+    simpa only [Pad72Boundary.converted, u3] using
+      Pad72PostHash.Site.post_conversion site s pc
+  have pcU3 : u3.pc = site.stubPC + 84 := by
+    simp [u3, Pad72Boundary.converted, MachineState.setPC, pc]
+    bv_omega
+  have sourceU3 : u3.getReg .x10 = 0x40000 := by
+    simpa [u3, Pad72Boundary.converted, MachineState.getReg_setPC,
+      MachineState.getReg_setReg_ne] using source
+  have hrestore : Padding64Trace.OrdinaryTrace site.image 14 u3 r7 := by
+    have h := Pad72RestoreSeven.sevenPairs site u3 pcU3 sourceU3
+    simpa only [Pad72RestoreJoin.sevenPairs_normalized, r7] using h
+  have pcR7 : r7.pc = site.stubPC + 140 := by
+    simp [r7, MachineState.setPC, pcU3]
+    bv_omega
+  have pcR7Nat : r7.pc.toNat = site.stubPC.toNat + 140 := by
+    rw [pcR7]
+    have h := site.bound
+    bv_omega
+  have hjump : Padding64Trace.OrdinaryTrace site.image 1 r7
+      (r7.setPC (site.oldPC + 4)) := by
+    apply Padding64Trace.OrdinaryTrace.step (.base (.JAL .x0 site.jump))
+      (site.fetchAt r7 35 (by decide) (by simpa using pcR7Nat)
+        (by simpa [Pad72StubClass.block] using site.lastDecode))
+      (by intro h; cases h) (Site.jump_to_old_pc site r7 pcR7)
+      (by simp [instructionCycles])
+    exact Padding64Trace.OrdinaryTrace.refl _
+  have h1 := Padding64Trace.OrdinaryTrace.append site.image hconv hrestore
+  have h2 := Padding64Trace.OrdinaryTrace.append site.image h1 hjump
+  simpa only [show 3 + 14 + 1 = 18 by decide] using h2
+
+#print axioms Site.post_hash
+end Pad72PostTrace
+
+namespace Pad72Service
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+set_option maxHeartbeats 1000000
+
+theorem Site.hash_fetch (site : Pad72StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC) :
+    fetch site.image (Pad72PreHash.ready s) = some (.base .ECALL) := by
+  have hpc : (Pad72PreHash.ready s).pc.toNat = site.stubPC.toNat + 68 := by
+    rw [Pad72ReadyFacts.ready_pc, pc]
+    have h := site.bound
+    bv_omega
+  exact site.fetchAt _ 17 (by decide) (by simpa using hpc) (by rfl)
+
+theorem Site.after_pc (site : Pad72StubClass.Site) (s : MachineState)
+    (answer : BitVec 256) (pc : s.pc = site.stubPC) :
+    (writeHash (Pad72PreHash.ready s) answer).pc = site.stubPC + 72 := by
+  simp [writeHash, MachineState.setPC, Pad72ReadyFacts.ready_pc, pc]
+  bv_omega
+
+theorem Site.boundary (site : Pad72StubClass.Site) (s : MachineState)
+    (answer : BitVec 256)
+    (oldPc : s.pc = site.oldPC)
+    (length : s.getReg .x11 = 576)
+    (destination : s.getReg .x12 = 0x42000)
+    (selector : s.getReg .x5 = 1)
+    (scratch : ∀ r ∈ Padding64Cells.cells72.map Prod.fst, s.getReg r = 0) :
+    let betaStart := s.setPC site.stubPC
+    (Padding64Cells.restoreMany
+      (Pad72Boundary.converted (writeHash (Pad72PreHash.ready betaStart) answer))
+      Padding64Cells.cells72).setPC (site.oldPC + 4) = writeHash s answer := by
+  dsimp only
+  let betaStart := s.setPC site.stubPC
+  have lengthβ : betaStart.getReg .x11 = 576 := by
+    simpa [betaStart, MachineState.getReg_setPC] using length
+  have selectorβ : betaStart.getReg .x5 = 1 := by
+    simpa [betaStart, MachineState.getReg_setPC] using selector
+  have destinationβ : betaStart.getReg .x12 = 0x42000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using destination
+  have scratchβ : ∀ r ∈ Padding64Cells.cells72.map Prod.fst,
+      betaStart.getReg r = 0 := by
+    intro r hr
+    simpa [betaStart, MachineState.getReg_setPC] using scratch r hr
+  have restored := Pad72Boundary.restore_boundary betaStart answer
+    lengthβ selectorβ destinationβ scratchβ
+  have hpc : (writeHash s answer).pc = site.oldPC + 4 := by
+    simp [writeHash, MachineState.setPC, oldPc]
+  have h : (writeHash betaStart answer).setPC (site.oldPC + 4) =
+      writeHash s answer := by
+    rw [Pad72StateAlgebra.writeHash_setPC]
+    rw [show ((writeHash s answer).setPC (site.stubPC + 4)).setPC
+        (site.oldPC + 4) = (writeHash s answer).setPC (site.oldPC + 4) by rfl]
+    exact (congrArg (fun w : Word => (writeHash s answer).setPC w) hpc).symm
+  change ((Padding64Cells.restoreMany
+    (Pad72Boundary.converted (writeHash (Pad72PreHash.ready betaStart) answer))
+    Padding64Cells.cells72).setPC (site.oldPC + 4)) = writeHash s answer
+  rw [restored]
+  exact h
+
+theorem Site.service_transport (site : Pad72StubClass.Site)
+    (hash : Hash) (fuel : Nat) (s : MachineState)
+    (oldPc : s.pc = site.oldPC)
+    (source : s.getReg .x10 = 0x40000)
+    (length : s.getReg .x11 = 576)
+    (destination : s.getReg .x12 = 0x42000)
+    (selector : s.getReg .x5 = 1)
+    (scratch : ∀ r ∈ Padding64Cells.cells72.map Prod.fst, s.getReg r = 0) :
+    let betaStart := s.setPC site.stubPC
+    let ready := Pad72PreHash.ready betaStart
+    let answer := hash (hashInput ready)
+    evalWithAnswerFn hash (execute (fuel + 36) site.image betaStart) =
+      (evalWithAnswerFn hash (execute fuel site.image (writeHash s answer))).charge
+        51 1 2 := by
+  dsimp only
+  let betaStart := s.setPC site.stubPC
+  let ready := Pad72PreHash.ready betaStart
+  let answer := hash (hashInput ready)
+  have pcβ : betaStart.pc = site.stubPC := by
+    simp [betaStart, MachineState.setPC]
+  have sourceβ : betaStart.getReg .x10 = 0x40000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using source
+  have lengthβ : betaStart.getReg .x11 = 576 := by
+    simpa [betaStart, MachineState.getReg_setPC] using length
+  have destinationβ : betaStart.getReg .x12 = 0x42000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using destination
+  have pre : Padding64Trace.OrdinaryTrace site.image 17 betaStart ready := by
+    simpa [ready] using Pad72PreHash.Site.pre_hash site betaStart pcβ sourceβ
+  have fetched : fetch site.image ready = some (.base .ECALL) := by
+    simpa [ready] using Site.hash_fetch site betaStart pcβ
+  have valid : hashArgumentsValid ready = true := by
+    simpa [ready] using Pad72ReadyFacts.ready_valid betaStart
+      sourceβ lengthβ destinationβ
+  have selectorReady : ready.getReg .x5 = 0 := by
+    simpa [ready] using Pad72ReadyFacts.ready_selector betaStart
+  have afterPc : (writeHash ready answer).pc = site.stubPC + 72 := by
+    simpa [ready] using Site.after_pc site betaStart answer pcβ
+  have afterSource : (writeHash ready answer).getReg .x10 = 0x40000 := by
+    rw [Pad72StateAlgebra.writeHash_getReg]
+    exact Pad72ReadyFacts.ready_source betaStart sourceβ
+  have post : Padding64Trace.OrdinaryTrace site.image 18
+      (writeHash ready answer)
+      ((Padding64Cells.restoreMany
+        (Pad72Boundary.converted (writeHash ready answer))
+        Padding64Cells.cells72).setPC (site.oldPC + 4)) := by
+    simpa only [MachineState.setPC] using
+      Pad72PostTrace.Site.post_hash site (writeHash ready answer)
+        afterPc afterSource
+  have boundary :
+      (Padding64Cells.restoreMany
+        (Pad72Boundary.converted (writeHash ready answer))
+        Padding64Cells.cells72).setPC (site.oldPC + 4) = writeHash s answer := by
+    simpa [ready, betaStart] using
+      Site.boundary site s answer oldPc length destination selector scratch
+  rw [boundary] at post
+  have blocks : (hashInput ready).blocks = 2 := by
+    simpa [ready] using Pad72ReadyFacts.ready_blocks betaStart lengthβ
+  have h := Padding64Trace.hash_macro_eval hash site.image
+    pre fetched selectorReady valid post fuel
+  rw [blocks] at h
+  have hfuel : fuel + 36 = fuel + 17 + 1 + 18 := by omega
+  rw [hfuel]
+  simpa [betaStart, ready, answer] using h
+
+#print axioms Site.hash_fetch
+#print axioms Site.boundary
+#print axioms Site.service_transport
+end Pad72Service
+
+namespace Pad72Sites
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad72StubClass
+def keygen_10d4 : Pad72StubClass.Site where
+  image := Pc64KeygenImage.image
+  start := 901
+  stubPC := 0x1e14
+  oldPC := 0x10d4
+  lastWord := 0xa38ff06f
+  jump := 2093624
+  slice := by exact Pc64KeygenImage.stub_1e14_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms keygen_10d4
+def keygen_1224 : Pad72StubClass.Site where
+  image := Pc64KeygenImage.image
+  start := 937
+  stubPC := 0x1ea4
+  oldPC := 0x1224
+  lastWord := 0xaf8ff06f
+  jump := 2093816
+  slice := by exact Pc64KeygenImage.stub_1ea4_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms keygen_1224
+def keygen_1b5c : Pad72StubClass.Site where
+  image := Pc64KeygenImage.image
+  start := 1041
+  stubPC := 0x2044
+  oldPC := 0x1b5c
+  lastWord := 0xa91ff06f
+  jump := 2095760
+  slice := by exact Pc64KeygenImage.stub_2044_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms keygen_1b5c
+def sign_10e4 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 10960
+  stubPC := 0xbb40
+  oldPC := 0x10e4
+  lastWord := 0xd1cf506f
+  jump := 2053404
+  slice := by exact Pc64SignImage.stub_bb40_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_10e4
+def sign_143c : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11015
+  stubPC := 0xbc1c
+  oldPC := 0x143c
+  lastWord := 0xf98f506f
+  jump := 2054040
+  slice := by exact Pc64SignImage.stub_bc1c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_143c
+def sign_1e48 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11087
+  stubPC := 0xbd3c
+  oldPC := 0x1e48
+  lastWord := 0x884f606f
+  jump := 2056324
+  slice := by exact Pc64SignImage.stub_bd3c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_1e48
+def sign_240c : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11167
+  stubPC := 0xbe7c
+  oldPC := 0x240c
+  lastWord := 0xd08f606f
+  jump := 2057480
+  slice := by exact Pc64SignImage.stub_be7c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_240c
+def sign_28e0 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11239
+  stubPC := 0xbf9c
+  oldPC := 0x28e0
+  lastWord := 0x8bdf606f
+  jump := 2058428
+  slice := by exact Pc64SignImage.stub_bf9c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_28e0
+def sign_3bc0 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11337
+  stubPC := 0xc124
+  oldPC := 0x3bc0
+  lastWord := 0xa15f706f
+  jump := 2062868
+  slice := by exact Pc64SignImage.stub_c124_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_3bc0
+def sign_3fec : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11385
+  stubPC := 0xc1e4
+  oldPC := 0x3fec
+  lastWord := 0xd81f706f
+  jump := 2063744
+  slice := by exact Pc64SignImage.stub_c1e4_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_3fec
+def sign_52cc : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11483
+  stubPC := 0xc36c
+  oldPC := 0x52cc
+  lastWord := 0xed9f806f
+  jump := 2068184
+  slice := by exact Pc64SignImage.stub_c36c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_52cc
+def sign_56f8 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11531
+  stubPC := 0xc42c
+  oldPC := 0x56f8
+  lastWord := 0xa44f906f
+  jump := 2069060
+  slice := by exact Pc64SignImage.stub_c42c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_56f8
+def sign_69d8 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11629
+  stubPC := 0xc5b4
+  oldPC := 0x69d8
+  lastWord := 0xb9cfa06f
+  jump := 2073500
+  slice := by exact Pc64SignImage.stub_c5b4_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_69d8
+def sign_6e04 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11677
+  stubPC := 0xc674
+  oldPC := 0x6e04
+  lastWord := 0xf08fa06f
+  jump := 2074376
+  slice := by exact Pc64SignImage.stub_c674_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_6e04
+def sign_80e4 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11775
+  stubPC := 0xc7fc
+  oldPC := 0x80e4
+  lastWord := 0x861fb06f
+  jump := 2078816
+  slice := by exact Pc64SignImage.stub_c7fc_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_80e4
+def sign_8510 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11823
+  stubPC := 0xc8bc
+  oldPC := 0x8510
+  lastWord := 0xbcdfb06f
+  jump := 2079692
+  slice := by exact Pc64SignImage.stub_c8bc_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_8510
+def sign_97f0 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11921
+  stubPC := 0xca44
+  oldPC := 0x97f0
+  lastWord := 0xd25fc06f
+  jump := 2084132
+  slice := by exact Pc64SignImage.stub_ca44_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_97f0
+def sign_a584 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11975
+  stubPC := 0xcb1c
+  oldPC := 0xa584
+  lastWord := 0x9e1fd06f
+  jump := 2087392
+  slice := by exact Pc64SignImage.stub_cb1c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_a584
+def sign_a9c4 : Pad72StubClass.Site where
+  image := Pc64SignImage.image
+  start := 12023
+  stubPC := 0xcbdc
+  oldPC := 0xa9c4
+  lastWord := 0xd61fd06f
+  jump := 2088288
+  slice := by exact Pc64SignImage.stub_cbdc_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+#print axioms sign_a9c4
+end Pad72Sites
+
+
+-- BEGIN BETA64 TRANSPORT: 520-to-576-byte HASH class.
+namespace Padding64Cells
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+def cells520 : List (Reg × Word) :=
+  [(.x16, 0x40208), (.x17, 0x40210), (.x18, 0x40218),
+   (.x19, 0x40220), (.x20, 0x40228), (.x21, 0x40230),
+   (.x22, 0x40238)]
+
+theorem ready_520 (s : MachineState)
+    (destination : s.getReg .x12 = 0x42000)
+    (scratch : ∀ r ∈ cells520.map Prod.fst, s.getReg r = 0) :
+    PadReady s cells520 := by
+  apply padReady_of_static s cells520 (by decide)
+  · intro pair h
+    exact scratch pair.1 (List.mem_map.mpr ⟨pair, h, rfl⟩)
+  · intro pair h
+    simp [cells520] at h
+    rcases h with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals decide
+  · intro pair h
+    simp [cells520] at h
+    rcases h with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals simp [destination]
+
+#print axioms ready_520
+
+theorem restore_520 (s : MachineState) (answer : BitVec 256)
+    (destination : s.getReg .x12 = 0x42000)
+    (scratch : ∀ r ∈ cells520.map Prod.fst, s.getReg r = 0) :
+    restoreMany (writeHash (padMany s cells520) answer) cells520 =
+      writeHash s answer :=
+  restore_padMany_writeHash s cells520 answer (ready_520 s destination scratch)
+
+#print axioms restore_520
+
+
+theorem pad520_byte (s : MachineState) (i : Nat) (hi : i < 576) :
+    (padMany s cells520).getByte (0x40000 + BitVec.ofNat 64 i) =
+      if i < 520 then s.getByte (0x40000 + BitVec.ofNat 64 i) else 0 := by
+  have hrange : (0x40000 : Word).toNat + i < 2 ^ 64 := by
+    change 262144 + i < 18446744073709551616
+    omega
+  have haddr := alignToDword_add_ofNat_of_aligned
+    (base := (0x40000 : Word)) (i := i) (by decide) hrange
+  by_cases h : i < 520
+  · simp only [if_pos h]
+    apply padMany_getByte_outside
+    intro pair member
+    rw [haddr]
+    simp [cells520] at member
+    rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals bv_omega
+  · simp only [if_neg h]
+    apply padMany_getByte_zero
+    · decide
+    · rw [haddr]
+      simp only [cells520, List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil,
+        or_false]
+      have hibounds : 65 ≤ i / 8 ∧ i / 8 ≤ 71 := by omega
+      rcases hibounds with ⟨lo, hi'⟩
+      interval_cases j : i / 8 <;> simp_all
+
+#print axioms pad520_byte
+
+
+theorem pad520_source (s : MachineState) (source : s.getReg .x10 = 0x40000) :
+    (padMany s cells520).getReg .x10 = 0x40000 := by
+  rw [padMany_getReg_outside]
+  · exact source
+  · intro pair member
+    simp [cells520] at member
+    rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals decide
+
+#print axioms pad520_source
+
+
+private theorem foldl_congr_on_520 (xs : List Nat) (f g : Nat → Nat)
+    (h : ∀ i ∈ xs, f i = g i) (acc : Nat) :
+    xs.foldl (fun a i => a + f i) acc =
+    xs.foldl (fun a i => a + g i) acc := by
+  induction xs generalizing acc with
+  | nil => rfl
+  | cons i rest ih =>
+      simp only [List.foldl_cons]
+      rw [h i (by simp), ih]
+      intro j hj
+      exact h j (by simp [hj])
+
+theorem hashInput_pad520 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    SigGolf.Riscv.hashInput ((padMany s cells520).setReg .x11 576) =
+      (⟨8, BitVec.ofNat 4608
+        ((List.range 576).foldl (fun acc i => acc +
+          (if i < 520 then s.getByte (0x40000 + BitVec.ofNat 64 i) else 0).toNat *
+            2 ^ (8 * i)) 0)⟩ : SigGolf.Query) := by
+  have hs : (padMany s cells520).getReg .x10 = 0x40000 := pad520_source s source
+  have hfold :
+      (List.range 576).foldl (fun acc i => acc +
+        (((padMany s cells520).setReg .x11 576).getByte
+          (((padMany s cells520).setReg .x11 576).getReg .x10 + BitVec.ofNat 64 i)).toNat *
+          2 ^ (8 * i)) 0 =
+      (List.range 576).foldl (fun acc i => acc +
+        (if i < 520 then s.getByte (0x40000 + BitVec.ofNat 64 i) else 0).toNat *
+          2 ^ (8 * i)) 0 := by
+    apply foldl_congr_on_520
+    intro i hi
+    have hi' : i < 576 := List.mem_range.mp hi
+    simp only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide), hs]
+    have hbyte : ((padMany s cells520).setReg .x11 576).getByte
+        (0x40000 + BitVec.ofNat 64 i) =
+        (padMany s cells520).getByte (0x40000 + BitVec.ofNat 64 i) := by
+      simp [MachineState.getByte]
+    rw [hbyte, pad520_byte s i hi']
+  have hlen : ((padMany s cells520).setReg .x11 576).getReg .x11 = 576 :=
+    MachineState.getReg_setReg_eq (by decide)
+  have hfold' :
+      (List.range 576).foldl (fun acc i => acc +
+        (((padMany s cells520).setReg .x11 576).getByte
+          (0x40000 + BitVec.ofNat 64 i)).toNat * 2 ^ (8 * i)) 0 =
+      (List.range 576).foldl (fun acc i => acc +
+        (if i < 520 then s.getByte (0x40000 + BitVec.ofNat 64 i) else 0).toNat *
+          2 ^ (8 * i)) 0 := by
+    simpa only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide), hs] using hfold
+  unfold SigGolf.Riscv.hashInput
+  rw [hlen]
+  have hnat : (576 : Word).toNat / 64 - 1 = 8 := by decide
+  dsimp only
+  rw [hnat]
+  simp only [Nat.reduceAdd, Nat.reduceMul]
+  rw [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide), hs]
+  exact congrArg (fun v : Nat => (⟨8, BitVec.ofNat 4608 v⟩ : SigGolf.Query)) hfold'
+
+#print axioms hashInput_pad520
+
+
+end Padding64Cells
+namespace Padding64Decode
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+def ready520 (s : MachineState) : MachineState :=
+  (Padding64Cells.padMany s Padding64Cells.cells520).setReg .x11 576
+end Padding64Decode
+namespace Pad520StubClass
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def block (lastWord : BitVec 32) : List (BitVec 32) := [
+  0x20853803, 0x20053423, 0x21053883, 0x20053823, 0x21853903, 0x20053c23, 0x22053983, 0x22053023, 0x22853a03, 0x22053423, 0x23053a83, 0x22053823, 0x23853b03, 0x22053c23, 0x35d593, 0x3858593, 0x293, 0x73, 0xfc858593, 0x359593, 0x100293, 0x23653c23, 0xb13, 0x23553823, 0xa93, 0x23453423, 0xa13, 0x23353023, 0x993, 0x21253c23, 0x913, 0x21153823, 0x893, 0x21053423, 0x813, lastWord]
+
+structure Site where
+  image : Image
+  start : Nat
+  stubPC : Word
+  oldPC : Word
+  lastWord : BitVec 32
+  jump : BitVec 21
+  slice : (image.code.drop start).take 36 = block lastWord
+  stubNat : stubPC.toNat = 0x1000 + 4 * start
+  bound : stubPC.toNat + 144 < 2 ^ 64
+  lastDecode : decodeInstruction lastWord = some (.base (.JAL .x0 jump))
+  returns : stubPC + 140 + signExtend21 jump = oldPC + 4
+
+theorem Site.fetchAt (site : Site) (s : MachineState) (j : Nat)
+    {instruction : Instruction}
+    (inside : j < 36)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (decoded : ((block site.lastWord)[j]?).bind decodeInstruction = some instruction) :
+    fetch site.image s = some instruction := by
+  apply Padding64Trace.fetch_of_block site.image s (block site.lastWord)
+    site.start 36 j site.slice inside
+  · rw [site.stubNat] at pc
+    omega
+  · exact decoded
+
+theorem Site.padPairTrace (site : Site) (s : MachineState)
+    (j : Nat) (r : Reg) (off : BitVec 12) (cell : Word)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (inside : j + 1 < 36)
+    (decodeLoad : ((block site.lastWord)[j]?).bind decodeInstruction =
+      some (.base (.LD r .x10 off)))
+    (decodeZero : ((block site.lastWord)[j+1]?).bind decodeInstruction =
+      some (.base (.SD .x10 .x0 off)))
+    (different : r ≠ .x10)
+    (loadValid : memoryArgumentsValid s (.LD r .x10 off) = true)
+    (storeValid : memoryArgumentsValid s (.SD .x10 .x0 off) = true)
+    (address : s.getReg .x10 + signExtend12 off = cell) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.padDword s r cell).setPC (s.pc + 8)) := by
+  let loaded := (s.setReg r (s.getMem cell)).setPC (s.pc + 4)
+  have pcLoaded : loaded.pc.toNat = site.stubPC.toNat + 4 * (j+1) := by
+    simp [loaded, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have pair := Padding64Cells.aligned_padDword_pair s r off cell
+    different loadValid storeValid address
+  apply Padding64Trace.OrdinaryTrace.step (.base (.LD r .x10 off))
+    (site.fetchAt s j (by omega) pc decodeLoad)
+    (by intro h; cases h) pair.1 (by simp [instructionCycles])
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SD .x10 .x0 off))
+    (site.fetchAt loaded (j+1) inside pcLoaded decodeZero)
+    (by intro h; cases h) pair.2 (by simp [instructionCycles])
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.padPairTrace
+
+theorem Site.firstPair (site : Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)) := by
+  apply site.padPairTrace s 0 .x16 520 0x40208
+  · simp [pc]
+  · decide
+  · rfl
+  · rfl
+  · decide
+  · simp [memoryArgumentsValid, source, accessValid, rangeValid,
+      signExtend12, MEMORY_BYTES]
+  · simp [memoryArgumentsValid, source, accessValid, rangeValid,
+      signExtend12, MEMORY_BYTES]
+  · simpa [source, signExtend12]
+
+#print axioms Site.firstPair
+
+theorem Site.firstTwoPairs (site : Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40210).setPC (p1.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 4 s p2 := by
+  dsimp only
+  let p1 := (Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)
+  let p2 := (Padding64Cells.padDword p1 .x17 0x40210).setPC (p1.pc + 8)
+  have source1 : p1.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne s .x16 .x10 0x40208 (by decide)
+    simpa only [p1, MachineState.getReg_setPC, h] using source
+  have pc1 : p1.pc.toNat = site.stubPC.toNat + 8 := by
+    simp [p1, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s p1 :=
+    site.firstPair s pc source
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 p1 p2 := by
+    apply site.padPairTrace p1 2 .x17 528 0x40210
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  simpa only [p1, p2] using
+    Padding64Trace.OrdinaryTrace.append site.image t1 t2
+
+#print axioms Site.firstTwoPairs
+
+theorem Site.restorePairTrace (site : Site) (s : MachineState)
+    (j : Nat) (r : Reg) (off : BitVec 12) (cell : Word)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (inside : j + 1 < 36)
+    (decodeStore : ((block site.lastWord)[j]?).bind decodeInstruction =
+      some (.base (.SD .x10 r off)))
+    (decodeClear : ((block site.lastWord)[j+1]?).bind decodeInstruction =
+      some (.base (.ADDI r .x0 0)))
+    (storeValid : memoryArgumentsValid s (.SD .x10 r off) = true)
+    (address : s.getReg .x10 + signExtend12 off = cell) :
+    Padding64Trace.OrdinaryTrace site.image 2 s
+      ((Padding64Cells.restoreDword s r cell).setPC (s.pc + 8)) := by
+  let stored := (s.setMem cell (s.getReg r)).setPC (s.pc + 4)
+  have pcStored : stored.pc.toNat = site.stubPC.toNat + 4 * (j+1) := by
+    simp [stored, MachineState.setPC]
+    have h := site.bound
+    bv_omega
+  have pair := Padding64Cells.aligned_restoreDword_pair s r off cell
+    storeValid address
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SD .x10 r off))
+    (site.fetchAt s j (by omega) pc decodeStore)
+    (by intro h; cases h) pair.1 (by simp [instructionCycles])
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI r .x0 0))
+    (site.fetchAt stored (j+1) inside pcStored decodeClear)
+    (by intro h; cases h) pair.2 (by simp [instructionCycles])
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.restorePairTrace
+
+end Pad520StubClass
+
+namespace Pad520SevenPairs
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+
+theorem sevenPairs (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40210).setPC (p1.pc + 8)
+    let p3 := (Padding64Cells.padDword p2 .x18 0x40218).setPC (p2.pc + 8)
+    let p4 := (Padding64Cells.padDword p3 .x19 0x40220).setPC (p3.pc + 8)
+    let p5 := (Padding64Cells.padDword p4 .x20 0x40228).setPC (p4.pc + 8)
+    let p6 := (Padding64Cells.padDword p5 .x21 0x40230).setPC (p5.pc + 8)
+    let p7 := (Padding64Cells.padDword p6 .x22 0x40238).setPC (p6.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 14 s p7 := by
+  dsimp only
+  let p1 := (Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)
+  let p2 := (Padding64Cells.padDword p1 .x17 0x40210).setPC (p1.pc + 8)
+  let p3 := (Padding64Cells.padDword p2 .x18 0x40218).setPC (p2.pc + 8)
+  let p4 := (Padding64Cells.padDword p3 .x19 0x40220).setPC (p3.pc + 8)
+  let p5 := (Padding64Cells.padDword p4 .x20 0x40228).setPC (p4.pc + 8)
+  let p6 := (Padding64Cells.padDword p5 .x21 0x40230).setPC (p5.pc + 8)
+  let p7 := (Padding64Cells.padDword p6 .x22 0x40238).setPC (p6.pc + 8)
+  have source0 : s.getReg .x10 = 0x40000 := source
+  have pc0 : s.pc.toNat = site.stubPC.toNat := by simp [pc]
+  have source1 : p1.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne s .x16 .x10 0x40208 (by decide)
+    simpa only [p1, MachineState.getReg_setPC, h] using source0
+  have pc1 : p1.pc.toNat = site.stubPC.toNat + 8 := by
+    simp [p1, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have source2 : p2.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p1 .x17 .x10 0x40210 (by decide)
+    simpa only [p2, MachineState.getReg_setPC, h] using source1
+  have pc2 : p2.pc.toNat = site.stubPC.toNat + 16 := by
+    simp [p2, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  have source3 : p3.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p2 .x18 .x10 0x40218 (by decide)
+    simpa only [p3, MachineState.getReg_setPC, h] using source2
+  have pc3 : p3.pc.toNat = site.stubPC.toNat + 24 := by
+    simp [p3, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc2
+    bv_omega
+  have source4 : p4.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p3 .x19 .x10 0x40220 (by decide)
+    simpa only [p4, MachineState.getReg_setPC, h] using source3
+  have pc4 : p4.pc.toNat = site.stubPC.toNat + 32 := by
+    simp [p4, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc3
+    bv_omega
+  have source5 : p5.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p4 .x20 .x10 0x40228 (by decide)
+    simpa only [p5, MachineState.getReg_setPC, h] using source4
+  have pc5 : p5.pc.toNat = site.stubPC.toNat + 40 := by
+    simp [p5, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc4
+    bv_omega
+  have source6 : p6.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p5 .x21 .x10 0x40230 (by decide)
+    simpa only [p6, MachineState.getReg_setPC, h] using source5
+  have pc6 : p6.pc.toNat = site.stubPC.toNat + 48 := by
+    simp [p6, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc5
+    bv_omega
+  have source7 : p7.getReg .x10 = 0x40000 := by
+    have h := Padding64Cells.getReg_padDword_ne p6 .x22 .x10 0x40238 (by decide)
+    simpa only [p7, MachineState.getReg_setPC, h] using source6
+  have pc7 : p7.pc.toNat = site.stubPC.toNat + 56 := by
+    simp [p7, Padding64Cells.padDword, MachineState.setPC]
+    have h := site.bound
+    have hp := pc6
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s p1 := by
+    apply site.padPairTrace s 0 .x16 520 0x40208
+    · simpa using pc0
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source0, signExtend12]
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 p1 p2 := by
+    apply site.padPairTrace p1 2 .x17 528 0x40210
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  have t3 : Padding64Trace.OrdinaryTrace site.image 2 p2 p3 := by
+    apply site.padPairTrace p2 4 .x18 536 0x40218
+    · simpa using pc2
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source2, signExtend12]
+  have t4 : Padding64Trace.OrdinaryTrace site.image 2 p3 p4 := by
+    apply site.padPairTrace p3 6 .x19 544 0x40220
+    · simpa using pc3
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source3, signExtend12]
+  have t5 : Padding64Trace.OrdinaryTrace site.image 2 p4 p5 := by
+    apply site.padPairTrace p4 8 .x20 552 0x40228
+    · simpa using pc4
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source4, signExtend12]
+  have t6 : Padding64Trace.OrdinaryTrace site.image 2 p5 p6 := by
+    apply site.padPairTrace p5 10 .x21 560 0x40230
+    · simpa using pc5
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source5, signExtend12]
+  have t7 : Padding64Trace.OrdinaryTrace site.image 2 p6 p7 := by
+    apply site.padPairTrace p6 12 .x22 568 0x40238
+    · simpa using pc6
+    · decide
+    · rfl
+    · rfl
+    · decide
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source6, signExtend12]
+  have t12 := Padding64Trace.OrdinaryTrace.append site.image t1 t2
+  have t13 := Padding64Trace.OrdinaryTrace.append site.image t12 t3
+  have t14 := Padding64Trace.OrdinaryTrace.append site.image t13 t4
+  have t15 := Padding64Trace.OrdinaryTrace.append site.image t14 t5
+  have t16 := Padding64Trace.OrdinaryTrace.append site.image t15 t6
+  have t17 := Padding64Trace.OrdinaryTrace.append site.image t16 t7
+  simpa only [show 2 + 2 + 2 + 2 + 2 + 2 + 2 = 14 by decide] using t17
+
+#print axioms sevenPairs
+end Pad520SevenPairs
+
+namespace Pad520Join
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 3000000
+
+private theorem setPC_setPC (s : MachineState) (a b : Word) :
+    (s.setPC a).setPC b = s.setPC b := by
+  rfl
+
+private theorem padDword_setPC (s : MachineState) (r : Reg) (addr pc : Word) :
+    Padding64Cells.padDword (s.setPC pc) r addr =
+      (Padding64Cells.padDword s r addr).setPC pc := by
+  cases r <;> simp [Padding64Cells.padDword, MachineState.setPC,
+    MachineState.setReg, MachineState.setMem, MachineState.getMem]
+
+private theorem padDword_pc (s : MachineState) (r : Reg) (addr : Word) :
+    (Padding64Cells.padDword s r addr).pc = s.pc := by
+  cases r <;> simp [Padding64Cells.padDword, MachineState.setReg,
+    MachineState.setMem]
+
+#print axioms padDword_setPC
+
+theorem sevenPairs_normalized (s : MachineState) :
+    let p1 := (Padding64Cells.padDword s .x16 0x40208).setPC (s.pc + 8)
+    let p2 := (Padding64Cells.padDword p1 .x17 0x40210).setPC (p1.pc + 8)
+    let p3 := (Padding64Cells.padDword p2 .x18 0x40218).setPC (p2.pc + 8)
+    let p4 := (Padding64Cells.padDword p3 .x19 0x40220).setPC (p3.pc + 8)
+    let p5 := (Padding64Cells.padDword p4 .x20 0x40228).setPC (p4.pc + 8)
+    let p6 := (Padding64Cells.padDword p5 .x21 0x40230).setPC (p5.pc + 8)
+    let p7 := (Padding64Cells.padDword p6 .x22 0x40238).setPC (p6.pc + 8)
+    p7 = (Padding64Cells.padMany s Padding64Cells.cells520).setPC (s.pc + 56) := by
+  dsimp [Padding64Cells.padMany, Padding64Cells.cells520]
+  simp only [padDword_setPC, setPC_setPC, MachineState.setPC,
+    padDword_pc]
+  congr 1
+  bv_omega
+
+#print axioms sevenPairs_normalized
+end Pad520Join
+
+namespace Pad520PreHash
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+set_option maxHeartbeats 1000000
+
+theorem add56 (s : MachineState) :
+    ordinaryStep s (.base (.ADDI .x11 .x11 56)) =
+      some ((s.setReg .x11 (s.getReg .x11 + 56)).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12]
+
+def ready (s : MachineState) : MachineState :=
+  let p := (Padding64Cells.padMany s Padding64Cells.cells520).setPC (s.pc + 56)
+  let q := (p.setReg .x11 (p.getReg .x11 >>> 3)).setPC (p.pc + 4)
+  let r := (q.setReg .x11 (q.getReg .x11 + 56)).setPC (q.pc + 4)
+  (r.setReg .x5 0).setPC (r.pc + 4)
+
+theorem Site.pre_hash (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC)
+    (source : s.getReg .x10 = 0x40000) :
+    Padding64Trace.OrdinaryTrace site.image 17 s (ready s) := by
+  let p := (Padding64Cells.padMany s Padding64Cells.cells520).setPC (s.pc + 56)
+  let q := (p.setReg .x11 (p.getReg .x11 >>> 3)).setPC (p.pc + 4)
+  let r := (q.setReg .x11 (q.getReg .x11 + 56)).setPC (q.pc + 4)
+  let t := (r.setReg .x5 0).setPC (r.pc + 4)
+  have pre : Padding64Trace.OrdinaryTrace site.image 14 s p := by
+    have h := Pad520SevenPairs.sevenPairs site s pc source
+    simpa only [Pad520Join.sevenPairs_normalized] using h
+  have ppc : p.pc.toNat = site.stubPC.toNat + 56 := by
+    simp [p, MachineState.setPC, pc]
+    have h := site.bound
+    bv_omega
+  have qpc : q.pc.toNat = site.stubPC.toNat + 60 := by
+    simp [q, MachineState.setPC]
+    have h := site.bound
+    have h2 := ppc
+    bv_omega
+  have rpc : r.pc.toNat = site.stubPC.toNat + 64 := by
+    simp [r, MachineState.setPC]
+    have h := site.bound
+    have h2 := qpc
+    bv_omega
+  have rest : Padding64Trace.OrdinaryTrace site.image 3 p t := by
+    apply Padding64Trace.OrdinaryTrace.step (.base (.SRLI .x11 .x11 3))
+      (site.fetchAt p 14 (by decide) (by simpa using ppc) (by rfl))
+      (by intro h; cases h) (FirstStubFetch.shift_a1 p) (by decide)
+    apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x11 .x11 56))
+      (site.fetchAt q 15 (by decide) (by simpa using qpc) (by rfl))
+      (by intro h; cases h) (add56 q) (by decide)
+    apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x5 .x0 0))
+      (site.fetchAt r 16 (by decide) (by simpa using rpc) (by rfl))
+      (by intro h; cases h) (FirstStubFetch.set_hash_selector r) (by decide)
+    exact Padding64Trace.OrdinaryTrace.refl _
+  simpa only [show 14 + 3 = 17 by decide, ready, p, q, r, t] using
+    Padding64Trace.OrdinaryTrace.append site.image pre rest
+
+#print axioms Site.pre_hash
+end Pad520PreHash
+
+namespace Pad520PostHash
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+set_option maxHeartbeats 1000000
+
+theorem sub56 (s : MachineState) :
+    ordinaryStep s (.base (.ADDI .x11 .x11 (-56))) =
+      some ((s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12]
+  have h : s.getReg .x11 + (18446744073709551560 : Word) =
+      s.getReg .x11 - 56 := by bv_decide
+  exact congrArg (fun w : Word => (s.setReg .x11 w).setPC (s.pc + 4)) h
+
+theorem restoreDword_source (s : MachineState) (r : Reg) (cell : Word)
+    (ne : r ≠ .x10) :
+    (Padding64Cells.restoreDword s r cell).getReg .x10 = s.getReg .x10 := by
+  rw [Padding64Cells.restoreDword,
+    MachineState.getReg_setReg_ne (s.setMem cell (s.getReg r)) r .x10 0 ne]
+  rfl
+
+theorem Site.post_conversion (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 72) :
+    let u1 := (s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)
+    let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+    let u3 := (u2.setReg .x5 1).setPC (u2.pc + 4)
+    Padding64Trace.OrdinaryTrace site.image 3 s u3 := by
+  dsimp only
+  let u1 := (s.setReg .x11 (s.getReg .x11 - 56)).setPC (s.pc + 4)
+  let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+  have pc0 : s.pc.toNat = site.stubPC.toNat + 72 := by
+    rw [pc]
+    have h := site.bound
+    bv_omega
+  have pc1 : u1.pc.toNat = site.stubPC.toNat + 76 := by
+    simp [u1, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have pc2 : u2.pc.toNat = site.stubPC.toNat + 80 := by
+    simp [u2, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x11 .x11 (-56)))
+    (site.fetchAt s 18 (by decide) (by simpa using pc0) (by rfl))
+    (by intro h; cases h) (sub56 s) (by decide)
+  apply Padding64Trace.OrdinaryTrace.step (.base (.SLLI .x11 .x11 3))
+    (site.fetchAt u1 19 (by decide) (by simpa using pc1) (by rfl))
+    (by intro h; cases h) (FirstStubFetch.shl_a1 u1) (by decide)
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x5 .x0 1))
+    (site.fetchAt u2 20 (by decide) (by simpa using pc2) (by rfl))
+    (by intro h; cases h) (FirstStubFetch.set_old_selector u2) (by decide)
+  exact Padding64Trace.OrdinaryTrace.refl _
+
+#print axioms Site.post_conversion
+end Pad520PostHash
+
+namespace Pad520RestoreSeven
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+set_option maxHeartbeats 2000000
+
+theorem sevenPairs (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 84)
+    (source : s.getReg .x10 = 0x40000) :
+    let r1 := (Padding64Cells.restoreDword s .x22 0x40238).setPC (s.pc + 8)
+    let r2 := (Padding64Cells.restoreDword r1 .x21 0x40230).setPC (r1.pc + 8)
+    let r3 := (Padding64Cells.restoreDword r2 .x20 0x40228).setPC (r2.pc + 8)
+    let r4 := (Padding64Cells.restoreDword r3 .x19 0x40220).setPC (r3.pc + 8)
+    let r5 := (Padding64Cells.restoreDword r4 .x18 0x40218).setPC (r4.pc + 8)
+    let r6 := (Padding64Cells.restoreDword r5 .x17 0x40210).setPC (r5.pc + 8)
+    let r7 := (Padding64Cells.restoreDword r6 .x16 0x40208).setPC (r6.pc + 8)
+    Padding64Trace.OrdinaryTrace site.image 14 s r7 := by
+  dsimp only
+  let r1 := (Padding64Cells.restoreDword s .x22 0x40238).setPC (s.pc + 8)
+  let r2 := (Padding64Cells.restoreDword r1 .x21 0x40230).setPC (r1.pc + 8)
+  let r3 := (Padding64Cells.restoreDword r2 .x20 0x40228).setPC (r2.pc + 8)
+  let r4 := (Padding64Cells.restoreDword r3 .x19 0x40220).setPC (r3.pc + 8)
+  let r5 := (Padding64Cells.restoreDword r4 .x18 0x40218).setPC (r4.pc + 8)
+  let r6 := (Padding64Cells.restoreDword r5 .x17 0x40210).setPC (r5.pc + 8)
+  let r7 := (Padding64Cells.restoreDword r6 .x16 0x40208).setPC (r6.pc + 8)
+  have pc0 : s.pc.toNat = site.stubPC.toNat + 84 := by
+    rw [pc]
+    have h := site.bound
+    bv_omega
+  have source0 : s.getReg .x10 = 0x40000 := source
+  have source1 : r1.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source s .x22 0x40238 (by decide)
+    simpa only [r1, MachineState.getReg_setPC, h] using source0
+  have pc1 : r1.pc.toNat = site.stubPC.toNat + 92 := by
+    simp [r1, MachineState.setPC]
+    have h := site.bound
+    have hp := pc0
+    bv_omega
+  have source2 : r2.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r1 .x21 0x40230 (by decide)
+    simpa only [r2, MachineState.getReg_setPC, h] using source1
+  have pc2 : r2.pc.toNat = site.stubPC.toNat + 100 := by
+    simp [r2, MachineState.setPC]
+    have h := site.bound
+    have hp := pc1
+    bv_omega
+  have source3 : r3.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r2 .x20 0x40228 (by decide)
+    simpa only [r3, MachineState.getReg_setPC, h] using source2
+  have pc3 : r3.pc.toNat = site.stubPC.toNat + 108 := by
+    simp [r3, MachineState.setPC]
+    have h := site.bound
+    have hp := pc2
+    bv_omega
+  have source4 : r4.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r3 .x19 0x40220 (by decide)
+    simpa only [r4, MachineState.getReg_setPC, h] using source3
+  have pc4 : r4.pc.toNat = site.stubPC.toNat + 116 := by
+    simp [r4, MachineState.setPC]
+    have h := site.bound
+    have hp := pc3
+    bv_omega
+  have source5 : r5.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r4 .x18 0x40218 (by decide)
+    simpa only [r5, MachineState.getReg_setPC, h] using source4
+  have pc5 : r5.pc.toNat = site.stubPC.toNat + 124 := by
+    simp [r5, MachineState.setPC]
+    have h := site.bound
+    have hp := pc4
+    bv_omega
+  have source6 : r6.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r5 .x17 0x40210 (by decide)
+    simpa only [r6, MachineState.getReg_setPC, h] using source5
+  have pc6 : r6.pc.toNat = site.stubPC.toNat + 132 := by
+    simp [r6, MachineState.setPC]
+    have h := site.bound
+    have hp := pc5
+    bv_omega
+  have source7 : r7.getReg .x10 = 0x40000 := by
+    have h := Pad520PostHash.restoreDword_source r6 .x16 0x40208 (by decide)
+    simpa only [r7, MachineState.getReg_setPC, h] using source6
+  have pc7 : r7.pc.toNat = site.stubPC.toNat + 140 := by
+    simp [r7, MachineState.setPC]
+    have h := site.bound
+    have hp := pc6
+    bv_omega
+  have t1 : Padding64Trace.OrdinaryTrace site.image 2 s r1 := by
+    apply site.restorePairTrace s 21 .x22 568 0x40238
+    · simpa using pc0
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source0, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source0, signExtend12]
+  have t2 : Padding64Trace.OrdinaryTrace site.image 2 r1 r2 := by
+    apply site.restorePairTrace r1 23 .x21 560 0x40230
+    · simpa using pc1
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source1, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source1, signExtend12]
+  have t3 : Padding64Trace.OrdinaryTrace site.image 2 r2 r3 := by
+    apply site.restorePairTrace r2 25 .x20 552 0x40228
+    · simpa using pc2
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source2, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source2, signExtend12]
+  have t4 : Padding64Trace.OrdinaryTrace site.image 2 r3 r4 := by
+    apply site.restorePairTrace r3 27 .x19 544 0x40220
+    · simpa using pc3
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source3, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source3, signExtend12]
+  have t5 : Padding64Trace.OrdinaryTrace site.image 2 r4 r5 := by
+    apply site.restorePairTrace r4 29 .x18 536 0x40218
+    · simpa using pc4
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source4, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source4, signExtend12]
+  have t6 : Padding64Trace.OrdinaryTrace site.image 2 r5 r6 := by
+    apply site.restorePairTrace r5 31 .x17 528 0x40210
+    · simpa using pc5
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source5, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source5, signExtend12]
+  have t7 : Padding64Trace.OrdinaryTrace site.image 2 r6 r7 := by
+    apply site.restorePairTrace r6 33 .x16 520 0x40208
+    · simpa using pc6
+    · decide
+    · rfl
+    · rfl
+    · simp [memoryArgumentsValid, source6, accessValid, rangeValid,
+        signExtend12, MEMORY_BYTES]
+    · simpa [source6, signExtend12]
+  have t12 := Padding64Trace.OrdinaryTrace.append site.image t1 t2
+  have t13 := Padding64Trace.OrdinaryTrace.append site.image t12 t3
+  have t14 := Padding64Trace.OrdinaryTrace.append site.image t13 t4
+  have t15 := Padding64Trace.OrdinaryTrace.append site.image t14 t5
+  have t16 := Padding64Trace.OrdinaryTrace.append site.image t15 t6
+  have t17 := Padding64Trace.OrdinaryTrace.append site.image t16 t7
+  simpa only [show 2 + 2 + 2 + 2 + 2 + 2 + 2 = 14 by decide] using t17
+
+#print axioms sevenPairs
+end Pad520RestoreSeven
+
+namespace Pad520RestoreJoin
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 3000000
+
+theorem restoreDword_setPC (s : MachineState) (r : Reg) (addr pc : Word) :
+    Padding64Cells.restoreDword (s.setPC pc) r addr =
+      (Padding64Cells.restoreDword s r addr).setPC pc := by
+  cases r <;> simp [Padding64Cells.restoreDword, MachineState.setPC,
+    MachineState.setReg, MachineState.setMem, MachineState.getReg]
+
+private theorem restoreDword_pc (s : MachineState) (r : Reg) (addr : Word) :
+    (Padding64Cells.restoreDword s r addr).pc = s.pc := by
+  cases r <;> simp [Padding64Cells.restoreDword, MachineState.setReg,
+    MachineState.setMem]
+
+theorem sevenPairs_normalized (s : MachineState) :
+    let r1 := (Padding64Cells.restoreDword s .x22 0x40238).setPC (s.pc + 8)
+    let r2 := (Padding64Cells.restoreDword r1 .x21 0x40230).setPC (r1.pc + 8)
+    let r3 := (Padding64Cells.restoreDword r2 .x20 0x40228).setPC (r2.pc + 8)
+    let r4 := (Padding64Cells.restoreDword r3 .x19 0x40220).setPC (r3.pc + 8)
+    let r5 := (Padding64Cells.restoreDword r4 .x18 0x40218).setPC (r4.pc + 8)
+    let r6 := (Padding64Cells.restoreDword r5 .x17 0x40210).setPC (r5.pc + 8)
+    let r7 := (Padding64Cells.restoreDword r6 .x16 0x40208).setPC (r6.pc + 8)
+    r7 = (Padding64Cells.restoreMany s Padding64Cells.cells520).setPC (s.pc + 56) := by
+  dsimp [Padding64Cells.restoreMany, Padding64Cells.cells520]
+  simp only [restoreDword_setPC, MachineState.setPC, restoreDword_pc]
+  congr 1
+  bv_omega
+
+#print axioms sevenPairs_normalized
+end Pad520RestoreJoin
+
+namespace Pad520ReadyFacts
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 1000000
+
+theorem padReg (s : MachineState) (q : Reg)
+    (outside : q ∉ Padding64Cells.cells520.map Prod.fst) :
+    (Padding64Cells.padMany s Padding64Cells.cells520).getReg q = s.getReg q := by
+  apply Padding64Cells.padMany_getReg_outside
+  intro pair member eq
+  apply outside
+  rw [← eq]
+  exact List.mem_map.mpr ⟨pair, member, rfl⟩
+
+theorem ready_normalized (s : MachineState)
+    (length : s.getReg .x11 = 4160) :
+    Pad520PreHash.ready s =
+      ((Padding64Decode.ready520 s).setReg .x5 0).setPC (s.pc + 68) := by
+  have hp : (Padding64Cells.padMany s Padding64Cells.cells520).getReg .x11 = 4160 := by
+    rw [padReg s .x11 (by decide)]
+    exact length
+  simp [Pad520PreHash.ready, Padding64Decode.ready520,
+    MachineState.getReg_setPC, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, padReg s .x11 (by decide), length,
+    MachineState.setPC, MachineState.setReg]
+  constructor
+  · funext q
+    by_cases h5 : q = .x5
+    · simp [h5]
+    by_cases h11 : q = .x11
+    · subst q
+      change (Padding64Cells.padMany s Padding64Cells.cells520).regs .x11 >>> 3 + 56 = 576
+      simpa only [MachineState.getReg, show (4160 : Word) >>> 3 + 56 = 576 by decide] using
+        congrArg (fun w : Word => (w >>> 3) + 56) hp
+    · simp [h5, h11]
+  · bv_decide
+
+theorem ready_source (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    (Pad520PreHash.ready s).getReg .x10 = 0x40000 := by
+  simp [Pad520PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_ne, padReg s .x10 (by decide), source]
+
+theorem ready_length (s : MachineState)
+    (length : s.getReg .x11 = 4160) :
+    (Pad520PreHash.ready s).getReg .x11 = 576 := by
+  simp [Pad520PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    padReg s .x11 (by decide), length]
+
+theorem ready_destination (s : MachineState)
+    (destination : s.getReg .x12 = 0x42000) :
+    (Pad520PreHash.ready s).getReg .x12 = 0x42000 := by
+  simp [Pad520PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_ne, padReg s .x12 (by decide), destination]
+
+theorem ready_selector (s : MachineState) :
+    (Pad520PreHash.ready s).getReg .x5 = 0 := by
+  simp [Pad520PreHash.ready, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq]
+
+theorem ready_pc (s : MachineState) :
+    (Pad520PreHash.ready s).pc = s.pc + 68 := by
+  simp [Pad520PreHash.ready, MachineState.setPC]
+  bv_omega
+
+theorem ready_valid (s : MachineState)
+    (source : s.getReg .x10 = 0x40000)
+    (length : s.getReg .x11 = 4160)
+    (destination : s.getReg .x12 = 0x42000) :
+    hashArgumentsValid (Pad520PreHash.ready s) = true := by
+  simp [hashArgumentsValid, ready_source s source,
+    ready_length s length, ready_destination s destination,
+    accessValid, rangeValid, MEMORY_BYTES]
+
+theorem ready_blocks (s : MachineState)
+    (length : s.getReg .x11 = 4160) :
+    (hashInput (Pad520PreHash.ready s)).blocks = 9 := by
+  simp [hashInput, SigGolf.Query.blocks, ready_length s length]
+
+private theorem hashInput_setPC (s : MachineState) (pc : Word) :
+    hashInput (s.setPC pc) = hashInput s := by
+  rfl
+
+private theorem hashInput_setX5 (s : MachineState) (w : Word) :
+    hashInput (s.setReg .x5 w) = hashInput s := by
+  rfl
+
+
+end Pad520ReadyFacts
+
+namespace Pad520StateAlgebra
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+theorem setMem_setReg (s : MachineState) (a : Word) (w : Word)
+    (r : Reg) (v : Word) :
+    (s.setReg r v).setMem a w = (s.setMem a w).setReg r v := by
+  cases r <;> rfl
+
+theorem setMem_setPC (s : MachineState) (a w pc : Word) :
+    (s.setPC pc).setMem a w = (s.setMem a w).setPC pc := by
+  rfl
+
+theorem writeWords_setReg (s : MachineState) (base : Word)
+    (words : List Word) (r : Reg) (v : Word) :
+    (s.setReg r v).writeWords base words = (s.writeWords base words).setReg r v := by
+  induction words generalizing s base with
+  | nil => rfl
+  | cons w ws ih =>
+      simp only [MachineState.writeWords]
+      rw [setMem_setReg, ih]
+
+theorem writeWords_setPC (s : MachineState) (base : Word)
+    (words : List Word) (pc : Word) :
+    (s.setPC pc).writeWords base words = (s.writeWords base words).setPC pc := by
+  induction words generalizing s base with
+  | nil => rfl
+  | cons w ws ih =>
+      simp only [MachineState.writeWords]
+      rw [setMem_setPC, ih]
+
+theorem writeHash_setPC (s : MachineState) (answer : BitVec 256) (pc : Word) :
+    writeHash (s.setPC pc) answer = (writeHash s answer).setPC (pc + 4) := by
+  simp only [writeHash, MachineState.getReg_setPC, writeWords_setPC]
+  rfl
+
+theorem writeHash_setReg (s : MachineState) (answer : BitVec 256)
+    (r : Reg) (v : Word) (ne : r ≠ .x12) :
+    writeHash (s.setReg r v) answer = (writeHash s answer).setReg r v := by
+  have dest : (s.setReg r v).getReg .x12 = s.getReg .x12 :=
+    MachineState.getReg_setReg_ne s r .x12 v ne
+  simp only [writeHash, dest, writeWords_setReg]
+  cases r <;> simp_all [MachineState.setPC, MachineState.setReg]
+
+theorem writeHash_getReg (s : MachineState) (answer : BitVec 256) (r : Reg) :
+    (writeHash s answer).getReg r = s.getReg r := by
+  rfl
+
+#print axioms writeWords_setReg
+#print axioms writeWords_setPC
+#print axioms writeHash_setPC
+#print axioms writeHash_setReg
+#print axioms writeHash_getReg
+end Pad520StateAlgebra
+
+namespace Pad520Boundary
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxHeartbeats 2000000
+
+def converted (u : MachineState) : MachineState :=
+  let u1 := (u.setReg .x11 (u.getReg .x11 - 56)).setPC (u.pc + 4)
+  let u2 := (u1.setReg .x11 (u1.getReg .x11 <<< 3)).setPC (u1.pc + 4)
+  (u2.setReg .x5 1).setPC (u2.pc + 4)
+
+theorem converted_restore (v : MachineState) (pc : Word)
+    (length : v.getReg .x11 = 4160)
+    (selector : v.getReg .x5 = 1) :
+    converted (((v.setReg .x11 576).setReg .x5 0).setPC pc) =
+      v.setPC (pc + 12) := by
+  simp [converted, MachineState.getReg_setPC,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setPC, MachineState.setReg]
+  constructor
+  · funext r
+    by_cases h5 : r = .x5
+    · simpa [h5, MachineState.getReg] using selector.symm
+    by_cases h11 : r = .x11
+    · simpa [h5, h11, MachineState.getReg] using length.symm
+    · simp [h5, h11]
+  · bv_decide
+
+#print axioms converted_restore
+
+theorem converted_normalized (s : MachineState) (answer : BitVec 256)
+    (length : s.getReg .x11 = 4160)
+    (selector : s.getReg .x5 = 1) :
+    converted (writeHash (Pad520PreHash.ready s) answer) =
+      (writeHash (Padding64Cells.padMany s Padding64Cells.cells520) answer).setPC
+        (s.pc + 84) := by
+  rw [Pad520ReadyFacts.ready_normalized s length]
+  have pad5 : (Padding64Cells.padMany s Padding64Cells.cells520).regs .x5 = 1 := by
+    have h := Pad520ReadyFacts.padReg s .x5 (by decide)
+    simpa only [MachineState.getReg] using h.trans selector
+  have pad11 : (Padding64Cells.padMany s Padding64Cells.cells520).regs .x11 = 4160 := by
+    have h := Pad520ReadyFacts.padReg s .x11 (by decide)
+    simpa only [MachineState.getReg] using h.trans length
+  let u := Padding64Cells.padMany s Padding64Cells.cells520
+  have hu5 : (writeHash u answer).getReg .x5 = 1 := by
+    rw [Pad520StateAlgebra.writeHash_getReg]
+    simpa [u, MachineState.getReg] using pad5
+  have hu11 : (writeHash u answer).getReg .x11 = 4160 := by
+    rw [Pad520StateAlgebra.writeHash_getReg]
+    simpa [u, MachineState.getReg] using pad11
+  have h5 := Pad520StateAlgebra.writeHash_setReg (u.setReg .x11 576) answer
+    .x5 0 (by decide)
+  have h11 := Pad520StateAlgebra.writeHash_setReg u answer .x11 576 (by decide)
+  simp only [Padding64Decode.ready520, Pad520StateAlgebra.writeHash_setPC]
+  change converted ((writeHash ((u.setReg .x11 576).setReg .x5 0) answer).setPC
+    (s.pc + 68 + 4)) = (writeHash u answer).setPC (s.pc + 84)
+  rw [h5, h11]
+  rw [converted_restore (writeHash u answer) (s.pc + 68 + 4) hu11 hu5]
+  congr 1
+  bv_decide
+
+#print axioms converted_normalized
+
+theorem restoreMany_setPC (s : MachineState)
+    (cells : List (Reg × Word)) (pc : Word) :
+    Padding64Cells.restoreMany (s.setPC pc) cells =
+      (Padding64Cells.restoreMany s cells).setPC pc := by
+  induction cells with
+  | nil => rfl
+  | cons pair rest ih =>
+      rcases pair with ⟨r, addr⟩
+      simp only [Padding64Cells.restoreMany]
+      rw [ih, Pad520RestoreJoin.restoreDword_setPC]
+
+theorem restore_boundary (s : MachineState) (answer : BitVec 256)
+    (length : s.getReg .x11 = 4160)
+    (selector : s.getReg .x5 = 1)
+    (destination : s.getReg .x12 = 0x42000)
+    (scratch : ∀ r ∈ Padding64Cells.cells520.map Prod.fst, s.getReg r = 0) :
+    Padding64Cells.restoreMany
+      (converted (writeHash (Pad520PreHash.ready s) answer))
+      Padding64Cells.cells520 =
+      (writeHash s answer).setPC (s.pc + 84) := by
+  rw [converted_normalized s answer length selector]
+  rw [restoreMany_setPC]
+  rw [Padding64Cells.restore_520 s answer destination scratch]
+
+#print axioms restoreMany_setPC
+#print axioms restore_boundary
+end Pad520Boundary
+
+namespace Pad520PostTrace
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+set_option maxHeartbeats 1000000
+
+theorem Site.jump_to_old_pc (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 140) :
+    ordinaryStep s (.base (.JAL .x0 site.jump)) =
+      some (s.setPC (site.oldPC + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr,
+    MachineState.setReg, pc]
+  congr 1
+  have h := site.returns
+  bv_omega
+
+theorem Site.post_hash (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC + 72)
+    (source : s.getReg .x10 = 0x40000) :
+    let u3 := Pad520Boundary.converted s
+    let r7 := (Padding64Cells.restoreMany u3 Padding64Cells.cells520).setPC
+      (u3.pc + 56)
+    Padding64Trace.OrdinaryTrace site.image 18 s
+      (r7.setPC (site.oldPC + 4)) := by
+  dsimp only
+  let u3 := Pad520Boundary.converted s
+  let r7 := (Padding64Cells.restoreMany u3 Padding64Cells.cells520).setPC
+    (u3.pc + 56)
+  have hconv : Padding64Trace.OrdinaryTrace site.image 3 s u3 := by
+    simpa only [Pad520Boundary.converted, u3] using
+      Pad520PostHash.Site.post_conversion site s pc
+  have pcU3 : u3.pc = site.stubPC + 84 := by
+    simp [u3, Pad520Boundary.converted, MachineState.setPC, pc]
+    bv_omega
+  have sourceU3 : u3.getReg .x10 = 0x40000 := by
+    simpa [u3, Pad520Boundary.converted, MachineState.getReg_setPC,
+      MachineState.getReg_setReg_ne] using source
+  have hrestore : Padding64Trace.OrdinaryTrace site.image 14 u3 r7 := by
+    have h := Pad520RestoreSeven.sevenPairs site u3 pcU3 sourceU3
+    simpa only [Pad520RestoreJoin.sevenPairs_normalized, r7] using h
+  have pcR7 : r7.pc = site.stubPC + 140 := by
+    simp [r7, MachineState.setPC, pcU3]
+    bv_omega
+  have pcR7Nat : r7.pc.toNat = site.stubPC.toNat + 140 := by
+    rw [pcR7]
+    have h := site.bound
+    bv_omega
+  have hjump : Padding64Trace.OrdinaryTrace site.image 1 r7
+      (r7.setPC (site.oldPC + 4)) := by
+    apply Padding64Trace.OrdinaryTrace.step (.base (.JAL .x0 site.jump))
+      (site.fetchAt r7 35 (by decide) (by simpa using pcR7Nat)
+        (by simpa [Pad520StubClass.block] using site.lastDecode))
+      (by intro h; cases h) (Site.jump_to_old_pc site r7 pcR7)
+      (by simp [instructionCycles])
+    exact Padding64Trace.OrdinaryTrace.refl _
+  have h1 := Padding64Trace.OrdinaryTrace.append site.image hconv hrestore
+  have h2 := Padding64Trace.OrdinaryTrace.append site.image h1 hjump
+  simpa only [show 3 + 14 + 1 = 18 by decide] using h2
+
+#print axioms Site.post_hash
+end Pad520PostTrace
+
+namespace Pad520Service
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 Pad520StubClass
+set_option maxHeartbeats 1000000
+
+theorem Site.hash_fetch (site : Pad520StubClass.Site) (s : MachineState)
+    (pc : s.pc = site.stubPC) :
+    fetch site.image (Pad520PreHash.ready s) = some (.base .ECALL) := by
+  have hpc : (Pad520PreHash.ready s).pc.toNat = site.stubPC.toNat + 68 := by
+    rw [Pad520ReadyFacts.ready_pc, pc]
+    have h := site.bound
+    bv_omega
+  exact site.fetchAt _ 17 (by decide) (by simpa using hpc) (by rfl)
+
+theorem Site.after_pc (site : Pad520StubClass.Site) (s : MachineState)
+    (answer : BitVec 256) (pc : s.pc = site.stubPC) :
+    (writeHash (Pad520PreHash.ready s) answer).pc = site.stubPC + 72 := by
+  simp [writeHash, MachineState.setPC, Pad520ReadyFacts.ready_pc, pc]
+  bv_omega
+
+theorem Site.boundary (site : Pad520StubClass.Site) (s : MachineState)
+    (answer : BitVec 256)
+    (oldPc : s.pc = site.oldPC)
+    (length : s.getReg .x11 = 4160)
+    (destination : s.getReg .x12 = 0x42000)
+    (selector : s.getReg .x5 = 1)
+    (scratch : ∀ r ∈ Padding64Cells.cells520.map Prod.fst, s.getReg r = 0) :
+    let betaStart := s.setPC site.stubPC
+    (Padding64Cells.restoreMany
+      (Pad520Boundary.converted (writeHash (Pad520PreHash.ready betaStart) answer))
+      Padding64Cells.cells520).setPC (site.oldPC + 4) = writeHash s answer := by
+  dsimp only
+  let betaStart := s.setPC site.stubPC
+  have lengthβ : betaStart.getReg .x11 = 4160 := by
+    simpa [betaStart, MachineState.getReg_setPC] using length
+  have selectorβ : betaStart.getReg .x5 = 1 := by
+    simpa [betaStart, MachineState.getReg_setPC] using selector
+  have destinationβ : betaStart.getReg .x12 = 0x42000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using destination
+  have scratchβ : ∀ r ∈ Padding64Cells.cells520.map Prod.fst,
+      betaStart.getReg r = 0 := by
+    intro r hr
+    simpa [betaStart, MachineState.getReg_setPC] using scratch r hr
+  have restored := Pad520Boundary.restore_boundary betaStart answer
+    lengthβ selectorβ destinationβ scratchβ
+  have hpc : (writeHash s answer).pc = site.oldPC + 4 := by
+    simp [writeHash, MachineState.setPC, oldPc]
+  have h : (writeHash betaStart answer).setPC (site.oldPC + 4) =
+      writeHash s answer := by
+    rw [Pad520StateAlgebra.writeHash_setPC]
+    rw [show ((writeHash s answer).setPC (site.stubPC + 4)).setPC
+        (site.oldPC + 4) = (writeHash s answer).setPC (site.oldPC + 4) by rfl]
+    exact (congrArg (fun w : Word => (writeHash s answer).setPC w) hpc).symm
+  change ((Padding64Cells.restoreMany
+    (Pad520Boundary.converted (writeHash (Pad520PreHash.ready betaStart) answer))
+    Padding64Cells.cells520).setPC (site.oldPC + 4)) = writeHash s answer
+  rw [restored]
+  exact h
+
+theorem Site.service_transport (site : Pad520StubClass.Site)
+    (hash : Hash) (fuel : Nat) (s : MachineState)
+    (oldPc : s.pc = site.oldPC)
+    (source : s.getReg .x10 = 0x40000)
+    (length : s.getReg .x11 = 4160)
+    (destination : s.getReg .x12 = 0x42000)
+    (selector : s.getReg .x5 = 1)
+    (scratch : ∀ r ∈ Padding64Cells.cells520.map Prod.fst, s.getReg r = 0) :
+    let betaStart := s.setPC site.stubPC
+    let ready := Pad520PreHash.ready betaStart
+    let answer := hash (hashInput ready)
+    evalWithAnswerFn hash (execute (fuel + 36) site.image betaStart) =
+      (evalWithAnswerFn hash (execute fuel site.image (writeHash s answer))).charge
+        107 1 9 := by
+  dsimp only
+  let betaStart := s.setPC site.stubPC
+  let ready := Pad520PreHash.ready betaStart
+  let answer := hash (hashInput ready)
+  have pcβ : betaStart.pc = site.stubPC := by
+    simp [betaStart, MachineState.setPC]
+  have sourceβ : betaStart.getReg .x10 = 0x40000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using source
+  have lengthβ : betaStart.getReg .x11 = 4160 := by
+    simpa [betaStart, MachineState.getReg_setPC] using length
+  have destinationβ : betaStart.getReg .x12 = 0x42000 := by
+    simpa [betaStart, MachineState.getReg_setPC] using destination
+  have pre : Padding64Trace.OrdinaryTrace site.image 17 betaStart ready := by
+    simpa [ready] using Pad520PreHash.Site.pre_hash site betaStart pcβ sourceβ
+  have fetched : fetch site.image ready = some (.base .ECALL) := by
+    simpa [ready] using Site.hash_fetch site betaStart pcβ
+  have valid : hashArgumentsValid ready = true := by
+    simpa [ready] using Pad520ReadyFacts.ready_valid betaStart
+      sourceβ lengthβ destinationβ
+  have selectorReady : ready.getReg .x5 = 0 := by
+    simpa [ready] using Pad520ReadyFacts.ready_selector betaStart
+  have afterPc : (writeHash ready answer).pc = site.stubPC + 72 := by
+    simpa [ready] using Site.after_pc site betaStart answer pcβ
+  have afterSource : (writeHash ready answer).getReg .x10 = 0x40000 := by
+    rw [Pad520StateAlgebra.writeHash_getReg]
+    exact Pad520ReadyFacts.ready_source betaStart sourceβ
+  have post : Padding64Trace.OrdinaryTrace site.image 18
+      (writeHash ready answer)
+      ((Padding64Cells.restoreMany
+        (Pad520Boundary.converted (writeHash ready answer))
+        Padding64Cells.cells520).setPC (site.oldPC + 4)) := by
+    simpa only [MachineState.setPC] using
+      Pad520PostTrace.Site.post_hash site (writeHash ready answer)
+        afterPc afterSource
+  have boundary :
+      (Padding64Cells.restoreMany
+        (Pad520Boundary.converted (writeHash ready answer))
+        Padding64Cells.cells520).setPC (site.oldPC + 4) = writeHash s answer := by
+    simpa [ready, betaStart] using
+      Site.boundary site s answer oldPc length destination selector scratch
+  rw [boundary] at post
+  have blocks : (hashInput ready).blocks = 9 := by
+    simpa [ready] using Pad520ReadyFacts.ready_blocks betaStart lengthβ
+  have h := Padding64Trace.hash_macro_eval hash site.image
+    pre fetched selectorReady valid post fuel
+  rw [blocks] at h
+  have hfuel : fuel + 36 = fuel + 17 + 1 + 18 := by omega
+  rw [hfuel]
+  simpa [betaStart, ready, answer] using h
+
+#print axioms Site.hash_fetch
+#print axioms Site.boundary
+#print axioms Site.service_transport
+end Pad520Service
+
+
+namespace Pad520Sites
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def sign_2728 : Pad520StubClass.Site where
+  image := Pc64SignImage.image
+  start := 11203
+  stubPC := 0xbf0c
+  oldPC := 0x2728
+  lastWord := 0xf94f606f
+  jump := 0x1f6794
+  slice := by exact Pc64SignImage.stub_bf0c_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+
+#print axioms sign_2728
+
+def verify_1d38 : Pad520StubClass.Site where
+  image := Pc64VerifyImage.image
+  start := 7029
+  stubPC := 0x7dd4
+  oldPC := 0x1d38
+  lastWord := 0xeddf906f
+  jump := 0x1f9edc
+  slice := by exact Pc64VerifyImage.stub_7dd4_block
+  stubNat := by decide
+  bound := by decide
+  lastDecode := by rfl
+  returns := by decide
+
+#print axioms verify_1d38
+
+end Pad520Sites

@@ -8636,3 +8636,204 @@ theorem signerPrelude_entry_digits (location : Fin 5) (s : MachineState)
 
 #print axioms signerPrelude_entry_digits
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+private theorem supported_step_eq (s next : MachineState) (i : Instr)
+    (ok : signerSupported i)
+    (step : ordinaryStep s (.base i) = some next) :
+    next = execInstrBr s i := by
+  cases i <;> simp_all [signerSupported, SphincsMaskedSignOtsShift.Supported,
+    ordinaryStep, memoryArgumentsValid]
+  all_goals split_ifs at step <;> simp_all
+
+/-- A signer-body trace whose every executed PC belongs to the shared bytecode slice. -/
+inductive SignerBodyTrace (hash : Hash) :
+    MachineState → Nat → Nat → Nat → Nat → MachineState → Prop where
+  | refl (state : MachineState) : SignerBodyTrace hash state 0 0 0 0 state
+  | ordinary (state next final : MachineState) (instruction : Instr)
+      (steps cycles calls blocks : Nat)
+      (inside : 0x3b20 ≤ state.pc.toNat ∧ state.pc.toNat < 0x3dec ∧
+        state.pc.toNat % 4 = 0)
+      (fetched : fetch SphincsMaskedImages.sign state = some (.base instruction))
+      (supported : signerSupported instruction)
+      (executed : ordinaryStep state (.base instruction) = some next)
+      (tail : SignerBodyTrace hash next steps cycles calls blocks final) :
+      SignerBodyTrace hash state (steps + 1) (cycles + 1) calls blocks final
+  | hash (state final : MachineState) (steps cycles calls blocks : Nat)
+      (inside : 0x3b20 ≤ state.pc.toNat ∧ state.pc.toNat < 0x3dec ∧
+        state.pc.toNat % 4 = 0)
+      (fetched : fetch SphincsMaskedImages.sign state = some (.base .ECALL))
+      (service : state.getReg .x5 = 1)
+      (valid : hashArgumentsValid state = true)
+      (tail : SignerBodyTrace hash
+        (writeHash state (hash (hashInput state))) steps cycles calls blocks final) :
+      SignerBodyTrace hash state (steps + 1)
+        (cycles + 8 * compressions (hashInput state).1) (calls + 1)
+        (blocks + compressions (hashInput state).1) final
+
+theorem SignerBodyTrace.base {hash : Hash} {s t : MachineState}
+    {steps cycles calls blocks : Nat}
+    (trace : SignerBodyTrace hash s steps cycles calls blocks t) :
+    Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t := by
+  induction trace with
+  | refl state => exact Trace.refl state
+  | ordinary state next final instruction steps cycles calls blocks inside fetched supported executed tail ih =>
+      exact Trace.ordinary state next final (.base instruction) steps cycles calls blocks
+        fetched executed ih
+  | hash state final steps cycles calls blocks inside fetched service valid tail ih =>
+      exact Trace.hash state final steps cycles calls blocks fetched service valid ih
+
+theorem SignerBodyTrace.trans {hash : Hash} {s t u : MachineState}
+    {steps cycles calls blocks moreSteps moreCycles moreCalls moreBlocks : Nat}
+    (first : SignerBodyTrace hash s steps cycles calls blocks t)
+    (second : SignerBodyTrace hash t moreSteps moreCycles moreCalls moreBlocks u) :
+    SignerBodyTrace hash s (steps + moreSteps) (cycles + moreCycles)
+      (calls + moreCalls) (blocks + moreBlocks) u := by
+  induction first with
+  | refl => simpa using second
+  | ordinary state next final instruction steps cycles calls blocks inside fetched supported executed tail ih =>
+      simpa only [Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using
+        SignerBodyTrace.ordinary state next u instruction _ _ _ _
+          inside fetched supported executed (ih second)
+  | hash state final steps cycles calls blocks inside fetched service valid tail ih =>
+      simpa only [Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using
+        SignerBodyTrace.hash state u _ _ _ _ inside fetched service valid (ih second)
+
+theorem SignerBodyTrace.checked {hash : Hash} (code : List (Word × Instr))
+    (supported : ∀ e ∈ code, signerSupported e.2)
+    (inside : ∀ e ∈ code,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0)
+    (encoded : ∀ e ∈ code,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2))
+    (s : MachineState) (check : Checked code s) :
+    SignerBodyTrace hash s code.length code.length 0 0 (runSchedule code s) := by
+  induction code generalizing s with
+  | nil => exact SignerBodyTrace.refl s
+  | cons e rest ih =>
+      obtain ⟨pc, step, tail⟩ := check
+      have fetchEq : fetch SphincsMaskedImages.sign s = some (.base e.2) := by
+        rw [fetch_at, pc]
+        exact encoded e (by simp)
+      have sourceInside :
+          0x3b20 ≤ s.pc.toNat ∧ s.pc.toNat < 0x3dec ∧ s.pc.toNat % 4 = 0 := by
+        rw [pc]
+        exact inside e (by simp)
+      have ih' := ih (by intro x hx; exact supported x (by simp [hx]))
+        (by intro x hx; exact inside x (by simp [hx]))
+        (by intro x hx; exact encoded x (by simp [hx]))
+        (execInstrBr s e.2) tail
+      simpa only [List.length_cons, runSchedule] using
+        SignerBodyTrace.ordinary s (execInstrBr s e.2)
+          (runSchedule rest (execInstrBr s e.2)) e.2 rest.length rest.length 0 0
+          sourceInside fetchEq (supported e (by simp)) step ih'
+
+theorem signer_digit_body (hash : Hash) (s : MachineState)
+    (i : Fin 52) (pc : s.pc = 0x3bfc)
+    (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val) :
+    SignerBodyTrace hash s 21 21 0 0 (firstBottomChainDigit s) := by
+  have support : ∀ e ∈ firstBottomChainDigitCode, signerSupported e.2 := by
+    have baseSupport : ∀ e ∈ firstBottomChainDigitCode,
+        SphincsMaskedSignOtsShift.Supported e.2 := by decide
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomChainDigitCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := SignerBodyTrace.checked (hash := hash) firstBottomChainDigitCode
+    support inside first_bottom_chain_digit_code s
+    (first_bottom_chain_digit_checked_any s i pc chain)
+  simpa [firstBottomChainDigit, firstBottomChainDigitCode] using run
+
+theorem signer_continue_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3d90) :
+    SignerBodyTrace hash s 8 8 0 0 (firstBottomChainContinue s) := by
+  have support : ∀ e ∈ firstBottomChainContinueCode, signerSupported e.2 := by
+    intro e he
+    simp only [firstBottomChainContinueCode, List.mem_cons,
+      List.not_mem_nil, or_false] at he
+    rcases he with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals simp [signerSupported, SphincsMaskedSignOtsShift.Supported]
+  have inside : ∀ e ∈ firstBottomChainContinueCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := SignerBodyTrace.checked (hash := hash) firstBottomChainContinueCode
+    support inside first_bottom_chain_continue_code s
+    (first_bottom_chain_continue_checked s pc)
+  simpa [firstBottomChainContinue, firstBottomChainContinueCode] using run
+
+theorem signer_check_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c34) :
+    SignerBodyTrace hash s 7 7 0 0 (firstBottomChainCheck s) := by
+  have support : ∀ e ∈ firstBottomChainCheckCode, signerSupported e.2 := by
+    have baseSupport : ∀ e ∈ firstBottomChainCheckCode,
+        SphincsMaskedSignOtsShift.Supported e.2 := by decide
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomChainCheckCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := SignerBodyTrace.checked (hash := hash) firstBottomChainCheckCode
+    support inside first_bottom_chain_check_code s
+    (first_bottom_chain_check_checked s pc)
+  simpa [firstBottomChainCheck, firstBottomChainCheckCode] using run
+
+theorem SignerBodyTrace.shifted {hash : Hash} {s t : MachineState}
+    {steps cycles calls blocks : Nat}
+    (location : Fin 5)
+    (trace : SignerBodyTrace hash s steps cycles calls blocks t) :
+    Trace hash SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      steps cycles calls blocks
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) t) := by
+  induction trace with
+  | refl state => exact Trace.refl _
+  | ordinary state next final instruction steps cycles calls blocks inside fetched supported executed tail ih =>
+      have targetFetch : fetch SphincsMaskedImages.sign
+          (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) state) =
+          some (.base instruction) := by
+        change instructionAt SphincsMaskedImages.sign (state.pc + signerShiftBytes location) = _
+        rw [signer_five_layer_instruction_transfer location state.pc
+          inside.1 inside.2.1 inside.2.2]
+        simpa only [SphincsVerifierFtsRootCopy.fetch_at] using fetched
+      have nextEq : next = execInstrBr state instruction :=
+        supported_step_eq state next instruction supported executed
+      subst next
+      have targetStep : ordinaryStep
+          (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) state)
+          (.base instruction) =
+          some (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+            (execInstrBr state instruction)) := by
+        exact signer_ordinary_shift (signerShiftBytes location) state instruction
+          supported executed
+      exact Trace.ordinary _ _ _ _ _ _ _ _ targetFetch targetStep ih
+  | hash state final steps cycles calls blocks inside fetched service valid tail ih =>
+      have targetFetch : fetch SphincsMaskedImages.sign
+          (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) state) =
+          some (.base .ECALL) := by
+        change instructionAt SphincsMaskedImages.sign (state.pc + signerShiftBytes location) = _
+        rw [signer_five_layer_instruction_transfer location state.pc
+          inside.1 inside.2.1 inside.2.2]
+        simpa only [SphincsVerifierFtsRootCopy.fetch_at] using fetched
+      have target := Trace.hash (hash := hash) (image := SphincsMaskedImages.sign)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) state)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) final)
+        steps cycles calls blocks targetFetch (by simpa using service)
+        (by simpa using valid) ?_
+      · simpa only [SphincsMaskedSignOtsShift.hashInput_shift] using target
+      · simpa only [SphincsMaskedSignOtsShift.hashInput_shift,
+          SphincsMaskedSignOtsShift.writeHash_shift] using ih
+
+#print axioms SignerBodyTrace.base
+#print axioms SignerBodyTrace.checked
+#print axioms signer_digit_body
+#print axioms signer_continue_body
+#print axioms signer_check_body
+#print axioms SignerBodyTrace.shifted
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
