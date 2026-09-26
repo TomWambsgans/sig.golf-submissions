@@ -184,9 +184,11 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (layer : Layer)
     (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (digit : Fin 8) (initial : Digest)
+    (base : Nat) (baseBound : base + 20 * 52 ≤ 0x40000)
+    (baseAligned : base % 4 = 0)
     (pc : state.pc = 0x2710)
     (pointer : state.getMem 0x43028 =
-      BitVec.ofNat 64 (0x2547c + 20 * chain.val))
+      BitVec.ofNat 64 (base + 20 * chain.val))
     (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
     (decoded : state.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
       BitVec.ofNat 8 digit.val)
@@ -195,13 +197,13 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
     (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
     (value : ∀ i, (hi : i < 20) →
-      state.getByte (BitVec.ofNat 64 (0x2547c + 20 * chain.val + i)) =
+      state.getByte (BitVec.ofNat 64 (base + 20 * chain.val + i)) =
         initial.extractLsb' (8 * i) 8) :
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       final.pc = (if chain.val + 1 = 52 then 0x298c else 0x2710) ∧
       final.getMem 0x43050 = BitVec.ofNat 64 (chain.val + 1) ∧
       final.getMem 0x43028 =
-        BitVec.ofNat 64 (0x2547c + 20 * (chain.val + 1)) ∧
+        BitVec.ofNat 64 (base + 20 * (chain.val + 1)) ∧
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
@@ -225,13 +227,19 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
         Executes hash SphincsImages.verify final tailSteps result →
         Executes hash SphincsImages.verify state (tailSteps + steps)
           (result.charge cycles calls blocks) := by
-  have entry := chainEntry_block state chain pc pointer counter
-  have initialInv := chainEntry_walkInv hash state pk layer tree leaf chain
-    digit initial pc pointer counter decoded layerCell treeCell leafCell
-    hprefix value
+  have sourceBound : base + 20 * chain.val + 20 ≤ 0x40000 := by
+    have h := chain.isLt
+    change chain.val < 52 at h
+    omega
+  have sourceAligned : (base + 20 * chain.val) % 4 = 0 := by omega
+  have entry := SphincsVerifierWotsChainEntryGeneral.chainEntry_block_general
+    state chain (base + 20 * chain.val) sourceBound sourceAligned pc pointer counter
+  have initialInv := SphincsVerifierWotsSemanticEntryGeneral.chainEntry_walkInv_general
+    hash state pk layer tree leaf chain digit initial base baseBound baseAligned
+    pc pointer counter decoded layerCell treeCell leafCell hprefix value
   obtain ⟨seven, steps, cycles, calls, blocks, finalInv, stable,
     stepBound, cycleBound, callBound, blockBound, run⟩ :=
-    walkInv_loop_stable hash pk layer tree leaf chain digit initial 0x2547c
+    walkInv_loop_stable hash pk layer tree leaf chain digit initial base
       (chainEntryState state) initialInv
   have cell : seven.getMem 0x43058 = 7 := by
     simpa [show digit.val + (7 - digit.val) = 7 by
@@ -249,7 +257,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     rw [stepCheck_mem]
     exact finalInv.chainCell
   have middlePointer : middle.getMem 0x43028 =
-      BitVec.ofNat 64 (0x2547c + 20 * chain.val) := by
+      BitVec.ofNat 64 (base + 20 * chain.val) := by
     rw [stepCheck_mem]
     exact finalInv.pointerCell
   have middleValue (i : Nat) (hi : i < 20) :
@@ -259,12 +267,12 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
             (8 * i) 8 := by
     rw [stepCheck_byte]
     exact walkInv_recoverChain hash pk layer tree leaf chain digit
-      initial 0x2547c seven finalInv i hi
+      initial base seven finalInv i hi
   obtain ⟨endTrace, endPc, endCounter⟩ :=
     chainEnd_block middle chain (by simpa [middle] using checked.2)
       middleCounter
-  have endPointer := chainEnd_pointer middle chain
-    middleCounter middlePointer
+  have endPointer := SphincsVerifierWotsChainEndGeneral.chainEnd_pointer_general
+    middle chain base middleCounter middlePointer
   have context (address : Word) (inside : ContextAddr address) :
       (chainEndState middle).getMem address = middle.getMem address :=
     chainEnd_contextFrame middle chain middleCounter address inside
@@ -339,8 +347,9 @@ theorem lowByteFrame (initial current : MachineState)
     congrArg (fun value : Word => extractByte value (byteOffset address))
       (frame (alignToDword address) aligned)
 
-theorem sourceByteSmall (chain : Fin 52) (i : Nat) (hi : i < 20) :
-    (BitVec.ofNat 64 (0x2547c + 20 * chain.val + i)).toNat < 0x40000 := by
+theorem sourceByteSmall (base : Nat) (baseBound : base + 20 * 52 ≤ 0x40000)
+    (chain : Fin 52) (i : Nat) (hi : i < 20) :
+    (BitVec.ofNat 64 (base + 20 * chain.val + i)).toNat < 0x40000 := by
   have hc : chain.val < 52 := by exact chain.isLt
   simp only [BitVec.toNat_ofNat]
   rw [Nat.mod_eq_of_lt (by omega)]
@@ -365,10 +374,11 @@ private structure History (hash : Hash)
     (initial : MachineState) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (base : Nat)
     (i : Nat) (current : MachineState) : Prop where
   pc : current.pc = (if i = 52 then 0x298c else 0x2710)
   counter : current.getMem 0x43050 = BitVec.ofNat 64 i
-  pointer : current.getMem 0x43028 = BitVec.ofNat 64 (0x2547c + 20 * i)
+  pointer : current.getMem 0x43028 = BitVec.ofNat 64 (base + 20 * i)
   layerCell : current.getMem 0x43000 = BitVec.ofNat 64 layer.val
   treeCell : current.getMem 0x43008 = BitVec.ofNat 64 tree.val
   leafCell : current.getMem 0x43018 = BitVec.ofNat 64 leaf.val
@@ -387,9 +397,11 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (layer : Layer)
     (tree : TreeIndex) (leaf : LeafIndex)
     (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (base : Nat) (baseBound : base + 20 * 52 ≤ 0x40000)
+    (baseAligned : base % 4 = 0)
     (pc : state.pc = 0x2710)
     (counter : state.getMem 0x43050 = 0)
-    (pointer : state.getMem 0x43028 = 0x2547c)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 base)
     (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
     (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
     (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
@@ -398,12 +410,12 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
       state.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
         BitVec.ofNat 8 (digits chain).val)
     (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
-      state.getByte (BitVec.ofNat 64 (0x2547c + 20 * chain.val + j)) =
+      state.getByte (BitVec.ofNat 64 (base + 20 * chain.val + j)) =
         (values chain).extractLsb' (8 * j) 8) :
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       final.pc = 0x298c ∧
       final.getMem 0x43050 = 52 ∧
-      final.getMem 0x43028 = 0x2547c + 20 * 52 ∧
+      final.getMem 0x43028 = BitVec.ofNat 64 (base + 20 * 52) ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -417,7 +429,7 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
         Executes hash SphincsImages.verify final tailSteps result →
         Executes hash SphincsImages.verify state (tailSteps + steps)
           (result.charge cycles calls blocks) := by
-  let Inv := History hash state pk layer tree leaf digits values
+  let Inv := History hash state pk layer tree leaf digits values base
   have next (i : Nat) (current : MachineState)
       (small : i < 52) (inv : Inv i current) :
       ∃ (following : MachineState) (steps cycles calls blocks : Nat),
@@ -434,7 +446,7 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
     have currentCounter : current.getMem 0x43050 =
         BitVec.ofNat 64 chain.val := by simpa [chain] using inv.counter
     have currentPointer : current.getMem 0x43028 =
-        BitVec.ofNat 64 (0x2547c + 20 * chain.val) := by
+        BitVec.ofNat 64 (base + 20 * chain.val) := by
       simpa [chain] using inv.pointer
     have currentPrefix : SphincsVerifierHashBytes.WitnessPrefix current pk := by
       apply SphincsVerifierFtsPostForestCopy.witnessPrefix_of_low_mem_frame
@@ -446,16 +458,18 @@ theorem allChains_recover (hash : Hash) (state : MachineState)
       rw [digitByteFrame state current inv.digitFrame chain]
       exact decoded chain
     have currentValue : ∀ j, (hj : j < 20) →
-        current.getByte (BitVec.ofNat 64 (0x2547c + 20 * chain.val + j)) =
+        current.getByte (BitVec.ofNat 64 (base + 20 * chain.val + j)) =
           (values chain).extractLsb' (8 * j) 8 := by
       intro j hj
-      rw [lowByteFrame state current inv.lowFrame _ (sourceByteSmall chain j hj)]
+      rw [lowByteFrame state current inv.lowFrame _
+        (sourceByteSmall base baseBound chain j hj)]
       exact source chain j hj
     obtain ⟨following, a, b, c, d, nextPc, nextCounter, nextPointer,
       nextLayer, nextTree, nextLeaf, nextLow, nextDigit, otherSlots,
       newEndpoint, stepBound, cycleBound, callBound, blockBound, run⟩ :=
       chainRound_recover hash current pk layer tree leaf chain digit
-        (values chain) currentPc currentPointer currentCounter currentDigit
+        (values chain) base baseBound baseAligned
+        currentPc currentPointer currentCounter currentDigit
         inv.layerCell inv.treeCell inv.leafCell currentPrefix currentValue
     refine ⟨following, a, b, c, d, ?_, by
       have hd := digit.isLt; omega, by
