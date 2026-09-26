@@ -582,7 +582,18 @@ theorem referenceForgeryGame_full_budget_le_original_counted_unconditional
       originalCertificateCountedSource adversary] := by
   exact referenceForgeryGame_full_budget_le_original_counted dummy adversary q
     (fun result hr => boundaryRun_keygen_hashCalls result hr)
-  trace_state
+
+theorem referenceForgeryGame_full_budget_le_rates
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hbudget : q ≤ 2 ^ 128) :
+    Pr[fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+    (q : ENNReal) * (fullCertificateTotalRate + certificateCacheExceptionRate) +
+      proposalPrefixExceptionBound :=
+  (referenceForgeryGame_full_budget_le_original_counted_unconditional dummy adversary q).trans
+    (originalCertificate_budget_le_q_rates_add_prefix adversary q hbudget)
 
 
 end SphincsSecurity.Concrete
@@ -594,3 +605,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted_unconditional' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted_unconditional
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_rates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_rates
