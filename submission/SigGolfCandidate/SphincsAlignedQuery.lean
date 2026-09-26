@@ -1,392 +1,370 @@
-import SigGolfCandidate.SphincsBridge
+import SigGolf.Oracle
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Bytes
+import SigGolfCandidate.SphincsSecurity.Proof.RandomizedStatement
+import SigGolfCandidate.SphincsBeta64Images
+import SigGolf.Security
 
-/-! Split the organizer's bit-string oracle into byte-aligned scheme queries
-and a disjoint non-aligned part. -/
-
-namespace SigGolfCandidate.SphincsAlignedQuery
+namespace SigGolfCandidate.QueryDecoder
 open SigGolf SphincsSecurity
-def alignedInput (query : SigGolf.Query) (aligned : query.1 % 8 = 0) : HashInput :=
-  SphincsSecurity.bytesLE (query.1 / 8)
-    (cast (congrArg BitVec (by omega : query.1 = 8 * (query.1 / 8))) query.2)
+set_option maxRecDepth 20000
+set_option maxHeartbeats 1000000
 
-theorem toQuery_alignedInput (query : SigGolf.Query)
-    (aligned : query.1 % 8 = 0) :
-    SphincsBridge.toQuery (alignedInput query aligned) = query := by
-  cases query with
-  | mk n bits =>
-      change n % 8 = 0 at aligned
-      have hn : n = 8 * (n / 8) := by omega
-      simp only [alignedInput, SphincsBridge.toQuery_bytesLE]
-      apply Sigma.ext hn.symm
-      exact cast_heq (congrArg BitVec hn) bits
+def queryBytes (query : SigGolf.Query) : SphincsSecurity.HashInput :=
+  SphincsSecurity.bytesLE (64 * (query.1 + 1)) query.2
 
-theorem aligned_toQuery (input : HashInput) : (SphincsBridge.toQuery input).1 % 8 = 0 := by
-  simp [SphincsBridge.toQuery, Hypertree.Reference.packed]
+theorem queryBytes_length (query : SigGolf.Query) :
+    (queryBytes query).length = 64 * (query.1 + 1) :=
+  SphincsSecurity.bytesLE_length _ _
 
-theorem alignedInput_toQuery (input : HashInput) :
-    alignedInput (SphincsBridge.toQuery input) (aligned_toQuery input) = input := by
-  apply SphincsBridge.toQuery_injective
-  exact toQuery_alignedInput _ _
+theorem queryBytes_injective : Function.Injective queryBytes := by
+  intro x y h
+  have hl := congrArg List.length h
+  rw [queryBytes_length, queryBytes_length] at hl
+  have hn : x.1 = y.1 := by omega
+  cases x with
+  | mk nx bx =>
+    cases y with
+    | mk ny bitsY =>
+      change nx = ny at hn
+      subst ny
+      exact congrArg (Sigma.mk nx) (SphincsSecurity.bytesLE_injective h)
 
-abbrev NonalignedQuery := {q : SigGolf.Query // q.1 % 8 ≠ 0}
-abbrev NonalignedSpec : OracleSpec NonalignedQuery := NonalignedQuery →ₒ BitVec 256
-abbrev SplitCache := OracleSpec.QueryCache SphincsSecurity.HashSpec ×
-  OracleSpec.QueryCache NonalignedSpec
+def sourceLength (tag : UInt8) : Nat :=
+  if tag == 0 || tag == 5 || tag == 8 || tag == 14 then 72
+  else if tag == 1 || tag == 9 || tag == 13 then 60
+  else if tag == 3 || tag == 10 then 80
+  else if tag == 7 then 104
+  else if tag == 12 then 112
+  else if tag == 11 then 520
+  else if tag == 2 then 1080
+  else if tag == 15 then 131124
+  else if tag == 4 then 64
+  else 0
 
-def splitQuery (query : SigGolf.Query) : HashInput ⊕ NonalignedQuery :=
-  if aligned : query.1 % 8 = 0 then
-    .inl (alignedInput query aligned)
-  else
-    .inr ⟨query, aligned⟩
+def blockLength (n : Nat) : Nat := 64 * ((n + 63) / 64)
 
-def joinQuery : HashInput ⊕ NonalignedQuery → SigGolf.Query
-  | .inl input => SphincsBridge.toQuery input
-  | .inr query => query.1
+def recognized (bytes : SphincsSecurity.HashInput) : Prop :=
+  bytes[0]? = some 1 ∧
+  let n := sourceLength (bytes[1]?.getD 255)
+  2 ≤ n ∧ n ≤ bytes.length ∧ bytes.length = blockLength n ∧
+    bytes.drop n = List.replicate (blockLength n - n) 0
 
-theorem join_split (query : SigGolf.Query) : joinQuery (splitQuery query) = query := by
-  simp only [splitQuery]
-  split_ifs with h
-  · exact toQuery_alignedInput query h
-  · rfl
+instance (bytes : SphincsSecurity.HashInput) : Decidable (recognized bytes) := by
+  unfold recognized
+  infer_instance
 
-theorem split_join (query : HashInput ⊕ NonalignedQuery) : splitQuery (joinQuery query) = query := by
-  cases query with
-  | inl input => simp [splitQuery, joinQuery, aligned_toQuery, alignedInput_toQuery]
-  | inr query =>
-      have h := query.2
-      simp [splitQuery, joinQuery, h]
+def decode (query : SigGolf.Query) : SphincsSecurity.HashInput :=
+  let bytes := queryBytes query
+  if recognized bytes then bytes.take (sourceLength (bytes[1]?.getD 255))
+  else [0, 255] ++ bytes
 
-theorem split_injective : Function.Injective splitQuery := by
+private theorem recognized_take_length (bytes : SphincsSecurity.HashInput)
+    (h : recognized bytes) :
+    (bytes.take (sourceLength (bytes[1]?.getD 255))).length =
+      sourceLength (bytes[1]?.getD 255) := by
+  have hn : sourceLength (bytes[1]?.getD 255) ≤ bytes.length := h.2.2.1
+  simp [List.length_take, hn]
+
+private theorem recognized_reconstruct (bytes : SphincsSecurity.HashInput)
+    (h : recognized bytes) :
+    bytes = bytes.take (sourceLength (bytes[1]?.getD 255)) ++
+      List.replicate (blockLength (sourceLength (bytes[1]?.getD 255)) -
+        sourceLength (bytes[1]?.getD 255)) 0 := by
+  have htail := h.2.2.2.2
+  rw [← htail]
+  exact (List.take_append_drop _ _).symm
+
+private theorem recognized_take_head (bytes : SphincsSecurity.HashInput)
+    (h : recognized bytes) :
+    (bytes.take (sourceLength (bytes[1]?.getD 255)))[0]? = some 1 := by
+  have hn' : 2 ≤ sourceLength (bytes[1]?.getD 255) := h.2.1
+  have hn : 0 < sourceLength (bytes[1]?.getD 255) := by omega
+  simpa [List.getElem?_take, hn] using h.1
+
+theorem decode_injective : Function.Injective decode := by
   intro first second h
-  have := congrArg joinQuery h
-  simpa only [join_split] using this
+  let a := queryBytes first
+  let b := queryBytes second
+  by_cases ha : recognized a
+  · by_cases hb : recognized b
+    · have htake : a.take (sourceLength (a[1]?.getD 255)) =
+          b.take (sourceLength (b[1]?.getD 255)) := by
+        simpa [decode, a, b, ha, hb] using h
+      have hlen : sourceLength (a[1]?.getD 255) = sourceLength (b[1]?.getD 255) := by
+        have := congrArg List.length htake
+        simpa [recognized_take_length a ha, recognized_take_length b hb] using this
+      have hbytes : a = b := by
+        calc
+          a = a.take (sourceLength (a[1]?.getD 255)) ++
+              List.replicate (blockLength (sourceLength (a[1]?.getD 255)) -
+                sourceLength (a[1]?.getD 255)) 0 := recognized_reconstruct a ha
+          _ = b.take (sourceLength (b[1]?.getD 255)) ++
+              List.replicate (blockLength (sourceLength (b[1]?.getD 255)) -
+                sourceLength (b[1]?.getD 255)) 0 := by rw [htake, hlen]
+          _ = b := (recognized_reconstruct b hb).symm
+      exact queryBytes_injective hbytes
+    · have hhead := recognized_take_head a ha
+      have hh := congrArg (fun bytes : List UInt8 => bytes[0]?) h
+      simp [decode, a, b, ha, hb, hhead] at hh
+  · by_cases hb : recognized b
+    · have hhead := recognized_take_head b hb
+      have hh := congrArg (fun bytes : List UInt8 => bytes[0]?) h
+      simp [decode, a, b, ha, hb, hhead] at hh
+    · have hbytes : a = b := by
+        have : [0, 255] ++ a = [0, 255] ++ b := by
+          simpa [decode, a, b, ha, hb] using h
+        injection this with _ htail
+        injection htail with _ hbytes
+      exact queryBytes_injective hbytes
 
-def encodeCache (cache : SplitCache) : OracleSpec.QueryCache SigGolf.HashSpec :=
-  fun query => match splitQuery query with
-    | .inl input => cache.1 input
-    | .inr input => cache.2 input
+theorem decode_padded (query : SigGolf.Query) (input : SphincsSecurity.HashInput)
+    (n : Nat) (hsize : input.length = n) (hminimum : 2 ≤ n)
+    (hfirst : input[0]? = some 1)
+    (htag : sourceLength (input[1]?.getD 255) = n)
+    (hbytes : queryBytes query = input ++ List.replicate (blockLength n - n) 0)
+    (hblock : (queryBytes query).length = blockLength n) :
+    decode query = input := by
+  let bytes := queryBytes query
+  have hprefix : bytes.take n = input := by
+    change (queryBytes query).take n = input
+    rw [hbytes]
+    simp [hsize]
+  have htagBytes : bytes[1]? = input[1]? := by
+    have h := congrArg (fun xs : List UInt8 => xs[1]?) hprefix
+    simpa [List.getElem?_take, show 1 < n by omega] using h
+  have hfirstBytes : bytes[0]? = some 1 := by
+    have h := congrArg (fun xs : List UInt8 => xs[0]?) hprefix
+    simpa [List.getElem?_take, show 0 < n by omega, hfirst] using h
+  have hn : sourceLength (bytes[1]?.getD 255) = n := by rw [htagBytes, htag]
+  have hrecognized : recognized bytes := by
+    refine ⟨hfirstBytes, ?_⟩
+    simp only [hn]
+    have hle : n ≤ bytes.length := by
+      change n ≤ (queryBytes query).length
+      rw [hbytes]
+      simp [hsize]
+    have hlength : bytes.length = blockLength n := by simpa [bytes] using hblock
+    have htail : bytes.drop n = List.replicate (blockLength n - n) 0 := by
+      change (queryBytes query).drop n = _
+      rw [hbytes]
+      simp [hsize]
+    exact ⟨hminimum, hle, hlength, htail⟩
+  change (if recognized bytes then bytes.take (sourceLength (bytes[1]?.getD 255))
+    else [0, 255] ++ bytes) = input
+  rw [if_pos hrecognized, hn, hprefix]
 
-def decodeCache (cache : OracleSpec.QueryCache SigGolf.HashSpec) : SplitCache :=
-  (fun input => cache (SphincsBridge.toQuery input), fun input => cache input.1)
+theorem finite_oracle_pullback (queries : Finset SigGolf.Query) :
+    𝒮[do
+      let table ← ($ᵗ ((queries.image decode) → BitVec 256) : ProbComp _)
+      pure (fun query : queries => table ⟨decode query.1,
+        Finset.mem_image.mpr ⟨query.1, query.2, rfl⟩⟩)] =
+    𝒮[($ᵗ (queries → BitVec 256) : ProbComp _)] := by
+  classical
+  let e : queries → (queries.image decode) := fun query =>
+    ⟨decode query.1, Finset.mem_image.mpr ⟨query.1, query.2, rfl⟩⟩
+  have he : Function.Injective e := by
+    intro left right h
+    apply Subtype.ext
+    exact decode_injective (congrArg Subtype.val h)
+  exact evalSPMF_uniformSample_map_comp_injective he
 
-theorem encode_decode (cache : OracleSpec.QueryCache SigGolf.HashSpec) :
-    encodeCache (decodeCache cache) = cache := by
+def projectCache (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec) :
+    OracleSpec.QueryCache SigGolf.HashSpec :=
+  fun query => cache (decode query)
+
+theorem projectCache_empty :
+    projectCache (∅ : OracleSpec.QueryCache SphincsSecurity.HashSpec) =
+      (∅ : OracleSpec.QueryCache SigGolf.HashSpec) := by
   funext query
-  change (match splitQuery query with
-    | .inl input => cache (SphincsBridge.toQuery input)
-    | .inr input => cache input.1) = cache query
-  cases h : splitQuery query with
-  | inl input =>
-      have hj : SphincsBridge.toQuery input = query := by
-        simpa [joinQuery, h] using join_split query
-      simpa only [h] using (by cases hj; rfl : cache (SphincsBridge.toQuery input) = cache query)
-  | inr input =>
-      have hj : input.1 = query := by
-        simpa [joinQuery, h] using join_split query
-      simpa only [h] using (by cases hj; rfl : cache input.1 = cache query)
-
-theorem decode_encode (cache : SplitCache) : decodeCache (encodeCache cache) = cache := by
-  apply Prod.ext
-  · funext input
-    change (match splitQuery (SphincsBridge.toQuery input) with
-      | .inl value => cache.1 value
-      | .inr value => cache.2 value) = cache.1 input
-    rw [show splitQuery (SphincsBridge.toQuery input) = .inl input from
-      split_join (.inl input)]
-  · funext input
-    change (match splitQuery input.1 with
-      | .inl value => cache.1 value
-      | .inr value => cache.2 value) = cache.2 input
-    rw [show splitQuery input.1 = .inr input from split_join (.inr input)]
-
-theorem encode_update_inl (cache : SplitCache) (query : SigGolf.Query)
-    (input : HashInput) (u : BitVec 256) (h : splitQuery query = .inl input) :
-    encodeCache (cache.1.cacheQuery input u, cache.2) =
-      (encodeCache cache).cacheQuery query u := by
-  funext query'
-  cases h' : splitQuery query' with
-  | inl input' =>
-      by_cases heq : input' = input
-      · have hq : query' = query := split_injective (by simp [h', h, heq])
-        subst query'
-        simp only [encodeCache, h]
-        rw [OracleSpec.QueryCache.cacheQuery_self]
-        exact OracleSpec.QueryCache.cacheQuery_self cache.1 input u
-      · have hq : query' ≠ query := by
-          intro same
-          subst query'
-          have hs : input' = input := Sum.inl.inj (h'.symm.trans h)
-          exact heq hs
-        simp only [encodeCache, h', OracleSpec.QueryCache.cacheQuery_of_ne cache.1 u heq,
-          OracleSpec.QueryCache.cacheQuery_of_ne (encodeCache cache) u hq]
-        rfl
-  | inr input' =>
-      have hq : query' ≠ query := by
-        intro same
-        subst query'
-        simp [h] at h'
-      simp [encodeCache, h', OracleSpec.QueryCache.cacheQuery_of_ne, hq]
-
-theorem encode_update_inr (cache : SplitCache) (query : SigGolf.Query)
-    (input : NonalignedQuery) (u : BitVec 256) (h : splitQuery query = .inr input) :
-    encodeCache (cache.1, cache.2.cacheQuery input u) =
-      (encodeCache cache).cacheQuery query u := by
-  funext query'
-  cases h' : splitQuery query' with
-  | inl input' =>
-      have hq : query' ≠ query := by
-        intro same
-        subst query'
-        simp [h] at h'
-      simp [encodeCache, h', OracleSpec.QueryCache.cacheQuery_of_ne, hq]
-      rfl
-  | inr input' =>
-      by_cases heq : input' = input
-      · have hq : query' = query := split_injective (by simp [h', h, heq])
-        subst query'
-        simp only [encodeCache, h]
-        rw [OracleSpec.QueryCache.cacheQuery_self]
-        exact (OracleSpec.QueryCache.cacheQuery_self (encodeCache cache) query u).symm
-      · have hq : query' ≠ query := by
-          intro same
-          subst query'
-          have hs : input' = input := Sum.inr.inj (h'.symm.trans h)
-          exact heq hs
-        simp only [encodeCache, h', OracleSpec.QueryCache.cacheQuery_of_ne cache.2 u heq,
-          OracleSpec.QueryCache.cacheQuery_of_ne (encodeCache cache) u hq]
-
-theorem decode_update_inl (cache : SplitCache) (query : SigGolf.Query)
-    (input : HashInput) (u : BitVec 256) (h : splitQuery query = .inl input) :
-    decodeCache ((encodeCache cache).cacheQuery query u) =
-      (cache.1.cacheQuery input u, cache.2) := by
-  rw [← encode_update_inl cache query input u h, decode_encode]
-
-theorem decode_update_inr (cache : SplitCache) (query : SigGolf.Query)
-    (input : NonalignedQuery) (u : BitVec 256) (h : splitQuery query = .inr input) :
-    decodeCache ((encodeCache cache).cacheQuery query u) =
-      (cache.1, cache.2.cacheQuery input u) := by
-  rw [← encode_update_inr cache query input u h, decode_encode]
-
-theorem encode_empty : encodeCache (∅, ∅) = (∅ : OracleSpec.QueryCache SigGolf.HashSpec) := by
-  funext query
-  change (match splitQuery query with | .inl _ => none | .inr _ => none) = none
-  cases splitQuery query <;> rfl
-
-/-- Transport the organizer's lazy oracle through the exact cache decomposition. -/
-noncomputable def splitRandomOracle :
-    QueryImpl SigGolf.HashSpec (StateT SplitCache ProbComp) :=
-  fun query cache =>
-    (fun result => (result.1, decodeCache result.2)) <$> 
-      (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run (encodeCache cache)
-
-/-- A byte-aligned query touches only the inherited byte-string table. -/
-theorem splitRandomOracle_aligned (cache : SplitCache) (query : SigGolf.Query)
-    (input : HashInput) (h : splitQuery query = .inl input) :
-    (splitRandomOracle query).run cache =
-      match cache.1 input with
-      | some u => pure (u, cache)
-      | none => ($ᵗ BitVec 256) >>= fun u =>
-          pure (u, (cache.1.cacheQuery input u, cache.2)) := by
-  change (fun result => (result.1, decodeCache result.2)) <$>
-    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run (encodeCache cache) = _
-  rw [randomOracle.run_eq]
-  have hlook : encodeCache cache query = cache.1 input := by
-    simp only [encodeCache, h]
-    rfl
-  rw [hlook]
-  cases hc : cache.1 input with
-  | some u => simp [decode_encode]
-  | none =>
-      simp only [map_bind, map_pure]
-      exact bind_congr fun u => by simp [decode_update_inl cache query input u h]
-
-/-- A non-byte-aligned query touches only its separate private table. -/
-theorem splitRandomOracle_nonaligned (cache : SplitCache) (query : SigGolf.Query)
-    (input : NonalignedQuery) (h : splitQuery query = .inr input) :
-    (splitRandomOracle query).run cache =
-      match cache.2 input with
-      | some u => pure (u, cache)
-      | none => ($ᵗ BitVec 256) >>= fun u =>
-          pure (u, (cache.1, cache.2.cacheQuery input u)) := by
-  change (fun result => (result.1, decodeCache result.2)) <$>
-    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run (encodeCache cache) = _
-  rw [randomOracle.run_eq]
-  have hlook : encodeCache cache query = cache.2 input := by simp [encodeCache, h]
-  rw [hlook]
-  cases hc : cache.2 input with
-  | some u => simp [decode_encode]
-  | none =>
-      simp only [map_bind, map_pure]
-      exact bind_congr fun u => by simp [decode_update_inr cache query input u h]
-
-/-- The aligned component is precisely the inherited byte-string lazy random oracle. -/
-theorem splitRandomOracle_byte (cache : SplitCache) (input : HashInput) :
-    (splitRandomOracle (SphincsBridge.toQuery input)).run cache =
-    (fun result => (result.1, (result.2, cache.2))) <$>
-      (OracleSpec.randomOracle (spec := SphincsSecurity.HashSpec) input).run cache.1 := by
-  have h : splitQuery (SphincsBridge.toQuery input) = .inl input :=
-    split_join (.inl input)
-  rw [splitRandomOracle_aligned cache _ input h]
-  rw [randomOracle.run_eq]
-  cases cache.1 input <;> simp [map_pure] <;> rfl
-
-/-- The nonaligned component is a separate lazy random oracle and never changes the byte table. -/
-theorem splitRandomOracle_other (cache : SplitCache) (input : NonalignedQuery) :
-    (splitRandomOracle input.1).run cache =
-    (fun result => (result.1, (cache.1, result.2))) <$>
-      (OracleSpec.randomOracle (spec := NonalignedSpec) input).run cache.2 := by
-  have h : splitQuery input.1 = .inr input := split_join (.inr input)
-  rw [splitRandomOracle_nonaligned cache _ input h]
-  rw [randomOracle.run_eq]
-  cases cache.2 input <;> simp [map_pure]
-
-/-- One query has exactly the same joint law of answer and resulting cache. -/
-theorem splitRandomOracle_run (query : SigGolf.Query) (cache : SplitCache) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (splitRandomOracle query).run cache =
-    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run (encodeCache cache) := by
-  change (fun result => (result.1, encodeCache result.2)) <$>
-    ((fun result => (result.1, decodeCache result.2)) <$>
-      (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run (encodeCache cache)) = _
-  rw [Functor.map_map]
-  simp [encode_decode]
-
-theorem splitRandomOracle_run_empty (query : SigGolf.Query) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (splitRandomOracle query).run (∅, ∅) =
-    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run ∅ := by
-  simpa only [encode_empty] using splitRandomOracle_run query (∅, ∅)
-
-/-- The oracle-cache decomposition preserves the full joint distribution of every finite
-hash-query computation, including adaptively selected and repeated queries. -/
-theorem simulate_split (α : Type) (program : OracleComp SigGolf.HashSpec α)
-    (cache : SplitCache) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (simulateQ splitRandomOracle program).run cache =
-    (simulateQ (OracleSpec.randomOracle (spec := SigGolf.HashSpec)) program).run
-      (encodeCache cache) := by
-  induction program using OracleComp.inductionOn generalizing cache with
-  | pure value => simp [simulateQ_pure]
-  | query_bind query continuation ih =>
-      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
-      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
-      rw [map_bind]
-      rw [← splitRandomOracle_run query cache, bind_map_left]
-      exact bind_congr fun result => ih result.1 result.2
-
-def splitCoinOracle : QueryImpl unifSpec (StateT SplitCache ProbComp) :=
-  (HasQuery.toQueryImpl (spec := unifSpec) (m := ProbComp)).liftTarget
-    (StateT SplitCache ProbComp)
-
-noncomputable def splitWorldOracle :
-    QueryImpl SigGolf.World (StateT SplitCache ProbComp) :=
-  splitCoinOracle + splitRandomOracle
-
-theorem splitCoinOracle_run (query : unifSpec.Domain) (cache : SplitCache) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (splitCoinOracle query).run cache =
-    (unifFwdImpl SigGolf.HashSpec query).run (encodeCache cache) := by
   rfl
 
-theorem splitWorldOracle_run (query : SigGolf.World.Domain) (cache : SplitCache) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (splitWorldOracle query).run cache =
-    ((unifFwdImpl SigGolf.HashSpec +
-      (OracleSpec.randomOracle (spec := SigGolf.HashSpec))) query).run
-      (encodeCache cache) := by
-  cases query with
-  | inl coin => exact splitCoinOracle_run coin cache
-  | inr hash => exact splitRandomOracle_run hash cache
+theorem projectCache_update (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec)
+    (query : SigGolf.Query) (answer : BitVec 256) :
+    projectCache (cache.cacheQuery (decode query) answer) =
+      (projectCache cache).cacheQuery query answer := by
+  funext other
+  by_cases h : other = query
+  · subst other
+    change cache.cacheQuery (decode query) answer (decode query) =
+      (projectCache cache).cacheQuery query answer query
+    simp [OracleSpec.QueryCache.cacheQuery]
+    rfl
+  · have hd : decode other ≠ decode query := fun eq => h (decode_injective eq)
+    change cache.cacheQuery (decode query) answer (decode other) =
+      (projectCache cache).cacheQuery query answer other
+    rw [OracleSpec.QueryCache.cacheQuery_of_ne cache answer hd,
+      OracleSpec.QueryCache.cacheQuery_of_ne (projectCache cache) answer h]
+    rfl
 
-/-- The same split preserves computations that combine private uniform coins with arbitrary
-organizer hash queries. This is the form needed for the security experiment. -/
-theorem simulate_world_split (α : Type) (program : OracleComp SigGolf.World α)
-    (cache : SplitCache) :
-    (fun result => (result.1, encodeCache result.2)) <$>
-      (simulateQ splitWorldOracle program).run cache =
-    (simulateQ (unifFwdImpl SigGolf.HashSpec +
-      (OracleSpec.randomOracle (spec := SigGolf.HashSpec))) program).run
-      (encodeCache cache) := by
+noncomputable def pulledRandomOracle :
+    QueryImpl SigGolf.HashSpec (StateT (OracleSpec.QueryCache SphincsSecurity.HashSpec) ProbComp) :=
+  fun query => OracleSpec.randomOracle (spec := SphincsSecurity.HashSpec) (decode query)
+
+theorem pulledRandomOracle_step (query : SigGolf.Query)
+    (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec) :
+    (fun result => (result.1, projectCache result.2)) <$>
+      (pulledRandomOracle query).run cache =
+    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run
+      (projectCache cache) := by
+  change (fun result => (result.1, projectCache result.2)) <$>
+    (OracleSpec.randomOracle (spec := SphincsSecurity.HashSpec) (decode query)).run cache =
+    (OracleSpec.randomOracle (spec := SigGolf.HashSpec) query).run
+      (projectCache cache)
+  rw [randomOracle.run_eq, randomOracle.run_eq]
+  have hlook : projectCache cache query = cache (decode query) := rfl
+  rw [hlook]
+  cases hc : cache (decode query) with
+  | some answer => simp; rfl
+  | none =>
+      simp only [map_bind, map_pure]
+      change (fun a : BitVec 256 => (a, projectCache (cache.cacheQuery (decode query) a))) <$>
+        ($ᵗ BitVec 256 : ProbComp _) =
+        (fun a : BitVec 256 => (a, (projectCache cache).cacheQuery query a)) <$>
+          ($ᵗ BitVec 256 : ProbComp _)
+      simp only [projectCache_update]
+
+theorem simulate_pulled {α : Type} (program : OracleComp SigGolf.HashSpec α)
+    (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec) :
+    (fun result => (result.1, projectCache result.2)) <$>
+      (simulateQ pulledRandomOracle program).run cache =
+    (simulateQ (OracleSpec.randomOracle (spec := SigGolf.HashSpec)) program).run
+      (projectCache cache) := by
   induction program using OracleComp.inductionOn generalizing cache with
   | pure value => simp [simulateQ_pure]
   | query_bind query continuation ih =>
       rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
       rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
       rw [map_bind]
-      rw [← splitWorldOracle_run query cache, bind_map_left]
+      rw [← pulledRandomOracle_step query cache, bind_map_left]
       exact bind_congr fun result => ih result.1 result.2
 
-noncomputable def withSplitRandomness {α : Type} (program : OracleComp SigGolf.World α) :
-    ProbComp α :=
-  (simulateQ splitWorldOracle program).run' (∅, ∅)
+theorem simulate_pulled_empty {α : Type} (program : OracleComp SigGolf.HashSpec α) :
+    (fun result => (result.1, projectCache result.2)) <$>
+      (simulateQ pulledRandomOracle program).run ∅ =
+    (simulateQ (OracleSpec.randomOracle (spec := SigGolf.HashSpec)) program).run ∅ := by
+  simpa only [projectCache_empty] using simulate_pulled program ∅
 
-/-- Organizer sampling is unchanged when its bit-string random oracle is realized by the
-independent byte-aligned and nonaligned lazy tables. -/
-theorem withSplitRandomness_eq {α : Type} (program : OracleComp SigGolf.World α) :
-    withSplitRandomness program = SigGolf.withRandomness program := by
-  have h := simulate_world_split α program (∅, ∅)
-  have h' := congrArg (Functor.map Prod.fst) h
-  simpa only [withSplitRandomness, SigGolf.withRandomness, StateT.run'_eq,
-    Functor.map_map, encode_empty] using h'
+def pulledCoinOracle :
+    QueryImpl unifSpec (StateT (OracleSpec.QueryCache SphincsSecurity.HashSpec) ProbComp) :=
+  (HasQuery.toQueryImpl (spec := unifSpec) (m := ProbComp)).liftTarget
+    (StateT (OracleSpec.QueryCache SphincsSecurity.HashSpec) ProbComp)
 
-/-- A scheme computation can use the inherited byte-string RO in the first component
-while the nonaligned organizer table remains untouched. -/
-noncomputable def splitByteWorldOracle :
-    QueryImpl SphincsSecurity.OracleWorld (StateT SplitCache ProbComp) :=
-  splitCoinOracle + (fun input => splitRandomOracle (SphincsBridge.toQuery input))
+noncomputable def pulledWorldOracle :
+    QueryImpl SigGolf.World (StateT (OracleSpec.QueryCache SphincsSecurity.HashSpec) ProbComp) :=
+  pulledCoinOracle + pulledRandomOracle
 
-theorem splitByteWorldOracle_run (query : SphincsSecurity.OracleWorld.Domain)
-    (byteCache : OracleSpec.QueryCache SphincsSecurity.HashSpec)
-    (otherCache : OracleSpec.QueryCache NonalignedSpec) :
-    (splitByteWorldOracle query).run (byteCache, otherCache) =
-    (fun result => (result.1, (result.2, otherCache))) <$>
-      ((unifFwdImpl SphincsSecurity.HashSpec +
-        (OracleSpec.randomOracle (spec := SphincsSecurity.HashSpec))) query).run
-        byteCache := by
+theorem pulledWorldOracle_step (query : SigGolf.World.Domain)
+    (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec) :
+    (fun result => (result.1, projectCache result.2)) <$>
+      (pulledWorldOracle query).run cache =
+    ((unifFwdImpl SigGolf.HashSpec +
+      (OracleSpec.randomOracle (spec := SigGolf.HashSpec))) query).run
+      (projectCache cache) := by
   cases query with
   | inl coin => rfl
-  | inr input => exact splitRandomOracle_byte (byteCache, otherCache) input
+  | inr hash => exact pulledRandomOracle_step hash cache
 
-theorem simulate_byte_world (α : Type)
-    (program : OracleComp SphincsSecurity.OracleWorld α)
-    (byteCache : OracleSpec.QueryCache SphincsSecurity.HashSpec)
-    (otherCache : OracleSpec.QueryCache NonalignedSpec) :
-    (simulateQ splitByteWorldOracle program).run (byteCache, otherCache) =
-    (fun result => (result.1, (result.2, otherCache))) <$>
-      (simulateQ (unifFwdImpl SphincsSecurity.HashSpec +
-        (OracleSpec.randomOracle (spec := SphincsSecurity.HashSpec))) program).run
-        byteCache := by
-  induction program using OracleComp.inductionOn generalizing byteCache with
+theorem simulate_world_pulled {α : Type} (program : OracleComp SigGolf.World α)
+    (cache : OracleSpec.QueryCache SphincsSecurity.HashSpec) :
+    (fun result => (result.1, projectCache result.2)) <$>
+      (simulateQ pulledWorldOracle program).run cache =
+    (simulateQ (unifFwdImpl SigGolf.HashSpec +
+      (OracleSpec.randomOracle (spec := SigGolf.HashSpec))) program).run
+      (projectCache cache) := by
+  induction program using OracleComp.inductionOn generalizing cache with
   | pure value => simp [simulateQ_pure]
   | query_bind query continuation ih =>
       rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
       rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
-      rw [splitByteWorldOracle_run query byteCache otherCache]
-      rw [bind_map_left, map_bind]
+      rw [map_bind]
+      rw [← pulledWorldOracle_step query cache, bind_map_left]
       exact bind_congr fun result => ih result.1 result.2
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.simulate_byte_world' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.simulate_byte_world
+theorem simulate_world_pulled_empty {α : Type} (program : OracleComp SigGolf.World α) :
+    (simulateQ pulledWorldOracle program).run' ∅ = SigGolf.withRandomness program := by
+  have h := congrArg (Functor.map Prod.fst) (simulate_world_pulled program ∅)
+  simpa only [SigGolf.withRandomness, StateT.run'_eq, Functor.map_map, projectCache_empty]
+    using h
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.splitRandomOracle_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.splitRandomOracle_byte
+noncomputable def embedWorld : QueryImpl SigGolf.World (OracleComp SphincsSecurity.OracleWorld) :=
+  fun | .inl n => liftM (SphincsSecurity.OracleWorld.query (.inl n))
+      | .inr query => liftM (SphincsSecurity.OracleWorld.query (.inr (decode query)))
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.splitRandomOracle_other' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.splitRandomOracle_other
+noncomputable def reindex {α : Type} (program : OracleComp SigGolf.World α) :
+    OracleComp SphincsSecurity.OracleWorld α := simulateQ embedWorld program
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.simulate_world_split' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.simulate_world_split
+theorem composed_oracle_eq :
+    SphincsSecurity.romImpl ∘ₛ embedWorld = pulledWorldOracle := by
+  funext query
+  cases query with
+  | inl n => rfl
+  | inr query =>
+      change simulateQ SphincsSecurity.romImpl
+        (liftM (SphincsSecurity.OracleWorld.query (.inr (decode query)))) = _
+      rw [simulateQ_spec_query]
+      rfl
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.withSplitRandomness_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.withSplitRandomness_eq
+theorem reindex_law {α : Type} (program : OracleComp SigGolf.World α) :
+    (simulateQ SphincsSecurity.romImpl (reindex program)).run' ∅ =
+      SigGolf.withRandomness program := by
+  rw [reindex, ← QueryImpl.simulateQ_compose]
+  rw [composed_oracle_eq]
+  exact simulate_world_pulled_empty program
 
-end SigGolfCandidate.SphincsAlignedQuery
+noncomputable def securityCore (submission : SigGolf.Submission)
+    (adversary : SigGolf.Adversary submission.sizes) (rounds : Nat) :
+    OracleComp SigGolf.World SigGolf.AttackResult := do
+  let secretKey ← liftM SigGolf.sampleSecretKey
+  let keygen ← liftM (submission.run .keygen secretKey)
+  let some (pk, cache) := keygen.value | return ⟨false, keygen.hashCalls⟩
+  submission.interact adversary secretKey pk rounds (adversary.initial pk cache)
+    { hashCalls := keygen.hashCalls }
 
-/-- info: 'SigGolfCandidate.SphincsAlignedQuery.toQuery_alignedInput' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+theorem securityExperiment_reindexed (submission : SigGolf.Submission)
+    (adversary : SigGolf.Adversary submission.sizes) (rounds : Nat) :
+    submission.securityExperiment adversary rounds =
+      (simulateQ SphincsSecurity.romImpl
+        (reindex (securityCore submission adversary rounds))).run' ∅ := by
+  change SigGolf.withRandomness (securityCore submission adversary rounds) = _
+  exact (reindex_law (securityCore submission adversary rounds)).symm
+
+theorem candidate64_securityExperiment_reindexed
+    (adversary : SigGolf.Adversary Candidate64.submission.sizes) (rounds : Nat) :
+    Candidate64.submission.securityExperiment adversary rounds =
+      (simulateQ SphincsSecurity.romImpl
+        (reindex (securityCore Candidate64.submission adversary rounds))).run' ∅ :=
+  securityExperiment_reindexed Candidate64.submission adversary rounds
+
+end SigGolfCandidate.QueryDecoder
+
+/-- info: 'SigGolfCandidate.QueryDecoder.decode_injective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms SigGolfCandidate.SphincsAlignedQuery.toQuery_alignedInput
+#print axioms SigGolfCandidate.QueryDecoder.decode_injective
+
+/-- info: 'SigGolfCandidate.QueryDecoder.decode_padded' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.decode_padded
+
+/-- info: 'SigGolfCandidate.QueryDecoder.finite_oracle_pullback' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.finite_oracle_pullback
+
+/-- info: 'SigGolfCandidate.QueryDecoder.pulledRandomOracle_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.pulledRandomOracle_step
+
+/-- info: 'SigGolfCandidate.QueryDecoder.simulate_pulled_empty' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.simulate_pulled_empty
+
+/-- info: 'SigGolfCandidate.QueryDecoder.simulate_world_pulled_empty' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.simulate_world_pulled_empty
+
+/-- info: 'SigGolfCandidate.QueryDecoder.reindex_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.reindex_law
+
+/-- info: 'SigGolfCandidate.QueryDecoder.candidate64_securityExperiment_reindexed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.QueryDecoder.candidate64_securityExperiment_reindexed

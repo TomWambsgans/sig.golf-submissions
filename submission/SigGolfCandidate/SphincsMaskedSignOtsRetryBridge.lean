@@ -6217,4 +6217,41 @@ theorem forest_complete_first_bottom_loop_state (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms forest_complete_first_bottom_loop_state
 
+theorem forest_complete_first_bottom_wots_output (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (index : Index) (encoding : Encoding) (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index)
+    (decoded : TargetSum.decodeDigest
+      (bottomEncodingDigest hash parameter seed index) = some encoding) :
+    ∃ t u v w, (∃ steps cycles calls blocks,
+      Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
+      Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
+      OrdinarySteps SphincsMaskedImages.sign u 55 v ∧
+      Trace hash SphincsMaskedImages.sign v
+        (firstBottomPrefixInstructions (firstBottomDigits encoding) 52 - 59)
+        (firstBottomPrefixCycles (firstBottomDigits encoding) 52 - 59)
+        (firstBottomPrefixCalls (firstBottomDigits encoding) 52)
+        (firstBottomPrefixCompressions (firstBottomDigits encoding) 52) w ∧
+      w.pc = 0x3dec ∧
+      (∀ j : ChainIndex,
+        Words20 w (0x2283c + 20 * j.val)
+          (firstBottomExpectedChain hash parameter seed bottomLayer
+            (Concrete.treeIndexAt index bottomLayer)
+            (Concrete.leafIndexAt index bottomLayer)
+            (firstBottomDigits encoding) j)) := by
+  obtain ⟨t, u, v, forestRun, encodingRun, secretRun, initial⟩ :=
+    forest_complete_first_bottom_loop_state hash s parameter seed index
+      encoding pc ctx decoded
+  obtain ⟨w, chainRun, wpc, outputs⟩ :=
+    first_bottom_all_chains hash v parameter seed bottomLayer
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer)
+      (firstBottomDigits encoding) initial
+  exact ⟨t, u, v, w, forestRun, encodingRun, secretRun,
+    chainRun, wpc, outputs⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_wots_output' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_first_bottom_wots_output
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
