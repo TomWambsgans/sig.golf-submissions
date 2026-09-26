@@ -451,3 +451,146 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+
+theorem fixedBoundaryRun_lift_prob_trace {α : Type} (parameter : PublicParameter)
+    (f : QueryImpl HashSpec Id) (computation : ProbComp α) :
+    fixedBoundaryRun parameter f (liftM computation) =
+      (fun value => (value, (1 : SigningBoundaryTrace))) <$> computation := by
+  induction computation using OracleComp.inductionOn with
+  | pure value => simp only [liftM_pure, fixedBoundaryRun_pure, map_pure]
+  | query_bind input next ih =>
+      rw [liftM_bind, fixedBoundaryRun_bind]
+      have hquery : fixedBoundaryRun parameter f
+          (liftM (liftM (unifSpec.query input) : ProbComp _)) =
+          (fun value => (value, (1 : SigningBoundaryTrace))) <$>
+            (liftM (unifSpec.query input) : ProbComp _) := by
+        rfl
+      rw [hquery]
+      simp only [map_bind, ih, bind_map_left, one_mul, Functor.map_map]
+
+theorem boundaryEval_hashCalls_independent {α : Type} (first second : PublicParameter)
+    (f : QueryImpl HashSpec Id) (computation : OracleComp HashSpec α) :
+    (boundaryEval first f computation).2.hashCalls =
+      (boundaryEval second f computation).2.hashCalls := by
+  induction computation using OracleComp.inductionOn with
+  | pure value => rfl
+  | query_bind query next ih =>
+      rw [boundaryEval_bind, boundaryEval_bind]
+      simp only [SigningBoundaryTrace.hashCalls_mul]
+      rw [boundaryEval_hash_query, boundaryEval_hash_query]
+      simp only [signingBoundaryTrace_hashCalls_eq]
+      simpa using congrArg (fun n : Nat => 1 + n) (ih _)
+
+theorem fixedBoundaryRun_keygen_hashCalls (f : QueryImpl HashSpec Id)
+    (result : (PublicKey × SecretKey) × SigningBoundaryTrace)
+    (hr : result ∈ support (fixedBoundaryRun 0 f scheme.keygen)) :
+    result.2.hashCalls = keygenHashCost := by
+  change result ∈ support (fixedBoundaryRun 0 f keygen) at hr
+  simp only [keygen, fixedBoundaryRun_bind, fixedBoundaryRun_lift_prob_trace,
+    fixedBoundaryRun_lift_hash, fixedBoundaryRun_pure,
+    mem_support_bind_iff] at hr
+  rcases hr with ⟨x, hx, hr⟩
+  rw [support_map] at hx
+  rcases hx with ⟨parameter, hp, rfl⟩
+  rw [support_map] at hr
+  rcases hr with ⟨middle, hmiddle, heq⟩
+  change middle = result at heq
+  subst result
+  simp only [mem_support_bind_iff] at hmiddle
+  rcases hmiddle with ⟨x, hx, hr⟩
+  rw [support_map] at hx
+  rcases hx with ⟨otsSecret, hots, rfl⟩
+  rw [support_map] at hr
+  rcases hr with ⟨middle2, hmiddle2, heq⟩
+  change middle2 = middle at heq
+  subst middle
+  simp only [mem_support_bind_iff] at hmiddle2
+  rcases hmiddle2 with ⟨x, hx, hr⟩
+  rw [support_map] at hx
+  rcases hx with ⟨ftsSecret, hfts, rfl⟩
+  rw [support_map] at hr
+  rcases hr with ⟨middle3, hmiddle3, heq⟩
+  change middle3 = middle2 at heq
+  subst middle2
+  simp only [mem_support_bind_iff] at hmiddle3
+  rcases hmiddle3 with ⟨x, hx, hr⟩
+  rw [mem_support_pure_iff] at hx
+  subst x
+  rw [support_map] at hr
+  rcases hr with ⟨middle4, hmiddle4, heq⟩
+  rw [mem_support_pure_iff] at hmiddle4
+  subst middle4
+  subst middle3
+  change ((boundaryEval 0 f (treeRoot parameter topLayer rootTree
+    (otsSecret topLayer rootTree))).2 * 1).hashCalls = keygenHashCost
+  rw [mul_one]
+  rw [boundaryEval_hashCalls_independent 0 parameter f
+    (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree))]
+  rw [boundaryEval_keygen]
+  exact SigningBoundaryTrace.hashCalls_pow_none _
+
+theorem rom_support_exists_fixed {α : Type} (computation : OracleComp OracleWorld α)
+    (result : α) (hr : result ∈ support ((simulateQ romImpl computation).run' ∅)) :
+    ∃ oracle : QueryImpl HashSpec Id,
+      result ∈ support (simulateQ (fixedHashWorld oracle) computation) := by
+  classical
+  let inputs := hashInputs computation
+  let : SampleableType (inputs → HashOutput) := SampleableType.ofFintype _
+  have heq := evalSPMF_romRun_eq_finiteHash computation inputs (Finset.Subset.refl _) ∅
+  have hs : support ((simulateQ romImpl computation).run' ∅) =
+      support (do
+        let table ← ($ᵗ (inputs → HashOutput) : ProbComp _)
+        simulateQ (fixedHashWorld (finiteHashAnswer ∅ inputs table)) computation) := by
+    ext value
+    simp only [mem_support_iff, probOutput_def, heq]
+  rw [hs, mem_support_bind_iff] at hr
+  obtain ⟨table, _, htable⟩ := hr
+  exact ⟨finiteHashAnswer ∅ inputs table, htable⟩
+
+theorem boundaryRun_keygen_hashCalls
+    (result : ((PublicKey × SecretKey) × SigningBoundaryTrace) × QueryCache HashSpec)
+    (hr : result ∈ support (boundaryRun 0 scheme.keygen ∅)) :
+    result.1.2.hashCalls = keygenHashCost := by
+  have hcount : (result.1.1, result.1.2.hashCalls) ∈
+      support ((simulateQ romImpl (countHashQueries scheme.keygen)).run' ∅) := by
+    have hfull : ((result.1.1, result.1.2.hashCalls), result.2) ∈
+        support ((simulateQ romImpl (countHashQueries scheme.keygen)).run ∅) := by
+      rw [← boundaryRun_count]
+      rw [support_map]
+      exact ⟨result, hr, rfl⟩
+    rw [StateT.run'_eq, support_map]
+    exact ⟨_, hfull, rfl⟩
+  obtain ⟨oracle, horacle⟩ := rom_support_exists_fixed _ _ hcount
+  rw [← fixedBoundaryRun_count] at horacle
+  rw [support_map] at horacle
+  obtain ⟨fixed, hfixed, heq⟩ := horacle
+  have hcost := fixedBoundaryRun_keygen_hashCalls oracle fixed hfixed
+  have := congrArg Prod.snd heq
+  simpa only using this.symm.trans hcost
+
+theorem referenceForgeryGame_full_budget_le_original_counted_unconditional
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] := by
+  exact referenceForgeryGame_full_budget_le_original_counted dummy adversary q
+    (fun result hr => boundaryRun_keygen_hashCalls result hr)
+  trace_state
+
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.boundaryRun_keygen_hashCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.boundaryRun_keygen_hashCalls
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted_unconditional' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted_unconditional
