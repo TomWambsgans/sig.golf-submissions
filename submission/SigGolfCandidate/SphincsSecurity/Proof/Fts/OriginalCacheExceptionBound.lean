@@ -15,18 +15,28 @@ noncomputable def originalCacheHistoryWeight (key : SecretKey) (state : Certific
 private theorem probOutput_probCompLift {Result : Type} (computation : ProbComp Result) (result : Result) :
     Pr[= result | (liftM computation : PMF Result)] = Pr[= result | computation] := rfl
 
+theorem originalProposalRecord_budget_event (key : SecretKey)
+    (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
+    (spent q : Nat) (event : QueryCache HashSpec → Prop) :
+    Pr[fun record => event record.cache ∧ spent + record.trace.hashCalls ≤ q |
+      originalProposalRecord key input cache] =
+    Pr[fun result => event result.2 ∧ spent + result.1.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (expandedAdversaryImpl key input))).run cache] := by
+  rw [← boundaryRun_count key.parameter (expandedAdversaryImpl key input) cache, probEvent_map]
+  have h := congrArg (fun law : PMF _ => Pr[fun result =>
+      event result.2 ∧ spent + result.1.2.hashCalls ≤ q | law])
+    (originalProposalRecord_boundary key input cache)
+  rw [← PMF.monad_map_eq_map, probEvent_map] at h
+  simpa only [Function.comp_def, probEvent_eq_tsum_ite, probOutput_probCompLift] using h
+
 theorem originalProposalRecord_cache_exception_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec) (q : Nat) :
     Pr[fun record => CertificateCacheExceptional key record.cache ∧ record.trace.hashCalls ≤ q |
       originalProposalRecord key input cache] =
     Pr[fun result => CertificateCacheExceptional key result.2 ∧ result.1.2 ≤ q |
       (simulateQ romImpl (countHashQueries (expandedAdversaryImpl key input))).run cache] := by
-  rw [← boundaryRun_count key.parameter (expandedAdversaryImpl key input) cache, probEvent_map]
-  have h := congrArg (fun law : PMF _ => Pr[fun result =>
-      CertificateCacheExceptional key result.2 ∧ result.1.2.hashCalls ≤ q | law])
-    (originalProposalRecord_boundary key input cache)
-  rw [← PMF.monad_map_eq_map, probEvent_map] at h
-  simpa only [Function.comp_def, probEvent_eq_tsum_ite, probOutput_probCompLift] using h
+  simpa only [Nat.zero_add] using originalProposalRecord_budget_event key input cache 0 q
+    (CertificateCacheExceptional key)
 
 theorem expected_certificateCacheLengthImpl_of_record_function (key : SecretKey) (budget : Nat)
     (required : Finset FtsTree) (stopAfter : CertificateStopRule)
@@ -389,3 +399,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.originalProposalRecord_cache_exception_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.originalProposalRecord_cache_exception_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.originalProposalRecord_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalProposalRecord_budget_event
