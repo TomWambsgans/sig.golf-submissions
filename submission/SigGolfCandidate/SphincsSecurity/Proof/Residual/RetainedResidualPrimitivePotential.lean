@@ -922,3 +922,135 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stoppedPotential_bind_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stoppedPotential_bind_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+/-- One checked hash step composes the stopped continuation while preserving the
+same global primitive potential. -/
+theorem lazyRun_stopped_checkedHash_bind_jointPotential
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+    (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily)
+    (rows : CanonicalEncodingRows) (routing : InterleavedResidual.Routing)
+    (input : inputs) {Result : Type} (next : HashOutput → OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (hselect : ∀ position, FirstSuccessTable.select decodeEncodingOutput
+      (fun counter => rows (position, counter)) = selections position)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcandidates : ResidualByteFrontend.HiddenCandidateBound words routing.disclosed (project state))
+    (hclean : ResidualByteFrontend.ReplyClean
+      (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections)
+      state.memory.external.cache)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits)
+    (hnext : ∀ middle, Pr[= middle | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (simulateQ (embed inputs routing)
+        (ResidualByteFrontend.checkedHashQuery
+          (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections) input))
+      state] ≠ 0 →
+      ∀ answer, middle.1 = some answer →
+      (∑' result, Pr[= result | lazyRun
+        (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) (next answer)
+          (remaining - 1)) middle.2] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget middle.2.memory) :
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        ((simulateQ (embed inputs routing)
+          (ResidualByteFrontend.checkedHashQuery
+            (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections) input)) >>=
+          next) remaining) state] * stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  rw [WeightedCutoff.residual_run_checkedHashQuery_bind]
+  by_cases allowed : 1 ≤ remaining
+  · rw [if_pos allowed]
+    apply (lazyRun_stoppedPotential_bind_le parameter inputs hencoding words publicReplies selections rows
+      _ _ state budget hnext).trans
+    have hquery : state.memory.external.hashCalls + 1 ≤ budget := by omega
+    have hlaw : lazyByteRun parameter inputs hencoding words publicReplies selections rows routing
+        (liftM (OracleWorld.query (.inr input.val))) state =
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (simulateQ (embed inputs routing)
+          (ResidualByteFrontend.checkedHashQuery
+            (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections) input)) state := by
+      simp only [lazyByteRun, simulateQ_spec_query, ResidualByteFrontend.checkedTranslate,
+        dif_pos input.property]
+    rw [← hlaw]
+    exact lazyByteRun_hash_jointPotential parameter inputs hencoding words publicReplies selections rows
+      routing input.val input.property state budget hselect ha hcovered hcandidates hclean hresources hquery hbudget
+  · rw [if_neg allowed]
+    simp only [AdaptiveResidualLabels.lazyRun, AdaptiveResidualLabels.runWith_pure,
+      tsum_probOutput_pure_mul]
+    simp [stoppedPrimitiveResultPotential, primitiveLivePotential]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_checkedHash_bind_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_checkedHash_bind_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+/-- The account/disclosure step composes the stopped continuation while preserving
+the same global primitive potential. -/
+theorem lazyRun_stopped_completeWork_bind_jointPotential
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+    (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily)
+    (rows : CanonicalEncodingRows) (routing : InterleavedResidual.Routing)
+    (work : PublicSigningRecord × Nat)
+    {Result : Type}
+    (next : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) →
+      OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits)
+    (hnext : ∀ middle, Pr[= middle | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (simulateQ (embed inputs routing)
+        (ResidualByteFrontend.jointCompleteSigningWork work)) state] ≠ 0 →
+      ∀ answer, middle.1 = some answer →
+      (∑' result, Pr[= result | lazyRun
+        (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) (next answer)
+          (remaining - work.2)) middle.2] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget middle.2.memory) :
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        ((simulateQ (embed inputs routing)
+          (ResidualByteFrontend.jointCompleteSigningWork work)) >>= next) remaining) state] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  rw [WeightedCutoff.residual_run_completeSigningWork_bind]
+  by_cases allowed : work.2 ≤ remaining
+  · rw [if_pos allowed]
+    apply (lazyRun_stoppedPotential_bind_le parameter inputs hencoding words publicReplies selections rows
+      _ _ state budget hnext).trans
+    have hcost : state.memory.external.hashCalls + work.2 ≤ budget := by omega
+    exact lazyRun_completeWork_jointPotential parameter inputs hencoding words publicReplies selections rows
+      routing work state budget ha hresources hcost hbudget
+  · rw [if_neg allowed]
+    simp only [AdaptiveResidualLabels.lazyRun, AdaptiveResidualLabels.runWith_pure,
+      tsum_probOutput_pure_mul]
+    simp [stoppedPrimitiveResultPotential, primitiveLivePotential]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_completeWork_bind_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_completeWork_bind_jointPotential
