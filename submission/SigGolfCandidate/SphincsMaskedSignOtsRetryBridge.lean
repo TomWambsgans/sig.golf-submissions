@@ -5632,4 +5632,390 @@ theorem first_bottom_signed_chain_next_secret (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_signed_chain_next_secret
 
+theorem ordinarySteps_unique {image : Image} {s t u : MachineState} {n : Nat}
+    (first : OrdinarySteps image s n t) (second : OrdinarySteps image s n u) :
+    t = u := by
+  induction first generalizing u with
+  | refl state =>
+    cases second
+    rfl
+  | step state next final instruction steps fetched executed tail ih =>
+    cases second with
+    | step state next' final' instruction' steps' fetched' executed' tail' =>
+      have sameInstruction : instruction = instruction' := by
+        rw [fetched] at fetched'
+        cases fetched'
+        rfl
+      subst instruction'
+      have sameNext : next = next' := by
+        rw [executed] at executed'
+        cases executed'
+        rfl
+      subst next'
+      exact ih tail'
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.ordinarySteps_unique' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms ordinarySteps_unique
+
+theorem first_bottom_secret_context_from_repeat_with_frame (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3ac8)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 40 t ∧
+      t.pc = 0x3b20 ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf chain ∧
+      (∀ a : Word, (a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) →
+        a ≠ 0x43010 → a ≠ 0x43018 → t.getMem a = s.getMem a) := by
+  obtain ⟨t, run, tPc, tCtx⟩ :=
+    first_bottom_secret_context_from_repeat s parameter seed lay treeIdx leaf
+      chain pc layer tree selected chainControl par key
+  let mid := firstBottomSecretRepeat s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    first_bottom_secret_repeat_registers s pc
+  obtain ⟨copiedState, copied, _, _, copyFrame⟩ :=
+    first_bottom_secret_copy_with_frame mid midPc source destination count
+  have runCopy : OrdinarySteps SphincsMaskedImages.sign s 40 copiedState := by
+    simpa only [mid, Nat.reduceAdd] using
+      (first_bottom_secret_repeat_trace s pc).append copied
+  have same : t = copiedState := ordinarySteps_unique run runCopy
+  refine ⟨t, run, tPc, tCtx, ?_⟩
+  intro a safe notChain notLeaf
+  rw [same]
+  have outside : copiedState.getMem a = mid.getMem a := by
+    apply copyFrame a
+    intro j hj eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  exact outside.trans (first_bottom_secret_repeat_mem_frame s a notChain notLeaf)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_context_from_repeat_with_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_context_from_repeat_with_frame
+
+theorem first_bottom_advance_secret_with_frame (t : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (last : chain.val < 51)
+    (pc : t.pc = 0x3dec)
+    (layer : t.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : t.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : t.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (chainControl : t.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : t.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+    (par : Words20 t 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 t seed) :
+    let nextChain : ChainIndex := ⟨chain.val + 1, by
+      have := chain.isLt
+      simpa [numChains] using (show chain.val + 1 < 52 by omega)⟩
+    ∃ v, OrdinarySteps SphincsMaskedImages.sign t 59 v ∧
+      v.pc = 0x3b20 ∧
+      FirstBottomSecretContext v parameter seed lay treeIdx leaf nextChain ∧
+      v.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+      v.getMem 0x43050 = BitVec.ofNat 64 nextChain.val ∧
+      v.getMem 0x430a0 =
+        BitVec.ofNat 64 (0x20060 + 20 * nextChain.val) ∧
+      (∀ a : Word, (a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) →
+        a ≠ 0x43010 → a ≠ 0x43018 → a ≠ 0x430a0 → a ≠ 0x43050 →
+        v.getMem a = t.getMem a) := by
+  let nextChain : ChainIndex := ⟨chain.val + 1, by
+    have := chain.isLt
+    simpa [numChains] using (show chain.val + 1 < 52 by omega)⟩
+  let advanced := firstBottomNext t
+  have advancedControls := first_bottom_next_chain t chain pc last chainControl pointer
+  have preserved (a : Word) (notPointer : a ≠ 0x430a0)
+      (notChain : a ≠ 0x43050) : advanced.getMem a = t.getMem a :=
+    first_bottom_next_mem_frame t a notPointer notChain
+  have advancedLayer : advanced.getMem 0x43000 = BitVec.ofNat 64 lay.val := by
+    rw [preserved 0x43000 (by decide) (by decide)]
+    exact layer
+  have advancedTree : advanced.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val := by
+    rw [preserved 0x43008 (by decide) (by decide)]
+    exact tree
+  have advancedSelected : advanced.getMem 0x43020 = BitVec.ofNat 64 leaf.val := by
+    rw [preserved 0x43020 (by decide) (by decide)]
+    exact selected
+  have advancedPar : Words20 advanced 0x74 parameter := by
+    intro i
+    simp only [MachineState.getWord32]
+    rw [preserved _ (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact par i
+  have advancedKey : SphincsMaskedSecretDomain.Words32 advanced seed := by
+    intro i
+    simp only [MachineState.getWord32]
+    rw [preserved _ (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact key i
+  obtain ⟨v, repeatTrace, vPc, vCtx, repeatFrame⟩ :=
+    first_bottom_secret_context_from_repeat_with_frame advanced parameter seed
+      lay treeIdx leaf nextChain advancedControls.1 advancedLayer advancedTree
+      advancedSelected (by simpa [nextChain] using advancedControls.2.1)
+      advancedPar advancedKey
+  have nextTrace := first_bottom_next_trace t pc
+  refine ⟨v, ?_, vPc, vCtx, ?_, ?_, ?_, ?_⟩
+  · simpa only [Nat.reduceAdd] using nextTrace.append repeatTrace
+  · rw [repeatFrame 0x43020 (Or.inr (by decide)) (by decide) (by decide)]
+    exact advancedSelected
+  · rw [repeatFrame 0x43050 (Or.inr (by decide)) (by decide) (by decide)]
+    simpa [nextChain] using advancedControls.2.1
+  · rw [repeatFrame 0x430a0 (Or.inr (by decide)) (by decide) (by decide)]
+    simpa [nextChain] using advancedControls.2.2
+  · intro a safe notChainPrep notLeaf notPointer notChain
+    exact (repeatFrame a safe notChainPrep notLeaf).trans
+      (preserved a notPointer notChain)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_advance_secret_with_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_advance_secret_with_frame
+
+def firstBottomExpectedChain (hash : Hash) (parameter : PublicParameter)
+    (seed : MasterSeed) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (digits : Nat → Digit) (chain : ChainIndex) :
+    BitVec 160 :=
+  firstBottomAbstractValue hash parameter
+    (truncateHash (hash (toQuery
+      (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed))))
+    lay treeIdx leaf chain (digits chain.val).val
+
+def FirstBottomLoopState (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (chain : ChainIndex) : Prop :=
+  s.pc = 0x3b20 ∧
+    FirstBottomSecretContext s parameter seed lay treeIdx leaf chain ∧
+    s.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+    s.getMem 0x43050 = BitVec.ofNat 64 chain.val ∧
+    s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val) ∧
+    (∀ j : ChainIndex,
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+        BitVec.ofNat 8 (digits j.val).val) ∧
+    (∀ j : ChainIndex, j.val < chain.val →
+      Words20 s (0x20060 + 20 * j.val)
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j))
+
+def firstBottomPrefixInstructions (digits : Nat → Digit) (n : Nat) : Nat :=
+  (Finset.range n).sum fun j => 150 + 95 * (digits j).val
+
+def firstBottomPrefixCycles (digits : Nat → Digit) (n : Nat) : Nat :=
+  (Finset.range n).sum fun j => 165 + 102 * (digits j).val
+
+def firstBottomPrefixCalls (digits : Nat → Digit) (n : Nat) : Nat :=
+  (Finset.range n).sum fun j => 1 + (digits j).val
+
+def firstBottomPrefixCompressions (digits : Nat → Digit) (n : Nat) : Nat :=
+  (Finset.range n).sum fun j => 2 + (digits j).val
+
+theorem first_bottom_loop_step (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (chain : ChainIndex) (last : chain.val < 51)
+    (state : FirstBottomLoopState hash s parameter seed lay treeIdx leaf digits chain) :
+    let nextChain : ChainIndex := ⟨chain.val + 1, by
+      have := chain.isLt
+      simpa [numChains] using (show chain.val + 1 < 52 by omega)⟩
+    ∃ v, Trace hash SphincsMaskedImages.sign s
+        (150 + 95 * (digits chain.val).val)
+        (165 + 102 * (digits chain.val).val)
+        (1 + (digits chain.val).val)
+        (2 + (digits chain.val).val) v ∧
+      FirstBottomLoopState hash v parameter seed lay treeIdx leaf digits nextChain := by
+  let nextChain : ChainIndex := ⟨chain.val + 1, by
+    have := chain.isLt
+    simpa [numChains] using (show chain.val + 1 < 52 by omega)⟩
+  let digit := digits chain.val
+  obtain ⟨pc, ctx, selected, chainControl, pointer, digitInvariant, priorWords⟩ := state
+  have digitByte := digitInvariant chain
+  let signed := firstBottomSignedChain hash s digit
+  have signedRun := first_bottom_signed_chain hash s parameter seed lay treeIdx
+    leaf chain digit pc ctx chainControl pointer digitByte
+  obtain ⟨signedPc, signedLayer, signedTree, signedSelected, signedChain,
+      signedPointer, signedPar, signedKey, signedDigits⟩ :=
+    first_bottom_signed_chain_retained hash s parameter seed lay treeIdx leaf
+      chain digit pc ctx selected chainControl pointer digitByte
+  obtain ⟨v, advanceRun, vPc, vCtx, vSelected, vChainControl, vPointer,
+      advanceFrame⟩ :=
+    first_bottom_advance_secret_with_frame signed parameter seed lay treeIdx
+      leaf chain last signedPc signedLayer signedTree signedSelected signedChain
+      signedPointer signedPar signedKey
+  have advanceOutput (j : ChainIndex) (value : BitVec 160)
+      (present : Words20 signed (0x20060 + 20 * j.val) value) :
+      Words20 v (0x20060 + 20 * j.val) value := by
+    intro k
+    let read := BitVec.ofNat 64 (0x20060 + 20 * j.val + 4 * k.val)
+    have hj : j.val < 52 := by simpa [numChains] using j.isLt
+    have readNat : read.toNat = 0x20060 + 20 * j.val + 4 * k.val := by
+      simp [read, BitVec.toNat_ofNat]
+      have hk := k.isLt
+      omega
+    have low : (alignToDword read).toNat < 0x40028 := by
+      rw [align_nat, readNat]
+      have hk := k.isLt
+      omega
+    have neHigh (n : Nat) (bound : 0x43000 ≤ n) (small : n < 2 ^ 64) :
+        alignToDword read ≠ BitVec.ofNat 64 n := by
+      intro h
+      have e := congrArg BitVec.toNat h
+      simp [BitVec.toNat_ofNat] at e
+      omega
+    have frame := advanceFrame (alignToDword read) (Or.inl low)
+      (neHigh 0x43010 (by decide) (by decide))
+      (neHigh 0x43018 (by decide) (by decide))
+      (neHigh 0x430a0 (by decide) (by decide))
+      (neHigh 0x43050 (by decide) (by decide))
+    simp only [MachineState.getWord32]
+    rw [frame]
+    exact present k
+  have nextDigits : ∀ j : ChainIndex,
+      v.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+        BitVec.ofNat 8 (digits j.val).val := by
+    intro j
+    let address := BitVec.ofNat 64 (0x44000 + j.val)
+    have hj : j.val < 52 := by simpa [numChains] using j.isLt
+    have addressNat : address.toNat = 0x44000 + j.val := by
+      simp [address, BitVec.toNat_ofNat]
+      omega
+    have range : 0x44000 ≤ (alignToDword address).toNat ∧
+        (alignToDword address).toNat < 0x44b00 := by
+      rw [align_nat, addressNat]
+      omega
+    have ne (n : Nat) (bound : n < 0x44000) :
+        alignToDword address ≠ BitVec.ofNat 64 n := by
+      intro h
+      have e := congrArg BitVec.toNat h
+      simp [BitVec.toNat_ofNat] at e
+      omega
+    have frame := advanceFrame (alignToDword address)
+      (Or.inr (by omega)) (ne 0x43010 (by decide))
+      (ne 0x43018 (by decide)) (ne 0x430a0 (by decide))
+      (ne 0x43050 (by decide))
+    simp only [MachineState.getByte]
+    rw [frame]
+    exact (signedDigits j).trans (digitInvariant j)
+  have nextPrefix : ∀ j : ChainIndex, j.val < nextChain.val →
+      Words20 v (0x20060 + 20 * j.val)
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
+    intro j before
+    by_cases older : j.val < chain.val
+    · have prior := priorWords j older
+      have kept := first_bottom_signed_chain_prior_emission hash s parameter seed
+        lay treeIdx leaf j chain digit
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)
+        older pc ctx chainControl pointer digitByte prior
+      exact advanceOutput j _ kept
+    · have sameVal : j = chain := Fin.ext (by dsimp [nextChain] at before; omega)
+      subst j
+      have current : Words20 signed (0x20060 + 20 * chain.val)
+          (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits chain) := by
+        simpa [firstBottomExpectedChain, digit] using signedRun.2
+      exact advanceOutput chain _ current
+  have nextState : FirstBottomLoopState hash v parameter seed lay treeIdx leaf
+      digits nextChain :=
+    ⟨vPc, vCtx, vSelected, vChainControl, vPointer, nextDigits, nextPrefix⟩
+  refine ⟨v, ?_, nextState⟩
+  have joined := signedRun.1.trans (advanceRun.trace (hash := hash))
+  convert joined using 1 <;> omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_loop_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_loop_step
+
+theorem first_bottom_loop_prefix (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopState hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩)
+    (n : Nat) (hn : n < 52) :
+    ∃ v, Trace hash SphincsMaskedImages.sign s
+        (firstBottomPrefixInstructions digits n)
+        (firstBottomPrefixCycles digits n)
+        (firstBottomPrefixCalls digits n)
+        (firstBottomPrefixCompressions digits n) v ∧
+      FirstBottomLoopState hash v parameter seed lay treeIdx leaf digits
+        ⟨n, hn⟩ := by
+  induction n with
+  | zero =>
+    refine ⟨s, ?_, ?_⟩
+    · simpa [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+        firstBottomPrefixCalls, firstBottomPrefixCompressions] using
+        (Trace.refl (hash := hash) (image := SphincsMaskedImages.sign) s)
+    · simpa using initial
+  | succ n ih =>
+    have hnPrev : n < 52 := by omega
+    have hnLast : n < 51 := by omega
+    obtain ⟨mid, run, state⟩ := ih hnPrev
+    let chain : ChainIndex := ⟨n, hnPrev⟩
+    obtain ⟨v, step, nextState⟩ :=
+      first_bottom_loop_step hash mid parameter seed lay treeIdx leaf digits
+        chain hnLast state
+    refine ⟨v, ?_, ?_⟩
+    · have joined := run.trans step
+      simpa [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+        firstBottomPrefixCalls, firstBottomPrefixCompressions,
+        Finset.sum_range_succ, chain] using joined
+    · simpa [chain] using nextState
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_loop_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_loop_prefix
+
+theorem first_bottom_all_chains (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopState hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩) :
+    ∃ v, Trace hash SphincsMaskedImages.sign s
+        (firstBottomPrefixInstructions digits 52 - 59)
+        (firstBottomPrefixCycles digits 52 - 59)
+        (firstBottomPrefixCalls digits 52)
+        (firstBottomPrefixCompressions digits 52) v ∧
+      v.pc = 0x3dec ∧
+      (∀ j : ChainIndex,
+        Words20 v (0x20060 + 20 * j.val)
+          (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)) := by
+  let finalChain : ChainIndex := ⟨51, by decide⟩
+  obtain ⟨mid, firstRun, state⟩ :=
+    first_bottom_loop_prefix hash s parameter seed lay treeIdx leaf digits
+      initial 51 (by decide)
+  obtain ⟨pc, ctx, selected, chainControl, pointer, digitInvariant, priorWords⟩ := state
+  let digit := digits 51
+  have digitByte := digitInvariant finalChain
+  have lastRun := first_bottom_signed_chain hash mid parameter seed lay treeIdx
+    leaf finalChain digit pc ctx chainControl pointer digitByte
+  let v := firstBottomSignedChain hash mid digit
+  have lastPc := first_bottom_signed_chain_pc hash mid parameter seed lay treeIdx
+    leaf finalChain digit pc ctx chainControl pointer digitByte
+  have allWords : ∀ j : ChainIndex,
+      Words20 v (0x20060 + 20 * j.val)
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
+    intro j
+    by_cases earlier : j.val < 51
+    · exact first_bottom_signed_chain_prior_emission hash mid parameter seed
+        lay treeIdx leaf j finalChain digit
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)
+        earlier pc ctx chainControl pointer digitByte (priorWords j earlier)
+    · have hj : j.val < 52 := by simpa [numChains] using j.isLt
+      have jLast : j = finalChain := Fin.ext (by dsimp [finalChain]; omega)
+      subst j
+      simpa [firstBottomExpectedChain, digit] using lastRun.2
+  refine ⟨v, ?_, lastPc, allWords⟩
+  have joined := firstRun.trans lastRun.1
+  convert joined using 1 <;>
+    simp [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+      firstBottomPrefixCalls, firstBottomPrefixCompressions,
+      Finset.sum_range_succ] <;> omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_all_chains' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_all_chains
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
