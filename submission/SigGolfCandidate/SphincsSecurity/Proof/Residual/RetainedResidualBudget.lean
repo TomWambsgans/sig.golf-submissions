@@ -892,3 +892,121 @@ end SphincsSecurity.WeightedCutoff
 /-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery_bind' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery_bind
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem fixedSourceImpl_random_state {inputs : Finset HashInput}
+    (context : Context inputs) (sample : Nat) (memory : Memory) :
+    (fixedSourceImpl context (.inl (.inl sample))).run.run memory =
+    (fun answer => (some answer, memory)) <$>
+      simulateQ (fixedHashWorld context.oracle)
+        (liftM (OracleWorld.query (.inl sample))) := by
+  simp [fixedSourceImpl, fixedByteRun, fixedByteImpl,
+    fixedHashWorld, evalSPMF_query, liftM_bind,
+    map_eq_bind_pure_comp]
+
+theorem prob_originalSource_budget_le_stopped {Result : Type} {inputs : Finset HashInput}
+    (context : Context inputs) (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (memory : Memory) (event : Result → QueryLog SigningSpec → Prop) (budget : Nat) :
+    Pr[fun result => event result.1.1 result.1.2 ∧
+      memory.external.hashCalls + result.2 ≤ budget |
+      simulateQ (fixedHashWorld context.oracle)
+        (countHashQueries (simulateQ (expandedAdversaryImpl context.key)
+          (FtsProbeSimulation.withSigningLog computation memory.log)))] ≤
+    Pr[fun result => StoppedOr event result ∧ result.2.external.hashCalls ≤ budget |
+      fixedSourceRun context computation memory] := by
+  induction computation using OracleComp.inductionOn generalizing memory with
+  | pure value =>
+      simp [FtsProbeSimulation.withSigningLog_pure, fixedSourceRun_pure, countHashQueries_pure, StoppedOr]
+  | query_bind input next ih =>
+      rw [FtsProbeSimulation.withSigningLog_query_bind, fixedSourceRun_query_bind]
+      cases input with
+      | inl input =>
+          rw [simulateQ_expandedAdversaryImpl_query_bind_inl]
+          rw [countHashQueries_bind, simulateQ_bind]
+          cases input with
+          | inl sample =>
+              have hhead : countHashQueries (liftM (OracleWorld.query (.inl sample))) =
+                  (fun value => (value, 0)) <$> (liftM (OracleWorld.query (.inl sample))) := by rfl
+              rw [hhead]
+              rw [fixedSourceImpl_random_state]
+              simp only [signingLogFragment, List.append_nil, simulateQ_map,
+                Nat.zero_add, map_bind, map_pure, bind_pure_comp,
+                probEvent_bind_eq_tsum]
+              simp only [liftM_map, tsum_probOutput_map_mul,
+                SPMF.probOutput_liftM, Nat.zero_add, Option.elim_some]
+              simp only [tsum_probOutput_map_mul, id_map', Function.comp_def,
+                SPMF.probOutput_liftM]
+              apply ENNReal.tsum_le_tsum
+              intro answer
+              exact mul_le_mul' le_rfl (ih answer memory)
+          | inr hash =>
+              have hhead : countHashQueries (liftM (OracleWorld.query (.inr hash))) =
+                  (fun value => (value, 1)) <$> (liftM (OracleWorld.query (.inr hash))) := by rfl
+              rw [hhead]
+              simp only [signingLogFragment, List.append_nil, simulateQ_map,
+                map_bind, map_pure, bind_pure_comp, Nat.add_assoc]
+              simp only [fixedSourceImpl, OptionT.run_mk, StateT.run_mk,
+                fixedByteRun, simulateQ_spec_query, fixedByteImpl, pure_bind]
+              simp only [fixedHashWorld, map_pure, pure_bind]
+              rcases fixedHashStep_answer context hash memory with hstop | hlive
+              · rw [hstop]
+                simp only [Option.elim_none, probEvent_pure, StoppedOr,
+                  probEvent_map, Function.comp_def]
+                rw [fixedHashStep_hashCalls]
+                by_cases hb : memory.external.hashCalls + 1 ≤ budget
+                · simp only [hb, and_self, if_true]
+                  exact probEvent_le_one
+                · simp only [hb, and_false, if_false]
+                  have hz :
+                      Pr[fun x => event x.1.1 x.1.2 ∧
+                        memory.external.hashCalls + (1 + x.2) ≤ budget |
+                        simulateQ (fixedHashWorld context.oracle)
+                          (countHashQueries
+                            (simulateQ (expandedAdversaryImpl context.key)
+                              (FtsProbeSimulation.withSigningLog
+                                (next (context.oracle hash)) memory.log)))] = 0 := by
+                    apply (probEvent_eq_zero_iff).2
+                    intro result hresult hevent
+                    omega
+                  exact hz.le
+              · rw [hlive]
+                simp only [Option.elim_some]
+                have h := ih (context.oracle hash)
+                  (fixedHashStep context.key.parameter context.words context.auxiliary.selections
+                    memory.routing context.actual context.oracle hash memory).2
+                rw [fixedHashStep_log] at h
+                rw [fixedHashStep_hashCalls] at h
+                simpa only [probEvent_map, Function.comp_def, Nat.add_assoc] using h
+      | inr message =>
+          rw [simulateQ_expandedAdversaryImpl_query_bind_inr]
+          rw [countHashQueries_bind, simulateQ_bind]
+          rw [show scheme.sign context.key message = sign context.key message from rfl,
+            ← signWithView_fst context.key message]
+          rw [countHashQueries_map, simulateQ_map]
+          rw [← fixedBoundaryRun_count context.key.parameter context.oracle
+            (signWithView context.key message)]
+          simp only [Functor.map_map, map_eq_bind_pure_comp, bind_assoc,
+            Function.comp_def, pure_bind, fixedSourceImpl, OptionT.run_mk, StateT.run_mk]
+          simp only [Option.elim_some, probEvent_bind_eq_tsum]
+          apply ENNReal.tsum_le_tsum
+          intro record
+          apply mul_le_mul'
+          · simp only [probOutput_def, SPMF.evalSPMF_def, le_refl]
+          · have h := ih record.1.1
+              ((memory.applyBoundary record.2).recordSigning message record)
+            have hlog : ((memory.applyBoundary record.2).recordSigning message record).log =
+                memory.log ++ signingLogFragment (.inr message) record.1.1 := rfl
+            rw [hlog] at h
+            rw [applyBoundary_recordSigning_hashCalls] at h
+            simpa only [simulateQ_bind, simulateQ_pure, bind_pure_comp, simulateQ_map,
+              probEvent_map, Function.comp_def, Nat.add_assoc] using h
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.prob_originalSource_budget_le_stopped' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.prob_originalSource_budget_le_stopped
