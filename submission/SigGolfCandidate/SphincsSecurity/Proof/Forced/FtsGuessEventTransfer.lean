@@ -115,3 +115,67 @@ theorem initial_original_two_witnesses (dummy : OtsReferenceWords) (adversary : 
     (lazy_original_two_guesses dummy adversary budget hbudget parameter otsSecret labels auxiliary hauxiliary)
 
 end SphincsSecurity.Concrete.FtsGuessHash
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State fixedRun lazyRun initialState)
+
+theorem initial_reference_two_witnesses_budget_event
+    (parameter : PublicParameter) (root : Digest)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary inputs)
+    (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun result => completedTwoGuesses
+      ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm result.1⟩
+      (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm result.1)
+        labels (finiteHashAnswer ∅ inputs
+          (canonicalReferenceResidual parameter inputs hencoding labels
+            auxiliary.rows auxiliary.seed))) result.2 ∧
+      keygenHashCost + completedWork result.2 ≤ q |
+      complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
+        (fun value => (secrets, value)) <$> 𝒮[simulateQ
+          (fixedAnswers (referenceAnswers parameter root otsSecret labels inputs
+            hencoding auxiliary dummy) secrets)
+          (completedRun parameter root labels adversary)]] ≤
+      Pr[fun result => 2 ≤ result.2.guesses.card ∧
+        keygenHashCost + completedWork result.1 ≤ q |
+        lazyRun
+          (SecretGuessObservation.environment
+            (referenceAnswers parameter root otsSecret labels inputs hencoding
+              auxiliary dummy))
+          (completedRun parameter root labels adversary)
+          (initialState PUnit.unit)] := by
+  apply initialEvent_le _ _
+    (fun secrets result => completedTwoGuesses
+      ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+      (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm secrets)
+        labels (finiteHashAnswer ∅ inputs
+          (canonicalReferenceResidual parameter inputs hencoding labels
+            auxiliary.rows auxiliary.seed))) result ∧
+      keygenHashCost + completedWork result ≤ q)
+    (fun result => 2 ≤ result.2.guesses.card ∧
+      keygenHashCost + completedWork result.1 ≤ q)
+  intro result hr secrets hs hevent
+  constructor
+  · refine lazy_reference_two_guesses
+      ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+      inputs hencoding labels auxiliary hauxiliary dummy adversary result ?_ ?_ ?_
+    · exact hr
+    · have htable : FtsGuessSigning.secretTable
+          (⟨parameter, root, otsSecret,
+            FtsGuessSigning.secretTable.symm secrets⟩ : SecretKey).ftsSecret = secrets :=
+        Equiv.apply_symm_apply FtsGuessSigning.secretTable secrets
+      exact (congrArg (fun table => complete result.2.allowed table ≠ 0) htable).mpr hs
+    · exact hevent.1
+  · exact hevent.2
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_reference_two_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_reference_two_witnesses_budget_event
