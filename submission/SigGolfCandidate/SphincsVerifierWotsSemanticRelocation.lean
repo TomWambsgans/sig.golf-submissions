@@ -2251,6 +2251,21 @@ theorem first_upper_header_counter_word (state : MachineState) :
     extractWord32 value (byteOffset (0x4003c : Word) / 4))
     (first_upper_header_counter_cell state)
 
+theorem first_upper_counter_header_low_byte_frame (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (firstUpperHeaderState (firstUpperCounterState state)).getByte address =
+      state.getByte address := by
+  apply SphincsVerifierWotsSemanticAllChains.lowByteFrame state
+    (firstUpperHeaderState (firstUpperCounterState state)) ?_ address low
+  intro read small
+  rw [first_upper_header_mem_frame _ read (Or.inl small),
+    first_upper_counter_mem_frame]
+  intro equal
+  have value := congrArg BitVec.toNat equal
+  have high : (0x40038 : Word).toNat = 0x40038 := by decide
+  rw [high] at value
+  omega
+
 private def firstUpperParamPointers : List (Word × Instr) := [
   (0x6d94, .LUI .x6 0x23),
   (0x6d98, .ADDI .x6 .x6 (-844)),
@@ -2446,6 +2461,19 @@ theorem first_upper_prehash_parameter_byte (state : MachineState)
     simp [firstUpperPrehashState, MachineState.getByte,
       first_upper_service_mem]
   exact service.trans (first_upper_parameter_copied_bytes _ i hi)
+
+theorem first_upper_prehash_parameter (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (witness : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (i : Nat) (hi : i < 20) :
+    (firstUpperPrehashState state).getByte (BitVec.ofNat 64 (0x40014 + i)) =
+      pk.parameter.extractLsb' (8*i) 8 := by
+  have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+    simp only [BitVec.toNat_ofNat]
+    omega
+  exact (first_upper_prehash_parameter_byte state i hi).trans
+    ((first_upper_counter_header_low_byte_frame state _ low).trans
+      (witness.parameter i hi))
 
 theorem first_upper_prehash_counter_word (state : MachineState) :
     (firstUpperPrehashState state).getWord32 0x4003c =
@@ -3052,5 +3080,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_parameter_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_prehash_parameter_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_parameter' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_parameter
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation

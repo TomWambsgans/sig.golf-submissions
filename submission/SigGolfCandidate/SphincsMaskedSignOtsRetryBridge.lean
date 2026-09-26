@@ -1577,4 +1577,31 @@ theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : Machin
 #guard_msgs (whitespace := lax) in
 #print axioms forest_complete_first_bottom_encoding_accepted
 
+/-- The first bottom-layer signer seed-copy loop is the protected six-instruction
+    word-copy idiom, repeated four times for the 32-byte secret key. -/
+theorem first_bottom_secret_copy_code :
+    CopyCode SphincsMaskedImages.sign 0x3b08 := by decide
+
+theorem first_bottom_secret_copy (s : MachineState)
+    (pc : s.pc = 0x3b08)
+    (source : s.getReg .x6 = 0x20)
+    (destination : s.getReg .x7 = 0x40028)
+    (count : s.getReg .x10 = 4) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 24 t ∧
+      t.pc = 0x3b20 ∧
+      (∀ i, i < 4 → t.getMem (wordAddress 0x40028 i) =
+        s.getMem (wordAddress 0x20 i)) := by
+  have inv : CopyInvariant 0x3b08 0x20 0x40028 4 4 s := by
+    exact ⟨by decide, by decide, by simpa using pc,
+      by simpa using source, by simpa using destination, by simpa using count⟩
+  obtain ⟨t, copied, done, values, _⟩ := copy_all
+    SphincsMaskedImages.sign 0x3b08 first_bottom_secret_copy_code
+    0x20 0x40028 4 s inv (by decide) (by decide) (by decide) (by decide)
+    (Or.inl (by decide))
+  exact ⟨t, by simpa using copied, by simpa [CopyInvariant] using done.2.2.1, values⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_copy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_copy
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
