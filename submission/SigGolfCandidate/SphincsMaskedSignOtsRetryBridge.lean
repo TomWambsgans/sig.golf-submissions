@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsMaskedSignOtsPathValue
 import SigGolfCandidate.SphincsMaskedSignForestSemantics
+import SigGolfCandidate.SphincsVerifierWotsValue
 
 namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
@@ -1807,5 +1808,96 @@ theorem first_bottom_secret_hash (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_hash' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_hash
+
+/-- Register-only setup for copying the twenty-byte secret HASH answer. -/
+def firstBottomSecretAnswerSetupCode : List (Word × Instr) := [
+  (0x3bc4, .LUI .x6 0x42),
+  (0x3bc8, .ADDI .x6 .x6 0),
+  (0x3bcc, .LUI .x7 0x45),
+  (0x3bd0, .ADDI .x7 .x7 (-1280))]
+
+def firstBottomSecretAnswerSetup (s : MachineState) : MachineState :=
+  runSchedule firstBottomSecretAnswerSetupCode s
+
+theorem first_bottom_secret_answer_setup_code :
+    ∀ e ∈ firstBottomSecretAnswerSetupCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_secret_answer_setup_checked (s : MachineState)
+    (pc : s.pc = 0x3bc4) : Checked firstBottomSecretAnswerSetupCode s := by
+  simp [firstBottomSecretAnswerSetupCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, pc]
+
+theorem first_bottom_secret_answer_setup (s : MachineState) (pc : s.pc = 0x3bc4) :
+    OrdinarySteps SphincsMaskedImages.sign s 4 (firstBottomSecretAnswerSetup s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomSecretAnswerSetupCode
+    first_bottom_secret_answer_setup_code s (first_bottom_secret_answer_setup_checked s pc)
+  simpa [firstBottomSecretAnswerSetup, firstBottomSecretAnswerSetupCode] using run
+
+theorem first_bottom_secret_answer_setup_registers (s : MachineState)
+    (pc : s.pc = 0x3bc4) :
+    (firstBottomSecretAnswerSetup s).pc = 0x3bd4 ∧
+    (firstBottomSecretAnswerSetup s).getReg .x6 = 0x42000 ∧
+    (firstBottomSecretAnswerSetup s).getReg .x7 = 0x44b00 := by
+  simp [firstBottomSecretAnswerSetup, firstBottomSecretAnswerSetupCode,
+    runSchedule, execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_secret_answer_copy_code :
+    Copy20Code SphincsMaskedImages.sign 2805 := by
+  refine ⟨?_, ?_⟩ <;> intro offset <;> fin_cases offset <;> decide
+
+def firstBottomSecretAnswerCopy (s : MachineState) : MachineState :=
+  copyRootState (firstBottomSecretAnswerSetup s)
+
+theorem first_bottom_secret_answer_copy (s : MachineState) (pc : s.pc = 0x3bc4) :
+    OrdinarySteps SphincsMaskedImages.sign s 14 (firstBottomSecretAnswerCopy s) ∧
+    (firstBottomSecretAnswerCopy s).pc = 0x3bfc := by
+  let setup := firstBottomSecretAnswerSetup s
+  obtain ⟨setupPc, source, destination⟩ := first_bottom_secret_answer_setup_registers s pc
+  have copied : OrdinarySteps SphincsMaskedImages.sign setup 10 (copyRootState setup) :=
+    SphincsVerifierFtsCopyAccess.copy20_block_general
+      SphincsMaskedImages.sign 2805 first_bottom_secret_answer_copy_code
+      setup 0x42000 0x44b00 (by simpa using setupPc) source destination
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+  refine ⟨?_, ?_⟩
+  · simpa only [firstBottomSecretAnswerCopy, setup, Nat.reduceAdd] using
+      (first_bottom_secret_answer_setup s pc).append copied
+  · simpa [firstBottomSecretAnswerCopy, setup] using
+      SphincsVerifierMessageCopy.copy20_final_pc setup 2805 (by simpa using setupPc)
+
+/-- The copied words are exactly the low 160 bits of the first secret HASH output. -/
+theorem first_bottom_secret_answer_words (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    Words20 (firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s))
+      0x44b00 (truncateHash (hash (hashInput (firstBottomSecretHashPrep s)))) := by
+  intro i
+  let answer := firstBottomSecretHashAnswer hash s
+  let setup := firstBottomSecretAnswerSetup answer
+  have answerPc := (first_bottom_secret_hash hash s pc).2
+  obtain ⟨setupPc, source, destination⟩ :=
+    first_bottom_secret_answer_setup_registers answer answerPc
+  change (copyRootState setup).getWord32 _ = _
+  rw [SphincsMaskedSignForestParents.copy_data setup 0x42000 0x44b00
+    (by decide) (by decide) (by decide) (by decide) (Or.inl (by decide))
+    source destination i]
+  have framed : setup.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+      answer.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) := by
+    fin_cases i <;>
+      simp [setup, firstBottomSecretAnswerSetup, firstBottomSecretAnswerSetupCode,
+        runSchedule, execInstrBr]
+  rw [framed]
+  have answerWord := SphincsVerifierWotsValue.writeHash_word32
+    (firstBottomSecretHashPrep s) (hash (hashInput (firstBottomSecretHashPrep s)))
+    (first_bottom_secret_hash_registers s pc).2.2.2.1 i
+  rw [show answer.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+    (hash (hashInput (firstBottomSecretHashPrep s))).extractLsb' (32 * i.val) 32 by
+      simpa [answer, firstBottomSecretHashAnswer, SphincsVerifierWotsEndpointCopy.word]
+      using answerWord]
+  exact (BitVec.extractLsb'_extractLsb'_of_le (by omega)).symm
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_answer_words' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_answer_words
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
