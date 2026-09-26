@@ -179,6 +179,40 @@ theorem chain_prefix_inside (hash : Hash) (state : MachineState)
         (chainEntry_stableFrame state address stableAddr))
   · simpa [run, entryTrace, finishTrace, Nat.add_assoc] using inside
 
+theorem chain_end_global_index_cell (state : MachineState)
+    (chain : Fin 52)
+    (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val) :
+    (SphincsVerifierWotsChainEnd.chainEndState state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  let pointers := SphincsVerifierWotsChainEnd.endpointSourceState
+    (SphincsVerifierWotsChainEnd.endpointPointersState state)
+  have destination : pointers.getReg .x7 =
+      BitVec.ofNat 64 (0x44300 + 20 * chain.val) := by
+    simpa [pointers, SphincsVerifierWotsChainEnd.endpointSourceState, execInstrBr,
+      MachineState.getReg_setReg_ne] using
+        SphincsVerifierWotsChainEnd.endpointPointers_regs state chain counter
+  have copyFrame := SphincsVerifierCopyMemory.copyRoot_mem_frame pointers
+    0x43078 (by
+      intro offset
+      rw [destination]
+      fin_cases chain <;> fin_cases offset <;> decide)
+  have pointerFrame : pointers.getMem 0x43078 = state.getMem 0x43078 := by
+    simp [pointers, SphincsVerifierWotsChainEnd.endpointSourceState,
+      SphincsVerifierWotsChainEnd.endpointPointersState, execInstrBr]
+  have advanceFrame :
+      (SphincsVerifierWotsChainEnd.chainBranchState
+        (SphincsVerifierWotsChainEnd.chainAdvanceState
+          (SphincsVerifierWotsChainEnd.pointerAdvanceState
+            (SphincsVerifierCopy.copyRootState pointers)))).getMem 0x43078 =
+          (SphincsVerifierCopy.copyRootState pointers).getMem 0x43078 := by
+    simp [SphincsVerifierWotsChainEnd.chainBranchState,
+      SphincsVerifierWotsChainEnd.chainAdvanceState,
+      SphincsVerifierWotsChainEnd.pointerAdvanceState,
+      execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  exact advanceFrame.trans (copyFrame.trans pointerFrame)
+
+
 /-- One recovered chain keeps the witness and earlier endpoints intact during relocation. -/
 theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
     (pk : SphincsSecurity.PublicKey) (layer : Layer)
@@ -208,6 +242,7 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ address, address.toNat < 0x40000 →
         final.getMem address = state.getMem address) ∧
       (∀ address, DigitAddr address →
@@ -283,7 +318,7 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
   refine ⟨chainEndState middle, preSteps + 40, preCycles + 40,
     preCalls + 0, preBlocks + 0, run,
     endPc, endCounter, endPointer, ?_, ?_, ?_, ?_,
-    lowFrame, digitFrame, otherFrame, endpointByte,
+    ?_, lowFrame, digitFrame, otherFrame, endpointByte,
     by omega, by omega, by omega, by omega, ?_⟩
   · rw [context 0x43000 (Or.inl rfl)]; exact middleLayer
   · rw [context 0x43008 (Or.inr (Or.inl rfl))]; exact middleTree
@@ -291,6 +326,9 @@ theorem chain_round_semantic_inside (hash : Hash) (state : MachineState)
   · rw [context 0x43020 (Or.inr (Or.inr (Or.inr rfl)))]
     exact middleFrame 0x43020
       (Or.inl (Or.inr ⟨by decide, by decide, by decide, by decide⟩))
+  · exact (chain_end_global_index_cell middle chain middleCounter).trans
+      (middleFrame 0x43078 (Or.inl (Or.inr
+        ⟨by decide, by decide, by decide, by decide⟩)))
   · simpa [run, tailTrace] using inside
 
 private structure History (hash : Hash)
@@ -305,6 +343,7 @@ private structure History (hash : Hash)
   treeCell : current.getMem 0x43008 = BitVec.ofNat 64 tree.val
   leafCell : current.getMem 0x43018 = BitVec.ofNat 64 leaf.val
   bitCell : current.getMem 0x43020 = initial.getMem 0x43020
+  globalIndex : current.getMem 0x43078 = initial.getMem 0x43078
   lowFrame : ∀ address, address.toNat < 0x40000 →
     current.getMem address = initial.getMem address
   digitFrame : ∀ address, DigitAddr address →
@@ -344,6 +383,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -388,7 +428,8 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
         (sourceByteSmall base baseBound chain j hj)]
       exact source chain j hj
     obtain ⟨following, a, b, c, d, trace, nextPc, nextCounter,
-      nextPointer, nextLayer, nextTree, nextLeaf, nextBit, nextLow, nextDigit,
+      nextPointer, nextLayer, nextTree, nextLeaf, nextBit, nextGlobal,
+      nextLow, nextDigit,
       otherSlots, newEndpoint, stepBound, cycleBound, callBound,
       blockBound, inside⟩ :=
       chain_round_semantic_inside hash current pk layer tree leaf chain digit
@@ -406,6 +447,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
     · exact nextTree
     · exact nextLeaf
     · exact nextBit.trans inv.bitCell
+    · exact nextGlobal.trans inv.globalIndex
     · intro address low
       exact (nextLow address low).trans (inv.lowFrame address low)
     · intro address inside
@@ -440,7 +482,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
       ⟨by simpa [Inv, History] using pc,
        by simpa [Inv, History] using counter,
        by simpa [Inv, History] using pointer,
-       layerCell, treeCell, leafCell, rfl,
+       layerCell, treeCell, leafCell, rfl, rfl,
        by intro address _; rfl,
        by intro address _; rfl,
        by intro chain impossible; omega⟩
@@ -449,6 +491,7 @@ theorem all_chains_inside_semantics (hash : Hash) (state : MachineState)
     by simpa using inv.counter,
     by simpa using inv.pointer,
     inv.layerCell, inv.treeCell, inv.leafCell, inv.bitCell,
+    inv.globalIndex,
     ?_, inv.lowFrame, stepBound, cycleBound,
     callBound, blockBound, inside⟩
   intro chain j hj
@@ -486,6 +529,7 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = state.getMem 0x43020 ∧
+      final.getMem 0x43078 = state.getMem 0x43078 ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -496,13 +540,14 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
       calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 := by
   obtain ⟨final, steps, cycles, calls, blocks, run, done, count,
-    sourcePointer, layerFinal, treeFinal, leafFinal, bitFinal, valuesDone, lowFrame,
+    sourcePointer, layerFinal, treeFinal, leafFinal, bitFinal, globalIndex,
+    valuesDone, lowFrame,
     stepBound, cycleBound, callBound, blockBound, inside⟩ :=
     all_chains_inside_semantics hash state pk layer tree leaf digits values
       base baseBound baseAligned pc counter pointer layerCell treeCell
       leafCell hprefix decoded source
   refine ⟨shift (delta target) final, steps, cycles, calls, blocks,
-    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     stepBound, cycleBound, callBound, blockBound⟩
   · simp [shift_pc, done]
   · simpa using count
@@ -511,6 +556,7 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
   · simpa using treeFinal
   · simpa using leafFinal
   · simpa using bitFinal
+  · simpa using globalIndex
   · intro chain j hj
     simpa using valuesDone chain j hj
   · intro address low
@@ -573,6 +619,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = ready.getMem 0x43020 ∧
+      final.getMem 0x43078 = ready.getMem 0x43078 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ address, address.toNat < 0x40000 →
         final.getMem address = ready.getMem address) ∧
@@ -591,6 +638,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     simp [base, shift, MachineState.setPC]
   obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
     _counter, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    globalIndex,
     endpoints, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_semantics target hash base pk layer tree leaf digits values
@@ -616,6 +664,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     simpa [base] using lowFrame address low
   refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc, pointerFinal,
     layerFinal, treeFinal, leafFinal, by simpa [base] using bitFinal,
+    by simpa [base] using globalIndex,
     witnessPrefix_frame ready final pk hprefix lowFrameReady, lowFrameReady,
     endpoints,
     stepBound, cycleBound, callBound, blockBound⟩
@@ -815,6 +864,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = ready.getMem 0x43020 ∧
+      final.getMem 0x43078 = ready.getMem 0x43078 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ address, address.toNat < 0x40000 →
         final.getMem address = ready.getMem address) ∧
@@ -839,6 +889,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
     simpa only [readyEq] using upper_ready_source target state values source
   obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
     done, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    globalIndex,
     finalPrefix, lowFrame, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_from_ready target hash ready pk layer tree leaf digits values
@@ -848,6 +899,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       layerCell treeCell leafCell readyPrefix decoded readySource
   refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
     ?_, done, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    globalIndex,
     finalPrefix, lowFrame, endpoints,
     by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
@@ -1650,7 +1702,7 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
   obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
     chainRun, chainsPc, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
-    prefixFinal, lowFrame, endpointBytes, stepBound, cycleBound,
+    _globalIndex, prefixFinal, lowFrame, endpointBytes, stepBound, cycleBound,
     callBound, blockBound⟩ :=
     upper_decoder_chains_semantics target hash state ready pk layer tree leaf
       digits values readyEq pc checksum layerCell treeCell leafCell decoded
@@ -4100,6 +4152,12 @@ theorem first_upper_encoding_query_with_index (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_setup_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_setup_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.chain_end_global_index_cell' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms chain_end_global_index_cell
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_with_index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
