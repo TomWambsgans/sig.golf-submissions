@@ -321,6 +321,68 @@ theorem certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor
     simp only [probEvent_eq_tsum_ite, hcost, and_false, if_false, tsum_zero]
     exact le_rfl
 
+/-- Key generation leaves no cache-exception event for its own secret key. -/
+theorem certificateStoppedKeygen_cache_clean
+    (generated : ((PublicKey × SecretKey) × SigningBoundaryTrace) × QueryCache HashSpec)
+    (hg : generated ∈ support (boundaryRun 0 scheme.keygen ∅)) :
+    ¬ CertificateCacheExceptional generated.1.1.2 generated.2 := by
+  have hrun : (generated.1.1, generated.2) ∈
+      support ((simulateQ romImpl scheme.keygen).run ∅) := by
+    rw [← boundaryRun_forget 0 scheme.keygen ∅, support_map]
+    exact ⟨generated, hg, rfl⟩
+  have hfinite := finite_cache_of_mem_support scheme.keygen ∅
+    generated.1.1 generated.2 hrun finite_empty
+  have hzero := certificateCacheExceptionWeight_initial generated.1.1.2 generated.2
+    (keygen_cache_message_none (generated.1.1, generated.2) hrun)
+  intro hbad
+  have hweight := certificateCacheExceptionWeight_bad generated.1.1.2 generated.2
+    hfinite hbad
+  rw [hzero] at hweight
+  norm_num at hweight
+
+abbrev CertificateKeygenBoundaryResult :=
+  ((PublicKey × SecretKey) × SigningBoundaryTrace) × QueryCache HashSpec
+
+/-- The in-budget keygen law retains the exact generated values and cache.
+    Over-budget keygen executions are represented by `none`. -/
+noncomputable def certificateStoppedKeygenInit (q : Nat) :
+    PMF (Option (CertificateKeygenBoundaryResult × CertificateStoppedCacheState)) :=
+  ((liftM (boundaryRun 0 scheme.keygen ∅) : PMF CertificateKeygenBoundaryResult)).map
+    fun generated =>
+      if generated.1.2.hashCalls ≤ q then
+        some (generated, (generated.2, (false, q - generated.1.2.hashCalls)))
+      else none
+
+theorem certificateStoppedKeygenInit_support (q : Nat)
+    (result : Option (CertificateKeygenBoundaryResult × CertificateStoppedCacheState))
+    (hr : result ∈ (certificateStoppedKeygenInit q).support) :
+    ∀ generated state, result = some (generated, state) →
+      generated.1.2.hashCalls ≤ q ∧
+      state = (generated.2, (false, q - generated.1.2.hashCalls)) ∧
+      ¬ CertificateCacheExceptional generated.1.1.2 generated.2 := by
+  rw [certificateStoppedKeygenInit, PMF.mem_support_map_iff] at hr
+  obtain ⟨source, hsource, hresult⟩ := hr
+  intro generated state heq
+  by_cases hcost : source.1.2.hashCalls ≤ q
+  · simp only [if_pos hcost] at hresult
+    cases hresult
+    cases heq
+    refine ⟨hcost, rfl, ?_⟩
+    apply certificateStoppedKeygen_cache_clean source
+    simpa only [probCompLift_support] using hsource
+  · simp only [if_neg hcost] at hresult
+    cases hresult
+    cases heq
+
+theorem certificateStoppedKeygenInit_success_mass (q : Nat) :
+    Pr[fun result => result.isSome | certificateStoppedKeygenInit q] =
+    Pr[fun generated => generated.1.2.hashCalls ≤ q |
+      (liftM (boundaryRun 0 scheme.keygen ∅) : PMF CertificateKeygenBoundaryResult)] := by
+  rw [certificateStoppedKeygenInit, ← PMF.monad_map_eq_map, probEvent_map]
+  congr 1
+  funext generated
+  by_cases hcost : generated.1.2.hashCalls ≤ q <;> simp [hcost]
+
 /-- The stopped bridge remains valid after an arbitrary adaptive prefix. An
     already exhausted prefix contributes zero to the within-budget event. -/
 theorem certificateCountedLengthImpl_hit_budget_stopped_after_prefix {History : Type}
@@ -780,3 +842,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygen_cache_clean' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedKeygen_cache_clean
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygenInit_support' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedKeygenInit_support
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygenInit_success_mass' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedKeygenInit_success_mass
