@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsImages
 import SigGolfCandidate.SphincsMaskedImages
 import SigGolfCandidate.SphincsWire
+import SigGolfCandidate.Execution
 
 namespace SigGolfCandidate.SphincsSubmission
 open SigGolf
@@ -15,7 +16,7 @@ def submission : Submission where
   image
     | .keygen => SphincsMaskedImages.keygen
     | .sign => SphincsMaskedImages.sign
-    | .expand => SphincsImages.expand
+    | .expand => BetaExpand.translated
     | .verify => SphincsImages.verify
 
 /-- Candidate value. No organizer certificate is claimed in this module. -/
@@ -35,9 +36,8 @@ theorem sign_byteSize : SphincsMaskedImages.sign.byteSize = 43828 := by
   rw [SphincsMaskedImages.sign_code_length]
   rfl
 
-theorem expand_byteSize : SphincsImages.expand.byteSize = 64 := by
+theorem expand_byteSize : BetaExpand.translated.byteSize = 76 := by
   unfold Riscv.Image.byteSize
-  rw [SphincsImages.expand_code_length]
   rfl
 
 theorem verify_byteSize : SphincsImages.verify.byteSize = 27816 := by
@@ -65,7 +65,7 @@ theorem admissible : submission.Admissible := by
       rw [sign_byteSize]
       decide
     · exact layout_valid_of_data_empty _ rfl
-    · change SphincsImages.expand.byteSize < MAX_IMAGE_BYTES
+    · change BetaExpand.translated.byteSize < MAX_IMAGE_BYTES
       rw [expand_byteSize]
       decide
     · exact layout_valid_of_data_empty _ rfl

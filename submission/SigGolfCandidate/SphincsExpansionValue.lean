@@ -241,22 +241,43 @@ theorem readBuffer_copy (hash : Hash) (s : MachineState) (pc : s.pc = 0x1000) :
   intro i hi acc
   rw [copied i (by simpa using hi)]
 
+private theorem exact_old_image : SphincsImages.expand = BetaExpand.oldExpand := by rfl
+
 theorem runWith_copy (hash : Hash)
     (input : Input SphincsSubmission.submission.sizes .expand)
     (state : MachineState)
     (loaded : initialState SphincsSubmission.submission .expand input = some state)
     (pc : state.pc = 0x1000) :
     SphincsSubmission.submission.runWith hash .expand input =
-      ⟨some (readBuffer state 0x20060 11324), true, 8500, 0, 0⟩ := by
+      ⟨some (readBuffer state 0x20060 11324), true, 8503, 0, 0⟩ := by
   obtain ⟨final, trace, copied⟩ := readBuffer_copy hash state pc
-  have run := runWith_of_executes SphincsSubmission.submission hash .expand
-    input state 8500 ⟨.success, final, 8500, 0, 0⟩ loaded
-    (by simpa [SphincsSubmission.submission] using trace)
-    (by decide)
-  change SphincsSubmission.submission.runWith hash .expand input =
-    ⟨some (readBuffer final 0x22ca0 11324), true, 8500, 0, 0⟩ at run
-  rw [copied] at run
-  exact run
+  have traceOld : Executes hash BetaExpand.oldExpand state 8500
+      ⟨.success, final, 8500, 0, 0⟩ := by
+    rw [← exact_old_image]
+    exact trace
+  have transported := BetaExpand.old_expand_trace_transport_extra
+    (CYCLE_LIMIT - 8503) hash traceOld rfl
+  have fuel : CYCLE_LIMIT - 8503 + 8500 + 3 = CYCLE_LIMIT := by decide
+  rw [fuel] at transported
+  rcases transported with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
+  let execution := evalWithAnswerFn hash
+    (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated state)
+  have outputEq : readBuffer execution.state 0x22ca0 11324 =
+      readBuffer final 0x22ca0 11324 :=
+    BetaExpand.readBuffer_mem_eq _ _ _ _ hmem
+  have outputReading : readOutput SphincsSubmission.submission.sizes
+      SphincsSubmission.submission.layout .expand execution.state =
+      readBuffer execution.state 0x22ca0 11324 := by
+    rfl
+  have run : SphincsSubmission.submission.runWith hash .expand input =
+      ⟨some (readBuffer execution.state 0x22ca0 11324), true,
+        execution.cycles, execution.hashCalls, execution.hashCompressions⟩ := by
+    unfold Submission.runWith
+    rw [Submission.run, loaded]
+    simp [evalWithAnswerFn_map, SphincsSubmission.submission, execution, hexit]
+    exact congrArg some outputReading
+  rw [outputEq, copied] at run
+  simpa [execution, hcycles, hcalls, hblocks] using run
 
 theorem loaded_signature
     (input : Input SphincsSubmission.submission.sizes .expand)
@@ -279,7 +300,7 @@ theorem runWith_expand (hash : Hash)
     (message : Message) (pk : PublicKey)
     (signature : Bytes SphincsSubmission.submission.sizes.signature) :
     SphincsSubmission.submission.runWith hash .expand (message, pk, signature) =
-      ⟨some signature, true, 8500, 0, 0⟩ := by
+      ⟨some signature, true, 8503, 0, 0⟩ := by
   obtain ⟨state, loaded, pc⟩ := initialState_exists
     SphincsSubmission.submission SphincsSubmission.admissible
     .expand (message, pk, signature)
@@ -291,38 +312,49 @@ theorem runWith_expand (hash : Hash)
 theorem run_expand_pure (message : Message) (pk : PublicKey)
     (signature : Bytes SphincsSubmission.submission.sizes.signature) :
     SphincsSubmission.submission.run .expand (message, pk, signature) =
-      pure ⟨some signature, true, 8500, 0, 0⟩ := by
+      pure ⟨some signature, true, 8503, 0, 0⟩ := by
   obtain ⟨state, loaded, pc⟩ := initialState_exists
     SphincsSubmission.submission SphincsSubmission.admissible
     .expand (message, pk, signature)
   obtain ⟨final, derivation, copied⟩ :=
     executes_copy (fun _ => 0) state pc
-  have exactExec : execute CYCLE_LIMIT SphincsImages.expand state =
-      pure (⟨.success, final, 8500, 0, 0⟩ : Execution) :=
-    pure_of_zero_hash derivation rfl CYCLE_LIMIT (by decide)
-  simp only [Submission.run, loaded]
-  change (do
-    let execution ← execute CYCLE_LIMIT SphincsImages.expand state
-    pure (⟨if execution.exit = Exit.success then
-      some (readOutput SphincsSubmission.submission.sizes
-        SphincsSubmission.submission.layout .expand execution.state)
-      else none, execution.exit != Exit.unfinished, execution.cycles,
-      execution.hashCalls, execution.hashCompressions⟩ :
-        RunResult (Bytes SphincsSubmission.submission.sizes.witness))) = _
-  rw [exactExec]
-  simp only [pure_bind]
-  have copiedEq : readBuffer final 0x22ca0 11324 =
+  have traceOld : Executes (fun _ => 0) BetaExpand.oldExpand state 8500
+      ⟨.success, final, 8500, 0, 0⟩ := by
+    rw [← exact_old_image]
+    exact derivation
+  obtain ⟨betaResult, betaRun, matched⟩ :=
+    BetaExpand.old_expand_trace_pure_extra
+      (CYCLE_LIMIT - 8503) (fun _ => 0) traceOld rfl
+  have fuel : CYCLE_LIMIT - 8503 + 8500 + 3 = CYCLE_LIMIT := by decide
+  rw [fuel] at betaRun
+  rcases matched with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
+  have copiedEq : readBuffer betaResult.state 0x22ca0 11324 =
       readBuffer state 0x20060 11324 := by
+    rw [BetaExpand.readBuffer_mem_eq betaResult.state final 0x22ca0 11324 hmem]
     unfold readBuffer
     apply congrArg (BitVec.ofNat (8 * 11324))
     apply Memory.foldl_eq_on
     intro i hi acc
     rw [copied i (by simpa using hi)]
   have loadedEq := loaded_signature (message, pk, signature) state loaded
-  change pure (⟨some (readBuffer final 0x22ca0 11324), true, 8500, 0, 0⟩ :
-    RunResult (Bytes 11324)) =
-    pure (⟨some signature, true, 8500, 0, 0⟩ : RunResult (Bytes 11324))
-  rw [copiedEq, loadedEq]
+  unfold Submission.run
+  rw [loaded]
+  dsimp only
+  change (do
+    let execution ← Riscv.execute CYCLE_LIMIT BetaExpand.translated state
+    pure (⟨if execution.exit = Exit.success then
+      some (readOutput SphincsSubmission.submission.sizes
+        SphincsSubmission.submission.layout .expand execution.state)
+      else none, execution.exit != Exit.unfinished, execution.cycles,
+      execution.hashCalls, execution.hashCompressions⟩ :
+        RunResult (Bytes SphincsSubmission.submission.sizes.witness))) = _
+  rw [betaRun]
+  simp only [pure_bind]
+  have outputReadingBeta : readOutput SphincsSubmission.submission.sizes
+      SphincsSubmission.submission.layout .expand betaResult.state =
+      readBuffer betaResult.state 0x22ca0 11324 := by rfl
+  simp [hexit, outputReadingBeta, hcycles, hcalls, hblocks, copiedEq, loadedEq]
+  rfl
 
 /-- info: 'SigGolfCandidate.Sphincs.ExpansionValue.runWith_expand' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

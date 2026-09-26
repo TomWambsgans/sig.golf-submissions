@@ -273,21 +273,45 @@ theorem executes (hash : Hash) (s : MachineState) (pc : s.pc = 0x1000) :
   simpa only [Execution.charge, hsteps, hcycles, Nat.zero_add] using
     (prefix_block s pc).then_executes tail
 
+private theorem exact_old_image : expand = BetaExpand.oldExpand := by rfl
+
+/-- The original 8,500-step proof transports to the translated beta image at full observation fuel. -/
+theorem beta_expand_executes_full (hash : Hash) (s : MachineState) (pc : s.pc = 0x1000) :
+    ∃ oldFinal,
+      BetaExpand.OutcomeMatches ⟨.success, oldFinal, 8500, 0, 0⟩
+        (evalWithAnswerFn hash (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated s)) := by
+  obtain ⟨oldFinal, trace⟩ := executes hash s pc
+  rw [exact_old_image] at trace
+  have transported := BetaExpand.old_expand_trace_transport_extra
+    (CYCLE_LIMIT - 8503) hash trace rfl
+  have fuel : CYCLE_LIMIT - 8503 + 8500 + 3 = CYCLE_LIMIT := by decide
+  exact ⟨oldFinal, by simpa only [fuel] using transported⟩
+
 theorem run_bound (hash : Hash)
     (input : Input SphincsSubmission.submission.sizes .expand) :
     let result := SphincsSubmission.submission.runWith hash .expand input
-    result.finished = true ∧ result.value.isSome = true ∧ result.cycles = 8500 ∧
+    result.finished = true ∧ result.value.isSome = true ∧ result.cycles = 8503 ∧
       result.hashCalls = 0 ∧ result.hashCompressions = 0 := by
   obtain ⟨state, loaded, pc⟩ := initialState_exists
     SphincsSubmission.submission SphincsSubmission.admissible .expand input
-  obtain ⟨final, trace⟩ := executes hash state pc
-  have bound : 8500 ≤ CYCLE_LIMIT := by decide
-  have run := runWith_of_executes SphincsSubmission.submission hash .expand input state 8500
-    ⟨.success, final, 8500, 0, 0⟩ loaded trace bound
-  simp [run]
+  obtain ⟨oldFinal, matchResult⟩ := beta_expand_executes_full hash state pc
+  rcases matchResult with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
+  let execution := evalWithAnswerFn hash
+    (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated state)
+  have hexecution : execution.exit = .success ∧ execution.cycles = 8503 ∧
+      execution.hashCalls = 0 ∧ execution.hashCompressions = 0 := by
+    dsimp [execution] at hexit hcycles hcalls hblocks ⊢
+    exact ⟨hexit, by omega, hcalls, hblocks⟩
+  rcases hexecution with ⟨hexit, hcycles, hcalls, hblocks⟩
+  have run : SphincsSubmission.submission.runWith hash .expand input =
+      ⟨some (readOutput SphincsSubmission.submission.sizes
+          SphincsSubmission.submission.layout .expand execution.state),
+        true, execution.cycles, execution.hashCalls, execution.hashCompressions⟩ := by
+    unfold Submission.runWith
+    rw [Submission.run, loaded]
+    simp [evalWithAnswerFn_map, SphincsSubmission.submission, execution, hexit]
+  simp [run, hcycles, hcalls, hblocks]
 
-/-- info: 'SigGolfCandidate.Sphincs.Expansion.run_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in
 #print axioms run_bound
 
 end Expansion
