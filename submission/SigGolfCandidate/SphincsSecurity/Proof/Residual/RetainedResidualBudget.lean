@@ -1010,3 +1010,31 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.prob_originalSource_budget_le_stopped' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.prob_originalSource_budget_le_stopped
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem fixedOriginal_gameRest_counted (key : SecretKey) (oracle : QueryImpl HashSpec Id)
+    (adversary : Adversary) :
+    simulateQ (fixedHashWorld oracle)
+      (countHashQueries (gameRest scheme adversary ⟨key.root, key.parameter⟩ key)) =
+      (fun result => (sourceVerdict result.1.1 result.1.2, result.2)) <$>
+        simulateQ (fixedHashWorld oracle)
+          (countHashQueries (simulateQ (expandedAdversaryImpl key)
+            (FtsProbeSimulation.withSigningLog
+              (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+                ⟨key.root, key.parameter⟩) []))) := by
+  rw [← FtsProbeSimulation.simulateQ_expanded_tracedGameRestComputation,
+    ← FtsProbeSimulation.retainedGameRestComputation_verdict_projection,
+    FtsProbeSimulation.retainedGameRestComputation_eq_signingTrace]
+  simp only [simulateQ_map, countHashQueries_map, Functor.map_map,
+    FtsProbeSimulation.withSigningLog, List.nil_append]
+  rfl
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.fixedOriginal_gameRest_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.fixedOriginal_gameRest_counted
