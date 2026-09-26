@@ -2110,3 +2110,195 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_hashCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_hashCalls
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyRun_counted_stopped_cost_le {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (remaining : Nat) (value : Option Result)
+    (cost : Nat) (after : State inputs)
+    (hresult : lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining)) state
+      (some (value, cost), after) ≠ 0) :
+    cost ≤ remaining := by
+  induction program using OracleComp.inductionOn generalizing state remaining value cost after with
+  | pure value =>
+      simp only [WeightedCutoff.run_pure, WeightedCutoff.counted_pure, lazyRun, runWith_pure,
+        ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+      cases hresult
+      exact Nat.zero_le _
+  | query_bind query next ih =>
+      rw [WeightedCutoff.run_query_bind] at hresult
+      by_cases allowed : WeightedCutoff.residualCharge inputs query ≤ remaining
+      · rw [if_pos allowed, WeightedCutoff.counted_query_bind, lazyRun_bind,
+          RetainedObservation.bind_nonzero] at hresult
+        obtain ⟨middle, hmiddle, htail⟩ := hresult
+        rcases middle with ⟨option, middleState⟩
+        cases option with
+        | none =>
+            simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+              not_not] at htail
+            cases htail
+        | some answer =>
+            simp only [Option.elim_some] at htail
+            rw [lazyRun_bind, RetainedObservation.bind_nonzero] at htail
+            obtain ⟨countedResult, hcounted, hpure⟩ := htail
+            rcases countedResult with ⟨optionResult, tailState⟩
+            cases optionResult with
+            | none =>
+                simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+                  not_not] at hpure
+                cases hpure
+            | some pair =>
+                rcases pair with ⟨tailValue, tailCost⟩
+                have hrest := ih answer middleState
+                  (remaining - WeightedCutoff.residualCharge inputs query)
+                  tailValue tailCost tailState hcounted
+                simp only [Option.elim_some, lazyRun, runWith_pure, ne_eq,
+                  SPMF.pure_apply_eq_zero_iff, not_not] at hpure
+                cases hpure
+                omega
+      · rw [if_neg allowed, WeightedCutoff.counted_pure, lazyRun,
+          runWith_pure, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+        cases hresult
+        exact Nat.zero_le _
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_cost_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_cost_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem lazyRun_counted_stopped_remaining {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result)
+    (state : State inputs) (budget remaining : Nat) (value : Option Result)
+    (cost : Nat) (after : State inputs)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hresult : lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs)
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs) program remaining)) state
+      (some (value, cost), after) ≠ 0) :
+    after.memory.external.hashCalls + (remaining - cost) = budget := by
+  have hspent := lazyRun_counted_hashCalls parameter inputs hencoding words publicReplies
+    selections rows _ state value cost after hresult
+  have hcap := lazyRun_counted_stopped_cost_le parameter inputs hencoding words publicReplies
+    selections rows program state remaining value cost after hresult
+  omega
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_remaining' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_remaining
+
+namespace SphincsSecurity.WeightedCutoff
+open _root_.OracleComp OracleSpec
+variable {Index : Type} {spec : OracleSpec Index}
+
+theorem counted_forget {Result : Type} (charge : spec.Domain → Nat)
+    (program : OracleComp spec Result) :
+    Prod.fst <$> counted charge program = program := by
+  induction program using OracleComp.inductionOn with
+  | pure value => simp only [counted_pure, map_pure]
+  | query_bind query next ih =>
+      simp only [counted_query_bind, map_bind, bind_pure_comp, Functor.map_map, ih]
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.counted_forget' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.counted_forget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem lazyRun_map_value {Result Next : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result) (f : Result → Next)
+    (state : State inputs) :
+    lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (f <$> program) state =
+    (fun result : Option Result × State inputs => (result.1.map f, result.2)) <$>
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        program state := by
+  simp only [lazyRun, runWith, simulateQ_map, OptionT.run_map, StateT.run_map]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_map_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_map_value
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem lazyRun_counted_forget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) Result) (state : State inputs) :
+    (fun result : Option (Result × Nat) × State inputs =>
+      (result.1.map Prod.fst, result.2)) <$>
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) program) state =
+      lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+        program state := by
+  rw [← lazyRun_map_value]
+  exact congrArg (fun p => lazyRun
+    (environment parameter inputs hencoding words publicReplies selections rows) p state)
+    (WeightedCutoff.counted_forget (WeightedCutoff.residualCharge inputs) program)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_forget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_forget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem expected_stoppedPotential_counted_forget {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (program : OracleComp (World inputs) (Option Result)) (state : State inputs) (budget : Nat) :
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs) program) state] *
+      stoppedPrimitiveResultPotential inputs budget
+        (result.1.map Prod.fst, result.2)) =
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      program state] * stoppedPrimitiveResultPotential inputs budget result) := by
+  rw [← lazyRun_counted_forget parameter inputs hencoding words publicReplies selections rows
+    program state, tsum_probOutput_map_mul]
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.expected_stoppedPotential_counted_forget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.expected_stoppedPotential_counted_forget
