@@ -232,6 +232,7 @@ theorem run_counted_support_le {State Result : Type}
 
 end SphincsSecurity.WeightedCutoff
 
+
 namespace SphincsSecurity.WeightedCutoff
 
 /-- The residual World's observable hash-call costs. -/
@@ -278,3 +279,158 @@ end SphincsSecurity.WeightedCutoff
 /-- info: 'SphincsSecurity.WeightedCutoff.residual_run_counted_support_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.WeightedCutoff.residual_run_counted_support_le
+
+namespace SphincsSecurity.WeightedCutoff
+
+attribute [local instance] Classical.propDecidable
+
+/-- The second half of a residual hash query has zero additional cost. -/
+theorem residual_run_execute (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing)
+    (action : Concrete.ResidualByteAction.Action inputs) (budget : Nat) :
+    run (residualCharge inputs)
+      (simulateQ (Concrete.RetainedResidual.embed inputs routing)
+        (Concrete.ResidualByteFrontend.execute action)) budget =
+    (do
+      let answer ← simulateQ (Concrete.RetainedResidual.embed inputs routing)
+        (Concrete.ResidualByteFrontend.execute action)
+      pure (some answer)) := by
+  cases action with
+  | known answer => rfl
+  | read input =>
+      simp only [Concrete.ResidualByteFrontend.execute, simulateQ_spec_query,
+        Concrete.RetainedResidual.embed]
+      rw [← bind_pure (liftM ((Concrete.RetainedResidual.World inputs).query (.inr (.read input))))]
+      rw [run_query_bind]
+      simp [residualCharge]
+  | probe input test =>
+      simp only [Concrete.ResidualByteFrontend.execute, simulateQ_spec_query,
+        Concrete.RetainedResidual.embed]
+      rw [← bind_pure (liftM ((Concrete.RetainedResidual.World inputs).query (.inr (.probe input test))))]
+      rw [run_query_bind]
+      simp [residualCharge]
+
+theorem residual_run_stop (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing) (budget : Nat) :
+    run (residualCharge inputs)
+      (simulateQ (Concrete.RetainedResidual.embed inputs routing)
+        (liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop)))) budget =
+      (do
+        let answer ← simulateQ (Concrete.RetainedResidual.embed inputs routing)
+          (liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop)))
+        pure (some answer)) := by
+  simp only [simulateQ_spec_query, Concrete.RetainedResidual.embed]
+  rw [← bind_pure (liftM ((Concrete.RetainedResidual.World inputs).query (.inl (.byte routing .stop))))]
+  rw [run_query_bind]
+  simp [residualCharge]
+
+/-- A byte hash's charged preparation is first; all remaining oracle steps are free. -/
+theorem residual_run_hashQuery (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing) (input : inputs) (budget : Nat) :
+    run (residualCharge inputs)
+      (simulateQ (Concrete.RetainedResidual.embed inputs routing)
+        (Concrete.ResidualByteFrontend.hashQuery input)) budget =
+    if 1 ≤ budget then
+      (do
+        let answer ← simulateQ (Concrete.RetainedResidual.embed inputs routing)
+          (Concrete.ResidualByteFrontend.hashQuery input)
+        pure (some answer))
+    else pure none := by
+  simp only [Concrete.ResidualByteFrontend.hashQuery, simulateQ_bind, simulateQ_spec_query,
+    Concrete.RetainedResidual.embed]
+  rw [run_query_bind]
+  by_cases allowed : residualCharge inputs (.inl (.byte routing (.prepare input))) ≤ budget
+  · have h1 : 1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_pos allowed, if_pos h1]
+    simp only [bind_assoc]
+    congr 1
+    funext action
+    exact residual_run_execute inputs routing action (budget - 1)
+  · have h1 : ¬1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_neg allowed, if_neg h1]
+
+theorem residual_run_checkedPost (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing) (reject : HashOutput → Prop)
+    (answer : HashOutput) (budget : Nat) :
+    run (residualCharge inputs)
+      (if reject answer then
+        simulateQ (Concrete.RetainedResidual.embed inputs routing)
+          (liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop)))
+       else pure answer) budget =
+    (do
+      let x ← if reject answer then
+        simulateQ (Concrete.RetainedResidual.embed inputs routing)
+          (liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop)))
+        else pure answer
+      pure (some x)) := by
+  split
+  · exact residual_run_stop inputs routing budget
+  · rfl
+
+theorem residual_run_checkedTail (inputs : Finset HashInput)
+    (routing : Concrete.InterleavedResidual.Routing)
+    (reject : HashOutput → Prop) (action : Concrete.ResidualByteAction.Action inputs)
+    (budget : Nat) :
+    run (residualCharge inputs)
+      (simulateQ (Concrete.RetainedResidual.embed inputs routing) (do
+        let answer ← Concrete.ResidualByteFrontend.execute action
+        if reject answer then
+          liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop))
+        else pure answer)) budget =
+    (do
+      let x ← simulateQ (Concrete.RetainedResidual.embed inputs routing) (do
+        let answer ← Concrete.ResidualByteFrontend.execute action
+        if reject answer then
+          liftM ((Concrete.ResidualByteFrontend.World inputs).query (.inl .stop))
+        else pure answer)
+      pure (some x)) := by
+  cases action with
+  | known answer =>
+      simp only [Concrete.ResidualByteFrontend.execute, pure_bind]
+      by_cases h : reject answer
+      · simpa only [if_pos h] using residual_run_stop inputs routing budget
+      · simp [h]
+
+  | read input =>
+      simp only [Concrete.ResidualByteFrontend.execute, simulateQ_bind, simulateQ_spec_query,
+        Concrete.RetainedResidual.embed]
+      rw [run_query_bind]
+      simp only [residualCharge, Nat.zero_le, if_pos, Nat.sub_zero, bind_assoc]
+      congr 1
+      funext answer
+      by_cases h : reject answer
+      · simpa only [if_pos h] using residual_run_stop inputs routing budget
+      · simp [h]
+  | probe input test =>
+      simp only [Concrete.ResidualByteFrontend.execute, simulateQ_bind, simulateQ_spec_query,
+        Concrete.RetainedResidual.embed]
+      rw [run_query_bind]
+      simp only [residualCharge, Nat.zero_le, if_pos, Nat.sub_zero, bind_assoc]
+      congr 1
+      funext answer
+      by_cases h : reject answer
+      · simpa only [if_pos h] using residual_run_stop inputs routing budget
+      · simp [h]
+
+
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_execute' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_execute
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_stop' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_stop
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_hashQuery' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_hashQuery
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedPost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedPost
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedTail' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedTail
