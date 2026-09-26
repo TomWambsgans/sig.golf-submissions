@@ -2524,6 +2524,205 @@ theorem certificateStoppedOuterRun_hit_le_budget {Result : Type} (key : SecretKe
           _ ≤ _ := mul_le_mul' le_rfl le_self_add
   · simp [hevent]
 
+
+theorem enrichedSigningRecord_hit (key : SecretKey) (message : Message)
+    (ghost : CertificateStoppedCacheState)
+    (hcover : CertificateCacheExceptional key ghost.1 → ghost.2.1 = true)
+    (x : ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState)
+    (hx : x ∈ (enrichedSigningRecord key message ghost).support) :
+    (ghost.2.1 = true → x.2.2.1 = true) ∧
+    (CertificateCacheExceptional key x.2.1 → x.2.2.1 = true) := by
+  unfold enrichedSigningRecord at hx
+  rw [PMF.mem_support_bind_iff] at hx
+  obtain ⟨source, hsource, hindex⟩ := hx
+  rw [PMF.mem_support_map_iff] at hindex
+  obtain ⟨index, _, heq⟩ := hindex
+  subst x
+  exact certificateStoppedRomImpl_hit_run key
+    (boundaryComputation key.parameter (signWithView key message)) ghost source hcover hsource
+
+theorem certificateUnboundedSigningJointStep_hit (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (hcacheBefore : ghost.1 = state.1)
+    (hcount : state.2.1.2 = true → ghost.2.1 = true)
+    (hcover : CertificateCacheExceptional key ghost.1 → ghost.2.1 = true)
+    (x : CertificateStoppedSigningJointOutput message)
+    (hx : x ∈ (certificateUnboundedSigningJointStep key budget required stopAfter
+      message state ghost).support) :
+    (x.2.2.1.2.1.2 = true → x.2.2.2.2.1 = true) ∧
+    (CertificateCacheExceptional key x.2.2.2.1 → x.2.2.2.2.1 = true) := by
+  classical
+  unfold certificateUnboundedSigningJointStep at hx
+  rw [PMF.mem_support_bind_iff] at hx
+  obtain ⟨source, hsource, hkernel⟩ := hx
+  unfold certificateStoppedSigningJointKernel at hkernel
+  rw [PMF.mem_support_map_iff] at hkernel
+  obtain ⟨length, _, heq⟩ := hkernel
+  subst x
+  have hhit := enrichedSigningRecord_hit key message ghost hcover source hsource
+  have hcache := enrichedSigningRecord_cache key message ghost source hsource
+  constructor
+  · intro hnew
+    simp only [originalProposalAdvance, certificateCountedUpdate,
+      certificateCacheMonitorUpdate] at hnew
+    change source.2.2.1 = true
+    simp only [certificateCountedProject] at hnew
+    rcases (Bool.or_eq_true _ _).mp hnew with hfirst | hfinal
+    · rcases (Bool.or_eq_true _ _).mp hfirst with hprev | hinitial
+      · exact hhit.1 (hcount hprev)
+      · exact hhit.1 (hcover (by rw [hcacheBefore]; exact of_decide_eq_true hinitial))
+    · exact hhit.2 (by rw [← hcache]; exact of_decide_eq_true hfinal)
+  · exact hhit.2
+
+theorem certificateUnboundedWorldJointStep_hit (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (world : OracleWorld.Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (hcacheBefore : ghost.1 = state.1)
+    (hcount : state.2.1.2 = true → ghost.2.1 = true)
+    (hcover : CertificateCacheExceptional key ghost.1 → ghost.2.1 = true)
+    (x : CertificateStoppedWorldJointOutput world)
+    (hx : x ∈ (certificateUnboundedWorldJointStep key budget required stopAfter
+      world state ghost).support) :
+    (x.2.2.1.2.1.2 = true → x.2.2.2.2.1 = true) ∧
+    (CertificateCacheExceptional key x.2.2.2.1 → x.2.2.2.2.1 = true) := by
+  classical
+  unfold certificateUnboundedWorldJointStep at hx
+  rw [PMF.mem_support_map_iff] at hx
+  obtain ⟨source, hsource, heq⟩ := hx
+  subst x
+  have hhit := certificateStoppedRomImpl_hit_step key world ghost source hsource
+  constructor
+  · intro hnew
+    simp only [certificateWorldJointOutput, originalProposalAdvance,
+      certificateCountedUpdate, certificateCacheMonitorUpdate] at hnew
+    change source.2.2.1 = true
+    simp only [certificateCountedProject] at hnew
+    rcases (Bool.or_eq_true _ _).mp hnew with hfirst | hfinal
+    · rcases (Bool.or_eq_true _ _).mp hfirst with hprev | hinitial
+      · exact hhit.1 (hcount hprev)
+      · exact hhit.1 (hcover (by rw [hcacheBefore]; exact of_decide_eq_true hinitial))
+    · exact hhit.2 (of_decide_eq_true hfinal)
+  · exact hhit.2
+
+theorem certificateStoppedJointStep_hit (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (hcacheBefore : ghost.1 = state.1)
+    (hcount : state.2.1.2 = true → ghost.2.1 = true)
+    (hcover : CertificateCacheExceptional key ghost.1 → ghost.2.1 = true)
+    (x : CertificateStoppedJointOutput input)
+    (hx : some x ∈ (certificateStoppedJointStep key budget required stopAfter
+      input state ghost).support) :
+    (x.2.2.1.2.1.2 = true → x.2.2.2.2.1 = true) ∧
+    (CertificateCacheExceptional key x.2.2.2.1 → x.2.2.2.2.1 = true) := by
+  have hsome := (PMF.mem_support_iff _ _).1 hx
+  rw [certificateStoppedJointStep_some] at hsome
+  have hcost : x.1.trace.hashCalls ≤ ghost.2.2 := by
+    by_contra hn
+    simp [hn] at hsome
+  simp only [if_pos hcost] at hsome
+  have hunbounded : x ∈ (certificateUnboundedJointStep key budget required
+      stopAfter input state ghost).support := (PMF.mem_support_iff _ _).2 hsome
+  cases input with
+  | inl world =>
+      exact certificateUnboundedWorldJointStep_hit key budget required stopAfter
+        world state ghost hcacheBefore hcount hcover x hunbounded
+  | inr message =>
+      exact certificateUnboundedSigningJointStep_hit key budget required stopAfter
+        message state ghost hcacheBefore hcount hcover x hunbounded
+
+theorem certificateStoppedJointStep_cache (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (x : CertificateStoppedJointOutput input)
+    (hx : some x ∈ (certificateStoppedJointStep key budget required stopAfter
+      input state ghost).support) :
+    x.2.2.2.1 = x.2.2.1.1 := by
+  have hsome := (PMF.mem_support_iff _ _).1 hx
+  rw [certificateStoppedJointStep_some] at hsome
+  have hcost : x.1.trace.hashCalls ≤ ghost.2.2 := by
+    by_contra hn
+    simp [hn] at hsome
+  simp only [if_pos hcost] at hsome
+  exact certificateUnboundedJointStep_cache key budget required stopAfter
+    input state ghost x ((PMF.mem_support_iff _ _).2 hsome)
+
+theorem certificateStoppedOuterRun_hit_cover {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    ∀ (state : CertificateJointState) (output : Result × CertificateJointState),
+      state.2.1 = state.1.1 →
+      (state.1.2.1.2 = true → state.2.2.1 = true) →
+      (CertificateCacheExceptional key state.2.1 → state.2.2.1 = true) →
+      some output ∈ (certificateStoppedOuterRun key budget required stopAfter
+        computation state).support →
+      (output.2.1.2.1.2 = true → output.2.2.2.1 = true) ∧
+      (CertificateCacheExceptional key output.2.2.1 → output.2.2.2.1 = true) := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state output hcache hcount hcover houtput
+      rw [certificateStoppedOuterRun_pure, PMF.mem_support_pure_iff] at houtput
+      cases houtput
+      exact ⟨hcount, hcover⟩
+  | query_bind input next ih =>
+      intro state output hcache hcount hcover houtput
+      rw [certificateStoppedOuterRun_query_bind, PMF.mem_support_bind_iff] at houtput
+      obtain ⟨middle, hmiddle, htail⟩ := houtput
+      cases middle with
+      | none =>
+          rw [PMF.mem_support_pure_iff] at htail
+          cases htail
+      | some x =>
+          have hstep := certificateStoppedJointStep_hit key budget required
+            stopAfter input state.1 state.2 hcache hcount hcover x hmiddle
+          have hcache' := certificateStoppedJointStep_cache key budget required
+            stopAfter input state.1 state.2 x hmiddle
+          exact ih x.1.output (x.2.2.1, x.2.2.2) output hcache'
+            hstep.1 hstep.2 htail
+
+theorem certificateCountedLengthImpl_hit_budget_le_rate {Result : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateJointState) (q : Nat)
+    (hcache : state.2.1 = state.1.1)
+    (hspent : state.1.2.2 ≤ q)
+    (hremaining : state.2.2.2 = q - state.1.2.2)
+    (hcount : state.1.2.1.2 = true → state.2.2.1 = true)
+    (hcover : CertificateCacheExceptional key state.2.1 → state.2.2.1 = true)
+    (hfinite : Finite state.2.1)
+    (hzero : stoppedCacheHistoryWeight key state.2 = 0) :
+    Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+      (simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+        computation).run state.1] ≤
+      (q - state.1.2.2 : ENNReal) * certificateCacheExceptionRate := by
+  rw [certificateStoppedOuterRun_hit_budget_event key budget required stopAfter
+    computation state q hcache hspent hremaining]
+  calc
+    _ ≤ Pr[fun result => result.elim False (fun value => value.2.2.2.1 = true) |
+        certificateStoppedOuterRun key budget required stopAfter computation state] := by
+      rw [← SPMF.probEvent_liftM, ← SPMF.probEvent_liftM]
+      apply probEvent_mono
+      intro result hr hhit
+      cases result with
+      | none => simp at hhit
+      | some output =>
+          have hr' : some output ∈
+              (certificateStoppedOuterRun key budget required stopAfter
+                computation state).support := by
+            simpa only [SPMF.support_eq_support, SPMF.support_liftM] using hr
+          exact (certificateStoppedOuterRun_hit_cover key budget required
+            stopAfter computation state output hcache hcount hcover hr').1 hhit
+    _ ≤ _ := by
+      rw [← ENNReal.natCast_sub, ← hremaining]
+      exact certificateStoppedOuterRun_hit_le_budget key budget required
+        stopAfter computation state hcache hfinite hzero
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2753,3 +2952,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_le_budget
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedJointStep_hit' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedJointStep_hit
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_cover' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_cover
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_rate
