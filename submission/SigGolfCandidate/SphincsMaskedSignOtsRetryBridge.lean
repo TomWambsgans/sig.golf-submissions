@@ -1701,4 +1701,111 @@ theorem first_bottom_secret_copy_from_encoding (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_copy_from_encoding
 
+/-- First bottom-layer secret HASH setup, through the ECALL instruction. -/
+def firstBottomSecretHashCode : List (Word × Instr) := [
+  (0x3b20, .ADDI .x6 .x0 1),
+  (0x3b24, .LUI .x28 0x43),
+  (0x3b28, .ADDI .x28 .x28 0),
+  (0x3b2c, .LD .x7 .x28 0),
+  (0x3b30, .SLLI .x7 .x7 16),
+  (0x3b34, .ADD .x6 .x6 .x7),
+  (0x3b38, .LUI .x7 0x40),
+  (0x3b3c, .ADDI .x7 .x7 0),
+  (0x3b40, .SW .x7 .x6 0),
+  (0x3b44, .LUI .x28 0x43),
+  (0x3b48, .ADDI .x28 .x28 0x10),
+  (0x3b4c, .LD .x6 .x28 0),
+  (0x3b50, .SW .x7 .x6 4),
+  (0x3b54, .LUI .x28 0x43),
+  (0x3b58, .ADDI .x28 .x28 8),
+  (0x3b5c, .LD .x6 .x28 0),
+  (0x3b60, .SD .x7 .x6 8),
+  (0x3b64, .LUI .x28 0x43),
+  (0x3b68, .ADDI .x28 .x28 0x18),
+  (0x3b6c, .LD .x6 .x28 0),
+  (0x3b70, .SW .x7 .x6 16),
+  (0x3b74, .ADDI .x6 .x0 0x74),
+  (0x3b78, .LUI .x7 0x40),
+  (0x3b7c, .ADDI .x7 .x7 0x14),
+  (0x3b80, .LWU .x13 .x6 0),
+  (0x3b84, .SW .x7 .x13 0),
+  (0x3b88, .LWU .x13 .x6 4),
+  (0x3b8c, .SW .x7 .x13 4),
+  (0x3b90, .LWU .x13 .x6 8),
+  (0x3b94, .SW .x7 .x13 8),
+  (0x3b98, .LWU .x13 .x6 12),
+  (0x3b9c, .SW .x7 .x13 12),
+  (0x3ba0, .LWU .x13 .x6 16),
+  (0x3ba4, .SW .x7 .x13 16),
+  (0x3ba8, .LUI .x10 0x40),
+  (0x3bac, .ADDI .x10 .x10 0),
+  (0x3bb0, .ADDI .x11 .x0 576),
+  (0x3bb4, .LUI .x12 0x42),
+  (0x3bb8, .ADDI .x12 .x12 0),
+  (0x3bbc, .ADDI .x5 .x0 1)]
+
+def firstBottomSecretHashPrep (s : MachineState) : MachineState :=
+  runSchedule firstBottomSecretHashCode s
+
+theorem first_bottom_secret_hash_code :
+    ∀ e ∈ firstBottomSecretHashCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_secret_hash_checked (s : MachineState)
+    (pc : s.pc = 0x3b20) : Checked firstBottomSecretHashCode s := by
+  simp [firstBottomSecretHashCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_secret_hash_prep (s : MachineState) (pc : s.pc = 0x3b20) :
+    OrdinarySteps SphincsMaskedImages.sign s 40 (firstBottomSecretHashPrep s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomSecretHashCode
+    first_bottom_secret_hash_code s (first_bottom_secret_hash_checked s pc)
+  simpa only [firstBottomSecretHashPrep, firstBottomSecretHashCode,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using run
+
+theorem first_bottom_secret_hash_registers (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    (firstBottomSecretHashPrep s).pc = 0x3bc0 ∧
+    (firstBottomSecretHashPrep s).getReg .x10 = 0x40000 ∧
+    (firstBottomSecretHashPrep s).getReg .x11 = 576 ∧
+    (firstBottomSecretHashPrep s).getReg .x12 = 0x42000 ∧
+    (firstBottomSecretHashPrep s).getReg .x5 = 1 := by
+  simp [firstBottomSecretHashPrep, firstBottomSecretHashCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+def firstBottomSecretHashAnswer (hash : Hash) (s : MachineState) : MachineState :=
+  let prep := firstBottomSecretHashPrep s
+  writeHash prep (hash (hashInput prep))
+
+theorem first_bottom_secret_hash (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    Trace hash SphincsMaskedImages.sign s 41 56 1 2
+      (firstBottomSecretHashAnswer hash s) ∧
+    (firstBottomSecretHashAnswer hash s).pc = 0x3bc4 := by
+  let prep := firstBottomSecretHashPrep s
+  obtain ⟨prepPc, src, bits, dst, service⟩ :=
+    first_bottom_secret_hash_registers s pc
+  have fetched : fetch SphincsMaskedImages.sign prep = some (.base .ECALL) := by
+    rw [fetch_at, prepPc]
+    decide
+  have valid : hashArgumentsValid prep = true := by
+    dsimp [prep]
+    simp [hashArgumentsValid, src, bits, dst, accessValid, rangeValid, MEMORY_BYTES]
+  have length : (hashInput prep).1 = 576 := by
+    dsimp [prep]
+    simp [hashInput, bits]
+  have hashed := Trace.hash (hash := hash) (image := SphincsMaskedImages.sign)
+    prep _ 0 0 0 0 fetched service valid (Trace.refl _)
+  refine ⟨?_, ?_⟩
+  · simpa only [firstBottomSecretHashAnswer, prep, length,
+      show compressions 576 = 2 from by decide, Nat.reduceMul, Nat.reduceAdd] using
+      (first_bottom_secret_hash_prep s pc).trace (hash := hash) |>.trans hashed
+  · simp [firstBottomSecretHashAnswer, prep, writeHash, prepPc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_hash' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_hash
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
