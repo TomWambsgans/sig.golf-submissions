@@ -949,7 +949,7 @@ theorem lazyRun_stopped_checkedHash_bind_jointPotential
     (hresources : ProbeMessageBound state.memory)
     (hremaining : state.memory.external.hashCalls + remaining = budget)
     (hbudget : 2 * budget ≤ 2 ^ digestBits)
-    (hnext : ∀ middle, Pr[= middle | lazyRun
+    (hnext : 1 ≤ remaining → ∀ middle, Pr[= middle | lazyRun
       (environment parameter inputs hencoding words publicReplies selections rows)
       (simulateQ (embed inputs routing)
         (ResidualByteFrontend.checkedHashQuery
@@ -974,7 +974,7 @@ theorem lazyRun_stopped_checkedHash_bind_jointPotential
   by_cases allowed : 1 ≤ remaining
   · rw [if_pos allowed]
     apply (lazyRun_stoppedPotential_bind_le parameter inputs hencoding words publicReplies selections rows
-      _ _ state budget hnext).trans
+      _ _ state budget (hnext allowed)).trans
     have hquery : state.memory.external.hashCalls + 1 ≤ budget := by omega
     have hlaw : lazyByteRun parameter inputs hencoding words publicReplies selections rows routing
         (liftM (OracleWorld.query (.inr input.val))) state =
@@ -1019,7 +1019,7 @@ theorem lazyRun_stopped_completeWork_bind_jointPotential
     (hresources : ProbeMessageBound state.memory)
     (hremaining : state.memory.external.hashCalls + remaining = budget)
     (hbudget : 2 * budget ≤ 2 ^ digestBits)
-    (hnext : ∀ middle, Pr[= middle | lazyRun
+    (hnext : work.2 ≤ remaining → ∀ middle, Pr[= middle | lazyRun
       (environment parameter inputs hencoding words publicReplies selections rows)
       (simulateQ (embed inputs routing)
         (ResidualByteFrontend.jointCompleteSigningWork work)) state] ≠ 0 →
@@ -1041,7 +1041,7 @@ theorem lazyRun_stopped_completeWork_bind_jointPotential
   by_cases allowed : work.2 ≤ remaining
   · rw [if_pos allowed]
     apply (lazyRun_stoppedPotential_bind_le parameter inputs hencoding words publicReplies selections rows
-      _ _ state budget hnext).trans
+      _ _ state budget (hnext allowed)).trans
     have hcost : state.memory.external.hashCalls + work.2 ≤ budget := by omega
     exact lazyRun_completeWork_jointPotential parameter inputs hencoding words publicReplies selections rows
       routing work state budget ha hresources hcost hbudget
@@ -1231,3 +1231,129 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_random_remaining_invariant' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_random_remaining_invariant
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem lazyByteRun_stopped_publicWorld_jointPotential
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (words : OtsReferenceWords)
+    (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily)
+    (rows : CanonicalEncodingRows) (routing : InterleavedResidual.Routing)
+    {Result : Type} (computation : OracleComp OracleWorld Result)
+    (hinputs : hashInputs computation ⊆ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (hselect : ∀ position, FirstSuccessTable.select decodeEncodingOutput
+      (fun counter => rows (position, counter)) = selections position)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcandidates : ResidualByteFrontend.HiddenCandidateBound words routing.disclosed (project state))
+    (hclean : ResidualByteFrontend.ReplyClean
+      (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections)
+      state.memory.external.cache)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits) :
+    (∑' result, Pr[= result | lazyRun
+      (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (simulateQ (embed inputs routing)
+          (simulateQ (ResidualByteFrontend.checkedTranslate inputs
+            (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections))
+            computation)) remaining) state] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  induction computation using OracleComp.inductionOn generalizing state remaining with
+  | pure value =>
+      simp only [simulateQ_pure, WeightedCutoff.run_pure, lazyRun, runWith_pure,
+        tsum_probOutput_pure_mul, stoppedPrimitiveResultPotential, primitiveResultPotential,
+        Option.elim_some, primitiveLivePotential, le_refl]
+  | query_bind input next ih =>
+      have hnextInputs : ∀ answer, hashInputs (next answer) ⊆ inputs :=
+        fun answer => (hashInputs_next_subset input next answer).trans hinputs
+      cases input with
+      | inl query =>
+          have hfirstInputs : hashInputs (liftM (OracleWorld.query (.inl query))) ⊆ inputs := by
+            rw [← bind_pure (liftM (OracleWorld.query (.inl query))), hashInputs_query_bind]
+            simp [hashInputs_pure]
+          convert (lazyRun_stopped_random_bind_jointPotential parameter inputs hencoding words publicReplies
+              selections rows routing query
+              (next := fun answer => simulateQ (embed inputs routing)
+                (simulateQ (ResidualByteFrontend.checkedTranslate inputs
+                  (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections))
+                  (next answer))) state budget remaining hfirstInputs hselect ha hcovered hcandidates
+              hclean hresources hremaining hbudget (by
+                intro middle hmiddle answer hans
+                change Pr[= middle | lazyByteRun parameter inputs hencoding words publicReplies
+                  selections rows routing (liftM (OracleWorld.query (.inl query))) state] ≠ 0 at hmiddle
+                have ha' := lazyRun_nonempty
+                  (environment parameter inputs hencoding words publicReplies selections rows) _
+                  state ha middle hmiddle
+                have hc' := lazyRun_rowsCovered parameter inputs hencoding words publicReplies
+                  selections rows _ state ha hcovered middle hmiddle
+                have hb' := lazyByteRun_hiddenCandidateBound parameter inputs hencoding words
+                  publicReplies selections rows routing _ hfirstInputs state ha hcandidates middle hmiddle
+                have he' := lazyByteRun_encodingClean parameter inputs hencoding words
+                  publicReplies selections rows routing _ hfirstInputs state ha hcovered hclean
+                  middle hmiddle (by simp [hans])
+                have hr' := lazyByteRun_world_probeMessageBound parameter inputs hencoding words
+                  publicReplies selections rows routing (.inl query) hfirstInputs state ha hresources
+                  middle hmiddle
+                have hm' := lazyByteRun_random_remaining_invariant parameter inputs hencoding words
+                  publicReplies selections rows routing query hfirstInputs state budget remaining ha
+                  hremaining middle hmiddle
+                exact ih answer (hnextInputs answer) middle.2 remaining ha' hc' hb' he' hr' hm')) using 1
+          all_goals rfl
+      | inr query =>
+          have hin : query ∈ inputs := hinputs (mem_hashInputs_hash_bind query next)
+          have hfirstInputs : hashInputs (liftM (OracleWorld.query (.inr query))) ⊆ inputs := by
+            rw [← bind_pure (liftM (OracleWorld.query (.inr query))), hashInputs_query_bind]
+            apply Finset.union_subset
+            · exact Finset.singleton_subset_iff.mpr hin
+            · apply Finset.biUnion_subset.mpr
+              intro answer _
+              simpa only [hashInputs_pure] using (Finset.empty_subset inputs)
+          simp only [simulateQ_bind, simulateQ_spec_query,
+            ResidualByteFrontend.checkedTranslate, dif_pos hin]
+          apply (lazyRun_stopped_checkedHash_bind_jointPotential parameter inputs hencoding words
+            publicReplies selections rows routing ⟨query, hin⟩
+            (next := fun answer => simulateQ (embed inputs routing)
+              (simulateQ (ResidualByteFrontend.checkedTranslate inputs
+                (PublicEncodingMatch.Match parameter (knownEncodingMessage routing.known) words selections))
+                (next answer))) state budget remaining hselect ha hcovered hcandidates hclean
+            hresources hremaining hbudget (by
+              intro allowed middle hmiddle answer hans
+              have hmiddle' : Pr[= middle | lazyByteRun parameter inputs hencoding words
+                  publicReplies selections rows routing
+                  (liftM (OracleWorld.query (.inr query))) state] ≠ 0 := by
+                simpa only [lazyByteRun, simulateQ_spec_query,
+                  ResidualByteFrontend.checkedTranslate, dif_pos hin] using hmiddle
+              have ha' := lazyRun_nonempty
+                (environment parameter inputs hencoding words publicReplies selections rows) _
+                state ha middle hmiddle'
+              have hc' := lazyRun_rowsCovered parameter inputs hencoding words publicReplies
+                selections rows _ state ha hcovered middle hmiddle'
+              have hb' := lazyByteRun_hiddenCandidateBound parameter inputs hencoding words
+                publicReplies selections rows routing _ hfirstInputs state ha hcandidates
+                middle hmiddle'
+              have he' := lazyByteRun_encodingClean parameter inputs hencoding words
+                publicReplies selections rows routing _ hfirstInputs state ha hcovered hclean
+                middle hmiddle' (by simp [hans])
+              have hr' := lazyByteRun_world_probeMessageBound parameter inputs hencoding words
+                publicReplies selections rows routing (.inr query) hfirstInputs state ha hresources
+                middle hmiddle'
+              have hm' := lazyByteRun_hash_remaining_invariant parameter inputs hencoding words
+                publicReplies selections rows routing query hin state budget remaining ha
+                hremaining allowed middle hmiddle'
+              exact ih answer (hnextInputs answer) middle.2 (remaining - 1)
+                ha' hc' hb' he' hr' hm'))
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_stopped_publicWorld_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyByteRun_stopped_publicWorld_jointPotential
