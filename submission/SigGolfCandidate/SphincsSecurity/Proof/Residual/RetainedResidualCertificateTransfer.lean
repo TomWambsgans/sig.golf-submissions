@@ -323,3 +323,60 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_counted
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem Context.frontierGame_budget_le_observed {inputs : Finset HashInput}
+    (context : Context inputs) (adversary : Adversary)
+    (hroot : context.key.root = canonicalGraphRoot context.graph)
+    (hinputs : sourceInputs context.key
+      (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+        ⟨context.key.root, context.key.parameter⟩) ⊆ inputs)
+    (state : State inputs) (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcompatible : Compatible context state.memory)
+    (hlog : state.memory.log = [])
+    (hcost : state.memory.external.hashCalls = keygenHashCost)
+    (budget : Nat) :
+    Pr[fun result => result.1 = true ∧ result.2.hashCalls ≤ budget |
+      referenceFamilyFrontierRest context.key context.oracle context.graph
+        context.auxiliary.selections context.dummy adversary] ≤
+    Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true)
+        (forgetState result) ∧ result.2.memory.external.hashCalls ≤ budget |
+      observedRun context.environment context.actual context.auxiliary.seed
+        (simulateQ (adversaryImpl inputs context.key.parameter context.key.root context.words
+          context.auxiliary.selections)
+          (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+            ⟨context.key.root, context.key.parameter⟩)) state] := by
+  let computation := FtsProbeSimulation.unloggedRetainedRestComputation adversary
+    ⟨context.key.root, context.key.parameter⟩
+  have h := prob_gameRest_budget_le_stopped context adversary state.memory hlog budget
+  rw [hcost] at h
+  have hfront := congrArg
+    (fun law : ProbComp (Bool × Nat) => Pr[fun result => result.1 = true ∧ result.2 ≤ budget | 𝒮[law]])
+    (context.frontierGame_counted adversary hroot)
+  simp only [evalSPMF_map, probEvent_map, Function.comp_def] at hfront
+  have hmemory := observedRun_source_memory context computation hinputs state hcovered hcompatible
+  have hobserved := congrArg
+    (fun law : SPMF (Option (Forgery × Bool) × Memory) =>
+      Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true) result ∧
+        result.2.external.hashCalls ≤ budget | law]) hmemory
+  rw [probEvent_map] at hobserved
+  simp only [Function.comp_def] at hobserved
+  calc
+    _ = Pr[fun result => result.1 = true ∧ keygenHashCost + result.2 ≤ budget |
+        simulateQ (fixedHashWorld context.oracle)
+          (countHashQueries
+            (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩ context.key))] := hfront
+    _ ≤ Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true) result ∧
+          result.2.external.hashCalls ≤ budget | fixedSourceRun context computation state.memory] := h
+    _ = _ := by simpa only [forgetState] using hobserved.symm
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_budget_le_observed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_budget_le_observed
