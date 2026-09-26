@@ -2203,6 +2203,23 @@ theorem first_upper_header_pc (state : MachineState)
   simp [firstUpperHeaderState, firstUpperHeaderSchedule,
     SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
 
+theorem first_upper_header_counter_cell (state : MachineState) :
+    (firstUpperHeaderState state).getMem 0x40038 = state.getMem 0x40038 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, setWord32_eq, alignToDword,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setPC, MachineState.getMem_setReg,
+    MachineState.getMem_setMem_ne]
+
+theorem first_upper_header_counter_word (state : MachineState) :
+    (firstUpperHeaderState state).getWord32 0x4003c = state.getWord32 0x4003c := by
+  have aligned : alignToDword (0x4003c : Word) = 0x40038 := by decide
+  simp only [getWord32_eq, aligned]
+  exact congrArg (fun value : Word =>
+    extractWord32 value (byteOffset (0x4003c : Word) / 4))
+    (first_upper_header_counter_cell state)
+
 private def firstUpperParamPointers : List (Word × Instr) := [
   (0x6d94, .LUI .x6 0x23),
   (0x6d98, .ADDI .x6 .x6 (-844)),
@@ -2279,6 +2296,20 @@ theorem first_upper_parameter_pc (state : MachineState)
     (firstUpperParamPointerState state) 5993 (by simpa using start)
   simpa using finish
 
+theorem first_upper_parameter_counter_word (state : MachineState) :
+    (firstUpperParamState state).getWord32 0x4003c = state.getWord32 0x4003c := by
+  have frame := SphincsVerifierFtsPriorRoots.copyRoot_word_frame
+    (firstUpperParamPointerState state) 0x4003c (by
+      intro offset
+      rw [(firstUpperParamPointer_regs state).2]
+      fin_cases offset <;> decide)
+  rw [show firstUpperParamState state =
+      SphincsVerifierCopy.copyRootState (firstUpperParamPointerState state) from rfl,
+    frame]
+  simp [firstUpperParamPointerState, firstUpperParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    MachineState.getReg_setReg_eq]
+
 private def firstUpperServiceSchedule : List (Word × Instr) := [
   (0x6dcc, .LUI .x10 0x40),
   (0x6dd0, .ADDI .x10 .x10 0),
@@ -2323,9 +2354,25 @@ theorem first_upper_service_ready (state : MachineState)
     signExtend12, MachineState.getReg_setReg_eq,
     MachineState.getReg_setReg_ne, pc]
 
+theorem first_upper_service_counter_word (state : MachineState) :
+    (firstUpperServiceState state).getWord32 0x4003c = state.getWord32 0x4003c := by
+  simp [firstUpperServiceState, firstUpperServiceSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
+
 private def firstUpperPrehashState (state : MachineState) : MachineState :=
   firstUpperServiceState (firstUpperParamState
     (firstUpperHeaderState (firstUpperCounterState state)))
+
+theorem first_upper_prehash_counter_word (state : MachineState) :
+    (firstUpperPrehashState state).getWord32 0x4003c =
+      state.getWord32 0x23dbc := by
+  rw [show firstUpperPrehashState state = firstUpperServiceState
+    (firstUpperParamState (firstUpperHeaderState (firstUpperCounterState state)))
+      from rfl,
+    first_upper_service_counter_word,
+    first_upper_parameter_counter_word,
+    first_upper_header_counter_word,
+    first_upper_counter_stored]
 
 theorem first_upper_prehash_block (state : MachineState)
     (pc : state.pc = 0x6d1c)
@@ -2909,5 +2956,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 -/
 #guard_msgs in
 #print axioms upper_chains_semantics
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_counter_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_counter_word
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
