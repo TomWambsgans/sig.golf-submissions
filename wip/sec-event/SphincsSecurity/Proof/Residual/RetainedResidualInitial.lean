@@ -37,7 +37,7 @@ theorem initialState_rowsCovered (inputs : Finset HashInput) (words : OtsReferen
 theorem Context.keygen_record {inputs : Finset HashInput} (context : Context inputs)
     (hroot : context.key.root = canonicalGraphRoot context.graph) :
     fixedBoundaryRun context.key.parameter context.oracle
-      (liftM (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest)) =
+      (liftM (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest)) =
         pure (context.key.root, (FreeMonoid.of none) ^ keygenHashCost) := by
   have hcomputed : context.key.root = evalWithAnswerFn context.oracle
       (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree)) := by
@@ -46,7 +46,7 @@ theorem Context.keygen_record {inputs : Finset HashInput} (context : Context inp
     exact (canonicalGraphLabels_programmedHash context.key.parameter context.key.otsSecret context.key.ftsSecret context.graph _).symm
   rw [fixedBoundaryRun_lift_hash]
   have htree : boundaryEval context.key.parameter context.oracle
-      (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree)) =
+      (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree)) =
       (evalWithAnswerFn context.oracle (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree)),
         (FreeMonoid.of none) ^ keygenHashCost) :=
     boundaryEval_keygen context.key.parameter context.oracle (context.key.otsSecret topLayer rootTree)
@@ -68,7 +68,7 @@ theorem Context.rest_queryBound {inputs : Finset HashInput} (context : Context i
     (hashQueryBound_gameAfterSecrets adversary q hq hparameter hots hfts)
   rw [gameAfterSecrets] at hbound
   have hresult : 𝒮[fixedBoundaryRun context.key.parameter context.oracle
-      (liftM (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest))]
+      (liftM (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest))]
         (context.key.root, (FreeMonoid.of none) ^ keygenHashCost) ≠ 0 := by
     rw [context.keygen_record hroot, evalSPMF_pure, SPMF.pure_apply_self]
     exact one_ne_zero

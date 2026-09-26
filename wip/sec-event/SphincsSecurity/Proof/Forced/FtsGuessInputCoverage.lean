@@ -1,4 +1,5 @@
 import SphincsSecurity.Proof.Forced.FtsGuessCachedSigning
+import SphincsSecurity.Proof.Scheme.BuildEval
 namespace SphincsSecurity.Concrete.FtsGuessHash
 
 open _root_.OracleComp OracleSpec UniformTableCompletion
@@ -92,6 +93,19 @@ theorem mem_support_treeRoot (parameter : PublicParameter) (lay : Layer) (tree :
   rw [hroot]
   exact evalWithAnswerFn_mem_support _ _
 
+/-- Every digest is a possible key-generation root. -/
+theorem mem_support_keygenRoot (parameter : PublicParameter)
+    (secret : LeafIndex → ChainIndex → Digest) (root : Digest) :
+    root ∈ support (keygenRoot parameter secret : OracleComp HashSpec Digest) := by
+  have hheight : 0 < layerHeight topLayer := by decide
+  obtain ⟨level, hlevel⟩ := Nat.exists_eq_succ_of_ne_zero (Nat.pos_iff_ne_zero.mp hheight)
+  have hroot : root = evalWithAnswerFn ((fun _ => OtsProbeSimulation.hashOutputOfDigest root) : QueryImpl HashSpec Id)
+      (keygenRoot parameter secret : OracleComp HashSpec Digest) := by
+    rw [eval_keygenRoot, treeRoot, hlevel, treeNode_succ_eq, evalWithAnswerFn_bind, evalWithAnswerFn_bind,
+      evalWithAnswerFn_tweakableHash, OtsProbeSimulation.truncateHash_hashOutputOfDigest]
+  rw [hroot]
+  exact evalWithAnswerFn_mem_support _ _
+
 /-! ### Covered inputs of the adversary's remaining computation -/
 
 theorem hashInputs_bind_congr {A B C : Type} (first : OracleComp OracleWorld A) (left : A → OracleComp OracleWorld B)
@@ -163,14 +177,12 @@ theorem hashInputs_gameRest_subset_gameAfterSecrets (adversary : Adversary) (par
     hashInputs (gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩) ⊆
       hashInputs (gameAfterSecrets adversary parameter otsSecret ftsSecret) := by
   rw [gameAfterSecrets]
-  have hheight : 0 < layerHeight topLayer := by
-    rw [show layerHeight topLayer = maxLayerHeight from rfl]
-    decide
-  exact hashInputs_liftHash_bind_subset (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree))
+  exact hashInputs_liftHash_bind_subset (keygenRoot parameter (otsSecret topLayer rootTree))
     (fun root => gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩) root
-    (mem_support_treeRoot parameter topLayer rootTree _ hheight root)
+    (mem_support_keygenRoot parameter _ root)
 
 theorem hashInputs_gameAfterSecrets_subset_boundaryGameCore (adversary : Adversary) (parameter : PublicParameter)
+    (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (ftsSecret : Index → FtsTree → FtsLeaf → Digest) :
     hashInputs (gameAfterSecrets adversary parameter otsSecret ftsSecret) ⊆ hashInputs (boundaryGameCore adversary) := by
   rw [boundaryGameCore, ← ResidualByteFrontend.hashInputs_boundary parameter (gameAfterSecrets adversary parameter otsSecret ftsSecret)]
@@ -185,17 +197,19 @@ theorem hashInputs_gameAfterSecrets_subset_boundaryGameCore (adversary : Adversa
     (fun parameter => (liftM sampleOtsSecrets : OracleComp OracleWorld _) >>= fun otsSecret =>
       (liftM sampleFtsSecrets : OracleComp OracleWorld _) >>= fun ftsSecret =>
         boundaryComputation parameter (gameAfterSecrets adversary parameter otsSecret ftsSecret)) parameter
-    (by unfold sampleParameter; exact @mem_support_uniformSample PublicParameter instSampleableTypePublicParameter parameter)
+    hparameter
 
-theorem hashInputs_gameRest_subset_boundaryGameCore (adversary : Adversary) (key : SecretKey) :
+theorem hashInputs_gameRest_subset_boundaryGameCore (adversary : Adversary) (key : SecretKey)
+    (hparameter : key.parameter ∈ support sampleParameter) :
     hashInputs (gameRest scheme adversary ⟨key.root, key.parameter⟩ key) ⊆ hashInputs (boundaryGameCore adversary) :=
   (hashInputs_gameRest_subset_gameAfterSecrets adversary key.parameter key.root key.otsSecret key.ftsSecret).trans
-    (hashInputs_gameAfterSecrets_subset_boundaryGameCore adversary key.parameter key.otsSecret key.ftsSecret)
+    (hashInputs_gameAfterSecrets_subset_boundaryGameCore adversary key.parameter hparameter key.otsSecret key.ftsSecret)
 
-theorem coveredInputs_main_subset (adversary : Adversary) (key : SecretKey) :
+theorem coveredInputs_main_subset (adversary : Adversary) (key : SecretKey)
+    (hparameter : key.parameter ∈ support sampleParameter) :
     coveredInputs key (adversary.main ⟨key.root, key.parameter⟩) ⊆ canonicalGraphGameInputs adversary := by
   rw [coveredInputs_main_eq_gameRest]
-  exact (hashInputs_gameRest_subset_boundaryGameCore adversary key).trans (hashInputs_subset_canonicalGraphGameInputs adversary)
+  exact (hashInputs_gameRest_subset_boundaryGameCore adversary key hparameter).trans (hashInputs_subset_canonicalGraphGameInputs adversary)
 
 theorem expandedAdversaryImpl_inl (key : SecretKey) (input : OracleWorld.Domain) :
     expandedAdversaryImpl key (.inl input) = liftM (OracleWorld.query input) := rfl

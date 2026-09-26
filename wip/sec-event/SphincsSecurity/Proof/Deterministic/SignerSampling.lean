@@ -9,45 +9,31 @@ set_option maxRecDepth 4096
 
 variable {State : Type}
 
-attribute [local irreducible] Concrete.ftsOpen Concrete.signLayer Concrete.treeRoot tableDigestLoop Concrete.signDigestLoop
+attribute [local irreducible] tableDigestLoop Concrete.signDigestLoop
 
+/-- What either signer does after its digest loop. -/
 def signatureAfterTrial (secretKey : SphincsSecurity.SecretKey) (attempt : TrialResult) : OracleComp HashSpec (Option Signature) :=
   match attempt with
   | none => pure none
-  | some (randomness, index, leaves) => do
-      let ftsPath ← Concrete.ftsOpen secretKey.parameter index leaves (secretKey.ftsSecret index)
-      match ← Concrete.sequenceLayers (fun lay => Concrete.signLayer secretKey index lay) with
-      | none => return none
-      | some parts => do
-          let _ ← Concrete.treeRoot secretKey.parameter topLayer Concrete.rootTree (secretKey.otsSecret topLayer Concrete.rootTree)
-          return some
-            { randomness := randomness
-              ftsSecret := fun tree => secretKey.ftsSecret index tree (leaves (Concrete.ftsIndexOf tree))
-              ftsPath := ftsPath
-              layers := fun lay => LayerSignature.ofPadded lay (parts lay) }
+  | some (randomness, index, leaves) => Concrete.signAfterDigest secretKey randomness index leaves
 
 theorem tableSign_eq_finish (randomizers : RandomizerOutputs) (secretKey : SphincsSecurity.SecretKey) (message : Message) :
     (tableSign randomizers secretKey message : OracleComp HashSpec (Option Signature)) =
       (tableDigestLoop randomizers secretKey message digestAttemptLimit 0 >>= signatureAfterTrial secretKey) := by
   unfold tableSign
-  rfl
+  apply bind_congr
+  intro attempt
+  rcases attempt with _ | ⟨randomness, index, leaves⟩ <;> rfl
 
 theorem sign_eq_finish (secretKey : SphincsSecurity.SecretKey) (message : Message) :
     Concrete.sign secretKey message = (Concrete.signDigestLoop digestAttemptLimit secretKey message >>= fun attempt =>
       (liftM (signatureAfterTrial secretKey attempt) : OracleComp OracleWorld (Option Signature))) := by
-  unfold Concrete.sign
+  rw [Concrete.sign_eq]
   apply bind_congr
   intro attempt
-  cases attempt with
-  | none => rfl
-  | some attempt =>
-      rcases attempt with ⟨randomness, index, leaves⟩
-      simp only [signatureAfterTrial, liftM_bind]
-      apply bind_congr
-      intro path
-      apply bind_congr
-      intro layers
-      cases layers <;> simp only [liftM_bind, liftM_pure]
+  rcases attempt with _ | ⟨randomness, index, leaves⟩
+  · simp only [signatureAfterTrial, liftM_pure]
+  · rfl
 
 attribute [local irreducible] signatureAfterTrial
 

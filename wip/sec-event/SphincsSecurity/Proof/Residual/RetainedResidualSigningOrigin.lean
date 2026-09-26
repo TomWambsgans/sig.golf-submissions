@@ -4,7 +4,7 @@ namespace SphincsSecurity.Concrete.RetainedResidual
 
 open _root_.OracleComp OracleSpec
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signDigestLoop signAfterDigest boundaryEval
+attribute [local irreducible] signDigestLoop boundaryEval
 set_option backward.isDefEq.respectTransparency false
 
 theorem fixedBoundaryRun_bind_nonzero {A B : Type} (parameter : PublicParameter) (oracle : QueryImpl HashSpec Id)

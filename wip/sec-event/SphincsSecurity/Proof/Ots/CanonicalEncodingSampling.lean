@@ -16,8 +16,13 @@ noncomputable def canonicalGraphMessage (labels : CanonicalGraphLabels) (positio
 theorem layerMessagePosition_treeBound (index : Index) (lay : Layer) :
     (layerMessagePosition index lay).TreeBound := by
   unfold layerMessagePosition
-  split_ifs <;> norm_num [Position.TreeBound, layerHeight, middleLayer, bottomLayer, topLayer, numLayers,
-    maxLayerHeight]
+  split_ifs with hbelow
+  · simp only [Position.TreeBound, zero_add, mul_one]
+    have hpos := layerHeight_pos ⟨lay.val + 1, hbelow⟩
+    have hle := layerHeight_le ⟨lay.val + 1, hbelow⟩
+    rw [Nat.sub_add_cancel hpos]
+    exact Nat.pow_le_pow_right (by omega) hle
+  · trivial
 
 theorem canonicalGraphMessage_eq (key : SecretKey) (f : QueryImpl HashSpec Id) (position : EncodingPosition) :
     canonicalGraphMessage (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) position =
@@ -56,11 +61,7 @@ attribute [local irreducible] canonicalEncodingInputs
 
 theorem canonicalEncodingRowInput_mem (parameter : PublicParameter) (labels : CanonicalGraphLabels)
     (row : EncodingRow) : canonicalEncodingRowInput parameter labels row ∈ canonicalEncodingInputs parameter := by
-  rw [canonicalEncodingInputs, Finset.mem_biUnion]
-  simp only [Finset.mem_univ, true_and]
-  refine ⟨row.1, ?_⟩
-  simp only [Finset.mem_image, Finset.mem_univ, true_and]
-  exact ⟨(canonicalGraphMessage labels row.1, row.2), rfl⟩
+  exact encodingRetryInput_mem_canonicalEncodingInputs parameter row.1 _ row.2
 
 noncomputable def canonicalEncodingCell (parameter : PublicParameter) (inputs : Finset HashInput)
     (hinputs : canonicalEncodingInputs parameter ⊆ inputs) (labels : CanonicalGraphLabels) (row : EncodingRow) : inputs :=

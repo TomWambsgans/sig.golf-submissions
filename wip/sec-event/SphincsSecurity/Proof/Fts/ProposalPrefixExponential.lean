@@ -5,8 +5,8 @@ namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp ENNReal
 
-noncomputable def proposalTailBase : ENNReal := 257 / 256
-noncomputable def proposalTailMoment : ENNReal := 67634176 / 66845695
+noncomputable def proposalTailBase : ENNReal := 1025 / 1024
+noncomputable def proposalTailMoment : ENNReal := 1075840000 / 1072690687
 
 theorem proposalBlockLength_power_moment (accept : ENNReal) (hpos : accept ≠ 0) (hle : accept ≤ 1) (base : ENNReal) :
     (∑' length, proposalBlockLength accept hpos hle length * base ^ length) =
@@ -95,17 +95,17 @@ theorem expected_proposalPrefixWeight (proposals completed : Nat) (hcap : comple
 
 theorem proposalPrefixWeight_initial_le : proposalPrefixWeight 0 0 ≤ proposalPrefixExceptionBound := by
   rw [proposalPrefixExceptionBound_def]
-  let z : ℝ := 257 / 256
-  let ratio : ℝ := 17179869184 / 17179343615
+  let z : ℝ := 1025 / 1024
+  let ratio : ℝ := 1099511627776 / 1099507954175
   have hz : 0 < z := by norm_num [z]
   have hr : 0 < ratio := by norm_num [ratio]
-  have hlog : (signatureLimit : ℝ) * Real.log ratio - 2 * 2 ^ 17 * Real.log z ≤ -700 * Real.log 2 := by
+  have hlog : (signatureLimit : ℝ) * Real.log ratio - 2 * 2 ^ 23 * Real.log z ≤ -700 * Real.log 2 := by
     have hratio := Real.log_le_sub_one_of_pos hr
     have hbase := Real.one_sub_inv_le_log_of_pos hz
     have htwo := Real.log_two_lt_d9
     norm_num [ratio, z, signatureLimit] at hratio hbase ⊢
     linarith
-  have hreal : (ratio * z ^ 3) ^ signatureLimit / z ^ (3 * signatureLimit + 2 * 2 ^ 17) ≤ (2 ^ 700 : ℝ)⁻¹ := by
+  have hreal : (ratio * z ^ 3) ^ signatureLimit / z ^ (3 * signatureLimit + 2 * 2 ^ 23) ≤ (2 ^ 700 : ℝ)⁻¹ := by
     apply (Real.log_le_log_iff (by positivity) (by positivity)).mp
     rw [Real.log_div (by positivity) (by positivity), Real.log_pow, Real.log_mul hr.ne' (by positivity),
       Real.log_pow, Real.log_pow, Real.log_inv, Real.log_pow]

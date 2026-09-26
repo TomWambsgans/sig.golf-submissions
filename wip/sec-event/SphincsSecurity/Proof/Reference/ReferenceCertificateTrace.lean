@@ -83,7 +83,8 @@ private theorem fixedHashWorld_lift_hash {Result : Type} (f : QueryImpl HashSpec
 
 private theorem rootedKey_root_eq_treeRoot (key : SecretKey) (f : QueryImpl HashSpec Id) :
     (ReferenceVerifierWitness.rootedKey key f).root =
-      evalWithAnswerFn f (treeRoot key.parameter topLayer rootTree (key.otsSecret topLayer rootTree)) := by
+      evalWithAnswerFn f (keygenRoot key.parameter (key.otsSecret topLayer rootTree)) := by
+  rw [eval_keygenRoot]
   simp only [honestNode, treeRoot]
 
 noncomputable def fixedCertificateTraceGame (f : QueryImpl HashSpec Id) (adversary : Adversary) : ProbComp CertificateTraceRecord := do

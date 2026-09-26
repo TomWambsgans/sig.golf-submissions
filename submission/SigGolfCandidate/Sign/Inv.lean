@@ -86,4 +86,39 @@ theorem regsEq_toState (r : Result) (s : MachineState) (l : List Reg)
 
 theorem getReg_x0 (s : MachineState) : s.getReg .x0 = 0 := rfl
 
+/-! ## Arrays of 16-byte values -/
+
+/-- `vs[i]` is stored at `B + 16 i`. -/
+def Slots (t : MachineState) (B : Nat) (vs : List Val) : Prop :=
+  ∀ i (hi : i < vs.length), t.readWords (BitVec.ofNat 64 (B + 16 * i)) 2 = wordsOf vs[i]
+
+theorem Slots.nil (t : MachineState) (B : Nat) : Slots t B [] := fun i hi => by simp at hi
+
+theorem Slots.snoc {t : MachineState} {B : Nat} {vs : List Val} {v : Val} (h : Slots t B vs)
+    (hv : t.readWords (BitVec.ofNat 64 (B + 16 * vs.length)) 2 = wordsOf v) : Slots t B (vs ++ [v]) := by
+  intro i hi
+  simp only [List.length_append, List.length_singleton] at hi
+  by_cases h' : i < vs.length
+  · rw [List.getElem_append_left h']; exact h i h'
+  · have : i = vs.length := by omega
+    subst this
+    rw [List.getElem_append_right (le_refl _)]; simpa using hv
+
+theorem Slots.frame {s t : MachineState} {W : Nat → Prop} {B : Nat} {vs : List Val}
+    (h : Slots s B vs) (hf : Frame s t W) (hB : B + 16 * vs.length + 16 < 2 ^ 64)
+    (hW : ∀ i < vs.length, ¬ W (B + 16 * i) ∧ ¬ W (B + 16 * i + 8)) : Slots t B vs := by
+  intro i hi
+  rw [hf.readWords _ _ (by omega) (by
+    intro j hj
+    have := hW i hi
+    interval_cases j
+    · simpa using this.1
+    · simpa using this.2)]
+  exact h i hi
+
+theorem Slots.getD {t : MachineState} {B : Nat} {vs : List Val} (h : Slots t B vs) (i : Nat)
+    (hi : i < vs.length) :
+    t.readWords (BitVec.ofNat 64 (B + 16 * i)) 2 = wordsOf (vs.getD i []) := by
+  rw [h i hi]; simp [List.getD, List.getElem?_eq_getElem hi]
+
 end SigGolfCandidate.Sign

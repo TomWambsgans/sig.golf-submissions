@@ -1,5 +1,5 @@
 import SphincsSecurity.Proof.Seeded.AlgorithmErasure
-import SphincsSecurity.Proof.Fts.FewTimeUniform
+import SphincsSecurity.Proof.Scheme.Guess
 
 open OracleComp OracleSpec
 
@@ -26,8 +26,19 @@ def flattenSecrets (secrets : Secrets) : SecretValues
   | .inl (lay, tree, leaf, chain) => secrets.1 lay tree leaf chain
   | .inr (index, tree, leaf) => secrets.2 index tree leaf
 
+/-- An oracle answer is its low and its high `128` bits. -/
+def splitOutput (output : HashOutput) : Digest × Digest :=
+  (output.extractLsb' 0 digestBits, output.extractLsb' digestBits digestBits)
+
+theorem splitOutput_bijective : Function.Bijective splitOutput := by
+  apply (Fintype.bijective_iff_injective_and_card _).2
+  refine ⟨fun left right heq => hashOutput_eq_of_extract (width := digestBits) (by decide)
+    (congrArg Prod.fst heq) (congrArg Prod.snd heq), ?_⟩
+  simp only [Fintype.card_prod, Fintype.card_bitVec, Digest, HashOutput, digestBits, hashOutputBits]
+  norm_num
+
 noncomputable def outputHalves : HashOutput ≃ (Digest × Digest) :=
-  splitHashOutputEquiv digestBits (by decide)
+  Equiv.ofBijective splitOutput splitOutput_bijective
 
 theorem outputHalves_low (output : HashOutput) : (outputHalves output).1 = truncateHash output := rfl
 
@@ -89,31 +100,23 @@ theorem evalDist_secretOutputs_from_halves :
       intro low
       rw [evalSPMF_bind, evalSPMF_bind, evalDist_sampleSecrets]
 
-theorem evalDist_sampleParameter : 𝒮[Concrete.sampleParameter] = 𝒮[$ᵗ Digest] := by
+/-- The parameter is the constant `P = 0`. -/
+theorem sampleParameter_eq_zero : Concrete.sampleParameter = pure 0 := by
   unfold Concrete.sampleParameter
-  rw [evalSPMF_uniformSample, evalSPMF_uniformSample]
   rfl
 
-theorem evalDist_parameterOutput_from_halves :
-    𝒮[$ᵗ HashOutput] = 𝒮[do
-      let low ← Concrete.sampleParameter
-      let high ← $ᵗ Digest
-      pure (outputHalves.symm (low, high))] := by
-  calc
-    _ = 𝒮[outputHalves.symm <$> ($ᵗ (Digest × Digest))] :=
-      (evalSPMF_map_bijective_uniform_cross (α := Digest × Digest) (β := HashOutput) outputHalves.symm outputHalves.symm.bijective).symm
-    _ = 𝒮[outputHalves.symm <$> (do
-        let low ← $ᵗ Digest
-        let high ← $ᵗ Digest
-        pure (low, high))] := by
-      rw [evalSPMF_map, evalSPMF_map, evalDist_independent_uniform_pair]
-    _ = _ := by
-      simp only [map_bind, map_pure]
-      rw [evalSPMF_bind, evalSPMF_bind, evalDist_sampleParameter]
-      rfl
+/-- The low half of a uniform answer is a uniform digest. -/
+theorem evalDist_truncate_uniform :
+    𝒮[truncateHash <$> ($ᵗ HashOutput : ProbComp HashOutput)] = 𝒮[($ᵗ Digest : ProbComp Digest)] := by
+  have hmap : truncateHash <$> ($ᵗ HashOutput : ProbComp HashOutput) =
+      Prod.fst <$> (outputHalves <$> ($ᵗ HashOutput : ProbComp HashOutput)) := by
+    simp only [Functor.map_map]
+    rfl
+  rw [hmap, evalSPMF_map, evalSPMF_map_bijective_uniform_cross (α := HashOutput) (β := Digest × Digest)
+    outputHalves outputHalves.bijective, ← evalSPMF_map]
+  exact evalSPMF_map_fst_uniformSample_prod
 
-noncomputable def programmedCache (seed : MasterSeed) (parameter : PublicParameter) (secret : Secrets)
-    (parameterHigh : Digest) (secretHigh : Secrets) : QueryCache HashSpec :=
-  derivationCache seed (outputHalves.symm (parameter, parameterHigh)) (secretHalves.symm (secret, secretHigh))
+noncomputable def programmedCache (seed : MasterSeed) (secret secretHigh : Secrets) : QueryCache HashSpec :=
+  derivationCache seed (secretHalves.symm (secret, secretHigh))
 
 end SphincsSecurity.Seeded

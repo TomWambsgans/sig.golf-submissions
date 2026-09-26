@@ -5,7 +5,7 @@ namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec
 set_option backward.isDefEq.respectTransparency false
-attribute [local irreducible] boundaryEval sequenceFin chainWalk referenceEncodingSearch signLayer
+attribute [local irreducible] boundaryEval sequenceFin chainWalk referenceEncodingSearch
 
 abbrev OtsReferenceWords := Layer → TreeIndex → LeafIndex → Encoding
 abbrev OtsFrontierValues := Layer → TreeIndex → LeafIndex → ChainIndex → Digest
@@ -39,14 +39,13 @@ def frontierSignLayer (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords)
     (frontier : OtsFrontierValues) (index : Index) (lay : Layer) : Option LayerPart × Nat :=
   let search := frontierLayerSearch parameter f ftsSecret words frontier index lay
-  let cost := layerMessageHashCost lay + search.2
   match search.1 with
-  | none => (none, cost)
-  | some (counter, word) =>
+  | none => (none, search.2)
+  | some (counter, _) =>
       (some (counter, frontier lay (treeIndexAt index lay) (leafIndexAt index lay),
         evalWithAnswerFn f (frontierTreePath parameter lay (treeIndexAt index lay)
           (words lay (treeIndexAt index lay)) (frontier lay (treeIndexAt index lay)) (leafIndexAt index lay))),
-        cost + OtsCode.signingSteps word + authenticationHashCost lay)
+        search.2 + treeNodeHashCost (layerHeight lay))
 
 theorem eval_frontierLayerMessage (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
@@ -59,53 +58,63 @@ theorem eval_frontierLayerMessage (key : SecretKey) (f : QueryImpl HashSpec Id)
     exact eval_frontierTreeNode _ _ _ _ _ _ _ (hfrontier _ _) _ _
   · rfl
 
-theorem boundaryEval_signLayer_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
+theorem eval_signLayer_search (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index) (lay : Layer) :
+    evalWithAnswerFn f (signLayer key index lay) =
+      (referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
+        (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0).1.map fun result =>
+          (result.1, fun chainIdx => evalWithAnswerFn f
+            (chainWalk key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay) chainIdx 0
+              (result.2 chainIdx).val (key.otsSecret lay (treeIndexAt index lay) (leafIndexAt index lay) chainIdx)),
+            evalWithAnswerFn f (treePath key.parameter lay (treeIndexAt index lay)
+              (key.otsSecret lay (treeIndexAt index lay)) (leafIndexAt index lay))) := by
+  simp only [signLayer, evalWithAnswerFn_bind, otsSign, eval_otsSignFrom, eval_encodingSearch]
+  cases (referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
+      (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0).1 with
+  | none => rfl
+  | some result => simp only [Option.map_some, evalWithAnswerFn_bind, evalWithAnswerFn_pure]
+
+theorem specLayerCost_isSome (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index) (lay : Layer) :
+    (specLayerCost key f index lay).1.isSome = (evalWithAnswerFn f (signLayer key index lay)).isSome := by
+  rw [eval_signLayer_search, specLayerCost, Option.isSome_map]
+
+theorem layersHashCostFrom_congr {α β : Type} (A : Layer → Option α × Nat) (B : Layer → Option β × Nat)
+    (hcost : ∀ lay, (A lay).2 = (B lay).2) (hsome : ∀ lay, (A lay).1.isSome = (B lay).1.isSome)
+    (remaining : Nat) : layersHashCostFrom A remaining = layersHashCostFrom B remaining := by
+  induction remaining with
+  | zero => rfl
+  | succ r ih =>
+      simp only [layersHashCostFrom, ih, hcost, hsome]
+
+/-- The frontier layer is the specification's layer, value and cost. -/
+theorem frontierSignLayer_eq_spec (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
     (hfrontier : IsSigningFrontier key f words frontier) (index : Index) (lay : Layer)
     (hword : FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay) :
-    boundaryEval key.parameter f (signLayer key index lay) =
-      ((frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).1,
-        (FreeMonoid.of none) ^ (frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).2) := by
-  let search := frontierLayerSearch key.parameter f key.ftsSecret words frontier index lay
-  let values := frontier lay (treeIndexAt index lay) (leafIndexAt index lay)
-  let message := evalWithAnswerFn f (frontierLayerMessage key.parameter key.ftsSecret words frontier index lay)
-  have hm : evalWithAnswerFn f (layerMessage key index lay) = message :=
-    (eval_frontierLayerMessage key f words frontier hfrontier index lay).symm
-  have hots : boundaryEval key.parameter f
-      (otsSign key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
-        (key.otsSecret lay (treeIndexAt index lay) (leafIndexAt index lay)) message) =
-      (search.1.map (fun selected => (selected.1, values)),
-        (FreeMonoid.of none) ^ (search.2 + search.1.elim 0 (fun selected => OtsCode.signingSteps selected.2))) := by
-    simp only [search, values, frontierLayerSearch, message]
-    unfold otsSign
-    apply boundaryEval_otsSignFrom_frontier
-    intro counter word hw chainIdx
-    rw [hword counter word hw]
-    exact hfrontier _ _ _ _
-  have hotsValue := congrArg Prod.fst hots
-  rw [boundaryEval_fst] at hotsValue
+    frontierSignLayer key.parameter f key.ftsSecret words frontier index lay =
+      (evalWithAnswerFn f (signLayer key index lay), (specLayerCost key f index lay).2) := by
+  have hsearch : frontierLayerSearch key.parameter f key.ftsSecret words frontier index lay =
+      referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
+        (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0 := by
+    rw [frontierLayerSearch, eval_frontierLayerMessage key f words frontier hfrontier]
   have hpath := (eval_frontierTreePath key.parameter f lay (treeIndexAt index lay)
     (key.otsSecret lay (treeIndexAt index lay)) (words lay (treeIndexAt index lay))
-    (frontier lay (treeIndexAt index lay)) (hfrontier _ _) (leafIndexAt index lay)).symm
-  simp only [signLayer, boundaryEval_bind, boundaryEval_layerMessage, hm, hots, hotsValue]
-  change _ = ((match search.1 with
-    | none => (none, layerMessageHashCost lay + search.2)
-    | some (counter, word) => (some (counter, values,
-        evalWithAnswerFn f (frontierTreePath key.parameter lay (treeIndexAt index lay)
-          (words lay (treeIndexAt index lay)) (frontier lay (treeIndexAt index lay)) (leafIndexAt index lay))),
-        layerMessageHashCost lay + search.2 + OtsCode.signingSteps word + authenticationHashCost lay)).1,
-      (FreeMonoid.of none) ^ (frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).2)
-  cases hs : search.1 with
-  | none =>
-      change (frontierLayerSearch key.parameter f key.ftsSecret words frontier index lay).1 = none at hs
-      simp only [Option.map_none, Option.elim_none, Nat.add_zero,
-        boundaryEval_pure, frontierSignLayer, search, hs, mul_one, pow_add]
-  | some selected =>
-      obtain ⟨counter, word⟩ := selected
-      change (frontierLayerSearch key.parameter f key.ftsSecret words frontier index lay).1 = some (counter, word) at hs
-      simp only [Option.map_some, Option.elim_some, boundaryEval_bind,
-        boundaryEval_treePath, boundaryEval_pure, hpath, mul_one, frontierSignLayer,
-        search, hs, pow_add, mul_assoc]
+    (frontier lay (treeIndexAt index lay)) (hfrontier _ _) (leafIndexAt index lay))
+  have hspec := eval_signLayer_search key f index lay
+  rw [hspec, specLayerCost]
+  simp only [frontierSignLayer]
+  rw [hsearch]
+  cases hs : (referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
+      (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0).1 with
+  | none => simp only [Option.map_none, Option.elim_none, Nat.add_zero]
+  | some result =>
+      obtain ⟨counter, word⟩ := result
+      have hw : word = words lay (treeIndexAt index lay) (leafIndexAt index lay) :=
+        hword counter word (by rw [hsearch]; exact hs)
+      simp only [Option.map_some, Option.elim_some, hpath, Prod.mk.injEq, Option.some.injEq, and_true,
+        true_and]
+      funext chainIdx
+      rw [hw]
+      exact (hfrontier _ _ _ _).symm
 
 def frontierSignAfterDigest (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords)
@@ -118,8 +127,7 @@ def frontierSignAfterDigest (parameter : PublicParameter) (f : QueryImpl HashSpe
         ftsSecret := fun tree => ftsSecret index tree (leaves (ftsIndexOf tree))
         ftsPath := paths
         layers := fun lay => LayerSignature.ofPadded lay (parts lay) }),
-    ftsOpenHashCost + sequenceLayersHashCost layers +
-      if (sequenceFin (m := Option) (fun lay => (layers lay).1)).isSome then keygenHashCost else 0)
+    ftsOpenHashCost + sequenceLayersHashCost layers)
 
 theorem boundaryEval_signAfterDigest_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
@@ -130,26 +138,18 @@ theorem boundaryEval_signAfterDigest_frontier (key : SecretKey) (f : QueryImpl H
       ((frontierSignAfterDigest key.parameter f key.ftsSecret words frontier randomness index leaves).1,
         (FreeMonoid.of none) ^
           (frontierSignAfterDigest key.parameter f key.ftsSecret words frontier randomness index leaves).2) := by
-  have hparts : (fun lay => evalWithAnswerFn f (signLayer key index lay)) =
-      (fun lay => (frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).1) := by
-    funext lay
-    rw [← boundaryEval_fst key.parameter f]
-    exact congrArg Prod.fst (boundaryEval_signLayer_frontier key f words frontier hfrontier index lay (hwords lay))
-  have hlayers := boundaryEval_sequenceLayers key.parameter f (fun lay => signLayer key index lay)
-    (fun lay => frontierSignLayer key.parameter f key.ftsSecret words frontier index lay)
-    (fun lay => boundaryEval_signLayer_frontier key f words frontier hfrontier index lay (hwords lay))
-  have hlayersValue : evalWithAnswerFn f (sequenceLayers (fun lay => signLayer key index lay)) =
-      sequenceFin (m := Option) (fun lay => (frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).1) := by
-    rw [evalWithAnswerFn_sequenceLayers, hparts]
-  simp only [signAfterDigest, frontierSignAfterDigest, boundaryEval_bind, boundaryEval_ftsOpen,
-    hlayers, hlayersValue]
-  cases hc : sequenceFin (m := Option) (fun lay =>
-      (frontierSignLayer key.parameter f key.ftsSecret words frontier index lay).1) with
-  | none => simp only [boundaryEval_pure, Option.map_none, Option.isSome_none, Bool.false_eq_true,
-      ↓reduceIte, Nat.add_zero, mul_one, pow_add]
-  | some parts =>
-      simp only [boundaryEval_bind, treeRoot, boundaryEval_treeNode, boundaryEval_pure,
-        Option.map_some, Option.isSome_some, ↓reduceIte, mul_one, pow_add,
-        ← keygenHashCost_def, mul_assoc]
+  have hlayers : (fun lay => frontierSignLayer key.parameter f key.ftsSecret words frontier index lay) =
+      fun lay => (evalWithAnswerFn f (signLayer key index lay), (specLayerCost key f index lay).2) :=
+    funext fun lay => frontierSignLayer_eq_spec key f words frontier hfrontier index lay (hwords lay)
+  have hcost : sequenceLayersHashCost (fun lay => frontierSignLayer key.parameter f key.ftsSecret words frontier index lay) =
+      sequenceLayersHashCost (specLayerCost key f index) := by
+    rw [hlayers]
+    exact layersHashCostFrom_congr
+      (fun lay => (evalWithAnswerFn f (signLayer key index lay), (specLayerCost key f index lay).2))
+      (specLayerCost key f index) (fun _ => rfl) (fun lay => (specLayerCost_isSome key f index lay).symm) _
+  rw [boundaryEval_signAfterDigest]
+  simp only [frontierSignAfterDigest, hcost, signatureValue]
+  congr 2
+  simp only [hlayers]
 
 end SphincsSecurity.Concrete

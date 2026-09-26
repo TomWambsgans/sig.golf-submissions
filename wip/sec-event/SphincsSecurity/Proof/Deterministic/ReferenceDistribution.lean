@@ -10,13 +10,6 @@ set_option maxRecDepth 4096
 
 attribute [local irreducible] Concrete.gameAfterSecrets
 
-theorem evalDist_parameter_continuation {α : Type} (next : PublicParameter → ProbComp α) :
-    𝒮[do let output ← ($ᵗ HashOutput : ProbComp HashOutput); next (truncateHash output)] =
-      𝒮[do let parameter ← Concrete.sampleParameter; next parameter] := by
-  have h := evalDist_truncateHash_uniform.trans evalDist_sampleParameter.symm
-  have heq := congrArg (fun distribution => distribution >>= fun parameter => 𝒮[next parameter]) h
-  simpa only [evalSPMF_bind, evalSPMF_map, bind_map_left, bind_pure_comp, bind_assoc, pure_bind] using heq
-
 theorem evalDist_secrets_continuation {α : Type} (next : Secrets → ProbComp α) :
     𝒮[do let outputs ← sampleSecretOutputs; next (tableOts outputs, tableFts outputs)] =
       𝒮[do let secret ← sampleSecrets; next secret] := by
@@ -30,24 +23,13 @@ theorem evalDist_secrets_continuation {α : Type} (next : Secrets → ProbComp �
 
 theorem evalDist_referenceOutputs (adversary : Adversary) :
     𝒮[do
-      let parameterOutput ← ($ᵗ HashOutput : ProbComp HashOutput)
       let outputs ← sampleSecretOutputs
-      (simulateQ romImpl (Concrete.gameAfterSecrets adversary (truncateHash parameterOutput)
+      (simulateQ romImpl (Concrete.gameAfterSecrets adversary 0
         (tableOts outputs) (tableFts outputs))).run' ∅] =
       𝒮[(simulateQ romImpl (gameCore Concrete.scheme adversary)).run' ∅] := by
   rw [gameCore_independent_eq, run'_lift_sample_bind]
-  trans 𝒮[do
-    let parameter ← Concrete.sampleParameter
-    let outputs ← sampleSecretOutputs
-    (simulateQ romImpl (Concrete.gameAfterSecrets adversary parameter (tableOts outputs) (tableFts outputs))).run' ∅]
-  · exact evalDist_parameter_continuation fun parameter => do
-      let outputs ← sampleSecretOutputs
-      (simulateQ romImpl (Concrete.gameAfterSecrets adversary parameter (tableOts outputs) (tableFts outputs))).run' ∅
-  apply evalSPMF_bind_congr'
-  intro parameter
-  rw [run'_lift_sample_bind]
   exact evalDist_secrets_continuation fun secret =>
-    (simulateQ romImpl (Concrete.gameAfterSecrets adversary parameter secret.1 secret.2)).run' ∅
+    (simulateQ romImpl (Concrete.gameAfterSecrets adversary 0 secret.1 secret.2)).run' ∅
 
 theorem worldHandler_randomOracle : worldHandler randomOracle = romImpl := rfl
 
@@ -58,10 +40,8 @@ theorem evalDist_independentTableGame_memo (adversary : Adversary) :
   unfold independentTableGame drawSigningMaterial
   simp only [bind_assoc, pure_bind]
   apply evalSPMF_bind_congr'
-  intro parameterOutput
-  apply evalSPMF_bind_congr'
   intro outputs
-  have h := evalDist_tableGameAfterParameter_memo randomOracle adversary (truncateHash parameterOutput) outputs ∅
+  have h := evalDist_tableGameAfterSecrets_memo randomOracle adversary outputs ∅
   rw [worldHandler_randomOracle] at h
   have heq := congrArg (fun distribution => Prod.fst <$> distribution) h
   simpa only [StateT.run'_eq, evalSPMF_map, evalSPMF_bind, map_bind] using heq

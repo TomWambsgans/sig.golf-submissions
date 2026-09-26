@@ -7,7 +7,7 @@ open _root_.OracleComp OracleSpec CanonicalProbeRouting
 open AdaptiveResidualLabels hiding World State Environment
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs sourceInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
-  signDigestLoop signAfterDigest sequenceFin chainWalk gameInputs
+  signDigestLoop sequenceFin chainWalk gameInputs
 set_option backward.isDefEq.respectTransparency false
 
 theorem Context.frontierGame_original {inputs : Finset HashInput} (context : Context inputs)

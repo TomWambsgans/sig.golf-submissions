@@ -10,13 +10,12 @@ attribute [local irreducible] instFintypePosition boundaryEval referenceEncoding
 def publicSignLayer (known : Labels) (words : OtsReferenceWords) (selections : ReferenceFamily)
     (index : Index) (lay : Layer) : Option LayerPart × Nat :=
   let search := referenceSelectionResult (selections ⟨lay, treeIndexAt index lay, leafIndexAt index lay⟩)
-  let cost := layerMessageHashCost lay + search.2
   match search.1 with
-  | none => (none, cost)
-  | some (counter, word) =>
+  | none => (none, search.2)
+  | some (counter, _) =>
       (some (counter, knownFrontier known words lay (treeIndexAt index lay) (leafIndexAt index lay),
         knownTreePath known lay (treeIndexAt index lay) (leafIndexAt index lay)),
-        cost + OtsCode.signingSteps word + authenticationHashCost lay)
+        search.2 + treeNodeHashCost (layerHeight lay))
 
 structure PublicSigningPlan where
   randomness : Randomness
@@ -34,8 +33,7 @@ def publicSignPlan (known : Labels) (words : OtsReferenceWords) (selections : Re
   let layers := fun lay => publicSignLayer known words selections index lay
   ((sequenceFin (m := Option) (fun lay => (layers lay).1)).map (fun parts =>
       ⟨randomness, knownFtsPath known index leaves, parts⟩),
-    ftsOpenHashCost + sequenceLayersHashCost layers +
-      if (sequenceFin (m := Option) (fun lay => (layers lay).1)).isSome then keygenHashCost else 0)
+    ftsOpenHashCost + sequenceLayersHashCost layers)
 
 variable (key : SecretKey) (f : QueryImpl HashSpec Id) (words : OtsReferenceWords)
   (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)

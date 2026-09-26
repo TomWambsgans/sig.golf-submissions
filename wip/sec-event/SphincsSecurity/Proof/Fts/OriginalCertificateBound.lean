@@ -7,7 +7,7 @@ open _root_.OracleComp OracleSpec ENNReal
 open FtsProbeSimulation (RetainedRestResult retainedGameRestComputation)
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
-attribute [local irreducible] scheme signAfterDigest certificateCacheProposalImpl retainedGameRestComputation
+attribute [local irreducible] scheme certificateCacheProposalImpl retainedGameRestComputation
 
 abbrev CertificateContextResult := SecretKey × CertificateCacheGameResult
 abbrev OriginalCertificateResult := SecretKey × RetainedRestResult × QueryCache HashSpec

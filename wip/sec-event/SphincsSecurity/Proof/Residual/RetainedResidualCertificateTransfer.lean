@@ -7,7 +7,7 @@ open _root_.OracleComp OracleSpec CanonicalProbeRouting
 open AdaptiveResidualLabels hiding World State Environment
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition hashInputs sourceInputs
-  signDigestLoop signAfterDigest gameInputs
+  signDigestLoop gameInputs
 set_option backward.isDefEq.respectTransparency false
 
 theorem initialMonitoredSource_strong_certificate (key : SecretKey) (adversary : Adversary)

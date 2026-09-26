@@ -31,7 +31,7 @@ noncomputable def gameAfterSecrets (adversary : Adversary) (parameter : PublicPa
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) : OracleComp OracleWorld Bool := do
   let root ← liftM
-    (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree) : OracleComp HashSpec Digest)
+    (keygenRoot parameter (otsSecret topLayer rootTree) : OracleComp HashSpec Digest)
   gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩
 
 attribute [local semireducible] keygen

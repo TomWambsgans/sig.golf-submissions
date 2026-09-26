@@ -1,5 +1,4 @@
-import SigGolfCandidate.Ref
-import SigGolfCandidate.Rv
+import SigGolfCandidate.Sign.Sim
 
 /-!
 # Exact refinement of oracle computations by machine runs (`XSim`)
@@ -9,7 +8,7 @@ import SigGolfCandidate.Rv
 `b` compressions, independently of the oracle answers; the final state `t` satisfies `Q a t`
 (`a` the value of `oa`). Formally, there is `oc` over `{(a, t) // Q a t}` with
 
-* `countWith wt oa = (·.1.1, w) <$> oc` for the call count (`w = n`) and the block count (`w = b`);
+* `Sign.countBoth oa = (·.1.1, n, b) <$> oc` (the joint call / compression counter);
 * `execute (fuel + k) image s = oc >>= fun p => (·.charge c n b) <$> execute fuel image p.1.2`.
 
 This is an exact-cost variant of `SigGolfCandidate.Sign.Sim` (which bounds the cycles); it fits
@@ -18,30 +17,29 @@ programs whose control flow does not depend on the answers, like `keygen`.
 
 namespace SigGolfCandidate.Keygen
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec SigGolfCandidate.Rv
-  SigGolfCandidate.Ref
+  SigGolfCandidate.Ref SigGolfCandidate.Sign
 
 def XSim {α : Type} (image : Image) (s : MachineState) (k c n b : Nat)
     (oa : OracleComp HashSpec α) (Q : α → MachineState → Prop) : Prop :=
   ∃ oc : OracleComp HashSpec {p : α × MachineState // Q p.1 p.2},
-    (fun p => (p.1.1, n)) <$> oc = countWith (fun _ => 1) oa ∧
-    (fun p => (p.1.1, b)) <$> oc = countWith Query.blocks oa ∧
+    (fun p => (p.1.1, n, b)) <$> oc = countBoth oa ∧
     ∀ fuel, Riscv.execute (fuel + k) image s =
       oc >>= fun p => (fun r => r.charge c n b) <$> Riscv.execute fuel image p.1.2
 
 section
 variable {α β : Type} {image : Image}
 
-theorem XSim.val {n : Nat} {oa : OracleComp HashSpec α}
+theorem XSim.val {n b : Nat} {oa : OracleComp HashSpec α}
     {Q : α → MachineState → Prop} {oc : OracleComp HashSpec {p : α × MachineState // Q p.1 p.2}}
-    (h : (fun p => (p.1.1, n)) <$> oc = countWith (fun _ => 1) oa) :
+    (h : (fun p => (p.1.1, n, b)) <$> oc = countBoth oa) :
     (fun p => p.1.1) <$> oc = oa := by
   have := congrArg (fun x => Prod.fst <$> x) h
-  simp only [Functor.map_map, fst_countWith] at this
+  simp only [Functor.map_map, fst_countBoth] at this
   exact this
 
 theorem XSim.pure_steps {s t : MachineState} {k c : Nat} {a : α} {Q : α → MachineState → Prop}
     (h : Steps image s k c t) (hQ : Q a t) : XSim image s k c 0 0 (pure a) Q := by
-  refine ⟨pure ⟨(a, t), hQ⟩, rfl, rfl, ?_⟩
+  refine ⟨pure ⟨(a, t), hQ⟩, rfl, ?_⟩
   intro fuel
   rw [pure_bind, h.execute]
 
@@ -52,10 +50,9 @@ theorem XSim.pure {s : MachineState} {a : α} {Q : α → MachineState → Prop}
 theorem XSim.mono {s : MachineState} {k c n b : Nat} {oa : OracleComp HashSpec α}
     {Q Q' : α → MachineState → Prop} (h : XSim image s k c n b oa Q)
     (hQ : ∀ a t, Q a t → Q' a t) : XSim image s k c n b oa Q' := by
-  obtain ⟨oc, h1, h2, h3⟩ := h
-  refine ⟨(fun p => ⟨p.1, hQ _ _ p.2⟩) <$> oc, ?_, ?_, ?_⟩
+  obtain ⟨oc, h1, h3⟩ := h
+  refine ⟨(fun p => ⟨p.1, hQ _ _ p.2⟩) <$> oc, ?_, ?_⟩
   · rw [Functor.map_map]; exact h1
-  · rw [Functor.map_map]; exact h2
   · intro fuel; rw [h3 fuel, bind_map_left]
 
 theorem XSim.of_eq {s : MachineState} {k c n b k' c' n' b' : Nat} {oa ob : OracleComp HashSpec α}
@@ -63,14 +60,14 @@ theorem XSim.of_eq {s : MachineState} {k c n b k' c' n' b' : Nat} {oa ob : Oracl
     (hk : k = k') (hc : c = c') (hn : n = n') (hb : b = b') : XSim image s k' c' n' b' ob Q := by
   subst he hk hc hn hb; exact h
 
-private theorem count_bind_aux (wt : Query → Nat) {P₁ : α × MachineState → Prop}
+private theorem count_bind_aux {P₁ : α × MachineState → Prop}
     {P₂ : β × MachineState → Prop} (oc₁ : OracleComp HashSpec {p // P₁ p})
     (oc₂ : {p // P₁ p} → OracleComp HashSpec {q // P₂ q}) (f : α → OracleComp HashSpec β)
-    (w₁ w₂ : Nat) (oa : OracleComp HashSpec α)
-    (h₁ : (fun p => (p.1.1, w₁)) <$> oc₁ = countWith wt oa)
-    (h₂ : ∀ p, (fun q => (q.1.1, w₂)) <$> oc₂ p = countWith wt (f p.1.1)) :
-    (fun q => (q.1.1, w₁ + w₂)) <$> (oc₁ >>= oc₂) = countWith wt (oa >>= f) := by
-  rw [countWith_bind, ← h₁, bind_map_left, map_bind]
+    (n₁ b₁ n₂ b₂ : Nat) (oa : OracleComp HashSpec α)
+    (h₁ : (fun p => (p.1.1, n₁, b₁)) <$> oc₁ = countBoth oa)
+    (h₂ : ∀ p, (fun q => (q.1.1, n₂, b₂)) <$> oc₂ p = countBoth (f p.1.1)) :
+    (fun q => (q.1.1, n₁ + n₂, b₁ + b₂)) <$> (oc₁ >>= oc₂) = countBoth (oa >>= f) := by
+  rw [countBoth_bind, ← h₁, bind_map_left, map_bind]
   congr 1; funext p
   rw [← h₂ p, Functor.map_map]
 
@@ -81,17 +78,16 @@ theorem XSim.bind {s : MachineState} {k₁ c₁ n₁ b₁ k₂ c₂ n₂ b₂ : 
     (h₂ : ∀ a t, Q₁ a t → XSim image t k₂ c₂ n₂ b₂ (f a) Q₂) :
     XSim image s (k₁ + k₂) (c₁ + c₂) (n₁ + n₂) (b₁ + b₂) (oa >>= f) Q₂ := by
   classical
-  obtain ⟨oc₁, hc₁, hb₁, he₁⟩ := h₁
+  obtain ⟨oc₁, hc₁, he₁⟩ := h₁
   have h₂' : ∀ p : {p : α × MachineState // Q₁ p.1 p.2}, XSim image p.1.2 k₂ c₂ n₂ b₂ (f p.1.1) Q₂ :=
     fun p => h₂ _ _ p.2
   let oc₂ := fun p => Classical.choose (h₂' p)
   have spec := fun p => Classical.choose_spec (h₂' p)
-  refine ⟨oc₁ >>= oc₂, count_bind_aux _ oc₁ oc₂ f n₁ n₂ oa hc₁ (fun p => (spec p).1),
-    count_bind_aux _ oc₁ oc₂ f b₁ b₂ oa hb₁ (fun p => (spec p).2.1), ?_⟩
+  refine ⟨oc₁ >>= oc₂, count_bind_aux oc₁ oc₂ f n₁ b₁ n₂ b₂ oa hc₁ (fun p => (spec p).1), ?_⟩
   intro fuel
   rw [show fuel + (k₁ + k₂) = (fuel + k₂) + k₁ by omega, he₁, bind_assoc]
   congr 1; funext p
-  rw [(spec p).2.2 fuel, map_bind]
+  rw [(spec p).2 fuel, map_bind]
   congr 1; funext q
   rw [Functor.map_map]
   congr 1; funext r
@@ -112,9 +108,8 @@ theorem XSim.query {s : MachineState} {q : Query}
       (fun a t => t = writeHash s a) := by
   subst hq
   refine ⟨(fun a => ⟨(a, writeHash s a), rfl⟩) <$>
-      (liftM (HashSpec.query (hashInput s)) : OracleComp HashSpec _), ?_, ?_, ?_⟩
-  · rw [Functor.map_map, countWith_query]
-  · rw [Functor.map_map, countWith_query]
+      (liftM (HashSpec.query (hashInput s)) : OracleComp HashSpec _), ?_, ?_⟩
+  · rw [Functor.map_map, countBoth_query]
   · intro fuel
     rw [execute_hash fuel hf ht0 hv, bind_map_left]
 
@@ -185,15 +180,23 @@ theorem XSim.foldlM_range {γ : Type} (n : Nat) (f : γ → Nat → OracleComp H
 end
 
 /-- The counts of a refined computation are constant. -/
-theorem XSim.count_eq {image : Image} {s : MachineState} {k c n b : Nat}
+theorem XSim.count_eq {α : Type} {image : Image} {s : MachineState} {k c n b : Nat}
     {oa : OracleComp HashSpec α} {Q : α → MachineState → Prop} (h : XSim image s k c n b oa Q) :
     countWith (fun _ => 1) oa = (fun a => (a, n)) <$> oa ∧
       countWith Query.blocks oa = (fun a => (a, b)) <$> oa := by
-  obtain ⟨oc, hc, hb, _⟩ := h
+  obtain ⟨oc, hc, _⟩ := h
   have hv := XSim.val hc
   refine ⟨?_, ?_⟩
-  · rw [← hc, ← hv, Functor.map_map]
-  · rw [← hb, ← hv, Functor.map_map]
+  · rw [show countWith (fun _ => 1) oa = countCalls oa from rfl, ← countBoth_calls, ← hc, ← hv,
+      Functor.map_map, Functor.map_map]
+  · rw [show countWith Query.blocks oa = countBlocks oa from rfl, ← countBoth_blocks, ← hc, ← hv,
+      Functor.map_map, Functor.map_map]
+
+theorem XSim.countBoth_eq {α : Type} {image : Image} {s : MachineState} {k c n b : Nat}
+    {oa : OracleComp HashSpec α} {Q : α → MachineState → Prop} (h : XSim image s k c n b oa Q) :
+    countBoth oa = (fun a => (a, n, b)) <$> oa := by
+  obtain ⟨oc, hc, _⟩ := h
+  rw [← hc, ← XSim.val hc, Functor.map_map]
 
 /-! ## Whole phases -/
 
@@ -210,7 +213,7 @@ theorem XSim.run_eq {α : Type} (submission : Submission) (phase : Phase)
       t.getReg .x5 = 1 ∧ t.getReg .x10 = 0 ∧
       readOutput submission.sizes submission.layout phase t = F a) :
     submission.run phase input = (fun a => ⟨some (F a), true, c + 1, n, b⟩) <$> oa := by
-  obtain ⟨oc, hc, _, he⟩ := hsim
+  obtain ⟨oc, hc, he⟩ := hsim
   have e1 := he (CYCLE_LIMIT - k - 1 + 1)
   rw [show CYCLE_LIMIT - k - 1 + 1 + k = CYCLE_LIMIT by omega] at e1
   rw [Rv.run_eq submission phase input s hinit, e1, map_bind, ← XSim.val hc,

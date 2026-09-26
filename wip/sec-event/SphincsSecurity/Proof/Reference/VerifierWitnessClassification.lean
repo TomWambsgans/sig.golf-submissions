@@ -35,7 +35,7 @@ theorem verify_classification (f : QueryImpl HashSpec Id) (key : SecretKey) (wor
   · rcases FtsVerifierWitness.recover_classification f key (digestIndex digest) (digestLeaves digest) signature.ftsSecret signature.ftsPath trace hfts
         ((recordedCache_run_iff f trace _).mp hftsrun) with ⟨hftsOpening, hqueries⟩ | he
     · refine Or.inl ⟨?_, fun lay => (hopenings lay).1, hqueries⟩
-      exact ⟨fun lay => ⟨(hopenings lay).1.honest, (hopenings lay).2.1⟩, hftsOpening, hftsrun, fun lay => (hopenings lay).2.2⟩
+      exact ⟨fun lay => ⟨(hopenings lay).1.honest, (hopenings lay).2⟩, hftsOpening, hftsrun⟩
     · exact Or.inr (Or.inr he)
   · exact Or.inr (Or.inl he)
 

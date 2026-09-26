@@ -57,7 +57,7 @@ theorem referenceTwoWitnessRest_program (key : SecretKey) (inputs : Finset HashI
   simp only [completedReferenceContact, reference_root, completedTwoGuesses, completedAtRoot]
 
 theorem referenceTwoWitnessRest_initial_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter)
+    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -68,7 +68,7 @@ theorem referenceTwoWitnessRest_initial_bound (dummy : OtsReferenceWords) (adver
             (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
               (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary.rows auxiliary.seed)))
         labels auxiliary.selections dummy adversary]] ≤ pairRate budget := by
-  have h := initial_original_two_witnesses dummy adversary budget hbudget parameter otsSecret labels auxiliary hauxiliary
+  have h := initial_original_two_witnesses dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary
   dsimp only at h
   have hprior := congrArg (fun law : SPMF (Coordinate → Digest) => law >>= fun secrets =>
       (fun result => (secrets, result)) <$> 𝒮[simulateQ
@@ -101,7 +101,8 @@ theorem referenceForgeryGame_two_guesses (dummy : OtsReferenceWords) (adversary 
     (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] = _ at hprojected
   rw [hprojected]
   apply probEvent_bind_le_of_forall_le
-  intro parameter _
+  intro parameter hparameter
+  have hparameter := mem_support_sampleParameter_of_evalSPMF hparameter
   apply probEvent_bind_le_of_forall_le
   intro otsSecret _
   rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets] 𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)]]
@@ -110,7 +111,7 @@ theorem referenceForgeryGame_two_guesses (dummy : OtsReferenceWords) (adversary 
   rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets] 𝒮[PMF.uniformOfFintype CanonicalGraphLabels]]
   apply probEvent_bind_le_of_forall_le
   intro labels _
-  have h := referenceTwoWitnessRest_initial_bound dummy adversary budget hbudget parameter otsSecret labels auxiliary
+  have h := referenceTwoWitnessRest_initial_bound dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary
     (pmf_support _ auxiliary hauxiliary)
   simpa only [referenceTwoWitnessRest, evalSPMF_map] using h
 

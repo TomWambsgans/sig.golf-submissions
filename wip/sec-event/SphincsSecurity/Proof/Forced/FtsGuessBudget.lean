@@ -49,9 +49,22 @@ private theorem probComp_nonzero {Result : Type} (computation : ProbComp Result)
     (hr : result ∈ support computation) : 𝒮[computation] result ≠ 0 := by
   simpa only [mem_support_iff, probOutput_def] using hr
 
+theorem mem_support_sampleParameter_of_evalSPMF {p : PublicParameter} (h : p ∈ support 𝒮[sampleParameter]) :
+    p ∈ support sampleParameter := by
+  unfold sampleParameter at h ⊢
+  simpa using h
+
+theorem mem_support_sampleParameter_of_ne_zero {p : PublicParameter} (h : 𝒮[sampleParameter] p ≠ 0) :
+    p ∈ support sampleParameter := by
+  unfold sampleParameter at h ⊢
+  simp only [evalSPMF_pure, ne_eq] at h
+  simp only [support_pure, Set.mem_singleton_iff]
+  by_contra hne
+  exact h (by simp only [SPMF.pure_apply]; exact if_neg hne)
+
 theorem referenceResidualGame_auxiliary_support (inputs : Finset HashInput)
     (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs) (dummy : OtsReferenceWords) (adversary : Adversary)
-    (parameter : PublicParameter) (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter) (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (auxiliary : ReferenceAuxiliary inputs)
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support) (labels : CanonicalGraphLabels)
     (result : Bool × SigningBoundaryTrace)
@@ -66,8 +79,7 @@ theorem referenceResidualGame_auxiliary_support (inputs : Finset HashInput)
   simp only [RetainedObservation.bind_nonzero]
   refine ⟨parameter, probComp_nonzero sampleParameter parameter ?_, otsSecret, probComp_nonzero sampleOtsSecrets otsSecret ?_,
     ftsSecret, probComp_nonzero sampleFtsSecrets ftsSecret ?_, auxiliary, ?_, labels, ?_, result, hr, ?_⟩
-  · unfold sampleParameter
-    exact @mem_support_uniformSample PublicParameter instSampleableTypePublicParameter parameter
+  · exact hparameter
   · simp only [sampleOtsSecrets, support_uniformSample, Set.mem_univ]
   · simp only [sampleFtsSecrets, support_uniformSample, Set.mem_univ]
   · simpa only [SPMF.liftM_apply] using (PMF.mem_support_iff _ _).mp hauxiliary
@@ -81,7 +93,7 @@ noncomputable def originalAnswers (dummy : OtsReferenceWords) (adversary : Adver
     (canonicalEncodingInputs_subset_gameInputs adversary parameter) auxiliary dummy
 
 theorem original_completedWork_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
@@ -101,11 +113,11 @@ theorem original_completedWork_le (dummy : OtsReferenceWords) (adversary : Adver
     rw [map_eq_bind_pure_comp, RetainedObservation.bind_nonzero]
     exact ⟨result, hr, by simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not]⟩
   have hs := referenceResidualGame_auxiliary_support (canonicalGraphGameInputs adversary)
-    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary parameter otsSecret ftsSecret auxiliary hauxiliary labels _ hv
+    (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary parameter hparameter otsSecret ftsSecret auxiliary hauxiliary labels _ hv
   simpa only [verdict_work] using referenceResidualGame_hashCalls_le dummy adversary q hbound (auxiliary.selections, verdict result) hs
 
 theorem fixed_original_completedRun_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (secrets : Coordinate → Digest)
     (labels : CanonicalGraphLabels) (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -119,7 +131,7 @@ theorem fixed_original_completedRun_budget (dummy : OtsReferenceWords) (adversar
     rw [← SecretGuessObservation.fixedRun_projection _ secrets _ state,
       map_eq_bind_pure_comp, RetainedObservation.bind_nonzero]
     exact ⟨result, hr, by simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not]⟩
-  have hw := original_completedWork_le dummy adversary q hbound parameter otsSecret (FtsGuessSigning.secretTable.symm secrets)
+  have hw := original_completedWork_le dummy adversary q hbound parameter hparameter otsSecret (FtsGuessSigning.secretTable.symm secrets)
     labels auxiliary hauxiliary result.1 hp
   have hc := fixed_completedRun_probes
     (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary)) secrets
@@ -127,7 +139,7 @@ theorem fixed_original_completedRun_budget (dummy : OtsReferenceWords) (adversar
   exact ⟨hw, hc⟩
 
 theorem lazy_original_completedRun_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -138,12 +150,12 @@ theorem lazy_original_completedRun_budget (dummy : OtsReferenceWords) (adversary
     keygenHashCost + completedWork result.1 ≤ q ∧ result.2.probes ≤ completedWork result.1 := by
   rw [← SecretGuessObservation.run_erasure _ _ _ (fun _ => Finset.univ_nonempty), RetainedObservation.bind_nonzero] at hr
   obtain ⟨secrets, _, hr⟩ := hr
-  have h := fixed_original_completedRun_budget dummy adversary q hbound parameter otsSecret secrets labels auxiliary hauxiliary
+  have h := fixed_original_completedRun_budget dummy adversary q hbound parameter hparameter otsSecret secrets labels auxiliary hauxiliary
     (SecretGuessObservation.initialState PUnit.unit) result hr
   simpa only [SecretGuessObservation.initialState, Nat.zero_add] using h
 
 theorem lazy_original_completedRun_probes (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -152,7 +164,7 @@ theorem lazy_original_completedRun_probes (dummy : OtsReferenceWords) (adversary
       (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
       (completedRun parameter (canonicalGraphRoot labels) labels adversary) (SecretGuessObservation.initialState PUnit.unit) result ≠ 0) :
     keygenHashCost + result.2.probes ≤ q := by
-  obtain ⟨hw, hp⟩ := lazy_original_completedRun_budget dummy adversary q hbound parameter otsSecret labels auxiliary hauxiliary result hr
+  obtain ⟨hw, hp⟩ := lazy_original_completedRun_budget dummy adversary q hbound parameter hparameter otsSecret labels auxiliary hauxiliary result hr
   omega
 
 end SphincsSecurity.Concrete.FtsGuessHash

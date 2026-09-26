@@ -3,8 +3,9 @@ import SphincsSecurity.Completeness.Search
 /-!
 # The counter search
 
-`otsSign` is the search of `Search.lean` run over the encoding inputs: the counter rides in the
-hashed bytes, so the inputs below the wrap are distinct, and the trial budget is exactly the wrap.
+`encodingSearch` is the search of `Search.lean` run over the encoding inputs: the counter rides in
+the hashed bytes, so the inputs below the `2 ^ 32` wrap are distinct, and the trial budget
+`C_max = 2 ^ 20` stays below it.
 What remains to bound its failure is the share of answers the target-sum code rejects.
 -/
 
@@ -14,7 +15,7 @@ set_option maxRecDepth 10000
 
 namespace SphincsSecurity.Completeness
 
-open Concrete Seeded
+open Concrete
 
 /-- The input the counter search hashes at counter `c`. -/
 def encodeInput (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
@@ -33,17 +34,18 @@ theorem encodeInput_inj (parameter : PublicParameter) (lay : Layer) (tree : Tree
   exact counter_bytes_inj hc hc' (List.append_cancel_left hpayload')
 
 /-- The counter search exhausts its budget with probability at most the rejection share to the budget. -/
-theorem probEvent_otsSign (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (seed : MasterSeed) (message : Digest) (cache : QueryCache HashSpec)
+theorem probEvent_encodingSearch (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (message : Digest) (cache : QueryCache HashSpec)
     (hfresh : ∀ c, c < encodingAttemptLimit →
       cache (encodeInput parameter lay tree leaf message c) = none) :
     Pr[fun r => r.1 = none | (simulateQ randomOracle
-        (otsSign parameter lay tree leaf seed message
-          : OracleComp HashSpec (Option (Counter × (ChainIndex → Digest))))).run cache]
+        (encodingSearch parameter lay tree leaf message encodingAttemptLimit 0
+          : OracleComp HashSpec (Option (Counter × Encoding)))).run cache]
       ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ encodingAttemptLimit := by
-  rw [otsSign, otsSignFrom_eq_searchLoop]
+  have hwrap : encodingAttemptLimit ≤ 2 ^ 32 := by rw [encodingAttemptLimit]; norm_num
+  rw [encodingSearch_eq_searchLoop]
   exact probEvent_searchLoop _ _ _ encodingAttemptLimit
-    (fun s s' hs hs' heq => encodeInput_inj parameter lay tree leaf message hs hs' heq)
+    (fun s s' hs hs' heq => encodeInput_inj parameter lay tree leaf message (by omega) (by omega) heq)
     encodingAttemptLimit 0 (by simp) cache (fun s _ hsb => hfresh s hsb)
 
 end SphincsSecurity.Completeness

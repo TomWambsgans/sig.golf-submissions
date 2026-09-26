@@ -343,7 +343,8 @@ theorem cachedNearGame_le (dummy : OtsReferenceWords) (adversary : Adversary) (q
     (hbudget : q ≤ 2 ^ 127) (slot : Nat) :
     Pr[fun hit => hit = true | cachedNearGame dummy adversary slot] ≤ nearCertificateBound q := by
   unfold cachedNearGame
-  refine probEvent_bind_le_of_forall_le fun parameter _ => ?_
+  refine probEvent_bind_le_of_forall_le fun parameter hparameter => ?_
+  have hparameter := mem_support_sampleParameter_of_evalSPMF hparameter
   refine probEvent_bind_le_of_forall_le fun otsSecret _ => ?_
   refine probEvent_bind_le_of_forall_le fun selections hselections => ?_
   refine probEvent_bind_le_of_forall_le fun rows hrows => ?_
@@ -358,13 +359,13 @@ theorem cachedNearGame_le (dummy : OtsReferenceWords) (adversary : Adversary) (q
   have hcovered : ∀ monitor, CoveredRun parameter (canonicalGraphRoot labels) otsSecret (canonicalGraphGameInputs adversary)
       (adversary.main ⟨canonicalGraphRoot labels, parameter⟩) ((∅, initialState PUnit.unit), monitor) :=
     fun _ secrets _ =>
-      coveredInputs_main_subset adversary ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+      coveredInputs_main_subset adversary ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ hparameter
   have hwork : ∀ result : Completed × CachedState,
       nearLaw parameter (canonicalGraphRoot labels) otsSecret labels (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary parameter) selections (Function.uncurry rows) dummy slot adversary result ≠ 0 →
         keygenHashCost + completedWork result.1 ≤ q := by
     intro result hresult
-    have h := cachedForcedRun_original_budget dummy adversary q slot hbound parameter otsSecret labels
+    have h := cachedForcedRun_original_budget dummy adversary q slot hbound parameter hparameter otsSecret labels
       ⟨selections, Function.uncurry rows, fun _ => Classical.arbitrary _⟩ (hauxiliary _)
     have hsel' : (⟨selections, Function.uncurry rows, fun _ => Classical.arbitrary _⟩ :
       ReferenceAuxiliary (canonicalGraphGameInputs adversary)).selections = selections := rfl

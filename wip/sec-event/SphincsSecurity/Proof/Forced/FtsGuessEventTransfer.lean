@@ -95,7 +95,7 @@ theorem initial_reference_two_witnesses (parameter : PublicParameter) (root : Di
   · exact hevent
 
 theorem initial_original_two_witnesses (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter)
+    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -112,6 +112,6 @@ theorem initial_original_two_witnesses (dummy : OtsReferenceWords) (adversary : 
   exact (initial_reference_two_witnesses parameter (canonicalGraphRoot labels) otsSecret
     (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary parameter)
     labels auxiliary hauxiliary dummy adversary).trans
-    (lazy_original_two_guesses dummy adversary budget hbudget parameter otsSecret labels auxiliary hauxiliary)
+    (lazy_original_two_guesses dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary)
 
 end SphincsSecurity.Concrete.FtsGuessHash

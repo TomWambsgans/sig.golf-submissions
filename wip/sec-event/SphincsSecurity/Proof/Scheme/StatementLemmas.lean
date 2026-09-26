@@ -115,7 +115,36 @@ theorem verifyLayers_succ_eq (parameter : PublicParameter) (index : Index) (sign
 
 attribute [local irreducible] verifyLayers
 
-theorem verify_eq (publicKey : PublicKey) (message : Message) (signature : Signature) :
+theorem verifyCore_eq (publicKey : PublicKey) (message : Message) (signature : Signature) :
+    verifyCore (m := m) publicKey message signature
+      = (do
+          let digest ← messageDigest publicKey.parameter publicKey.root message signature.randomness
+          if ¬ Admissible digest then
+            return false
+          else
+            let ftsPublicKey ← ftsRecover publicKey.parameter (digestIndex digest)
+              (digestLeaves digest) signature.ftsSecret signature.ftsPath
+            match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
+                ftsPublicKey with
+            | none => return false
+            | some root => return decide (root = publicKey.root)) := by
+  unfold verifyCore
+  apply bind_congr
+  intro digest
+  split
+  · rfl
+  · apply bind_congr
+    intro key
+    apply bind_congr
+    intro result
+    cases result <;> rfl
+
+theorem verify_eq_ite (publicKey : PublicKey) (message : Message) (signature : Signature) :
+    verify (m := m) publicKey message signature
+      = if CountersInRange signature then verifyCore publicKey message signature else pure false := rfl
+
+theorem verify_eq (publicKey : PublicKey) (message : Message) (signature : Signature)
+    (hcounters : CountersInRange signature) :
     verify (m := m) publicKey message signature
       = (do
           let digest ← messageDigest publicKey.parameter publicKey.root message signature.randomness
@@ -128,68 +157,37 @@ theorem verify_eq (publicKey : PublicKey) (message : Message) (signature : Signa
                 ftsPublicKey with
             | none => return false
             | some root => return decide (root = publicKey.root)) := by
-  unfold verify
-  apply bind_congr
-  intro digest
-  split
-  · rfl
-  · apply bind_congr
-    intro key
-    apply bind_congr
-    intro result
-    cases result <;> rfl
+  rw [verify_eq_ite, if_pos hcounters, verifyCore_eq]
+
+theorem verify_eq_of_not_counters (publicKey : PublicKey) (message : Message) (signature : Signature)
+    (hcounters : ¬ CountersInRange signature) :
+    verify (m := m) publicKey message signature = pure false := by
+  rw [verify_eq_ite, if_neg hcounters]
 
 theorem sign_eq (secretKey : SecretKey) (message : Message) :
     sign secretKey message
       = (do
           match ← signDigestLoop digestAttemptLimit secretKey message with
           | none => return none
-          | some (randomness, index, leaves) => do
-              let ftsPath ← liftM
-                (ftsOpen secretKey.parameter index leaves (secretKey.ftsSecret index) :
-                  OracleComp HashSpec (FtsTree → Fin ftsTreeHeight → Digest))
-              let layers ← liftM
-                (sequenceLayers (fun lay => signLayer secretKey index lay) :
-                  OracleComp HashSpec
-                    (Option (Layer → Counter × (ChainIndex → Digest) × (Fin maxLayerHeight → Digest))))
-              match layers with
-              | none => return none
-              | some parts => do
-                  let _ ← liftM
-                    (treeRoot secretKey.parameter topLayer rootTree (secretKey.otsSecret topLayer rootTree) :
-                      OracleComp HashSpec Digest)
-                  return some
-                    { randomness := randomness
-                      ftsSecret := fun tree =>
-                        secretKey.ftsSecret index tree (leaves (ftsIndexOf tree))
-                      ftsPath := ftsPath
-                      layers := fun lay => LayerSignature.ofPadded lay (parts lay) }) := rfl
+          | some (randomness, index, leaves) =>
+              liftM (signAfterDigest secretKey randomness index leaves :
+                OracleComp HashSpec (Option Signature))) := rfl
 
 theorem sampleRandomness_eq :
     sampleRandomness = ($ᵗ Randomness : ProbComp Randomness) := rfl
-
-example : ∀ failure : Fin 4,
-    let result := (sequenceLayers (m := WriterT (List Nat) Id) fun lay =>
-      WriterT.mk (pure (if lay.val = failure.val then none else some lay.val, [lay.val]))).run
-    (result.2, result.1.map List.ofFn) =
-      ![([2, 1, 0], none), ([2, 1], none), ([2], none), ([2, 1, 0], some [0, 1, 2])] failure := by
-  decide
 
 /-! ## Parameter arithmetic -/
 
 example : ∑ lay : Layer, layerHeight lay = totalHeight := by decide
 
-example : (layerHeight topLayer, layerHeight middleLayer, layerHeight bottomLayer) = (12, 7, 7) := by
-  decide
+example : (List.ofFn fun lay : Layer => layerHeight lay) = [5, 5, 5, 5, 5, 5, 4] := by decide
 
-example : (heightAbove topLayer, heightAbove middleLayer, heightAbove bottomLayer) = (0, 12, 19) := by
-  decide
+example : (List.ofFn fun lay : Layer => heightAbove lay) = [0, 5, 10, 15, 20, 25, 30] := by decide
 
-example : (heightBelow topLayer, heightBelow middleLayer, heightBelow bottomLayer) = (14, 7, 0) := by
-  decide
+example : (List.ofFn fun lay : Layer => heightBelow lay) = [29, 24, 19, 14, 9, 4, 0] := by decide
 
-/-- The digest is `h + k * a = 176` bits and has to fit in one oracle output. -/
-example : messageDigestBits = 176 ∧ messageDigestBits ≤ hashOutputBits := by decide
+/-- The digest is `h + k * a = 184` bits and has to fit in one oracle output. -/
+example : messageDigestBits = 184 ∧ messageDigestBits ≤ hashOutputBits := by decide
 
 theorem treeIndexAt_val (index : Index) (lay : Layer) :
     (treeIndexAt index lay).val = index.val / 2 ^ (totalHeight - heightAbove lay) := rfl
@@ -197,37 +195,43 @@ theorem treeIndexAt_val (index : Index) (lay : Layer) :
 theorem leafIndexAt_val (index : Index) (lay : Layer) :
     (leafIndexAt index lay).val = index.val / 2 ^ heightBelow lay % 2 ^ layerHeight lay := rfl
 
+theorem leafIndexAt_lt (index : Index) (lay : Layer) :
+    (leafIndexAt index lay).val < 2 ^ layerHeight lay := by
+  rw [leafIndexAt_val]
+  exact Nat.mod_lt _ (Nat.two_pow_pos _)
+
+theorem heightAbove_top : heightAbove topLayer = 0 := by decide
+
+/-- The layer below `lay` sits `h_lay` bits lower in the index. -/
+theorem heightAbove_succ (lay : Layer) (hbelow : lay.val + 1 < numLayers) :
+    heightAbove ⟨lay.val + 1, hbelow⟩ = heightAbove lay + layerHeight lay := by
+  revert lay; decide
+
+theorem heightAbove_add_le (lay : Layer) : heightAbove lay + layerHeight lay ≤ totalHeight := by
+  revert lay; decide
+
+theorem heightBelow_eq (lay : Layer) :
+    heightBelow lay + layerHeight lay + heightAbove lay = totalHeight := by
+  revert lay; decide
+
 /-- Layer `0` holds a single tree, the public key's. -/
 theorem treeIndexAt_topLayer (index : Index) : (treeIndexAt index topLayer).val = 0 := by
-  have hlt : index.val < 2 ^ 26 := index.isLt
-  have h0 : totalHeight - heightAbove topLayer = 26 := by decide
-  simp only [treeIndexAt_val, h0]
-  omega
+  have hlt : index.val < 2 ^ totalHeight := index.isLt
+  rw [treeIndexAt_val, heightAbove_top, Nat.sub_zero]
+  exact Nat.div_eq_of_lt hlt
 
-/-- The layers link: the tree used on a layer is the one whose root sits at leaf `e_(lay-1)` of the
-tree used on the layer above. -/
-theorem layers_link_top (index : Index) :
-    (treeIndexAt index middleLayer).val
-      = (treeIndexAt index topLayer).val * 2 ^ layerHeight topLayer
-        + (leafIndexAt index topLayer).val := by
-  have hlt : index.val < 2 ^ 26 := index.isLt
-  have h0 : totalHeight - heightAbove topLayer = 26 := by decide
-  have h1 : totalHeight - heightAbove middleLayer = 14 := by decide
-  have hb : heightBelow topLayer = 14 := by decide
-  have hh : layerHeight topLayer = 12 := by decide
-  simp only [treeIndexAt_val, leafIndexAt_val, h0, h1, hb, hh]
-  omega
-
-theorem layers_link_middle (index : Index) :
-    (treeIndexAt index bottomLayer).val
-      = (treeIndexAt index middleLayer).val * 2 ^ layerHeight middleLayer
-        + (leafIndexAt index middleLayer).val := by
-  have h1 : totalHeight - heightAbove middleLayer = 14 := by decide
-  have h2 : totalHeight - heightAbove bottomLayer = 7 := by decide
-  have hb : heightBelow middleLayer = 7 := by decide
-  have hh : layerHeight middleLayer = 7 := by decide
-  simp only [treeIndexAt_val, leafIndexAt_val, h1, h2, hb, hh]
-  omega
+/-- The layers link: the tree used on the layer below `lay` is the one whose root sits at leaf
+`e_lay` of the tree used on `lay`. -/
+theorem layers_link (index : Index) (lay : Layer) (hbelow : lay.val + 1 < numLayers) :
+    (treeIndexAt index ⟨lay.val + 1, hbelow⟩).val
+      = (treeIndexAt index lay).val * 2 ^ layerHeight lay + (leafIndexAt index lay).val := by
+  have hsum := heightBelow_eq lay
+  have habove := heightAbove_succ lay hbelow
+  rw [treeIndexAt_val, treeIndexAt_val, leafIndexAt_val, habove]
+  have hb : totalHeight - (heightAbove lay + layerHeight lay) = heightBelow lay := by omega
+  have ht : totalHeight - heightAbove lay = heightBelow lay + layerHeight lay := by omega
+  rw [hb, ht, pow_add, ← Nat.div_div_eq_div_mul]
+  exact (Nat.div_add_mod' _ _).symm
 
 /-- The bottom layer's leaves are the `2^h` indices themselves. -/
 theorem leafIndexAt_bottomLayer (index : Index) :

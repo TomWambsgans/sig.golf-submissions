@@ -1,6 +1,6 @@
 import SphincsSecurity.Proof.Deterministic.TableSigner
 import SphincsSecurity.Proof.Deterministic.FreshRequests
-import SphincsSecurity.Proof.Ots.EncodingProbability
+import SphincsSecurity.Proof.Seeded.TableSampling
 
 open OracleComp OracleSpec
 

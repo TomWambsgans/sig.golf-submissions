@@ -59,7 +59,7 @@ theorem trialTableRun_eq (handler : QueryImpl OracleWorld (StateT State ProbComp
 
 theorem evalDist_randomizer :
     𝒮[truncateHash <$> ($ᵗ HashOutput : ProbComp HashOutput)] = 𝒮[Concrete.sampleRandomness] := by
-  apply Eq.trans evalDist_truncateHash_uniform
+  apply Eq.trans evalDist_truncate_uniform
   simp only [Concrete.sampleRandomness_eq, evalSPMF_uniformSample]
 
 theorem run_freshTrialLoop_succ (hash : QueryImpl HashSpec (StateT State ProbComp))

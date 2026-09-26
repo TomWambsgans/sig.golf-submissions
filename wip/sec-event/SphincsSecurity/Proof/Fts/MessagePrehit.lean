@@ -1,4 +1,5 @@
 import SphincsSecurity.Proof.Base.Prelude
+import SphincsSecurity.Proof.Scheme.BuildEval
 import SphincsSecurity.Proof.Scheme.NoMessage
 import SphincsSecurity.Proof.Scheme.Replay
 /-!
@@ -100,11 +101,11 @@ theorem Concrete.signAfterDigest_some_randomness (f : QueryImpl HashSpec Id)
     (heval : evalWithAnswerFn f
       (Concrete.signAfterDigest secretKey randomness index leaves) = some signature) :
     signature.randomness = randomness := by
-  simp only [Concrete.signAfterDigest, evalWithAnswerFn_bind] at heval
-  cases hparts : evalWithAnswerFn f (Concrete.sequenceLayers fun lay => Concrete.signLayer secretKey index lay) with
-  | none => simp only [hparts, evalWithAnswerFn_pure, reduceCtorEq] at heval
+  rw [Concrete.eval_signAfterDigest, Concrete.signatureValue] at heval
+  cases hparts : sequenceFin (m := Option) (fun lay => evalWithAnswerFn f (Concrete.signLayer secretKey index lay)) with
+  | none => simp only [hparts, Option.map_none, reduceCtorEq] at heval
   | some parts =>
-      simp only [hparts, evalWithAnswerFn_bind, evalWithAnswerFn_pure, Option.some.injEq] at heval
+      simp only [hparts, Option.map_some, Option.some.injEq] at heval
       subst signature
       rfl
 

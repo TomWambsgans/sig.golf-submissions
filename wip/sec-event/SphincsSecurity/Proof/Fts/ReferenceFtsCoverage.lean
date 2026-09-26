@@ -6,7 +6,7 @@ namespace SphincsSecurity.Concrete.ReferenceFtsCoverage
 open _root_.OracleComp OracleSpec OtsContactTrace
 open RetainedResidual (signingInput signingView)
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signAfterDigest canonicalGraphInputs canonicalEncodingInputs
+attribute [local irreducible] canonicalGraphInputs canonicalEncodingInputs
 set_option backward.isDefEq.respectTransparency false
 
 noncomputable def transcriptCache (f : QueryImpl HashSpec Id) (boundary : SigningBoundaryTrace) (trace : Trace) : QueryCache HashSpec :=
@@ -70,7 +70,7 @@ theorem certificate_of_covered (key : SecretKey) (f : QueryImpl HashSpec Id) (lo
 def NearGuess (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
     (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) : Prop :=
   let target := signingView key f forgery.message forgery.signature
-  ∃ omitted : FtsTree,
+  CountersInRange forgery.signature ∧ ∃ omitted : FtsTree,
     TargetCertificateAt key (Finset.univ.erase omitted) (transcriptCache f boundary trace, log) (signingInput key forgery.message forgery.signature) ∧
     ¬CoveredByLog key f log target omitted ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 omitted (target.2 omitted) trace
 
@@ -82,11 +82,13 @@ def TwoGuesses (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog Sig
 
 def Outcome (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
     (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) : Prop :=
-  TargetCertificateAt key Finset.univ (transcriptCache f boundary trace, log) (signingInput key forgery.message forgery.signature) ∨
+  (CountersInRange forgery.signature ∧
+    TargetCertificateAt key Finset.univ (transcriptCache f boundary trace, log) (signingInput key forgery.message forgery.signature)) ∨
     NearGuess key f log boundary trace forgery ∨ TwoGuesses key f log trace forgery
 
 theorem classification (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
     (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery)
+    (hcounters : CountersInRange forgery.signature)
     (horigin : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log →
       ReferenceSigningWitness.SignatureOrigin key f message signature boundary)
     (hnew : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log →
@@ -96,11 +98,11 @@ theorem classification (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Quer
     (hqueries : let target := signingView key f forgery.message forgery.signature
       ∀ tree, FtsVerifierWitness.TrueSecretQuery f key target.1 tree (target.2 tree) trace) : Outcome key f log boundary trace forgery := by
   by_cases hall : ∀ tree, CoveredByLog key f log (signingView key f forgery.message forgery.signature) tree
-  · exact Or.inl (certificate_of_covered key f log boundary trace forgery Finset.univ horigin hnew hrun hadmissible (fun tree _ => hall tree))
+  · exact Or.inl ⟨hcounters, certificate_of_covered key f log boundary trace forgery Finset.univ horigin hnew hrun hadmissible (fun tree _ => hall tree)⟩
   · push Not at hall
     obtain ⟨first, hfirst⟩ := hall
     by_cases hrest : ∀ tree, tree ≠ first → CoveredByLog key f log (signingView key f forgery.message forgery.signature) tree
-    · refine Or.inr (Or.inl ⟨first, ?_, hfirst, hqueries first⟩)
+    · refine Or.inr (Or.inl ⟨hcounters, first, ?_, hfirst, hqueries first⟩)
       exact certificate_of_covered key f log boundary trace forgery (Finset.univ.erase first) horigin hnew hrun hadmissible
         (fun tree ht => hrest tree (Finset.mem_erase.mp ht).1)
     · push Not at hrest

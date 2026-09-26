@@ -5,7 +5,7 @@ namespace SphincsSecurity.Concrete.RetainedResidual
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
 open AdaptiveResidualLabels hiding World State Environment
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signDigestLoop signAfterDigest boundaryEval
+attribute [local irreducible] signDigestLoop boundaryEval
 set_option backward.isDefEq.respectTransparency false
 
 theorem SigningHistory.digestsCached {key : SecretKey} {oracle : QueryImpl HashSpec Id} {memory : Memory}

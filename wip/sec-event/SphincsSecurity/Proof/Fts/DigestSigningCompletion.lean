@@ -6,7 +6,7 @@ namespace SphincsSecurity.Concrete
 open _root_.OracleComp OracleSpec ENNReal
 open FtsProbeSimulation (messageAnswers)
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signDigestLoop signAfterDigest signWithView
+attribute [local irreducible] signDigestLoop signWithView
 
 def DigestCompletionPreservesMessages (key : SecretKey) (loop : DigestLoopRecord)
     (result : (Option Signature × Option FewTimeView) × QueryCache HashSpec) : Prop :=

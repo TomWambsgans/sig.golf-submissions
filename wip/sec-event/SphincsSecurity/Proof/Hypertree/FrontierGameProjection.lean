@@ -128,7 +128,7 @@ theorem fixedBoundaryRun_gameAfterSecrets_canonical (adversary : Adversary) (par
   have hroot := frontierRoot_eq key f words frontier hfrontier
   change frontierRoot parameter f words frontier = root at hroot
   rw [gameAfterSecrets, fixedBoundaryRun_bind, fixedBoundaryRun_lift_hash]
-  have htree : boundaryEval parameter f (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree)) =
+  have htree : boundaryEval parameter f (keygenRoot parameter (otsSecret topLayer rootTree)) =
       (root, (FreeMonoid.of none) ^ keygenHashCost) := by
     exact boundaryEval_keygen parameter f (otsSecret topLayer rootTree)
   rw [htree, pure_bind, fixedBoundaryRun_gameRest_frontier key f words frontier hfrontier

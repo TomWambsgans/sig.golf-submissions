@@ -6,7 +6,7 @@ namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signDigestLoop signAfterDigest
+attribute [local irreducible] signDigestLoop
 
 private theorem probCompLift_apply {α : Type} (comp : ProbComp α) (value : α) :
     (liftM comp : PMF α) value = Pr[= value | comp] := by
@@ -111,7 +111,7 @@ theorem completedSigningRecord_index_le {ω : Type} [Monoid ω]
     (spent : Nat) (hspent : spent ≤ 2 ^ 127) (hcache : QueryCache.enncard cache ≤ spent)
     (hclean : ¬ MessageDeficitExceptional key cache)
     (hindex : ∀ index, cachedIndexMultiplicity key.parameter cache index ≤
-      (spent : ENNReal) * ((2 ^ 36 : Nat) : ENNReal)⁻¹ + ((2 ^ 80 : Nat) : ENNReal)) (index : Index) :
+      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)) (index : Index) :
     ((completedSigningRecord trace key message cache).map Prod.snd) index ≤ targetProposalIndexRate := by
   rw [completedSigningRecord_index, probCompLift_apply, probOutput_tracedSigningIndex_eq_loop]
   exact probOutput_completeSelectedLoopIndex_le_proposalRate key message cache spent hspent hcache hclean hindex index
@@ -153,7 +153,7 @@ structure ProposalCacheBound (key : SecretKey) (cache : QueryCache HashSpec) (sp
   cache_le : QueryCache.enncard cache ≤ spent
   no_deficit : ¬ MessageDeficitExceptional key cache
   index_le : ∀ index, cachedIndexMultiplicity key.parameter cache index ≤
-    (spent : ENNReal) * ((2 ^ 36 : Nat) : ENNReal)⁻¹ + ((2 ^ 80 : Nat) : ENNReal)
+    (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)
 
 theorem completedSigningRecord_acceptance_cap {ω : Type} [Monoid ω]
     (trace : (input : OracleWorld.Domain) → OracleWorld.Range input → ω)

@@ -35,6 +35,19 @@ theorem ofNat_inj_of_lt {w a b : Nat} (ha : a < 2 ^ w) (hb : b < 2 ^ w)
   have htoNat := congrArg BitVec.toNat h
   rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb] at htoNat
 
+/-- A 40-bit tree field is determined by its two serialized pieces. -/
+theorem tree_eq_of_pieces {x y : BitVec 40} (hhigh : x.extractLsb' 32 8 = y.extractLsb' 32 8)
+    (hlow : x.extractLsb' 0 32 = y.extractLsb' 0 32) : x = y := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  by_cases hsmall : i < 32
+  · have h := congrArg (fun b : BitVec 32 => b.getLsbD i) hlow
+    simpa [BitVec.getLsbD_extractLsb', hsmall] using h
+  · have h := congrArg (fun b : BitVec 8 => b.getLsbD (i - 32)) hhigh
+    have hlt : i - 32 < 8 := by omega
+    have hsum : 32 + (i - 32) = i := by omega
+    simpa [BitVec.getLsbD_extractLsb', hlt, hsum] using h
+
 theorem fieldBytes_injective {t1 t2 : TweakFields} (h : fieldBytes t1 = fieldBytes t2) : t1 = t2 := by
   obtain ⟨tag1, layer1, tree1, position1, index1⟩ := t1
   obtain ⟨tag2, layer2, tree2, position2, index2⟩ := t2
@@ -42,10 +55,11 @@ theorem fieldBytes_injective {t1 t2 : TweakFields} (h : fieldBytes t1 = fieldByt
   obtain ⟨h, hindex⟩ := List.append_inj' h (by simp [bytesLE_length])
   obtain ⟨h, htree⟩ := List.append_inj' h (by simp [bytesLE_length])
   obtain ⟨h, hposition⟩ := List.append_inj' h (by simp [bytesLE_length])
-  have h := List.append_left_injective [0] h
+  obtain ⟨h, hhigh⟩ := List.append_inj' h (by simp [bytesLE_length])
   obtain ⟨htag, hlayer⟩ := List.append_inj' h (by simp [bytesLE_length])
   have htag := List.append_right_injective [protocolDomainSep] htag
-  simp only [bytesLE_injective htag, bytesLE_injective hlayer, bytesLE_injective htree,
+  simp only [bytesLE_injective htag, bytesLE_injective hlayer,
+    tree_eq_of_pieces (bytesLE_injective hhigh) (bytesLE_injective htree),
     bytesLE_injective hposition, bytesLE_injective hindex]
 
 theorem tweakBytes_eq_iff {d1 d2 : HashDomain} :
@@ -53,8 +67,8 @@ theorem tweakBytes_eq_iff {d1 d2 : HashDomain} :
   ⟨fun h => fieldBytes_injective h, fun h => by rw [tweakBytes, tweakBytes, h]⟩
 
 private theorem layer_le : numLayers ≤ 2 ^ 8 := by decide
-private theorem tree_le : 2 ^ totalHeight ≤ 2 ^ 32 := Nat.pow_le_pow_right (by omega) (by decide)
-private theorem index_le : 2 ^ totalHeight ≤ 2 ^ 32 := tree_le
+private theorem tree_le : 2 ^ totalHeight ≤ 2 ^ 40 := Nat.pow_le_pow_right (by omega) (by decide)
+private theorem index_le : 2 ^ totalHeight ≤ 2 ^ 40 := tree_le
 private theorem leaf_le : 2 ^ maxLayerHeight ≤ 2 ^ 32 := Nat.pow_le_pow_right (by omega) (by decide)
 private theorem ftsTree_le : ftsTrees - 1 ≤ 2 ^ 8 := by decide
 private theorem ftsLeaf_le : 2 ^ ftsTreeHeight ≤ 2 ^ 32 := Nat.pow_le_pow_right (by omega) (by decide)

@@ -32,6 +32,6 @@ theorem encodingRetryInput_injective_of_lt
   obtain ⟨_, hcounter⟩ :=
     List.append_inj hpayload (by simp [digestBytes_length])
   apply ofNat_inj_of_lt (w := counterBits)
-    (by simpa [encodingAttemptLimit, counterBits] using hleft)
-    (by simpa [encodingAttemptLimit, counterBits] using hright)
+    (hleft.trans_le (by norm_num [encodingAttemptLimit, counterBits]))
+    (hright.trans_le (by norm_num [encodingAttemptLimit, counterBits]))
   exact bytesLE_injective hcounter

@@ -55,7 +55,7 @@ theorem keygen_cache_message_none (generated : (PublicKey × SecretKey) × Query
   simp only [simulateQ_pure, StateT.run_pure, mem_support_pure_iff] at hg
   subst generated
   rintro input ⟨payload, rfl⟩
-  exact treeRoot_cache_message_none parameter topLayer rootTree (otsSecret topLayer rootTree)
+  exact keygenRoot_cache_message_none parameter (otsSecret topLayer rootTree)
     root.1 root.2 hroot payload
 
 abbrev CertificateGameResult := RetainedRestResult × (List Index × CertificateMonitorState)

@@ -9,7 +9,7 @@ open AdaptiveResidualLabels hiding World State Environment
 open FtsProbeSimulation (withSigningLog)
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs sourceInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
-  signDigestLoop signAfterDigest sequenceFin chainWalk
+  signDigestLoop sequenceFin chainWalk
 set_option backward.isDefEq.respectTransparency false
 
 def StoppedOr {Result : Type} (event : Result → QueryLog SigningSpec → Prop) (result : Option Result × Memory) : Prop :=

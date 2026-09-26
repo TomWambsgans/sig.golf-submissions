@@ -4,7 +4,7 @@ namespace SphincsSecurity.Concrete.OtsVerifierWitness
 
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition signAfterDigest sequenceFin chainWalk
+attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition sequenceFin chainWalk
 set_option backward.isDefEq.respectTransparency false
 
 theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (words : OtsReferenceWords) (selections : ReferenceFamily)

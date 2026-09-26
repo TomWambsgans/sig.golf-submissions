@@ -45,46 +45,29 @@ theorem secretInputs_injective (parameter : PublicParameter) (seed : MasterSeed)
   intro left right h
   exact secretDomain_injective (keygenHashInput_injective h).2.1
 
-def parameterCache (seed : MasterSeed) (output : HashOutput) : QueryCache HashSpec :=
-  (∅ : QueryCache HashSpec).cacheQuery (keygenHashInput 0 .parameter seed) output
+/-- Every secret derivation of the seed, answered by `outputs`. There is no parameter derivation:
+the parameter is `P = 0`, so the table holds the secrets alone. -/
+noncomputable def derivationCache (seed : MasterSeed) (outputs : SecretOutputs) : QueryCache HashSpec :=
+  cacheTable ∅ (secretInputs 0 seed) outputs
 
-theorem parameterCache_secret_fresh (seed : MasterSeed) (output : HashOutput)
-    (parameter : PublicParameter) (position : SecretPosition) :
-    parameterCache seed output (secretInputs parameter seed position) = none := by
-  apply QueryCache.cacheQuery_of_ne
-  intro h
-  have hd := (keygenHashInput_injective h).2.1
-  cases position <;> cases hd
-
-noncomputable def derivationCache (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) : QueryCache HashSpec :=
-  cacheTable (parameterCache seed parameterOutput) (secretInputs (truncateHash parameterOutput) seed) outputs
-
-theorem derivationCache_secret (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (position : SecretPosition) :
-    derivationCache seed parameterOutput outputs (secretInputs (truncateHash parameterOutput) seed position) =
-      some (outputs position) :=
+theorem derivationCache_secret (seed : MasterSeed) (outputs : SecretOutputs) (position : SecretPosition) :
+    derivationCache seed outputs (secretInputs 0 seed position) = some (outputs position) :=
   cacheTable_apply _ _ (secretInputs_injective _ seed) outputs position
 
-theorem derivationCache_agreeOutside (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) :
-    AgreeOutside (fun input => SeedHit input seed) (derivationCache seed parameterOutput outputs) ∅ := by
+theorem derivationCache_agreeOutside (seed : MasterSeed) (outputs : SecretOutputs) :
+    AgreeOutside (fun input => SeedHit input seed) (derivationCache seed outputs) ∅ := by
   intro input hinput
   unfold derivationCache
   rw [cacheTable_apply_of_not_mem]
-  · apply QueryCache.cacheQuery_of_ne
-    intro heq
-    exact hinput (heq.symm ▸ derivationSeedHit_keygen 0 .parameter seed)
-  · intro position heq
-    exact hinput (heq.symm ▸ derivationSeedHit_keygen (truncateHash parameterOutput) (secretDomain position) seed)
+  intro position heq
+  exact hinput (heq.symm ▸ derivationSeedHit_keygen 0 (secretDomain position) seed)
 
-noncomputable def prepareSecrets (parameter : PublicParameter) (seed : MasterSeed) :
-    OracleComp HashSpec SecretOutputs := queryTable (secretInputs parameter seed)
+noncomputable def prepareSecrets (seed : MasterSeed) : OracleComp HashSpec SecretOutputs :=
+  queryTable (secretInputs 0 seed)
 
-theorem evalDist_prepareSecrets (seed : MasterSeed) (parameterOutput : HashOutput) :
-    𝒮[(simulateQ randomOracle (prepareSecrets (truncateHash parameterOutput) seed)).run
-      (parameterCache seed parameterOutput)] =
-        𝒮[(fun outputs => (outputs, derivationCache seed parameterOutput outputs)) <$> sampleSecretOutputs] :=
-  evalDist_queryTable_fresh _ (secretInputs_injective _ seed) _ (parameterCache_secret_fresh seed parameterOutput _)
+theorem evalDist_prepareSecrets (seed : MasterSeed) :
+    𝒮[(simulateQ randomOracle (prepareSecrets seed)).run ∅] =
+        𝒮[(fun outputs => (outputs, derivationCache seed outputs)) <$> sampleSecretOutputs] :=
+  evalDist_queryTable_fresh _ (secretInputs_injective _ seed) _ (fun _ => QueryCache.empty_apply _)
 
 end SphincsSecurity.Seeded

@@ -1,7 +1,19 @@
-import SphincsSecurity.Proof.LayerAssembly
 import SphincsSecurity.Proof.Seeded.Erasure
 import SphincsSecurity.Proof.Seeded.DerivationTable
 import SphincsSecurity.Proof.Scheme.StatementLemmas
+
+/-!
+# Erasing the secret derivations from the signer
+
+The seeded and the table signers share the tree builders and differ only in the secret getters: the
+seeded getter makes a `deriveKey` query, the table getter returns the table value. Once every
+derivation answer is known, the builders run in lockstep: every builder `Erases` as soon as each of
+its getters does, and a seeded getter `Erases` to the `pure` table value by skipping its known query.
+
+Key generation's first query is the derivation of the top tree's first secret (leaf `0`, chain `0`).
+`buildLayerTree_split_first` pulls it out in front, which is what gives the table game its one-query
+slack.
+-/
 
 open OracleComp OracleSpec
 
@@ -37,25 +49,6 @@ theorem Erases.sequenceFin {ι : Type} {spec : OracleSpec ι} {α : Type} {n : N
       intro tail
       exact .pure _
 
-theorem Erases.sequenceLayers {α : Layer → Type} (known : QueryCache HashSpec)
-    (left right : (lay : Layer) → OracleComp HashSpec (Option (α lay)))
-    (h : ∀ lay, Erases known (left lay) (right lay)) :
-    Erases known (Concrete.sequenceLayers left) (Concrete.sequenceLayers right) := by
-  unfold Concrete.sequenceLayers
-  apply (h bottomLayer).bind
-  intro bottom
-  cases bottom with
-  | none => exact .pure _
-  | some bottom =>
-      apply (h middleLayer).bind
-      intro middle
-      cases middle with
-      | none => exact .pure _
-      | some middle =>
-          apply (h topLayer).bind
-          intro top
-          cases top <;> exact .pure _
-
 theorem Erases.bind_map_right {ι : Type} {spec : OracleSpec ι} {α β γ : Type}
     {known : QueryCache spec} {left : OracleComp spec α} {right : OracleComp spec β}
     {f : β → α} (h : Erases known left (f <$> right))
@@ -77,6 +70,177 @@ def tableKey (parameter : PublicParameter) (root : Digest) (outputs : SecretOutp
   otsSecret := tableOts outputs
   ftsSecret := tableFts outputs
 
+/-! ## The builders are congruent in their getters -/
+
+section Builders
+
+open Concrete
+
+variable {known : QueryCache HashSpec} (parameter : PublicParameter)
+
+theorem erases_buildChain (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chainIdx : ChainIndex)
+    {left right : OracleComp HashSpec Digest} (h : Erases known left right) (digit : Nat) :
+    Erases known (buildChain parameter lay tree leaf chainIdx left digit)
+      (buildChain parameter lay tree leaf chainIdx right digit) := by
+  unfold buildChain
+  exact h.bind _ _ fun _ => .refl _ _
+
+theorem erases_buildLeaf (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    {left right : ChainIndex → OracleComp HashSpec Digest}
+    (h : ∀ chainIdx, Erases known (left chainIdx) (right chainIdx)) (digits : Encoding) :
+    Erases known (buildLeaf parameter lay tree leaf left digits)
+      (buildLeaf parameter lay tree leaf right digits) := by
+  unfold buildLeaf
+  exact (Erases.sequenceFin known _ _ fun chainIdx =>
+    erases_buildChain parameter lay tree leaf chainIdx (h chainIdx) _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildLayerTree (lay : Layer) (tree : TreeIndex)
+    {left right : LeafIndex → ChainIndex → OracleComp HashSpec Digest}
+    (h : ∀ leaf chainIdx, Erases known (left leaf chainIdx) (right leaf chainIdx))
+    (leaf : LeafIndex) (digits : Encoding) :
+    Erases known (buildLayerTree parameter lay tree left leaf digits)
+      (buildLayerTree parameter lay tree right leaf digits) := by
+  unfold buildLayerTree
+  exact (Erases.sequenceFin known _ _ fun _ =>
+    erases_buildLeaf parameter lay tree _ (h _) _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildFtsTree (index : Index) (tree : FtsTree)
+    {left right : FtsLeaf → OracleComp HashSpec Digest}
+    (h : ∀ leaf, Erases known (left leaf) (right leaf)) (leaf : FtsLeaf) :
+    Erases known (buildFtsTree parameter index tree left leaf)
+      (buildFtsTree parameter index tree right leaf) := by
+  unfold buildFtsTree
+  exact (Erases.sequenceFin known _ _ fun leaf =>
+    (h leaf).bind _ _ fun _ => .refl _ _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildForest (index : Index)
+    {left right : FtsTree → FtsLeaf → OracleComp HashSpec Digest}
+    (h : ∀ tree leaf, Erases known (left tree leaf) (right tree leaf))
+    (leaves : IndexGroup → FtsLeaf) :
+    Erases known (buildForest parameter index left leaves)
+      (buildForest parameter index right leaves) := by
+  unfold buildForest
+  exact (Erases.sequenceFin known _ _ fun tree =>
+    erases_buildFtsTree parameter index tree (h tree) _).bind _ _ fun _ => .refl _ _
+
+theorem erases_signLayers (index : Index)
+    {left right : Layer → TreeIndex → LeafIndex → ChainIndex → OracleComp HashSpec Digest}
+    (h : ∀ lay tree leaf chainIdx, Erases known (left lay tree leaf chainIdx) (right lay tree leaf chainIdx))
+    (remaining : Nat) (message : Digest) :
+    Erases known (signLayers parameter index left remaining message)
+      (signLayers parameter index right remaining message) := by
+  induction remaining generalizing message with
+  | zero => exact .pure _
+  | succ remaining ih =>
+      simp only [signLayers]
+      split
+      · apply (Erases.refl known _).bind
+        intro search
+        rcases search with _ | ⟨counter, encoding⟩
+        · exact .pure _
+        · apply (erases_buildLayerTree parameter _ _ (h _ _) _ _).bind
+          rintro ⟨values, path, root⟩
+          apply (ih root).bind
+          intro rest
+          cases rest <;> exact .pure _
+      · exact .pure _
+
+theorem erases_signFrom (index : Index)
+    {ftsLeft ftsRight : FtsTree → FtsLeaf → OracleComp HashSpec Digest}
+    (hfts : ∀ tree leaf, Erases known (ftsLeft tree leaf) (ftsRight tree leaf))
+    {otsLeft otsRight : Layer → TreeIndex → LeafIndex → ChainIndex → OracleComp HashSpec Digest}
+    (hots : ∀ lay tree leaf chainIdx,
+      Erases known (otsLeft lay tree leaf chainIdx) (otsRight lay tree leaf chainIdx))
+    (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) :
+    Erases known (signFrom parameter index ftsLeft otsLeft randomness leaves)
+      (signFrom parameter index ftsRight otsRight randomness leaves) := by
+  unfold signFrom
+  apply (erases_buildForest parameter index hfts leaves).bind
+  rintro ⟨secrets, path, key⟩
+  apply (erases_signLayers parameter index hots _ _).bind
+  intro parts
+  cases parts <;> exact .pure _
+
+end Builders
+
+/-! ## The first secret of key generation -/
+
+section FirstSecret
+
+open Concrete
+
+variable {m : Type → Type} [Monad m] [LawfulMonad m]
+
+theorem sequenceFin_split_first {α β : Type} {n : Nat} (hn : 0 < n) (computation : Fin n → m α)
+    (first : m β) (rest : β → Fin n → m α)
+    (hfirst : computation ⟨0, hn⟩ = first >>= fun value => rest value ⟨0, hn⟩)
+    (hrest : ∀ value i, i.val ≠ 0 → rest value i = computation i) :
+    sequenceFin computation = first >>= fun value => sequenceFin (rest value) := by
+  cases n with
+  | zero => omega
+  | succ n =>
+      simp only [sequenceFin]
+      rw [show (0 : Fin (n + 1)) = ⟨0, hn⟩ from rfl, hfirst, bind_assoc]
+      apply bind_congr
+      intro value
+      have htail : (fun i : Fin n => rest value i.succ) = fun i => computation i.succ :=
+        funext fun i => hrest value i.succ (by simp)
+      rw [htail]
+
+/-- The getter with the secret of leaf `0`, chain `0` already known. -/
+def withFirst {m : Type → Type} [Monad m] (secret : LeafIndex → ChainIndex → m Digest) (first : Digest) :
+    LeafIndex → ChainIndex → m Digest :=
+  fun leaf chainIdx => if leaf.val = 0 ∧ chainIdx.val = 0 then pure first else secret leaf chainIdx
+
+theorem leafOfNat_val_ne_zero (lay : Layer) (i : Fin (2 ^ layerHeight lay)) (hi : i.val ≠ 0) :
+    (leafOfNat i.val).val ≠ 0 := by
+  have hheight : layerHeight lay ≤ maxLayerHeight := by
+    unfold layerHeight
+    split <;> decide
+  have hlt : i.val < 2 ^ maxLayerHeight :=
+    lt_of_lt_of_le i.isLt (Nat.pow_le_pow_right (by decide) hheight)
+  simp only [leafOfNat, Nat.mod_eq_of_lt hlt]
+  exact hi
+
+variable [HasQuery HashSpec m]
+
+theorem buildChain_split_first (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (chainIdx : ChainIndex) (secret : m Digest) (digit : Nat) :
+    buildChain parameter lay tree leaf chainIdx secret digit =
+      secret >>= fun value => buildChain parameter lay tree leaf chainIdx (pure value) digit := by
+  simp only [buildChain, pure_bind]
+
+/-- The tree's first query is the derivation of its first secret, which the rest of the build does
+not repeat. -/
+theorem buildLayerTree_split_first (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainIndex → m Digest) (leaf : LeafIndex) (digits : Encoding) :
+    buildLayerTree parameter lay tree secret leaf digits =
+      secret (leafOfNat 0) ⟨0, by decide⟩ >>= fun first =>
+        buildLayerTree parameter lay tree (withFirst secret first) leaf digits := by
+  unfold buildLayerTree
+  rw [sequenceFin_split_first (Nat.two_pow_pos _) _ (secret (leafOfNat 0) ⟨0, by decide⟩)
+    (fun first leafNat => buildLeaf parameter lay tree (leafOfNat leafNat.val)
+      (withFirst secret first (leafOfNat leafNat.val))
+      (if leafNat.val = leaf.val then digits else zeroEncoding)), bind_assoc]
+  · unfold buildLeaf
+    rw [sequenceFin_split_first (by decide) _ (secret (leafOfNat 0) ⟨0, by decide⟩)
+      (fun first chainIdx => buildChain parameter lay tree (leafOfNat 0) chainIdx
+        (withFirst secret first (leafOfNat 0) chainIdx)
+        ((if (0 : Nat) = leaf.val then digits else zeroEncoding) chainIdx).val), bind_assoc]
+    · rw [buildChain_split_first]
+      apply bind_congr
+      intro first
+      simp [withFirst, leafOfNat]
+    · intro first chainIdx hchain
+      simp [withFirst, hchain]
+  · intro first leafNat hleaf
+    have hne := leafOfNat_val_ne_zero lay leafNat hleaf
+    congr 1
+    funext chainIdx
+    simp [withFirst, hne]
+
+end FirstSecret
+
 section Algorithms
 
 variable (known : QueryCache HashSpec) (parameter : PublicParameter) (seed : MasterSeed)
@@ -91,146 +255,28 @@ theorem erases_deriveKey (position : SecretPosition) :
   unfold deriveKey Concrete.oracleHash
   exact Erases.skip _ _ (hknown position) _ _ (.pure _)
 
-theorem erases_oneTimePublicKey (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) :
-    Erases known (oneTimePublicKey parameter lay tree leaf seed : OracleComp HashSpec _)
-      (Concrete.oneTimePublicKey parameter lay tree leaf (tableOts outputs lay tree leaf)) := by
-  unfold oneTimePublicKey Concrete.oneTimePublicKey
-  apply Erases.sequenceFin
-  intro chain
-  simpa only [pure_bind, secretDomain, tableOts, tableFts] using (erases_deriveKey known parameter seed outputs hknown (.inl (lay, tree, leaf, chain))).bind
-    (fun secret => Concrete.chainWalk parameter lay tree leaf chain 0 (chainLength - 1) secret)
-    (fun secret => Concrete.chainWalk parameter lay tree leaf chain 0 (chainLength - 1) secret)
-    (fun _ => Erases.refl known _)
+theorem erases_otsSecret (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chainIdx : ChainIndex) :
+    Erases known (otsSecret parameter seed lay tree leaf chainIdx : OracleComp HashSpec Digest)
+      (pure (tableOts outputs lay tree leaf chainIdx)) :=
+  erases_deriveKey known parameter seed outputs hknown (.inl (lay, tree, leaf, chainIdx))
 
-theorem erases_otsSignFrom (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (message : Digest)
-    (attempts counter : Nat) :
-    Erases known (otsSignFrom parameter lay tree leaf seed message attempts counter : OracleComp HashSpec _)
-      (Concrete.otsSignFrom parameter lay tree leaf (tableOts outputs lay tree leaf) message attempts counter) := by
-  induction attempts generalizing counter with
-  | zero => exact .pure _
-  | succ attempts ih =>
-      simp only [otsSignFrom, Concrete.otsSignFrom, Concrete.encode_eq]
-      apply (Erases.refl known (Concrete.encodeAttempt parameter lay tree leaf message (BitVec.ofNat counterBits counter))).bind
-      intro encoding
-      cases encoding with
-      | none => exact ih _
-      | some encoding =>
-          apply Erases.bind _ _ _ (fun _ => Erases.pure _)
-          apply Erases.sequenceFin
-          intro chain
-          simpa only [pure_bind, secretDomain, tableOts, tableFts] using (erases_deriveKey known parameter seed outputs hknown (.inl (lay, tree, leaf, chain))).bind
-            (fun secret => Concrete.chainWalk parameter lay tree leaf chain 0 (encoding chain).val secret)
-            (fun secret => Concrete.chainWalk parameter lay tree leaf chain 0 (encoding chain).val secret)
-            (fun _ => Erases.refl known _)
+theorem erases_ftsSecret (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
+    Erases known (ftsSecret parameter seed index tree leaf : OracleComp HashSpec Digest)
+      (pure (tableFts outputs index tree leaf)) :=
+  erases_deriveKey known parameter seed outputs hknown (.inr (index, tree, leaf))
 
-theorem erases_otsSign (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (message : Digest) :
-    Erases known (otsSign parameter lay tree leaf seed message : OracleComp HashSpec _)
-      (Concrete.otsSign parameter lay tree leaf (tableOts outputs lay tree leaf) message) :=
-  erases_otsSignFrom known parameter seed outputs hknown lay tree leaf message _ _
-
-theorem erases_treeNode (lay : Layer) (tree : TreeIndex) (level node : Nat) :
-    Erases known (treeNode parameter lay tree seed level node : OracleComp HashSpec _)
-      (Concrete.treeNode parameter lay tree (tableOts outputs lay tree) level node) := by
-  induction level generalizing node with
-  | zero =>
-      rw [treeNode, Concrete.treeNode_zero_eq]
-      apply (erases_oneTimePublicKey known parameter seed outputs hknown lay tree _).bind
-      intro endpoints
-      exact .refl known _
-  | succ level ih =>
-      rw [treeNode, Concrete.treeNode_succ_eq]
-      apply (ih (2 * node)).bind
-      intro left
-      apply (ih (2 * node + 1)).bind
-      intro right
-      exact .refl known _
-
-theorem erases_treeRoot (lay : Layer) (tree : TreeIndex) :
-    Erases known (treeRoot parameter lay tree seed : OracleComp HashSpec _)
-      (Concrete.treeRoot parameter lay tree (tableOts outputs lay tree)) :=
-  erases_treeNode known parameter seed outputs hknown lay tree _ _
-
-theorem erases_treePath (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) :
-    Erases known (treePath parameter lay tree seed leaf : OracleComp HashSpec _)
-      (restrictPath lay <$> Concrete.treePath parameter lay tree (tableOts outputs lay tree) leaf) := by
-  unfold treePath Concrete.treePath
-  rw [sequenceFin_restrictPath]
-  apply Erases.sequenceFin
-  intro level
-  exact erases_treeNode known parameter seed outputs hknown lay tree _ _
-
-theorem erases_ftsNode (index : Index) (tree : FtsTree) (level node : Nat) :
-    Erases known (ftsNode parameter index tree seed level node : OracleComp HashSpec _)
-      (Concrete.ftsNode parameter index tree (tableFts outputs index tree) level node) := by
-  induction level generalizing node with
-  | zero =>
-      rw [ftsNode, Concrete.ftsNode_zero_eq]
-      simpa only [pure_bind, secretDomain, tableOts, tableFts] using (erases_deriveKey known parameter seed outputs hknown
-        (.inr (index, tree, Concrete.ftsLeafOfNat node))).bind
-        (fun secret => Concrete.ftsLeafHash parameter index tree (Concrete.ftsLeafOfNat node) secret)
-        (fun secret => Concrete.ftsLeafHash parameter index tree (Concrete.ftsLeafOfNat node) secret)
-        (fun _ => Erases.refl known _)
-  | succ level ih =>
-      rw [ftsNode, Concrete.ftsNode_succ_eq]
-      apply (ih (2 * node)).bind
-      intro left
-      apply (ih (2 * node + 1)).bind
-      intro right
-      exact .refl known _
-
-theorem erases_ftsKey (index : Index) :
-    Erases known (ftsKey parameter index seed : OracleComp HashSpec _)
-      (Concrete.ftsKey parameter index (tableFts outputs index)) := by
-  unfold ftsKey Concrete.ftsKey
-  apply Erases.bind _ _ _ (fun _ => Erases.refl known _)
-  exact Erases.sequenceFin known _ _ (fun tree => erases_ftsNode known parameter seed outputs hknown index tree _ _)
-
-theorem erases_ftsOpen (index : Index) (leaves : IndexGroup → FtsLeaf) :
-    Erases known (ftsOpen parameter index leaves seed : OracleComp HashSpec _)
-      (Concrete.ftsOpen parameter index leaves (tableFts outputs index)) := by
-  unfold ftsOpen Concrete.ftsOpen
-  apply Erases.sequenceFin
-  intro tree
-  apply Erases.sequenceFin
-  intro level
-  exact erases_ftsNode known parameter seed outputs hknown index tree _ _
-
-theorem erases_layerMessage (root : Digest) (index : Index) (lay : Layer) :
-    Erases known (layerMessage ⟨seed, parameter, root⟩ index lay : OracleComp HashSpec _)
-      (Concrete.layerMessage (tableKey parameter root outputs) index lay) := by
-  simp only [layerMessage, Concrete.layerMessage, tableKey]
-  split
-  · exact erases_treeRoot known parameter seed outputs hknown _ _
-  · exact erases_ftsKey known parameter seed outputs hknown _
-
-theorem erases_signLayer (root : Digest) (index : Index) (lay : Layer) :
-    Erases known (signLayer ⟨seed, parameter, root⟩ index lay : OracleComp HashSpec _)
-      (Option.map (LayerSignature.ofPadded lay) <$> Concrete.signLayer (tableKey parameter root outputs) index lay) := by
-  simp only [signLayer, Concrete.signLayer, map_bind]
-  apply (erases_layerMessage known parameter seed outputs hknown root index lay).bind
-  intro message
-  apply (erases_otsSign known parameter seed outputs hknown lay _ _ message).bind
-  intro signed
-  cases signed with
-  | none => simpa only [map_pure, Option.map_none] using Erases.pure (known := known) none
-  | some signed =>
-      rcases signed with ⟨counter, values⟩
-      have h := (erases_treePath known parameter seed outputs hknown lay
-        (Concrete.treeIndexAt index lay) (Concrete.leafIndexAt index lay)).map
-          (fun path => some (LayerSignature.mk counter values path))
-      simp only [Option.map_some, LayerSignature.ofPadded,
-        bind_pure_comp, Functor.map_map, tableKey] at h ⊢
-      convert h using 2
-      all_goals rfl
-
-theorem erases_selectedSecrets (index : Index) (leaves : IndexGroup → FtsLeaf) :
+/-- After the digest loop, the seeded signer erases to the table signer. -/
+theorem erases_signFrom_table (root : Digest) (index : Index) (randomness : Randomness)
+    (leaves : IndexGroup → FtsLeaf) :
     Erases known
-      (Concrete.sequenceFin (fun tree => deriveKey parameter (.fts index tree (leaves (Concrete.ftsIndexOf tree))) seed) :
-        OracleComp HashSpec (FtsTree → Digest))
-      (pure (fun tree => tableFts outputs index tree (leaves (Concrete.ftsIndexOf tree)))) := by
-  have h := Erases.sequenceFin known _ _ (fun tree =>
-    erases_deriveKey known parameter seed outputs hknown (.inr (index, tree, leaves (Concrete.ftsIndexOf tree))))
-  simpa only [sequenceFin_pure, secretDomain, tableFts] using h
+      (Concrete.signFrom parameter index (ftsSecret parameter seed index) (otsSecret parameter seed)
+        randomness leaves : OracleComp HashSpec (Option Signature))
+      (Concrete.signAfterDigest (tableKey parameter root outputs) randomness index leaves) := by
+  rw [Concrete.signAfterDigest]
+  exact erases_signFrom parameter index
+    (fun tree leaf => erases_ftsSecret known parameter seed outputs hknown index tree leaf)
+    (fun lay tree leaf chainIdx => erases_otsSecret known parameter seed outputs hknown lay tree leaf chainIdx)
+    randomness leaves
 
 omit hknown in
 theorem signDigestLoop_tableKey (root : Digest) (message : Message) (attempts : Nat) :
@@ -244,32 +290,13 @@ theorem signDigestLoop_tableKey (root : Digest) (message : Message) (attempts : 
 theorem erases_sign (root : Digest) (message : Message) :
     Erases (worldKnown known) (randomizedSign ⟨seed, parameter, root⟩ message)
       (Concrete.sign (tableKey parameter root outputs) message) := by
-  unfold randomizedSign Concrete.sign
-  rw [signDigestLoop_tableKey parameter seed outputs root message]
+  unfold randomizedSign
+  rw [Concrete.sign_eq, signDigestLoop_tableKey parameter seed outputs root message]
   apply (Erases.refl (worldKnown known) _).bind
   intro attempt
-  cases attempt with
-  | none => exact .pure _
-  | some attempt =>
-      rcases attempt with ⟨randomness, index, leaves⟩
-      have hselected := (erases_selectedSecrets known parameter seed outputs hknown index leaves).lift_hash
-      simp only [liftM_pure] at hselected
-      apply hselected.bind_known
-      apply (erases_ftsOpen known parameter seed outputs hknown index leaves).lift_hash.bind
-      intro path
-      have hlayers := Erases.sequenceLayers known _ _
-        (fun lay => erases_signLayer known parameter seed outputs hknown root index lay)
-      rw [sequenceLayers_map] at hlayers
-      have hlift := hlayers.lift_hash
-      simp only [liftM_map] at hlift
-      apply hlift.bind_map_right
-      intro layers
-      cases layers with
-      | none => exact .pure _
-      | some parts =>
-          apply (erases_treeRoot known parameter seed outputs hknown topLayer Concrete.rootTree).lift_hash.bind
-          intro rootValue
-          exact .pure _
+  rcases attempt with _ | ⟨randomness, index, leaves⟩
+  · exact .pure _
+  · exact (erases_signFrom_table known parameter seed outputs hknown root index randomness leaves).lift_hash
 
 end Algorithms
 end SphincsSecurity.Seeded

@@ -211,62 +211,182 @@ theorem avoidsMessage_signLayer (f : QueryImpl HashSpec Id) (secretKey : SecretK
         (leafIndexAt index lay)
     · exact AvoidsMessageQueries.pure secretKey.parameter f _
 
-def signAfterDigest (secretKey : SecretKey) (randomness : Randomness) (index : Index)
-    (leaves : IndexGroup → FtsLeaf) : OracleComp HashSpec (Option Signature) := do
-  let ftsPath ← ftsOpen secretKey.parameter index leaves (secretKey.ftsSecret index)
-  let layers ← sequenceLayers fun lay => signLayer secretKey index lay
-  match layers with
-  | none => return none
-  | some parts => do
-      let _ ← treeRoot secretKey.parameter topLayer rootTree (secretKey.otsSecret topLayer rootTree)
-      return some
-        { randomness := randomness
-          ftsSecret := fun tree => secretKey.ftsSecret index tree (leaves (ftsIndexOf tree))
-          ftsPath := ftsPath
-          layers := fun lay => LayerSignature.ofPadded lay (parts lay) }
+theorem AvoidsMessageQueries.bind_all {alpha beta : Type} {parameter : PublicParameter}
+    {f : QueryImpl HashSpec Id} {oa : OracleComp HashSpec alpha}
+    {next : alpha → OracleComp HashSpec beta}
+    (hleft : AvoidsMessageQueries parameter f oa)
+    (hright : ∀ value, AvoidsMessageQueries parameter f (next value)) :
+    AvoidsMessageQueries parameter f (oa >>= next) :=
+  AvoidsMessageQueries.bind hleft (hright _)
+
+theorem avoidsMessage_buildLevel (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (hashNode : Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (hhash : ∀ nodeIdx left right, AvoidsMessageQueries parameter f (hashNode nodeIdx left right))
+    (width : Nat) (below : Nat → Digest) :
+    AvoidsMessageQueries parameter f (buildLevel hashNode width below) := by
+  unfold buildLevel
+  exact AvoidsMessageQueries.bind_all (avoidsMessage_sequenceFin _ _ _ fun _ => hhash _ _ _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildLevels (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (hashNode : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (hhash : ∀ level nodeIdx left right,
+      AvoidsMessageQueries parameter f (hashNode level nodeIdx left right))
+    (height : Nat) (leaves : Nat → Digest) (levels : Nat) :
+    AvoidsMessageQueries parameter f (buildLevels hashNode height leaves levels) := by
+  induction levels with
+  | zero => exact AvoidsMessageQueries.pure _ _ _
+  | succ levels ih =>
+      rw [buildLevels]
+      refine AvoidsMessageQueries.bind_all ih fun table => ?_
+      exact AvoidsMessageQueries.bind_all
+        (avoidsMessage_buildLevel _ _ _ (hhash (levels + 1)) _ _)
+        fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildChain (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex) (chainIdx : ChainIndex)
+    (secret : OracleComp HashSpec Digest) (hsecret : AvoidsMessageQueries parameter f secret)
+    (digit : Nat) :
+    AvoidsMessageQueries parameter f (buildChain parameter lay tree leafIdx chainIdx secret digit) := by
+  unfold buildChain
+  refine AvoidsMessageQueries.bind_all hsecret fun _ => ?_
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_chainWalk _ _ _ _ _ _ _ _ _) fun _ => ?_
+  exact AvoidsMessageQueries.bind_all (avoidsMessage_chainWalk _ _ _ _ _ _ _ _ _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildLeaf (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex)
+    (secret : ChainIndex → OracleComp HashSpec Digest)
+    (hsecret : ∀ chainIdx, AvoidsMessageQueries parameter f (secret chainIdx)) (digits : Encoding) :
+    AvoidsMessageQueries parameter f (buildLeaf parameter lay tree leafIdx secret digits) := by
+  unfold buildLeaf
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_sequenceFin _ _ _ fun chainIdx =>
+    avoidsMessage_buildChain _ _ _ _ _ _ _ (hsecret chainIdx) _) fun _ => ?_
+  exact AvoidsMessageQueries.bind_all (AvoidsMessageQueries.tweakableHash _ _ _ (by simp) _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildLayerTree (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (lay : Layer) (tree : TreeIndex) (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest)
+    (hsecret : ∀ leafIdx chainIdx, AvoidsMessageQueries parameter f (secret leafIdx chainIdx))
+    (leafIdx : LeafIndex) (digits : Encoding) :
+    AvoidsMessageQueries parameter f (buildLayerTree parameter lay tree secret leafIdx digits) := by
+  unfold buildLayerTree
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_sequenceFin _ _ _ fun _ =>
+    avoidsMessage_buildLeaf _ _ _ _ _ _ (hsecret _) _) fun _ => ?_
+  exact AvoidsMessageQueries.bind_all (avoidsMessage_buildLevels _ _ _
+    (fun _ _ _ _ => AvoidsMessageQueries.tweakableHash _ _ _ (by simp) _) _ _ _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildFtsTree (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (tree : FtsTree) (secret : FtsLeaf → OracleComp HashSpec Digest)
+    (hsecret : ∀ leafIdx, AvoidsMessageQueries parameter f (secret leafIdx)) (leafIdx : FtsLeaf) :
+    AvoidsMessageQueries parameter f (buildFtsTree parameter index tree secret leafIdx) := by
+  unfold buildFtsTree
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_sequenceFin _ _ _ fun leaf =>
+    AvoidsMessageQueries.bind_all (hsecret leaf) fun _ =>
+      AvoidsMessageQueries.bind_all (avoidsMessage_ftsLeafHash _ _ _ _ _ _)
+        fun _ => AvoidsMessageQueries.pure _ _ _) fun _ => ?_
+  exact AvoidsMessageQueries.bind_all (avoidsMessage_buildLevels _ _ _
+    (fun _ _ _ _ => AvoidsMessageQueries.tweakableHash _ _ _ (by simp) _) _ _ _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_buildForest (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (secret : FtsTree → FtsLeaf → OracleComp HashSpec Digest)
+    (hsecret : ∀ tree leafIdx, AvoidsMessageQueries parameter f (secret tree leafIdx))
+    (leaves : IndexGroup → FtsLeaf) :
+    AvoidsMessageQueries parameter f (buildForest parameter index secret leaves) := by
+  unfold buildForest
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_sequenceFin _ _ _ fun tree =>
+    avoidsMessage_buildFtsTree _ _ _ _ _ (hsecret tree) _) fun _ => ?_
+  exact AvoidsMessageQueries.bind_all (AvoidsMessageQueries.tweakableHash _ _ _ (by simp) _)
+    fun _ => AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_encodingSearch (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex) (message : Digest) (attempts counter : Nat) :
+    AvoidsMessageQueries parameter f (encodingSearch parameter lay tree leafIdx message attempts counter) := by
+  induction attempts generalizing counter with
+  | zero => exact AvoidsMessageQueries.pure _ _ _
+  | succ attempts ih =>
+      rw [encodingSearch]
+      refine AvoidsMessageQueries.bind_all (by
+        rw [encode_eq]; exact avoidsMessage_encode _ _ _ _ _ _ _) fun result => ?_
+      cases result with
+      | none => exact ih _
+      | some _ => exact AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_signLayers (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (secret : Layer → TreeIndex → LeafIndex → ChainIndex → OracleComp HashSpec Digest)
+    (hsecret : ∀ lay tree leafIdx chainIdx,
+      AvoidsMessageQueries parameter f (secret lay tree leafIdx chainIdx))
+    (remaining : Nat) (message : Digest) :
+    AvoidsMessageQueries parameter f (signLayers parameter index secret remaining message) := by
+  induction remaining generalizing message with
+  | zero => exact AvoidsMessageQueries.pure _ _ _
+  | succ remaining ih =>
+      rw [signLayers]
+      split
+      · refine AvoidsMessageQueries.bind_all (avoidsMessage_encodingSearch _ _ _ _ _ _ _ _)
+          fun result => ?_
+        rcases result with _ | ⟨counter, encoding⟩
+        · exact AvoidsMessageQueries.pure _ _ _
+        refine AvoidsMessageQueries.bind_all (avoidsMessage_buildLayerTree _ _ _ _ _
+          (hsecret _ _) _ _) fun built => ?_
+        rcases built with ⟨values, path, root⟩
+        refine AvoidsMessageQueries.bind_all (ih root) fun rest => ?_
+        rcases rest with _ | rest <;> exact AvoidsMessageQueries.pure _ _ _
+      · exact AvoidsMessageQueries.pure _ _ _
+
+theorem avoidsMessage_signFrom (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (ftsGet : FtsTree → FtsLeaf → OracleComp HashSpec Digest)
+    (otsGet : Layer → TreeIndex → LeafIndex → ChainIndex → OracleComp HashSpec Digest)
+    (hfts : ∀ tree leafIdx, AvoidsMessageQueries parameter f (ftsGet tree leafIdx))
+    (hots : ∀ lay tree leafIdx chainIdx, AvoidsMessageQueries parameter f (otsGet lay tree leafIdx chainIdx))
+    (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) :
+    AvoidsMessageQueries parameter f (signFrom parameter index ftsGet otsGet randomness leaves) := by
+  unfold signFrom
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_buildForest _ _ _ _ hfts _) fun forest => ?_
+  rcases forest with ⟨secrets, ftsPath, ftsPublicKey⟩
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_signLayers _ _ _ _ hots _ _) fun parts => ?_
+  rcases parts with _ | parts <;> exact AvoidsMessageQueries.pure _ _ _
 
 theorem avoidsMessage_signAfterDigest (f : QueryImpl HashSpec Id) (secretKey : SecretKey)
     (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
     AvoidsMessageQueries secretKey.parameter f
       (signAfterDigest secretKey randomness index leaves) := by
   rw [signAfterDigest]
-  apply AvoidsMessageQueries.bind
-  · exact avoidsMessage_ftsOpen secretKey.parameter f index leaves (secretKey.ftsSecret index)
-  apply AvoidsMessageQueries.bind
-  · unfold sequenceLayers
-    apply AvoidsMessageQueries.bind (avoidsMessage_signLayer f secretKey index bottomLayer)
-    split
-    · apply AvoidsMessageQueries.bind (avoidsMessage_signLayer f secretKey index middleLayer)
-      split
-      · apply AvoidsMessageQueries.bind (avoidsMessage_signLayer f secretKey index topLayer)
-        split <;> exact AvoidsMessageQueries.pure secretKey.parameter f _
-      · exact AvoidsMessageQueries.pure secretKey.parameter f _
-    · exact AvoidsMessageQueries.pure secretKey.parameter f _
-  · split
-    · exact AvoidsMessageQueries.pure secretKey.parameter f _
-    · apply AvoidsMessageQueries.bind
-      · exact avoidsMessage_treeRoot secretKey.parameter f topLayer rootTree _
-      · exact AvoidsMessageQueries.pure secretKey.parameter f _
+  exact avoidsMessage_signFrom _ _ _ _ _ (fun _ _ => AvoidsMessageQueries.pure _ _ _)
+    (fun _ _ _ _ => AvoidsMessageQueries.pure _ _ _) randomness leaves
+
+theorem avoidsMessage_keygenRoot (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (secret : LeafIndex → ChainIndex → Digest) :
+    AvoidsMessageQueries parameter f (keygenRoot parameter secret) := by
+  unfold keygenRoot
+  refine AvoidsMessageQueries.bind_all (avoidsMessage_buildLayerTree _ _ _ _ _
+    (fun _ _ => AvoidsMessageQueries.pure _ _ _) _ _) fun built => ?_
+  rcases built with ⟨values, path, root⟩
+  exact AvoidsMessageQueries.pure _ _ _
+
+theorem keygenRoot_cache_message_none (parameter : PublicParameter)
+    (secret : LeafIndex → ChainIndex → Digest)
+    (root : Digest) (rootCache : QueryCache HashSpec)
+    (hroot : (root, rootCache) ∈ support
+      ((simulateQ (randomOracle : QueryImpl HashSpec _)
+        (keygenRoot parameter secret : OracleComp HashSpec Digest)).run ∅))
+    (payload : HashInput) :
+    rootCache (tweakableHashInput parameter .message payload) = none := by
+  obtain ⟨f, hf⟩ := QueryCache.exists_agreesWithFn (spec := HashSpec) rootCache
+  apply cache_eq_none_of_not_mem_queriedInputs
+    (keygenRoot parameter secret : OracleComp HashSpec Digest) ∅ root rootCache hroot f hf
+  · simp
+  · exact avoidsMessage_keygenRoot parameter f secret payload
 
 theorem sign_eq_digestLoop_afterDigest (secretKey : SecretKey) (message : Message) :
     sign secretKey message = (do
       match ← signDigestLoop digestAttemptLimit secretKey message with
       | none => return none
       | some (randomness, index, leaves) =>
-          liftM (signAfterDigest secretKey randomness index leaves)) := by
-  rw [sign_eq]
-  apply bind_congr
-  intro loopResult
-  cases loopResult with
-  | none => rfl
-  | some data =>
-      rcases data with ⟨randomness, index, leaves⟩
-      simp only [signAfterDigest, liftM_bind]
-      apply bind_congr
-      intro ftsPath
-      apply bind_congr
-      intro layers
-      cases layers <;> simp
+          liftM (signAfterDigest secretKey randomness index leaves :
+            OracleComp HashSpec (Option Signature))) := sign_eq secretKey message
 
 end Concrete
 

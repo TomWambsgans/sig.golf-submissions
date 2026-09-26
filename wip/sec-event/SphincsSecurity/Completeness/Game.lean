@@ -7,8 +7,8 @@ import SphincsSecurity.Proof.Scheme.Support
 # From the game to one hash-only run
 
 The experiment samples a seed and then runs key generation, signing and verification against the
-random oracle. `experiment_eq` pulls the sampling out front, leaving one hash-only computation per
-seed. Recovery then removes verification from the failure event: on every reachable path where the
+random oracle. `experiment_eq` pulls the sampling out front, leaving the per-seed experiment, which
+`seededExperiment_eq` reads as one hash-only computation run against the lazy random oracle. Recovery then removes verification from the failure event: on every reachable path where the
 signer produced a signature, replaying the path under an answer function agreeing with its cache
 shows the verifier accepts, so the honest run fails only where signing returned `none`.
 -/
@@ -27,26 +27,36 @@ def honest (seed : MasterSeed) (message : Message) : OracleComp HashSpec Bool :=
   | some signature => (Concrete.verify keys.1 message signature : OracleComp HashSpec Bool)
   | none => pure false
 
-theorem gameCore_eq (message : Message) :
-    gameCore message = (liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>= fun seed =>
-      (liftM (honest seed message) : OracleComp OracleWorld Bool) := by
-  unfold gameCore honest
-  refine bind_congr fun seed => ?_
+theorem seededGameCore_eq (seed : MasterSeed) (message : Message) :
+    seededGameCore seed message = (liftM (honest seed message) : OracleComp OracleWorld Bool) := by
+  unfold seededGameCore honest
   simp only [liftM_bind]
   refine bind_congr fun keys => ?_
   obtain ⟨pk, sk⟩ := keys
   refine bind_congr fun result => ?_
   cases result <;> simp
 
-theorem experiment_eq (message : Message) :
-    experiment message = sampleMasterSeed >>= fun seed =>
+theorem gameCore_eq (message : Message) :
+    gameCore message = (liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>= fun seed =>
+      seededGameCore seed message := rfl
+
+/-- The per-seed experiment is the honest run against the lazy random oracle, from an empty cache. -/
+theorem seededExperiment_eq (seed : MasterSeed) (message : Message) :
+    seededExperiment seed message =
       Prod.fst <$> (simulateQ (randomOracle : QueryImpl HashSpec _) (honest seed message)).run ∅ := by
+  rw [seededExperiment, seededGameCore_eq, StateT.run'_eq]
+  simp [romImpl, QueryImpl.simulateQ_add_liftM_right]
+
+/-- The experiment samples the seed, then runs the per-seed experiment. -/
+theorem experiment_eq (message : Message) :
+    experiment message = sampleMasterSeed >>= fun seed => seededExperiment seed message := by
   rw [experiment, gameCore_eq, simulateQ_bind, StateT.run'_eq, StateT.run_bind,
     show simulateQ romImpl (liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed)
       = simulateQ (unifFwdImpl HashSpec) sampleMasterSeed from
         QueryImpl.simulateQ_add_liftM_left _ _ _,
     unifFwdImpl.simulateQ_run]
-  simp [map_eq_bind_pure_comp, bind_assoc, romImpl, QueryImpl.simulateQ_add_liftM_right]
+  simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_def, seededExperiment,
+    StateT.run'_eq]
 
 theorem probEvent_prob_bind_le {α β : Type} (mx : ProbComp α) (my : α → ProbComp β)
     (p : β → Prop) (b : ℝ≥0∞) (h : ∀ x ∈ support mx, Pr[p | my x] ≤ b) :
@@ -77,17 +87,24 @@ theorem honest_eq (seed : MasterSeed) (message : Message) :
   unfold honest signedWithKeys
   simp only [bind_assoc, pure_bind]
 
-attribute [local irreducible] Seeded.signDigestLoop Seeded.signLayer Seeded.ftsOpen Seeded.treeRoot
+attribute [local irreducible] Seeded.signDigestLoop Concrete.signFrom Concrete.buildLayerTree
   sequenceFin digestAttemptLimit encodingAttemptLimit
 
-set_option maxHeartbeats 1000000 in
+/-- What key generation returns, the verifier accepts from the signer. -/
+theorem verify_of_keygen_sign (f : QueryImpl HashSpec Id) (seed : MasterSeed) (message : Message)
+    {signature : Signature}
+    (hsign : evalWithAnswerFn f (Seeded.sign (evalWithAnswerFn f (Seeded.keygenFromSeed seed)).2 message
+      : OracleComp HashSpec (Option Signature)) = some signature) :
+    evalWithAnswerFn f (Concrete.verify (evalWithAnswerFn f (Seeded.keygenFromSeed seed)).1 message
+      signature : OracleComp HashSpec Bool) = true := by
+  rw [eval_keygenFromSeed] at hsign ⊢
+  exact verify_of_sign f _ message (keygenRootValue_eq f seed) hsign
+
 /-- A signature the signer produces for a generated key verifies, under every hash function. -/
 theorem correct : SphincsCorrectnessStatement := by
   intro hash seed publicKey secretKey message signature hkeys hsign
-  simp only [Seeded.keygenFromSeed, evalWithAnswerFn_bind, evalWithAnswerFn_pure, Prod.mk.injEq]
-    at hkeys
-  obtain ⟨rfl, rfl⟩ := hkeys
-  exact verify_of_sign hash _ message rfl hsign
+  have h := verify_of_keygen_sign hash seed message (signature := signature) (by rw [hkeys]; exact hsign)
+  rwa [hkeys] at h
 
 set_option maxHeartbeats 1000000 in
 /-- A signature the signer produced always verifies, so the honest run fails only when signing does. -/
@@ -109,10 +126,9 @@ theorem probEvent_honest_false_le (seed : MasterSeed) (message : Message) :
   have hkeys : evalWithAnswerFn f (Seeded.keygenFromSeed seed) = (pk, sk) := congrArg Prod.fst hsigned
   have hsign := congrArg Prod.snd hsigned
   rw [hkeys] at hsign
-  simp only [Seeded.keygenFromSeed, evalWithAnswerFn_bind, evalWithAnswerFn_pure, Prod.mk.injEq]
-    at hkeys
-  obtain ⟨rfl, rfl⟩ := hkeys
-  have htrue := verify_of_sign f _ message rfl hsign
+  have htrue := verify_of_keygen_sign f seed message (signature := signature)
+    (by rw [hkeys]; exact hsign)
+  rw [hkeys] at htrue
   try dsimp only at hverify
   rw [htrue] at hverify
   try dsimp only

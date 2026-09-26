@@ -5,7 +5,7 @@ namespace SphincsSecurity.Concrete.RetainedResidual
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
-  signDigestLoop signAfterDigest sequenceFin chainWalk
+  signDigestLoop sequenceFin chainWalk
 set_option backward.isDefEq.respectTransparency false
 
 theorem Compatible.honest_public_plan {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}

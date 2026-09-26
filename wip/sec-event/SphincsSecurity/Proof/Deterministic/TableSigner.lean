@@ -19,21 +19,13 @@ def tableDigestLoop (randomizers : RandomizerOutputs) (secretKey : SphincsSecuri
       | some (index, leaves) => return some (randomness, index, leaves)
       | none => tableDigestLoop randomizers secretKey message attempts (trial + 1)
 
+/-- The deterministic signer from tables: the randomizers from `randomizers`, then the table signer
+after the digest loop. -/
 def tableSign (randomizers : RandomizerOutputs) (secretKey : SphincsSecurity.SecretKey)
-    (message : Message) : m (Option Signature) := do
+    (message : Message) : OracleComp HashSpec (Option Signature) := do
   match ← tableDigestLoop randomizers secretKey message digestAttemptLimit 0 with
   | none => return none
-  | some (randomness, index, leaves) => do
-      let ftsPath ← Concrete.ftsOpen secretKey.parameter index leaves (secretKey.ftsSecret index)
-      match ← sequenceLayers (fun lay => Concrete.signLayer secretKey index lay) with
-      | none => return none
-      | some parts => do
-          let _ ← Concrete.treeRoot secretKey.parameter topLayer rootTree (secretKey.otsSecret topLayer rootTree)
-          return some
-            { randomness := randomness
-              ftsSecret := fun tree => secretKey.ftsSecret index tree (leaves (ftsIndexOf tree))
-              ftsPath := ftsPath
-              layers := fun lay => LayerSignature.ofPadded lay (parts lay) }
+  | some (randomness, index, leaves) => Concrete.signAfterDigest secretKey randomness index leaves
 
 noncomputable def tableScheme (randomizers : RandomizerOutputs) : Scheme SphincsSecurity.SecretKey where
   keygen := Concrete.scheme.keygen
@@ -72,23 +64,8 @@ theorem erases_deterministicSign (known : QueryCache HashSpec) (parameter : Publ
   unfold sign tableSign
   apply (erases_deterministicDigestLoop known parameter seed root outputs randomizers hrandomizers message _ _).bind
   intro attempt
-  cases attempt with
-  | none => exact .pure _
-  | some attempt =>
-      rcases attempt with ⟨randomness, index, leaves⟩
-      apply (erases_selectedSecrets known parameter seed outputs hsecrets index leaves).bind_known
-      apply (erases_ftsOpen known parameter seed outputs hsecrets index leaves).bind
-      intro path
-      have hlayers := Erases.sequenceLayers known _ _
-        (fun lay => erases_signLayer known parameter seed outputs hsecrets root index lay)
-      rw [sequenceLayers_map] at hlayers
-      apply hlayers.bind_map_right
-      intro layers
-      cases layers with
-      | none => exact .pure _
-      | some parts =>
-          apply (erases_treeRoot known parameter seed outputs hsecrets topLayer Concrete.rootTree).bind
-          intro rootValue
-          exact .pure _
+  rcases attempt with _ | ⟨randomness, index, leaves⟩
+  · exact .pure _
+  · exact erases_signFrom_table known parameter seed outputs hsecrets root index randomness leaves
 
 end SphincsSecurity.Seeded

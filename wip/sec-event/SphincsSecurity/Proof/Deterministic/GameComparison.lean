@@ -6,29 +6,29 @@ namespace SphincsSecurity.Seeded
 
 set_option backward.isDefEq.respectTransparency false
 
-abbrev SigningMaterial := HashOutput × SecretOutputs × RandomizerOutputs
+/-- The derivation answers of the secrets and of the randomizers. -/
+abbrev SigningMaterial := SecretOutputs × RandomizerOutputs
 
 noncomputable def drawSigningMaterial : ProbComp SigningMaterial := do
-  let parameterOutput ← $ᵗ HashOutput
   let outputs ← sampleSecretOutputs
   let randomizers ← sampleRandomizerOutputs
-  return (parameterOutput, outputs, randomizers)
+  return (outputs, randomizers)
 
 noncomputable def independentTableGame (adversary : Adversary) : ProbComp Bool := do
   let material ← drawSigningMaterial
-  (simulateQ romImpl (tableGameAfterParameter adversary (truncateHash material.1) material.2.1 material.2.2)).run' ∅
+  (simulateQ romImpl (tableGameAfterSecrets adversary material.1 material.2)).run' ∅
 
 theorem evalDist_programmedDeterministicGame_seed_last (adversary : Adversary) :
     𝒮[programmedDeterministicGame adversary] = 𝒮[do
       let material ← drawSigningMaterial
       let seed ← sampleMasterSeed
-      (simulateQ romImpl (tableGameAfterParameter adversary (truncateHash material.1) material.2.1 material.2.2)).run'
-        (signingDerivationCache seed material.1 material.2.1 material.2.2)] := by
+      (simulateQ romImpl (tableGameAfterSecrets adversary material.1 material.2)).run'
+        (signingDerivationCache seed material.1 material.2)] := by
   have heq : programmedDeterministicGame adversary = (do
       let seed ← sampleMasterSeed
       let material ← drawSigningMaterial
-      (simulateQ romImpl (tableGameAfterParameter adversary (truncateHash material.1) material.2.1 material.2.2)).run'
-        (signingDerivationCache seed material.1 material.2.1 material.2.2)) := by
+      (simulateQ romImpl (tableGameAfterSecrets adversary material.1 material.2)).run'
+        (signingDerivationCache seed material.1 material.2)) := by
     simp only [programmedDeterministicGame, drawSigningMaterial, bind_assoc, pure_bind]
   rw [heq, evalSPMF_bind_bind_swap]
 
@@ -41,16 +41,16 @@ theorem forgeAdvantage_deterministic_le_table (adversary : Adversary) (q : Nat)
   simp only [probOutput_def, evalDist_gameCore_deterministic_programmed,
     evalDist_programmedDeterministicGame_seed_last]
   change Pr[= true | drawSigningMaterial >>= fun material => sampleMasterSeed >>= fun seed =>
-      (simulateQ romImpl (tableGameAfterParameter adversary (truncateHash material.1) material.2.1 material.2.2)).run'
-        (signingDerivationCache seed material.1 material.2.1 material.2.2)] ≤
+      (simulateQ romImpl (tableGameAfterSecrets adversary material.1 material.2)).run'
+        (signingDerivationCache seed material.1 material.2)] ≤
     Pr[= true | drawSigningMaterial >>= fun material =>
-      (simulateQ romImpl (tableGameAfterParameter adversary (truncateHash material.1) material.2.1 material.2.2)).run' ∅] + _
+      (simulateQ romImpl (tableGameAfterSecrets adversary material.1 material.2)).run' ∅] + _
   rw [← probEvent_eq_eq_probOutput, ← probEvent_eq_eq_probOutput]
   apply probEvent_bind_congr_le_add
   intro material _
   exact probEvent_random_cache_change_le _
-    (fun seed => signingDerivationCache seed material.1 material.2.1 material.2.2) ∅
-    (fun seed => signingDerivationCache_agreeOutside seed _ _ _) q
-    (hbound material.1 material.2.1 material.2.2) (fun value => value = true)
+    (fun seed => signingDerivationCache seed material.1 material.2) ∅
+    (fun seed => signingDerivationCache_agreeOutside seed _ _) q
+    (hbound material.1 material.2) (fun value => value = true)
 
 end SphincsSecurity.Seeded

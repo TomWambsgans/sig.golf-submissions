@@ -7,7 +7,7 @@ open AdaptiveResidualLabels hiding World State Environment
 open InterleavedResidual (SigningRecord)
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition hashInputs sourceInputs
-  signDigestLoop signAfterDigest
+  signDigestLoop
 set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)

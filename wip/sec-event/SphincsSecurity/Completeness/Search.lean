@@ -52,7 +52,7 @@ theorem fresh_run (input : HashInput) (cache : QueryCache HashSpec) (hfresh : ca
     from rfl, probEvent_bind_eq_tsum]
   exact tsum_congr fun u => by rw [probOutput_uniformSample]
 
-/-- A search over fresh inputs, distinct below `bound`, exhausts all `n` trials with probability at most the per-trial rejection share to the `n`. The bound is what the counter search needs: its inputs carry a 32-bit counter, so they repeat only after `2 ^ 32` trials, which is exactly its trial budget. -/
+/-- A search over fresh inputs, distinct below `bound`, exhausts all `n` trials with probability at most the per-trial rejection share to the `n`. The bound is what the counter search needs: its inputs carry a 32-bit counter, so they repeat only after `2 ^ 32` trials, well past its `2 ^ 20`-trial budget. -/
 theorem probEvent_searchLoop (inputs : Nat → HashInput) (decode : HashOutput → Option β)
     (success : Nat → β → OracleComp HashSpec γ) (bound : Nat)
     (hinj : ∀ s s', s < bound → s' < bound → inputs s = inputs s' → s = s') :
@@ -149,7 +149,7 @@ theorem probEvent_bind_le_add {α δ : Type} (x : OracleComp HashSpec α)
 
 /-! ## Distinct inputs
 
-The counter rides in the hashed bytes, so trials below the wrap hash distinct inputs. -/
+The counter rides in the hashed bytes, so trials below the `2 ^ 32` wrap hash distinct inputs. -/
 theorem bytesLE_inj {n : Nat} {x y : BitVec (8 * n)} (h : bytesLE n x = bytesLE n y) : x = y := by
   have hfun := List.ofFn_inj.mp h
   apply BitVec.eq_of_getLsbD_eq
@@ -174,35 +174,30 @@ theorem counter_bytes_inj {c c' : Nat} (hc : c < 2 ^ 32) (hc' : c' < 2 ^ 32)
 
 /-! ## The counter search
 
-`otsSignFrom` walks counters from its starting value, hashing the layer message with each under the
-leaf's encoding tweak and stopping at the first digest the target-sum code accepts. That is a search
-over the encoding inputs. -/
+`encodingSearch` walks counters from its starting value, hashing the layer message with each under
+the leaf's encoding tweak and stopping at the first digest the target-sum code accepts. That is a
+search over the encoding inputs. -/
 
-open Concrete Seeded in
+open Concrete in
 /-- The counter search, as a search over its encoding inputs. -/
-theorem otsSignFrom_eq_searchLoop (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (seed : MasterSeed) (message : Digest) :
+theorem encodingSearch_eq_searchLoop (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (message : Digest) :
     ∀ (n t : Nat),
-      (otsSignFrom parameter lay tree leaf seed message n t
-        : OracleComp HashSpec (Option (Counter × (ChainIndex → Digest))))
+      (encodingSearch parameter lay tree leaf message n t
+        : OracleComp HashSpec (Option (Counter × Encoding)))
         = searchLoop
             (fun c => tweakableHashInput parameter (.encoding lay tree leaf)
               (bytesLE 16 message ++ bytesLE 4 (BitVec.ofNat counterBits c)))
             (fun out => TargetSum.decodeDigest (truncateHash out))
-            (fun c encoding => do
-              let values ← sequenceFin fun chainIdx => do
-                let secret ← deriveKey parameter (.ots lay tree leaf chainIdx) seed
-                chainWalk parameter lay tree leaf chainIdx 0 (encoding chainIdx).val secret
-              pure (BitVec.ofNat counterBits c, values))
+            (fun c encoding => pure (BitVec.ofNat counterBits c, encoding))
             n t := by
   intro n
   induction n with
   | zero => intro t; rfl
   | succ n ih =>
       intro t
-      rw [otsSignFrom, searchLoop]
-      simp only [encode, tweakableHash, oracleHash, bind_assoc, pure_bind,
-        map_eq_bind_pure_comp, Function.comp_def, ih]
+      rw [encodingSearch, searchLoop]
+      simp only [encode, tweakableHash, oracleHash, bind_assoc, pure_bind, ih]
       refine bind_congr fun answer => ?_
       cases TargetSum.decodeDigest (truncateHash answer) <;> rfl
 

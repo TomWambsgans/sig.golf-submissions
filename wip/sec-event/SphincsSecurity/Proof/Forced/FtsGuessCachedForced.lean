@@ -159,7 +159,7 @@ theorem cachedForcedRun_deferred (adversary : Adversary) :
   rfl
 
 theorem cachedForcedRun_original_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q slot : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -176,7 +176,7 @@ theorem cachedForcedRun_original_budget (dummy : OtsReferenceWords) (adversary :
   rw [map_eq_bind_pure_comp, RetainedObservation.bind_nonzero] at hp
   obtain ⟨deferred, hdeferred, heq⟩ := hp
   simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at heq
-  have h := deferredForcedRun_original_budget dummy adversary q slot hbound parameter otsSecret labels auxiliary hauxiliary
+  have h := deferredForcedRun_original_budget dummy adversary q slot hbound parameter hparameter otsSecret labels auxiliary hauxiliary
     deferred hdeferred
   rw [← heq] at h
   exact h

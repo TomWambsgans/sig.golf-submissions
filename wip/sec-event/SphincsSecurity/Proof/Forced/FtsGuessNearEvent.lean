@@ -17,7 +17,7 @@ noncomputable def forcedNearProbability (dummy : OtsReferenceWords) (adversary :
       (completedRun parameter (canonicalGraphRoot labels) labels adversary) (initialState PUnit.unit)]
 
 theorem lazy_original_near_event_le (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter)
+    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -30,7 +30,7 @@ theorem lazy_original_near_event_le (dummy : OtsReferenceWords) (adversary : Adv
     (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
     (completedRun parameter (canonicalGraphRoot labels) labels adversary) PUnit.unit budget
     (fun result hr => (Nat.le_add_left _ _).trans
-      (lazy_original_completedRun_probes dummy adversary budget hbudget parameter otsSecret labels auxiliary hauxiliary result hr))
+      (lazy_original_completedRun_probes dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary result hr))
     (fun result => result.2.guesses.Nonempty ∧ completedNearCertificate parameter (canonicalGraphRoot labels) result.1)
     (fun result => if completedNearCertificate parameter (canonicalGraphRoot labels) result.1 then 1 else 0)
     (fun _ _ he => ⟨he.1, by rw [if_pos he.2]⟩)

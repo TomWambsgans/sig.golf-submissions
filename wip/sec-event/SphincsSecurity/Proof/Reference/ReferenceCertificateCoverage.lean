@@ -37,10 +37,11 @@ theorem recordedCache_agrees (f : QueryImpl HashSpec Id) (trace : Trace) : (reco
   · simp only [recordedCache, if_neg hm] at houtput
     cases houtput
 
-theorem boundaryEval_verify_message (key : SecretKey) (f : QueryImpl HashSpec Id) (forgery : Forgery) :
+theorem boundaryEval_verify_message (key : SecretKey) (f : QueryImpl HashSpec Id) (forgery : Forgery)
+    (hcounters : CountersInRange forgery.signature) :
     (signingInput key forgery.message forgery.signature, f (signingInput key forgery.message forgery.signature)) ∈
       (boundaryEval key.parameter f (verify ⟨key.root, key.parameter⟩ forgery.message forgery.signature)).2.messageCalls := by
-  rw [verify, boundaryEval_bind, SigningBoundaryTrace.messageCalls_mul, List.mem_append]
+  rw [verify_eq_ite, if_pos hcounters, verifyCore, boundaryEval_bind, SigningBoundaryTrace.messageCalls_mul, List.mem_append]
   apply Or.inl
   have hquery : boundaryEval key.parameter f
       (oracleHash (signingInput key forgery.message forgery.signature) : OracleComp HashSpec HashOutput) =
@@ -59,6 +60,7 @@ theorem boundaryEval_verify_message (key : SecretKey) (f : QueryImpl HashSpec Id
 
 theorem certificate_to_message_record (key : SecretKey) (f : QueryImpl HashSpec Id)
     (before : (Forgery × QueryLog SigningSpec) × SigningBoundaryTrace) (trace : Trace) (required : Finset FtsTree)
+    (hcounters : CountersInRange before.1.1.signature)
     (horigin : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ before.1.2 →
       ReferenceSigningWitness.SignatureOrigin key f message signature before.2)
     (htrace : RetainedResidual.TraceValid key.parameter f (completeCertificateRest key f before).2)
@@ -78,7 +80,7 @@ theorem certificate_to_message_record (key : SecretKey) (f : QueryImpl HashSpec 
       (signingInput key before.1.1.message before.1.1.signature) = some (f (signingInput key before.1.1.message before.1.1.signature)) := by
     apply hashRowsCache_lookup _ f hrows
     rw [completeCertificateRest, SigningBoundaryTrace.messageCalls_mul, List.mem_append]
-    exact Or.inr (boundaryEval_verify_message key f before.1.1)
+    exact Or.inr (boundaryEval_verify_message key f before.1.1 hcounters)
   obtain ⟨output, houtput, hm, ha, hcovered⟩ := hcertificate
   have hf : f (signingInput key before.1.1.message before.1.1.signature) = output :=
     recordedCache_agrees f _ houtput
@@ -134,14 +136,14 @@ theorem referenceForgeryRest_certificate_atRoot (key : SecretKey) (f : QueryImpl
     (dummy : OtsReferenceWords) (adversary : Adversary) (before : AdversaryTrace)
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary))
-    (trace : Trace) (required : Finset FtsTree)
+    (trace : Trace) (required : Finset FtsTree) (hcounters : CountersInRange before.1.1.1.signature)
     (hcertificate : TargetCertificateAt { key with root := root } required
       (ReferenceFtsCoverage.transcriptCache f before.1.2 trace, before.1.1.2)
       (signingInput { key with root := root } before.1.1.1.message before.1.1.1.signature)) :
     TargetCertificateAt { key with root := root } required
       (hashRowsCache (completeCertificateRest { key with root := root } f before.1).2.messageCalls, before.1.1.2)
       (signingInput { key with root := root } before.1.1.1.message before.1.1.1.signature) :=
-  certificate_to_message_record { key with root := root } f before.1 trace required
+  certificate_to_message_record { key with root := root } f before.1 trace required hcounters
     (referenceForgeryRest_origin_atRoot key f root hroot dummy adversary before hb)
     (referenceForgeryRest_traceValid_atRoot key f root hroot dummy adversary before hb) hcertificate
 
@@ -150,7 +152,7 @@ noncomputable def ReferenceForgerySample.fullCertificate {inputs : Finset HashIn
   let f := finiteHashAnswer ∅ inputs sample.2.1.2
   let key := ReferenceVerifierWitness.rootedKey sample.1 f
   let result := (sample.context dummy).2.2.2
-  SigningTranscript.Valid sample.2.2.1.1.2 ∧
+  SigningTranscript.Valid sample.2.2.1.1.2 ∧ CountersInRange sample.2.2.1.1.1.signature ∧
     TargetCertificateAt key Finset.univ
       (ReferenceFtsCoverage.transcriptCache f sample.2.2.1.2 (result.before * result.after), sample.2.2.1.1.2)
       (signingInput key sample.2.2.1.1.1.message sample.2.2.1.1.1.signature)
@@ -168,7 +170,7 @@ theorem ReferenceForgerySample.ftsOutcome_cases {inputs : Finset HashInput} (dum
     (sample : ReferenceForgerySample inputs) (h : sample.ftsOutcome dummy) :
     sample.fullCertificate dummy ∨ sample.remainingFts dummy := by
   rcases h with ⟨hvalid, hfull | hrest⟩
-  · exact Or.inl ⟨hvalid, hfull⟩
+  · exact Or.inl ⟨hvalid, hfull.1, hfull.2⟩
   · exact Or.inr ⟨hvalid, hrest⟩
 
 theorem referenceForgeryGame_full_record (inputs : Finset HashInput)
@@ -183,7 +185,7 @@ theorem referenceForgeryGame_full_record (inputs : Finset HashInput)
   refine ⟨hfull.1, signingInput (ReferenceVerifierWitness.rootedKey sample.1 (finiteHashAnswer ∅ inputs sample.2.1.2))
     sample.2.2.1.1.1.message sample.2.2.1.1.1.signature, ?_⟩
   exact referenceForgeryRest_certificate_atRoot sample.1 (finiteHashAnswer ∅ inputs sample.2.1.2) _ rfl
-    dummy adversary sample.2.2 hb _ Finset.univ hfull.2
+    dummy adversary sample.2.2 hb _ Finset.univ hfull.2.1 hfull.2.2
 
 private theorem probEvent_le_project {Source Result : Type} (source : SPMF Source) (native : ProbComp Result)
     (projection : Source → Result) (event : Source → Prop) (nativeEvent : Result → Prop)

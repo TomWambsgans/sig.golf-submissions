@@ -21,7 +21,7 @@ end SphincsSecurity.Concrete.OtsContactTrace
 namespace SphincsSecurity.Concrete.ReferenceSigningWitness
 
 open _root_.OracleComp OracleSpec OtsContactTrace
-attribute [local irreducible] signDigestLoop signAfterDigest boundaryEval fixedBoundaryRun frontierSigningRun frontierAdversaryImpl frontierAdversaryRun
+attribute [local irreducible] signDigestLoop boundaryEval fixedBoundaryRun frontierSigningRun frontierAdversaryImpl frontierAdversaryRun
 set_option backward.isDefEq.respectTransparency false
 
 private theorem supported_nonzero {Result : Type} (computation : ProbComp Result) (result : Result)

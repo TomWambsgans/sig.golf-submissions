@@ -7,7 +7,7 @@ open AdaptiveResidualLabels hiding World State Environment
 open InterleavedResidual (Routing SigningRecord)
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition hashInputs sourceInputs
-  signDigestLoop signAfterDigest
+  signDigestLoop
 set_option backward.isDefEq.respectTransparency false
 
 def MonitoredBankComplete {inputs : Finset HashInput} (key : SecretKey) (required : Finset FtsTree)

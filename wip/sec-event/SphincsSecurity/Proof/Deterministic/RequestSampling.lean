@@ -40,9 +40,8 @@ theorem tableDigestLoop_own (randomizers : RandomizerOutputs) (secretKey : Sphin
       | none => exact ih _
       | some result => rfl
 
-omit [LawfulMonad m] in
 theorem tableSign_own (randomizers : RandomizerOutputs) (secretKey : SphincsSecurity.SecretKey) (message : Message) :
-    (tableSign randomizers secretKey message : m (Option Signature)) =
+    tableSign randomizers secretKey message =
       tableSign (fun position => randomizers (message, position.2)) secretKey message := by
   unfold tableSign
   rw [tableDigestLoop_own randomizers secretKey message]
@@ -99,7 +98,7 @@ theorem tableRun_requests {α : Type} (hash : QueryImpl HashSpec (StateT State P
   exact tableRun_lift_requests (worldHandler hash)
     (fun message tape => tableSign (fun position => tape position.2) secretKey message)
     (tableSign (Function.uncurry tapes) secretKey) tapes
-    (fun message => (tableSign_own (m := OracleComp HashSpec) (Function.uncurry tapes) secretKey message).symm)
+    (fun message => (tableSign_own (Function.uncurry tapes) secretKey message).symm)
     computation
 
 theorem evalDist_freshRequests {α : Type} (hash : QueryImpl HashSpec (StateT State ProbComp))
@@ -139,7 +138,7 @@ theorem evalDist_tableRequests {α : Type} {used : Set Message}
 theorem freshRequests_sourceGame_memo (publicKey : PublicKey) (adversary : Adversary) :
     FreshRequests ∅ (sourceGame publicKey (memoAdversary adversary)) := by
   have h : FreshRequests ∅ (memoize (adversary.main publicKey) ∅) := by
-    simpa only [QueryCache.empty_apply, ne_eq, not_true_eq_false, Set.setOf_false] using
+    simpa only [QueryCache.empty_apply, ne_eq, not_true_eq_false, Set.ofPred_false] using
       freshRequests_memoize (adversary.main publicKey) ∅
   unfold sourceGame memoAdversary
   apply h.withRequestLog.bind

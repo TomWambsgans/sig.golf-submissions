@@ -26,7 +26,7 @@ def ForgeryWitnessFor (key : SecretKey) (f : QueryImpl HashSpec Id) (root : Dige
 theorem SuccessWitnessFor.classification {key : SecretKey} {f : QueryImpl HashSpec Id} {root : Digest} {words : OtsReferenceWords}
     {selections : ReferenceFamily} {adversary : Adversary} {result : ContactResult} {before : AdversaryTrace}
     (h : SuccessWitnessFor key f root words selections adversary result before) : ForgeryWitnessFor key f root words selections adversary result before := by
-  obtain ⟨hb, hv, hf, horigin, hfrontier, ht, digest, hdigest, hrun, hadmissible, hcases⟩ := h
+  obtain ⟨hb, hv, hf, horigin, hfrontier, ht, hcounters, digest, hdigest, hrun, hadmissible, hcases⟩ := h
   refine ⟨hb, hv, hf, horigin, hfrontier, ht, ?_⟩
   have heval : evalWithAnswerFn f (messageDigest key.parameter root before.1.1.1.message before.1.1.1.signature.randomness) =
       truncateMessageDigest (f (signingInput { key with root := root } before.1.1.1.message before.1.1.1.signature)) := rfl
@@ -34,7 +34,7 @@ theorem SuccessWitnessFor.classification {key : SecretKey} {f : QueryImpl HashSp
   rcases hcases with ⟨_, _, hqueries, hnew⟩ | hlayer | hfts
   · rw [hd] at hadmissible hqueries
     exact Or.inl (ReferenceFtsCoverage.classification { key with root := root } f before.1.1.2 before.1.2
-      (result.before * result.after) before.1.1.1 horigin hnew hrun hadmissible hqueries)
+      (result.before * result.after) before.1.1.1 hcounters horigin hnew hrun hadmissible hqueries)
   · apply Or.inr
     apply ReferencePrimitiveWitness.layer_exception { key with root := root } f words _ selections result ?_ hlayer
     intro lay tree leaf chain

@@ -26,11 +26,10 @@ theorem hashQueryBound_bind_replace {α β γ : Type} (first : OracleComp Oracle
   have := h.1
   omega
 
-theorem prob_tableGameAfterParameter_le_memo (adversary : Adversary) (parameter : PublicParameter)
-    (outputs : SecretOutputs) (randomizers : RandomizerOutputs) (cache : QueryCache HashSpec) :
-    Pr[= true | (simulateQ romImpl (tableGameAfterParameter adversary parameter outputs randomizers)).run' cache] ≤
-      Pr[= true | (simulateQ romImpl (tableGameAfterParameter (memoAdversary adversary) parameter outputs randomizers)).run' cache] := by
-  unfold tableGameAfterParameter
+theorem prob_tableGameAfterSecrets_le_memo (adversary : Adversary) (outputs : SecretOutputs) (randomizers : RandomizerOutputs) (cache : QueryCache HashSpec) :
+    Pr[= true | (simulateQ romImpl (tableGameAfterSecrets adversary outputs randomizers)).run' cache] ≤
+      Pr[= true | (simulateQ romImpl (tableGameAfterSecrets (memoAdversary adversary) outputs randomizers)).run' cache] := by
+  unfold tableGameAfterSecrets
   rw [run'_lift_hash_bind, run'_lift_hash_bind]
   apply probOutput_bind_mono
   intro result _
@@ -39,9 +38,9 @@ theorem prob_tableGameAfterParameter_le_memo (adversary : Adversary) (parameter 
 
 theorem tableBudget_memo (adversary : Adversary) (q : Nat) (hbound : HasTableBudget adversary q) :
     HasTableBudget (memoAdversary adversary) q := by
-  intro parameter outputs randomizers
-  have h := hbound parameter outputs randomizers
-  unfold tableGameAfterParameter at h ⊢
+  intro outputs randomizers
+  have h := hbound outputs randomizers
+  unfold tableGameAfterSecrets at h ⊢
   apply hashQueryBound_bind_replace _ _ _ ∅ q h
   intro root cache q hrest
   rw [← runSigning_sourceGame] at hrest ⊢
@@ -52,6 +51,6 @@ theorem prob_independentTableGame_le_memo (adversary : Adversary) :
   unfold independentTableGame
   apply probOutput_bind_mono
   intro material _
-  exact prob_tableGameAfterParameter_le_memo _ _ _ _ ∅
+  exact prob_tableGameAfterSecrets_le_memo _ _ _ ∅
 
 end SphincsSecurity.Seeded

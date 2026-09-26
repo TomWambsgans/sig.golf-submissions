@@ -34,9 +34,8 @@ theorem equal_word_reference (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     · apply hrun.bind_left
       simp only [encodeAttempt, queriedInputs_bind, queriedInputs_tweakableHash, queriedInputs_pure,
         List.append_nil, List.mem_singleton, input, position, EncodingPosition.domain]
-    · have hcounter : counter.toNat < encodingAttemptLimit := by
-        simpa only [encodingAttemptLimit, counterBits] using counter.isLt
-      have hin := encodingRetryInput_mem_canonicalEncodingInputs parameter position message ⟨counter.toNat, hcounter⟩
+    · have hcounter : counter.toNat < 2 ^ counterBits := counter.isLt
+      have hin := encodingRetryInput_mem_canonicalEncodingInputs_wide parameter position message ⟨counter.toNat, hcounter⟩
       simpa only [encodingRetryInput, BitVec.ofNat_toNat, BitVec.setWidth_eq, input] using hin
     · exact decode_of_eval_encode_eq_some f parameter lay tree leaf message counter (words lay tree leaf) hencode
 

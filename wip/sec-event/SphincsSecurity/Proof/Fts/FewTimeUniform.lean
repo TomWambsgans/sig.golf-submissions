@@ -79,9 +79,9 @@ theorem fullDigestView_injective : Function.Injective fullDigestView := by
     simpa [fullDigestView, digestIndex, BitVec.getLsbD_extractLsb', hindex] using hbit
   · let treeIndex := (position - totalHeight) / ftsTreeHeight
     have htreeIndex : treeIndex < ftsTrees := by
-      have hposition' : position < 176 := by
+      have hposition' : position < 184 := by
         simpa [messageDigestBits, totalHeight, ftsTrees, ftsTreeHeight] using hposition
-      have hindex' : 26 ≤ position := by
+      have hindex' : 34 ≤ position := by
         simpa [totalHeight] using Nat.le_of_not_gt hindex
       simp only [treeIndex, ftsTrees, ftsTreeHeight, totalHeight]
       omega

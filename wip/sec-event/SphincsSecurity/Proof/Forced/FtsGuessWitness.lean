@@ -140,7 +140,7 @@ theorem Tracking.near_guess {key : SecretKey} {f : QueryImpl HashSpec Id} {befor
     ∃ omitted, TargetCertificateAt key (Finset.univ.erase omitted)
       (ReferenceFtsCoverage.transcriptCache f boundary trace, log) (RetainedResidual.signingInput key forgery.message forgery.signature) ∧
       (target.1, omitted, target.2 omitted) ∈ after.guesses := by
-  obtain ⟨omitted, hcertificate, hcovered, hquery⟩ := h
+  obtain ⟨_, omitted, hcertificate, hcovered, hquery⟩ := h
   exact ⟨omitted, hcertificate, tracking.uncovered_guess _ omitted
     (by rw [hinitial]; exact Finset.notMem_empty _) hcovered hquery⟩
 

@@ -41,7 +41,7 @@ theorem referenceNearWitnessRest_program (key : SecretKey) (inputs : Finset Hash
   exact decide_eq_decide.mpr Iff.rfl
 
 theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter)
+    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -56,7 +56,7 @@ theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adve
         ∑ slot ∈ Finset.range budget, forcedNearProbability dummy adversary slot parameter otsSecret labels auxiliary := by
   have h := (initial_reference_near_witnesses parameter otsSecret (canonicalGraphGameInputs adversary)
     (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary hauxiliary dummy adversary).trans
-    (lazy_original_near_event_le dummy adversary budget hbudget parameter otsSecret labels auxiliary hauxiliary)
+    (lazy_original_near_event_le dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary)
   have hprior := congrArg (fun law : SPMF (Coordinate → Digest) => law >>= fun secrets =>
       (fun result => (secrets, result)) <$> 𝒮[simulateQ
         (fixedAnswers (originalAnswers dummy adversary parameter otsSecret labels auxiliary) secrets)
@@ -122,6 +122,9 @@ theorem referenceForgeryGame_near_guess_le_forced (dummy : OtsReferenceWords) (a
   rw [probEvent_bind_eq_tsum]
   apply ENNReal.tsum_le_tsum
   intro parameter
+  by_cases hzp : 𝒮[sampleParameter] parameter = 0
+  · simp only [SPMF.probOutput_eq_apply, hzp, zero_mul, le_refl]
+  have hparameter := mem_support_sampleParameter_of_ne_zero hzp
   apply mul_le_mul' le_rfl
   rw [probEvent_bind_eq_tsum]
   apply ENNReal.tsum_le_tsum
@@ -139,7 +142,7 @@ theorem referenceForgeryGame_near_guess_le_forced (dummy : OtsReferenceWords) (a
   apply ENNReal.tsum_le_tsum
   intro labels
   apply mul_le_mul' le_rfl
-  have h := referenceNearWitnessRest_initial_bound dummy adversary budget hbudget parameter otsSecret labels auxiliary
+  have h := referenceNearWitnessRest_initial_bound dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary
     (pmf_support_nonzero _ auxiliary hz)
   simpa only [referenceNearWitnessRest, evalSPMF_map] using h
 

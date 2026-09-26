@@ -45,6 +45,7 @@ def SuccessWitnessFor (key : SecretKey) (f : QueryImpl HashSpec Id) (root : Dige
     ReferenceSigningWitness.SignatureOrigin actualKey f message signature before.1.2) ∧
   result.frontier = frontier ∧
   trace = before.2 * answerTrace f (verify ⟨actualKey.root, key.parameter⟩ before.1.1.1.message before.1.1.1.signature) ∧
+  CountersInRange before.1.1.1.signature ∧
   ∃ digest, evalWithAnswerFn f (messageDigest key.parameter actualKey.root before.1.1.1.message before.1.1.1.signature.randomness) = digest ∧
     ContainsRun f trace (messageDigest key.parameter actualKey.root before.1.1.1.message before.1.1.1.signature.randomness) ∧ Admissible digest ∧
     ((FullyHonestOpening f (recordedCache f trace) actualKey (digestIndex digest) (digestLeaves digest) before.1.1.1.signature ∧
@@ -82,7 +83,7 @@ theorem run_success_atRoot (key : SecretKey) (f : QueryImpl HashSpec Id) (root :
     (canonicalReferenceWords { key with root := root } f dummy) _
     (isSigningFrontier_canonical { key with root := root } f _) (frontierReferenceWord_canonical { key with root := root } f dummy)
     (adversary.main ⟨root, key.parameter⟩) before hbc
-  refine ⟨hb, hv, hf, horigin, hfrontier, ht, ?_⟩
+  refine ⟨hb, hv, hf, horigin, hfrontier, ht, counters_of_verify _ _ _ hverify, ?_⟩
   obtain ⟨digest, hdigest, hdigestRun, hadmissible, hcases⟩ := verify_classification f { key with root := root } (referenceFamilyWords selections dummy)
     (canonicalGraphMessage (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)) selections before.1.1.1.message before.1.1.1.signature
     (result.before * result.after) hvalid (canonical_messages key f root) hroot hverify hrun

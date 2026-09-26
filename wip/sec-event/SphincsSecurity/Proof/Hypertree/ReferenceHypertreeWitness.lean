@@ -63,55 +63,21 @@ theorem hypertree_reference (index : Index) (leaves : IndexGroup → FtsLeaf) (s
     (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) = honestFtsKey f key.parameter index (key.ftsSecret index) ∧
       ∀ lay, ReferenceLayerOpening f key words selections index signature lay ∧
         CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
-          (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay)) ∧
-        VerifierLayerMessage f key.parameter index leaves signature lay (evalWithAnswerFn f (layerMessage key index lay)) := by
-  obtain ⟨bottomLeaf, hbottom, middleLeaf, hmiddle, topLeaf, htop⟩ := hypertreeRun_of_verify index signature (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) key.root hverify hrun.cached
-  let middleMessage := foldValue f key.parameter bottomLayer (treeIndexAt index bottomLayer) (leafIndexAt index bottomLayer)
-    (signaturePath signature bottomLayer) bottomLeaf (layerHeight bottomLayer)
-  let topMessage := foldValue f key.parameter middleLayer (treeIndexAt index middleLayer) (leafIndexAt index middleLayer)
-    (signaturePath signature middleLayer) middleLeaf (layerHeight middleLayer)
-  have htopFold : foldValue f key.parameter topLayer (treeIndexAt index topLayer) (leafIndexAt index topLayer)
-      (signaturePath signature topLayer) topLeaf (layerHeight topLayer) = key.root := by
-    simpa only [topLayer, verifyLayers_zero_eq, evalWithAnswerFn_pure, Option.some.injEq] using htop.2.1
-  have htree : treeIndexAt index topLayer = rootTree := Fin.ext (treeIndexAt_topLayer index)
-  have htopRoot : foldValue f key.parameter topLayer (treeIndexAt index topLayer) (leafIndexAt index topLayer)
-      (signaturePath signature topLayer) topLeaf (layerHeight topLayer) = honestNode f key.parameter topLayer (treeIndexAt index topLayer)
-        (key.otsSecret topLayer (treeIndexAt index topLayer)) (layerHeight topLayer) 0 := by
-    rw [htopFold, hroot, htree]
-  have ht := layer_frame_reference f key words messages selections index signature topLayer topMessage key.root topLeaf trace
-    (hvalid _) (hmessages _) hclean htop htopRoot
-  have hmRoot := exact_top_message_eq_middle_root f key index index topMessage rfl rfl ht.1.symm
-  have hm := layer_frame_reference f key words messages selections index signature middleLayer middleMessage key.root middleLeaf trace
-    (hvalid _) (hmessages _) hclean hmiddle hmRoot
-  have hbRoot := exact_middle_message_eq_bottom_root f key index index middleMessage rfl rfl hm.1.symm
-  have hb := layer_frame_reference f key words messages selections index signature bottomLayer (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) key.root bottomLeaf trace
-    (hvalid _) (hmessages _) hclean hbottom hbRoot
-  refine ⟨exact_bottom_message_eq_fts_key f key index index (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) rfl rfl hb.1.symm, ?_⟩
-  have hverifier (position : Layer) (value : Digest)
-      (hp : position = bottomLayer ∧ value = (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) ∨
-        position = middleLayer ∧ value = middleMessage ∨ position = topLayer ∧ value = topMessage) :
-      VerifierLayerMessage f key.parameter index leaves signature position value :=
-    ⟨bottomLeaf, hbottom.1, middleLeaf, hmiddle.1, hp⟩
-  have hpack (position : Layer) (value : Digest)
-      (he : value = evalWithAnswerFn f (layerMessage key index position))
-      (ho : ReferenceLayerOpening f key words selections index signature position)
-      (hc : CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter position (treeIndexAt index position) (leafIndexAt index position)
-        value (signature.counter position) (signature.chainValue position)))
-      (hv : VerifierLayerMessage f key.parameter index leaves signature position value) :
-      ReferenceLayerOpening f key words selections index signature position ∧
-        CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter position (treeIndexAt index position) (leafIndexAt index position)
-          (evalWithAnswerFn f (layerMessage key index position)) (signature.counter position) (signature.chainValue position)) ∧
-        VerifierLayerMessage f key.parameter index leaves signature position (evalWithAnswerFn f (layerMessage key index position)) := by
-    rw [he] at hc hv
-    exact ⟨ho, hc, hv⟩
-  intro lay
-  fin_cases lay
-  · simpa only [topLayer] using hpack topLayer topMessage ht.1 ht.2 htop.2.2.1
-      (hverifier _ _ (Or.inr (Or.inr ⟨rfl, rfl⟩)))
-  · simpa only [middleLayer] using hpack middleLayer middleMessage hm.1 hm.2 hmiddle.2.2.1
-      (hverifier _ _ (Or.inr (Or.inl ⟨rfl, rfl⟩)))
-  · simpa only [bottomLayer, numLayers] using hpack bottomLayer _ hb.1 hb.2 hbottom.2.2.1
-      (hverifier _ _ (Or.inl ⟨rfl, rfl⟩))
+          (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay)) := by
+  have hwalk := hypertree_walk (f := f) (cache := recordedCache f trace) key index signature
+    (fun lay => ReferenceLayerOpening f key words selections index signature lay ∧
+      CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
+        (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay)))
+    (fun lay message leafValue hframe hfold => by
+      have h := layer_frame_reference f key words messages selections index signature lay message key.root leafValue trace
+        (hvalid _) (hmessages _) hclean hframe hfold
+      refine ⟨h.1, h.2, ?_⟩
+      rw [← h.1]
+      exact hframe.2.2.1)
+    hroot _ hverify hrun.cached
+  refine ⟨?_, hwalk.1⟩
+  rw [hwalk.2, layerMessage_bottomLayer]
+  rfl
 
 theorem hypertree_classification (index : Index) (leaves : IndexGroup → FtsLeaf) (signature : Signature) (trace : Trace)
     (hvalid : ∀ lay, OtsCode.Valid (words lay (treeIndexAt index lay) (leafIndexAt index lay)))
@@ -121,8 +87,7 @@ theorem hypertree_classification (index : Index) (leaves : IndexGroup → FtsLea
     (hrun : ContainsRun f trace (verifyLayers key.parameter index signature numLayers (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)))) :
     ((evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) = honestFtsKey f key.parameter index (key.ftsSecret index) ∧ ∀ lay, ReferenceLayerOpening f key words selections index signature lay ∧
         CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
-          (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay)) ∧
-        VerifierLayerMessage f key.parameter index leaves signature lay (evalWithAnswerFn f (layerMessage key index lay))) ∨
+          (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay))) ∨
       LayerException f key words messages selections trace := by
   by_cases h : LayerException f key words messages selections trace
   · exact Or.inr h

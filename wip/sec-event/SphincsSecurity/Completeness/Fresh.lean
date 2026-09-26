@@ -125,82 +125,139 @@ theorem Avoids.chainWalk (parameter : PublicParameter) (lay : Layer) (tree : Tre
       · exact Avoids.tweakableHash f target parameter _ _ (hne _ _)
       · exact Avoids.pure' f target _
 
-theorem Avoids.oneTimePublicKey (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (seed : MasterSeed)
-    (hchain : ∀ (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
-    (hderive : ∀ chainIdx : ChainIndex,
-      keygenHashInput parameter (.ots lay tree leaf chainIdx) seed ≠ target) :
-    Avoids f target (Seeded.oneTimePublicKey parameter lay tree leaf seed
-      : OracleComp HashSpec (ChainIndex → Digest)) := by
-  rw [Seeded.oneTimePublicKey]
-  refine Avoids.sequenceFin f target _ (fun chainIdx => ?_)
-  exact Avoids.bind f target (Avoids.deriveKey f target parameter _ seed (hderive chainIdx))
-    (Avoids.chainWalk f target parameter lay tree leaf chainIdx (hchain chainIdx) _ _ _)
 
-theorem Avoids.treeNode (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (seed : MasterSeed)
-    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
-    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
-      tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput parameter (.ots lay tree leaf chainIdx) seed ≠ target) :
-    ∀ (level nodeIdx : Nat),
-      Avoids f target (Seeded.treeNode parameter lay tree seed level nodeIdx
-        : OracleComp HashSpec Digest) := by
-  intro level
-  induction level with
-  | zero =>
-      intro nodeIdx
-      rw [Seeded.treeNode]
-      refine Avoids.bind f target
-        (Avoids.oneTimePublicKey f target parameter lay tree _ seed (fun c => hchain _ c)
-          (fun c => hderive _ c)) ?_
-      exact Avoids.tweakableHash f target parameter _ _ (hleaf _ _)
-  | succ level ih =>
-      intro nodeIdx
-      rw [Seeded.treeNode]
-      refine Avoids.bind f target (ih _) (Avoids.bind f target (ih _) ?_)
-      exact Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)
+theorem Avoids.leafHash (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (endpoints : ChainIndex → Digest)
+    (hne : ∀ payload : HashInput, tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target) :
+    Avoids f target (Concrete.leafHash parameter lay tree leaf endpoints
+      : OracleComp HashSpec Digest) :=
+  Avoids.tweakableHash f target parameter _ _ (hne _)
 
-theorem Avoids.treeRoot (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (seed : MasterSeed)
-    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
-    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
-      tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput parameter (.ots lay tree leaf chainIdx) seed ≠ target) :
-    Avoids f target (Seeded.treeRoot parameter lay tree seed : OracleComp HashSpec Digest) :=
-  Avoids.treeNode f target parameter lay tree seed hchain hleaf hnode hderive _ _
+/-! ## Building trees
 
-/-- Key generation derives the public parameter and builds the top tree, and nothing else. -/
-theorem Avoids.keygenFromSeed (seed : MasterSeed)
-    (hparam : keygenHashInput 0 KeygenDomain.parameter seed ≠ target)
-    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput (evalWithAnswerFn f (SphincsSecurity.deriveKey 0 KeygenDomain.parameter seed
-        : OracleComp HashSpec Digest)) (.chain topLayer rootTree leaf chainIdx step) payload ≠ target)
-    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
-      tweakableHashInput (evalWithAnswerFn f (SphincsSecurity.deriveKey 0 KeygenDomain.parameter seed
-        : OracleComp HashSpec Digest)) (.leaf topLayer rootTree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput (evalWithAnswerFn f (SphincsSecurity.deriveKey 0 KeygenDomain.parameter seed
-        : OracleComp HashSpec Digest)) (.node topLayer rootTree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput (evalWithAnswerFn f (SphincsSecurity.deriveKey 0 KeygenDomain.parameter seed
-        : OracleComp HashSpec Digest)) (.ots topLayer rootTree leaf chainIdx) seed ≠ target) :
-    Avoids f target (Seeded.keygenFromSeed seed) := by
-  rw [Seeded.keygenFromSeed]
-  refine Avoids.bind f target (Avoids.deriveKey f target 0 _ seed hparam) ?_
-  exact Avoids.bind f target
-    (Avoids.treeRoot f target _ topLayer rootTree seed hchain hleaf hnode hderive)
+A builder hashes the leaves it is handed through its secret derivation, then the levels through its
+node hash; it avoids whatever all of those avoid. -/
+
+theorem Avoids.buildLevel (hashNode : Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (width : Nat) (below : Nat → Digest)
+    (hnode : ∀ nodeIdx left right, Avoids f target (hashNode nodeIdx left right)) :
+    Avoids f target (Concrete.buildLevel hashNode width below) := by
+  rw [Concrete.buildLevel]
+  exact Avoids.bind f target (Avoids.sequenceFin f target _ fun _ => hnode _ _ _)
     (Avoids.pure' f target _)
 
+theorem Avoids.buildLevels (hashNode : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (height : Nat) (leaves : Nat → Digest)
+    (hnode : ∀ level nodeIdx left right, Avoids f target (hashNode level nodeIdx left right)) :
+    ∀ levels, Avoids f target (Concrete.buildLevels hashNode height leaves levels) := by
+  intro levels
+  induction levels with
+  | zero => exact Avoids.pure' f target _
+  | succ levels ih =>
+      rw [Concrete.buildLevels]
+      exact Avoids.bind f target ih (Avoids.bind f target
+        (Avoids.buildLevel f target _ _ _ (hnode _)) (Avoids.pure' f target _))
+
+theorem Avoids.buildChain (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (chainIdx : ChainIndex) (secret : OracleComp HashSpec Digest) (digit : Nat)
+    (hsecret : Avoids f target secret)
+    (hchain : ∀ (step : ChainStep) (payload : HashInput),
+      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target) :
+    Avoids f target (Concrete.buildChain parameter lay tree leaf chainIdx secret digit) := by
+  rw [Concrete.buildChain]
+  exact Avoids.bind f target hsecret
+    (Avoids.bind f target (Avoids.chainWalk f target parameter lay tree leaf chainIdx hchain _ _ _)
+      (Avoids.bind f target (Avoids.chainWalk f target parameter lay tree leaf chainIdx hchain _ _ _)
+        (Avoids.pure' f target _)))
+
+theorem Avoids.buildLeaf (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (secret : ChainIndex → OracleComp HashSpec Digest) (digits : Encoding)
+    (hsecret : ∀ chainIdx, Avoids f target (secret chainIdx))
+    (hchain : ∀ (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
+      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
+    (hleaf : ∀ payload : HashInput,
+      tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target) :
+    Avoids f target (Concrete.buildLeaf parameter lay tree leaf secret digits) := by
+  rw [Concrete.buildLeaf]
+  exact Avoids.bind f target
+    (Avoids.sequenceFin f target _ fun chainIdx =>
+      Avoids.buildChain f target parameter lay tree leaf chainIdx _ _ (hsecret chainIdx)
+        (hchain chainIdx))
+    (Avoids.bind f target (Avoids.leafHash f target parameter lay tree leaf _ hleaf)
+      (Avoids.pure' f target _))
+
+/-- Building a layer's tree avoids every input outside that tree's chain, leaf and node tweaks and
+its secrets. -/
+theorem Avoids.buildLayerTree (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest) (leaf : LeafIndex)
+    (digits : Encoding)
+    (hsecret : ∀ leaf chainIdx, Avoids f target (secret leaf chainIdx))
+    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
+      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
+    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
+      tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target)
+    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target) :
+    Avoids f target (Concrete.buildLayerTree parameter lay tree secret leaf digits) := by
+  rw [Concrete.buildLayerTree]
+  refine Avoids.bind f target (Avoids.sequenceFin f target _ fun _ =>
+    Avoids.buildLeaf f target parameter lay tree _ _ _ (hsecret _) (hchain _) (hleaf _)) ?_
+  exact Avoids.bind f target
+    (Avoids.buildLevels f target _ _ _
+      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
+    (Avoids.pure' f target _)
+
+theorem Avoids.buildFtsTree (parameter : PublicParameter) (index : Index) (tree : FtsTree)
+    (secret : FtsLeaf → OracleComp HashSpec Digest) (leaf : FtsLeaf)
+    (hsecret : ∀ leaf, Avoids f target (secret leaf))
+    (hleafHash : ∀ (leaf : FtsLeaf) (payload : HashInput),
+      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
+    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target) :
+    Avoids f target (Concrete.buildFtsTree parameter index tree secret leaf) := by
+  rw [Concrete.buildFtsTree]
+  refine Avoids.bind f target (Avoids.sequenceFin f target _ fun leafIdx =>
+    Avoids.bind f target (hsecret leafIdx) (Avoids.bind f target
+      (Avoids.tweakableHash f target parameter _ _ (hleafHash _ _)) (Avoids.pure' f target _))) ?_
+  exact Avoids.bind f target
+    (Avoids.buildLevels f target _ _ _
+      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
+    (Avoids.pure' f target _)
+
+theorem Avoids.buildForest (parameter : PublicParameter) (index : Index)
+    (secret : FtsTree → FtsLeaf → OracleComp HashSpec Digest) (leaves : IndexGroup → FtsLeaf)
+    (hsecret : ∀ tree leaf, Avoids f target (secret tree leaf))
+    (hleafHash : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
+      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
+    (hnode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
+    (hroots : ∀ payload : HashInput,
+      tweakableHashInput parameter (.ftsRoots index) payload ≠ target) :
+    Avoids f target (Concrete.buildForest parameter index secret leaves) := by
+  rw [Concrete.buildForest]
+  exact Avoids.bind f target (Avoids.sequenceFin f target _ fun tree =>
+    Avoids.buildFtsTree f target parameter index tree _ _ (hsecret tree) (hleafHash tree)
+      (hnode tree))
+    (Avoids.bind f target (Avoids.tweakableHash f target parameter _ _ (hroots _))
+      (Avoids.pure' f target _))
+
+/-- Key generation builds the top tree from its derived secrets, and nothing else. -/
+theorem Avoids.keygenFromSeed (seed : MasterSeed)
+    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
+      tweakableHashInput 0 (.chain topLayer rootTree leaf chainIdx step) payload ≠ target)
+    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
+      tweakableHashInput 0 (.leaf topLayer rootTree leaf) payload ≠ target)
+    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
+      tweakableHashInput 0 (.node topLayer rootTree level nodeIdx) payload ≠ target)
+    (hderive : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex),
+      keygenHashInput 0 (.ots topLayer rootTree leaf chainIdx) seed ≠ target) :
+    Avoids f target (Seeded.keygenFromSeed seed) := by
+  rw [Seeded.keygenFromSeed]
+  exact Avoids.bind f target
+    (Avoids.buildLayerTree f target 0 topLayer rootTree _ _ _
+      (fun leaf chainIdx => Avoids.deriveKey f target 0 _ seed (hderive leaf chainIdx))
+      hchain hleaf hnode)
+    (Avoids.pure' f target _)
 /-! ## The signing side
 
 The digest loop hashes under the randomizer tweak and the message tweak, never under the encoding
@@ -268,142 +325,33 @@ theorem Avoids.signDigestLoop (secretKey : Seeded.SecretKey) (message : Message)
       · exact Avoids.pure' f target _
       · exact ih _
 
-/-! ## The few-time forest
-
-Opening the forest hashes under the few-time tweaks and derives its secrets, so it too leaves the
-encoding inputs alone. -/
-
-theorem Avoids.ftsNode (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (seed : MasterSeed)
-    (hleafHash : ∀ (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hderive : ∀ leaf : FtsLeaf,
-      keygenHashInput parameter (.fts index tree leaf) seed ≠ target) :
-    ∀ (level nodeIdx : Nat),
-      Avoids f target (Seeded.ftsNode parameter index tree seed level nodeIdx
-        : OracleComp HashSpec Digest) := by
-  intro level
-  induction level with
-  | zero =>
-      intro nodeIdx
-      rw [Seeded.ftsNode]
-      refine Avoids.bind f target (Avoids.deriveKey f target parameter _ seed (hderive _)) ?_
-      exact Avoids.tweakableHash f target parameter _ _ (hleafHash _ _)
-  | succ level ih =>
-      intro nodeIdx
-      rw [Seeded.ftsNode]
-      refine Avoids.bind f target (ih _) (Avoids.bind f target (ih _) ?_)
-      exact Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)
-
-theorem Avoids.ftsKey (parameter : PublicParameter) (index : Index) (seed : MasterSeed)
-    (hleafHash : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hroots : ∀ payload : HashInput,
-      tweakableHashInput parameter (.ftsRoots index) payload ≠ target)
-    (hderive : ∀ (tree : FtsTree) (leaf : FtsLeaf),
-      keygenHashInput parameter (.fts index tree leaf) seed ≠ target) :
-    Avoids f target (Seeded.ftsKey parameter index seed : OracleComp HashSpec Digest) := by
-  rw [Seeded.ftsKey]
-  refine Avoids.bind f target
-    (Avoids.sequenceFin f target _ (fun tree =>
-      Avoids.ftsNode f target parameter index tree seed (hleafHash tree) (hnode tree)
-        (hderive tree) _ _)) ?_
-  exact Avoids.tweakableHash f target parameter _ _ (hroots _)
-
-theorem Avoids.ftsOpen (parameter : PublicParameter) (index : Index)
-    (leaves : IndexGroup → FtsLeaf) (seed : MasterSeed)
-    (hleafHash : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (tree : FtsTree) (leaf : FtsLeaf),
-      keygenHashInput parameter (.fts index tree leaf) seed ≠ target) :
-    Avoids f target (Seeded.ftsOpen parameter index leaves seed
-      : OracleComp HashSpec (FtsTree → Fin ftsTreeHeight → Digest)) := by
-  rw [Seeded.ftsOpen]
-  refine Avoids.sequenceFin f target _ (fun tree => ?_)
-  exact Avoids.sequenceFin f target _ (fun level =>
-    Avoids.ftsNode f target parameter index tree seed (hleafHash tree) (hnode tree)
-      (hderive tree) _ _)
 
 /-! ## A layer
 
-A layer's own work is its counter search, its authentication path, and the message it signs. -/
+A layer's own work is its counter search, under its encoding tweak, and its tree. -/
 
-theorem Avoids.treePath (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (seed : MasterSeed) (leaf : LeafIndex)
-    (hchain : ∀ (leaf' : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput parameter (.chain lay tree leaf' chainIdx step) payload ≠ target)
-    (hleaf : ∀ (leaf' : LeafIndex) (payload : HashInput),
-      tweakableHashInput parameter (.leaf lay tree leaf') payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (leaf' : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput parameter (.ots lay tree leaf' chainIdx) seed ≠ target) :
-    Avoids f target (Seeded.treePath parameter lay tree seed leaf
-      : OracleComp HashSpec (Fin (layerHeight lay) → Digest)) := by
-  rw [Seeded.treePath]
-  exact Avoids.sequenceFin f target _ (fun level =>
-    Avoids.treeNode f target parameter lay tree seed hchain hleaf hnode hderive _ _)
-
-theorem Avoids.otsSignFrom (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (seed : MasterSeed) (message : Digest)
-    (hencode : ∀ (counter : Counter) (payload : HashInput),
-      tweakableHashInput parameter (.encoding lay tree leaf) payload ≠ target)
-    (hchain : ∀ (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
-      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
-    (hderive : ∀ chainIdx : ChainIndex,
-      keygenHashInput parameter (.ots lay tree leaf chainIdx) seed ≠ target) :
+theorem Avoids.encodingSearch (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (message : Digest)
+    (hencode : ∀ payload : HashInput,
+      tweakableHashInput parameter (.encoding lay tree leaf) payload ≠ target) :
     ∀ (attempts start : Nat),
-      Avoids f target (Seeded.otsSignFrom parameter lay tree leaf seed message attempts start
-        : OracleComp HashSpec (Option (Counter × (ChainIndex → Digest)))) := by
+      Avoids f target (Concrete.encodingSearch parameter lay tree leaf message attempts start
+        : OracleComp HashSpec (Option (Counter × Encoding))) := by
   intro attempts
   induction attempts with
   | zero => intro start; exact Avoids.pure' f target _
   | succ attempts ih =>
       intro start
-      rw [Seeded.otsSignFrom]
+      rw [Concrete.encodingSearch]
       refine Avoids.bind f target ?_ ?_
       · rw [Concrete.encode]
         exact Avoids.bind f target
-          (Avoids.tweakableHash f target parameter _ _ (hencode 0 _)) (Avoids.pure' f target _)
+          (Avoids.tweakableHash f target parameter _ _ (hencode _)) (Avoids.pure' f target _)
       · split
-        · refine Avoids.bind f target (Avoids.sequenceFin f target _ (fun chainIdx => ?_))
-            (Avoids.pure' f target _)
-          exact Avoids.bind f target (Avoids.deriveKey f target parameter _ seed (hderive chainIdx))
-            (Avoids.chainWalk f target parameter lay tree leaf chainIdx (hchain chainIdx) _ _ _)
+        · exact Avoids.pure' f target _
         · exact ih _
 
-theorem Avoids.layerMessage (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer)
-    (htree : ∀ (lay' : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chainIdx : ChainIndex)
-        (step : ChainStep) (payload : HashInput),
-      tweakableHashInput secretKey.parameter (.chain lay' tree leaf chainIdx step) payload ≠ target)
-    (hleaf : ∀ (lay' : Layer) (tree : TreeIndex) (leaf : LeafIndex) (payload : HashInput),
-      tweakableHashInput secretKey.parameter (.leaf lay' tree leaf) payload ≠ target)
-    (hnode : ∀ (lay' : Layer) (tree : TreeIndex) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput secretKey.parameter (.node lay' tree level nodeIdx) payload ≠ target)
-    (hotsDerive : ∀ (lay' : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput secretKey.parameter (.ots lay' tree leaf chainIdx) secretKey.seed ≠ target)
-    (hftsLeaf : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput secretKey.parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hftsNode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput secretKey.parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hftsRoots : ∀ payload : HashInput,
-      tweakableHashInput secretKey.parameter (.ftsRoots index) payload ≠ target)
-    (hftsDerive : ∀ (tree : FtsTree) (leaf : FtsLeaf),
-      keygenHashInput secretKey.parameter (.fts index tree leaf) secretKey.seed ≠ target) :
-    Avoids f target (Seeded.layerMessage secretKey index lay : OracleComp HashSpec Digest) := by
-  rw [Seeded.layerMessage]
-  split
-  · exact Avoids.treeRoot f target _ _ _ secretKey.seed (htree _ _) (hleaf _ _)
-      (hnode _ _) (hotsDerive _ _)
-  · exact Avoids.ftsKey f target _ index secretKey.seed hftsLeaf hftsNode hftsRoots hftsDerive
-
-/-- The three layers' counter searches hash under different layer fields, so none of them caches another's inputs. -/
+/-- Different layers' counter searches hash under different layer fields, so none of them caches another's inputs. -/
 theorem encodingInput_ne_of_layer_ne (parameter : PublicParameter) {lay lay' : Layer}
     (hlay : lay ≠ lay') (tree tree' : TreeIndex) (leaf leaf' : LeafIndex)
     (payload payload' : HashInput) :
@@ -481,52 +429,30 @@ theorem Avoids.signDigestLoop_of_structural (secretKey : Seeded.SecretKey) (mess
   Avoids.signDigestLoop f target secretKey message
     (fun trial => hstruct.randomizer message trial) (fun _ => hstruct.msg _)
 
-theorem Avoids.ftsOpen_of_structural (parameter : PublicParameter) (index : Index)
-    (leaves : IndexGroup → FtsLeaf) (seed : MasterSeed)
-    (hstruct : Structural parameter seed target) :
-    Avoids f target (Seeded.ftsOpen parameter index leaves seed
-      : OracleComp HashSpec (FtsTree → Fin ftsTreeHeight → Digest)) :=
-  Avoids.ftsOpen f target parameter index leaves seed
-    (fun tree leaf payload => hstruct.ftsLeaf index tree leaf payload)
-    (fun tree level nodeIdx payload => hstruct.ftsNodeHash index tree level nodeIdx payload)
-    (fun tree leaf => hstruct.derive _)
-
-theorem Avoids.treeRoot_of_structural (parameter : PublicParameter) (lay : Layer)
-    (tree : TreeIndex) (seed : MasterSeed) (hstruct : Structural parameter seed target) :
-    Avoids f target (Seeded.treeRoot parameter lay tree seed : OracleComp HashSpec Digest) :=
-  Avoids.treeRoot f target parameter lay tree seed
-    (fun leaf chainIdx step payload => hstruct.chain lay tree leaf chainIdx step payload)
-    (fun leaf payload => hstruct.leafHash lay tree leaf payload)
-    (fun level nodeIdx payload => hstruct.node lay tree level nodeIdx payload)
-    (fun leaf chainIdx => hstruct.derive _)
-
-theorem Avoids.treePath_of_structural (parameter : PublicParameter) (lay : Layer)
-    (tree : TreeIndex) (seed : MasterSeed) (leaf : LeafIndex)
-    (hstruct : Structural parameter seed target) :
-    Avoids f target (Seeded.treePath parameter lay tree seed leaf
-      : OracleComp HashSpec (Fin (layerHeight lay) → Digest)) :=
-  Avoids.treePath f target parameter lay tree seed leaf
-    (fun leaf' chainIdx step payload => hstruct.chain lay tree leaf' chainIdx step payload)
-    (fun leaf' payload => hstruct.leafHash lay tree leaf' payload)
-    (fun level nodeIdx payload => hstruct.node lay tree level nodeIdx payload)
-    (fun leaf' chainIdx => hstruct.derive _)
-
-theorem Avoids.layerMessage_of_structural (secretKey : Seeded.SecretKey) (index : Index)
-    (lay : Layer) (hstruct : Structural secretKey.parameter secretKey.seed target) :
-    Avoids f target (Seeded.layerMessage secretKey index lay : OracleComp HashSpec Digest) :=
-  Avoids.layerMessage f target secretKey index lay
-    (fun lay' tree leaf chainIdx step payload => hstruct.chain lay' tree leaf chainIdx step payload)
-    (fun lay' tree leaf payload => hstruct.leafHash lay' tree leaf payload)
-    (fun lay' tree level nodeIdx payload => hstruct.node lay' tree level nodeIdx payload)
-    (fun _ _ _ _ => hstruct.derive _)
+theorem Avoids.buildForest_of_structural (parameter : PublicParameter) (index : Index)
+    (seed : MasterSeed) (leaves : IndexGroup → FtsLeaf) (hstruct : Structural parameter seed target) :
+    Avoids f target (Concrete.buildForest parameter index (Seeded.ftsSecret parameter seed index) leaves
+      : OracleComp HashSpec _) :=
+  Avoids.buildForest f target parameter index _ leaves
+    (fun _ _ => Avoids.deriveKey f target parameter _ seed (hstruct.derive _))
     (fun tree leaf payload => hstruct.ftsLeaf index tree leaf payload)
     (fun tree level nodeIdx payload => hstruct.ftsNodeHash index tree level nodeIdx payload)
     (fun payload => hstruct.ftsRoots index payload)
-    (fun _ _ => hstruct.derive _)
+
+theorem Avoids.buildLayerTree_of_structural (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (digits : Encoding)
+    (hstruct : Structural parameter seed target) :
+    Avoids f target (Concrete.buildLayerTree parameter lay tree (Seeded.otsSecret parameter seed lay tree)
+      leaf digits : OracleComp HashSpec _) :=
+  Avoids.buildLayerTree f target parameter lay tree _ leaf digits
+    (fun _ _ => Avoids.deriveKey f target parameter _ seed (hstruct.derive _))
+    (fun leaf chainIdx step payload => hstruct.chain lay tree leaf chainIdx step payload)
+    (fun leaf payload => hstruct.leafHash lay tree leaf payload)
+    (fun level nodeIdx payload => hstruct.node lay tree level nodeIdx payload)
 
 /-! ## The invariant a signature keeps
 
-Signing runs its three counter searches one after another. Before each, no encoding input of a
+Signing runs its seven counter searches one after another. Before each, no encoding input of a
 layer still to come is cached: key generation and every earlier step avoid them. -/
 
 /-- A computation that avoids an input, run from a cache missing it, leaves it missing. -/
@@ -554,23 +480,5 @@ theorem EncodingFresh.step {α : Type} {parameter : PublicParameter} {pending : 
     EncodingFresh parameter pending r.2 := fun lay hlay tree leaf payload =>
   cache_none_of_avoids oa cache r hr _ (hfresh lay hlay tree leaf payload)
     (fun f => havoid f lay hlay tree leaf payload)
-
-/-- A layer's whole signing step leaves another layer's encoding inputs alone. -/
-theorem Avoids.signLayer_of_layer_ne (secretKey : Seeded.SecretKey) (index : Index) (lay : Layer)
-    {lay' : Layer} (hne : lay ≠ lay') (tree' : TreeIndex) (leaf' : LeafIndex)
-    (payload' : HashInput) :
-    Avoids f (tweakableHashInput secretKey.parameter (.encoding lay' tree' leaf') payload')
-      (Seeded.signLayer secretKey index lay : OracleComp HashSpec (Option (LayerSignature lay))) := by
-  have hstruct := structural_encoding secretKey.parameter secretKey.seed lay' tree' leaf' payload'
-  rw [Seeded.signLayer]
-  refine Avoids.bind f _ (Avoids.layerMessage_of_structural f _ secretKey index lay hstruct) ?_
-  refine Avoids.bind f _ (Avoids.otsSignFrom f _ secretKey.parameter lay _ _ secretKey.seed _
-    (fun _ _ => encodingInput_ne_of_layer_ne _ hne _ _ _ _ _ _)
-    (fun chainIdx step payload => hstruct.chain _ _ _ chainIdx step payload)
-    (fun _ => hstruct.derive _) _ _) ?_
-  split
-  · exact Avoids.bind f _ (Avoids.treePath_of_structural f _ _ lay _ secretKey.seed _ hstruct)
-      (Avoids.pure' f _ _)
-  · exact Avoids.pure' f _ _
 
 end SphincsSecurity.Completeness

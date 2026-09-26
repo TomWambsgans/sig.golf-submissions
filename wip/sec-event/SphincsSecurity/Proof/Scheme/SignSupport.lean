@@ -108,50 +108,48 @@ theorem index_eq_of_bottom_position_eq {left right : Index}
   apply Fin.ext
   have htreeVal := congrArg Fin.val htree
   have hleafVal := congrArg Fin.val hleaf
-  have habove : heightAbove bottomLayer = 19 := by decide
-  have hheight : layerHeight bottomLayer = 7 := by decide
-  have hleftTree : (treeIndexAt left bottomLayer).val = left.val / 128 := by
+  have habove : heightAbove bottomLayer = 30 := by decide
+  have hheight : layerHeight bottomLayer = 4 := by decide
+  have hleftTree : (treeIndexAt left bottomLayer).val = left.val / 16 := by
     rw [treeIndexAt_val, habove]
     norm_num [totalHeight]
-  have hrightTree : (treeIndexAt right bottomLayer).val = right.val / 128 := by
+  have hrightTree : (treeIndexAt right bottomLayer).val = right.val / 16 := by
     rw [treeIndexAt_val, habove]
     norm_num [totalHeight]
-  have hleftLeaf : (leafIndexAt left bottomLayer).val = left.val % 128 := by
+  have hleftLeaf : (leafIndexAt left bottomLayer).val = left.val % 16 := by
     rw [leafIndexAt_bottomLayer, hheight]
     norm_num
-  have hrightLeaf : (leafIndexAt right bottomLayer).val = right.val % 128 := by
+  have hrightLeaf : (leafIndexAt right bottomLayer).val = right.val % 16 := by
     rw [leafIndexAt_bottomLayer, hheight]
     norm_num
   rw [hleftTree, hrightTree] at htreeVal
   rw [hleftLeaf, hrightLeaf] at hleafVal
   omega
 
+/-- Two indices at the same position of a layer name the same tree on the layer below. -/
+theorem nextTree_eq_of_position_eq {left right : Index} (lay : Layer)
+    (hbelow : lay.val + 1 < numLayers)
+    (htree : treeIndexAt left lay = treeIndexAt right lay)
+    (hleaf : leafIndexAt left lay = leafIndexAt right lay) :
+    treeIndexAt left ⟨lay.val + 1, hbelow⟩ = treeIndexAt right ⟨lay.val + 1, hbelow⟩ := by
+  apply Fin.ext
+  rw [layers_link left lay hbelow, layers_link right lay hbelow, congrArg Fin.val htree,
+    congrArg Fin.val hleaf]
+
 theorem layerMessage_eq_of_position_eq (secretKey : SecretKey) (left right : Index)
     (lay : Layer) (htree : treeIndexAt left lay = treeIndexAt right lay)
     (hleaf : leafIndexAt left lay = leafIndexAt right lay) :
     layerMessage (m := OracleComp HashSpec) secretKey left lay =
       layerMessage secretKey right lay := by
-  have hlayer : lay = topLayer ∨ lay = middleLayer ∨ lay = bottomLayer := by
-    fin_cases lay
-    · exact Or.inl (Fin.ext rfl)
-    · exact Or.inr (Or.inl (Fin.ext rfl))
-    · exact Or.inr (Or.inr (Fin.ext rfl))
-  rcases hlayer with rfl | rfl | rfl
-  · have hnext : treeIndexAt left middleLayer = treeIndexAt right middleLayer := by
-      apply Fin.ext
-      rw [layers_link_top left, layers_link_top right]
-      rw [congrArg Fin.val htree, congrArg Fin.val hleaf]
-    rw [layerMessage_of_lt secretKey left topLayer (by decide),
-      layerMessage_of_lt secretKey right topLayer (by decide)]
-    simp only [show (⟨topLayer.val + 1, by decide⟩ : Layer) = middleLayer from rfl, hnext]
-  · have hnext : treeIndexAt left bottomLayer = treeIndexAt right bottomLayer := by
-      apply Fin.ext
-      rw [layers_link_middle left, layers_link_middle right]
-      rw [congrArg Fin.val htree, congrArg Fin.val hleaf]
-    rw [layerMessage_of_lt secretKey left middleLayer (by decide),
-      layerMessage_of_lt secretKey right middleLayer (by decide)]
-    simp only [show (⟨middleLayer.val + 1, by decide⟩ : Layer) = bottomLayer from rfl, hnext]
-  · have hindex := index_eq_of_bottom_position_eq htree hleaf
+  by_cases hbelow : lay.val + 1 < numLayers
+  · rw [layerMessage_of_lt secretKey left lay hbelow, layerMessage_of_lt secretKey right lay hbelow,
+      nextTree_eq_of_position_eq lay hbelow htree hleaf]
+  · have hbottom : lay = bottomLayer := Fin.ext (by
+      have := lay.isLt
+      simp only [bottomLayer]
+      omega)
+    subst hbottom
+    have hindex := index_eq_of_bottom_position_eq htree hleaf
     subst right
     rfl
 

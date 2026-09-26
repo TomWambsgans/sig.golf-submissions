@@ -53,7 +53,7 @@ theorem referenceAuxiliary_seed_support (inputs : Finset HashInput) (auxiliary :
   exact ⟨seed, PMF.mem_support_uniformOfFintype seed, rfl⟩
 
 theorem deferredForcedRun_original_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q slot : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -69,7 +69,7 @@ theorem deferredForcedRun_original_budget (dummy : OtsReferenceWords) (adversary
     exact ⟨result, hr, by simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not]⟩
   rw [← forcedRun_seed_marginal, RetainedObservation.bind_nonzero] at hp
   obtain ⟨seed, _, hs⟩ := hp
-  exact forced_original_completedRun_budget dummy adversary q slot hbound parameter otsSecret labels
+  exact forced_original_completedRun_budget dummy adversary q slot hbound parameter hparameter otsSecret labels
     { auxiliary with seed := seed } (referenceAuxiliary_seed_support _ auxiliary hauxiliary seed) result.1 hs
 
 end SphincsSecurity.Concrete.FtsGuessHash

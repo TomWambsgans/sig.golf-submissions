@@ -11,8 +11,8 @@ namespace SphincsSecurity.Concrete
 
 open ENNReal
 
-/-- Opening one leaf in every few-time tree recomputes each authentication path node. -/
-irreducible_def ftsOpenHashCost : Nat := ∑ _tree : FtsTree, ∑ level : Fin ftsTreeHeight, (2 ^ (level.val + 1) - 1)
+/-- The signer's forest: every few-time tree built once (its `2^a` leaves and `2^a - 1` nodes), then the hash of the roots. -/
+irreducible_def ftsOpenHashCost : Nat := ∑ _tree : FtsTree, (2 ^ (ftsTreeHeight + 1) - 1) + 1
 
 /-- A few-time public key: every tree root, then the hash of the roots. -/
 irreducible_def ftsKeyHashCost : Nat := ∑ _tree : FtsTree, (2 ^ (ftsTreeHeight + 1) - 1) + 1
@@ -26,10 +26,10 @@ theorem ftsOpenHashCost_le_digestAttemptLimit : ftsOpenHashCost ≤ digestAttemp
   decide
 
 /-- The length of the uniform proposal word that both budget routes price certificates against. -/
-irreducible_def fixedProposalLength : Nat := 25313293
+irreducible_def fixedProposalLength : Nat := 6455033869
 
 /-- How far a proposal-word prefix may run ahead of its expected length before the monitor stops. -/
-irreducible_def proposalPrefixSlack : Nat := 2 ^ 17
+irreducible_def proposalPrefixSlack : Nat := 2 ^ 23
 
 /-- Per query, the expected excess of the full certificate price over the price of one fresh digest. -/
 noncomputable irreducible_def fullCertificateExcessRate : ENNReal := 11 / 2 ^ 144

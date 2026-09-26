@@ -8,7 +8,7 @@ open _root_.OracleComp OracleSpec CanonicalProbeRouting
 open AdaptiveResidualLabels hiding World State Environment
 open InterleavedResidual (SigningRecord)
 attribute [local instance] Classical.propDecidable
-attribute [local irreducible] signDigestLoop signAfterDigest boundaryEval
+attribute [local irreducible] signDigestLoop boundaryEval
 set_option backward.isDefEq.respectTransparency false
 
 def signingInput (key : SecretKey) (message : Message) (signature : Signature) : HashInput :=

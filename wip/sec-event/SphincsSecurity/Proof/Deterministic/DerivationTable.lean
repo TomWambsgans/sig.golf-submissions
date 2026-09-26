@@ -26,59 +26,54 @@ theorem randomizerInputs_injective (parameter : PublicParameter) (seed : MasterS
   have heq := randomizerHashInput_injective h
   exact Prod.ext heq.2.2.1 heq.2.2.2
 
-theorem derivationCache_randomizer_fresh (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (position : RandomizerPosition) :
-    derivationCache seed parameterOutput outputs
-      (randomizerInputs (truncateHash parameterOutput) seed position) = none := by
+theorem derivationCache_randomizer_fresh (seed : MasterSeed) (outputs : SecretOutputs)
+    (position : RandomizerPosition) :
+    derivationCache seed outputs (randomizerInputs 0 seed position) = none := by
   unfold derivationCache
   rw [cacheTable_apply_of_not_mem]
-  · exact QueryCache.cacheQuery_of_ne _ _
-      (randomizerHashInput_ne_keygenHashInput _ _ _ _ _ _ .parameter)
+  · rfl
   · intro secret
     exact randomizerHashInput_ne_keygenHashInput _ _ _ _ _ _ (secretDomain secret)
 
-noncomputable def signingDerivationCache (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (randomizers : RandomizerOutputs) : QueryCache HashSpec :=
-  cacheTable (derivationCache seed parameterOutput outputs)
-    (randomizerInputs (truncateHash parameterOutput) seed) randomizers
+/-- Every derivation of the seed, secrets and randomizers, for the parameter `P = 0`. -/
+noncomputable def signingDerivationCache (seed : MasterSeed) (outputs : SecretOutputs)
+    (randomizers : RandomizerOutputs) : QueryCache HashSpec :=
+  cacheTable (derivationCache seed outputs) (randomizerInputs 0 seed) randomizers
 
-theorem signingDerivationCache_randomizer (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (randomizers : RandomizerOutputs) (position : RandomizerPosition) :
-    signingDerivationCache seed parameterOutput outputs randomizers
-      (randomizerInputs (truncateHash parameterOutput) seed position) = some (randomizers position) :=
+theorem signingDerivationCache_randomizer (seed : MasterSeed) (outputs : SecretOutputs)
+    (randomizers : RandomizerOutputs) (position : RandomizerPosition) :
+    signingDerivationCache seed outputs randomizers (randomizerInputs 0 seed position) =
+      some (randomizers position) :=
   cacheTable_apply _ _ (randomizerInputs_injective _ _) _ _
 
-theorem signingDerivationCache_secret (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (randomizers : RandomizerOutputs) (position : SecretPosition) :
-    signingDerivationCache seed parameterOutput outputs randomizers
-      (secretInputs (truncateHash parameterOutput) seed position) = some (outputs position) := by
+theorem signingDerivationCache_secret (seed : MasterSeed) (outputs : SecretOutputs)
+    (randomizers : RandomizerOutputs) (position : SecretPosition) :
+    signingDerivationCache seed outputs randomizers (secretInputs 0 seed position) =
+      some (outputs position) := by
   unfold signingDerivationCache
   rw [cacheTable_apply_of_not_mem]
-  · exact derivationCache_secret _ _ _ _
+  · exact derivationCache_secret _ _ _
   · intro randomizer
     exact (randomizerHashInput_ne_keygenHashInput _ _ _ _ _ _ (secretDomain position)).symm
 
-theorem signingDerivationCache_agreeOutside (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) (randomizers : RandomizerOutputs) :
-    AgreeOutside (fun input => SeedHit input seed)
-      (signingDerivationCache seed parameterOutput outputs randomizers) ∅ := by
+theorem signingDerivationCache_agreeOutside (seed : MasterSeed) (outputs : SecretOutputs)
+    (randomizers : RandomizerOutputs) :
+    AgreeOutside (fun input => SeedHit input seed) (signingDerivationCache seed outputs randomizers) ∅ := by
   intro input hinput
   unfold signingDerivationCache
   rw [cacheTable_apply_of_not_mem]
-  · exact derivationCache_agreeOutside seed parameterOutput outputs input hinput
+  · exact derivationCache_agreeOutside seed outputs input hinput
   · intro position heq
-    exact hinput (heq.symm ▸ derivationSeedHit_randomizer (truncateHash parameterOutput) seed position.1 position.2)
+    exact hinput (heq.symm ▸ derivationSeedHit_randomizer 0 seed position.1 position.2)
 
-noncomputable def prepareRandomizers (parameter : PublicParameter) (seed : MasterSeed) :
-    OracleComp HashSpec RandomizerOutputs := queryTable (randomizerInputs parameter seed)
+noncomputable def prepareRandomizers (seed : MasterSeed) : OracleComp HashSpec RandomizerOutputs :=
+  queryTable (randomizerInputs 0 seed)
 
-theorem evalDist_prepareRandomizers (seed : MasterSeed) (parameterOutput : HashOutput)
-    (outputs : SecretOutputs) :
-    𝒮[(simulateQ randomOracle (prepareRandomizers (truncateHash parameterOutput) seed)).run
-      (derivationCache seed parameterOutput outputs)] =
-        𝒮[(fun randomizers => (randomizers, signingDerivationCache seed parameterOutput outputs randomizers)) <$>
+theorem evalDist_prepareRandomizers (seed : MasterSeed) (outputs : SecretOutputs) :
+    𝒮[(simulateQ randomOracle (prepareRandomizers seed)).run (derivationCache seed outputs)] =
+        𝒮[(fun randomizers => (randomizers, signingDerivationCache seed outputs randomizers)) <$>
           sampleRandomizerOutputs] :=
   evalDist_queryTable_fresh _ (randomizerInputs_injective _ seed) _
-    (derivationCache_randomizer_fresh seed parameterOutput outputs)
+    (derivationCache_randomizer_fresh seed outputs)
 
 end SphincsSecurity.Seeded

@@ -23,9 +23,8 @@ theorem entryMarker_encoding_iff (parameter : PublicParameter) (words : OtsRefer
         (digestBytes message ++ counterBytes counter), output) ↔
       ∃ candidate, decodeEncodingOutput output = some candidate ∧
         OtsCode.UnitNeighborAt (words address.1 address.2.1 address.2.2.1) candidate address.2.2.2 := by
-  have hcounter : counter.toNat < encodingAttemptLimit := by
-    simpa only [encodingAttemptLimit, counterBits] using counter.isLt
-  have hin := encodingRetryInput_mem_canonicalEncodingInputs parameter
+  have hcounter : counter.toNat < 2 ^ counterBits := counter.isLt
+  have hin := encodingRetryInput_mem_canonicalEncodingInputs_wide parameter
     ⟨address.1, address.2.1, address.2.2.1⟩ message ⟨counter.toNat, hcounter⟩
   simp only [encodingRetryInput, BitVec.ofNat_toNat] at hin
   exact and_iff_right ⟨_, rfl⟩ |>.trans (and_iff_right hin)

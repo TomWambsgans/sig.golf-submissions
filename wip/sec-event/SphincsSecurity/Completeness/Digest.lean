@@ -1,7 +1,6 @@
 import SphincsSecurity.Completeness.Search
 import SphincsSecurity.Completeness.Fresh
-import SphincsSecurity.Proof.Ots.EncodingProbability
-import SphincsSecurity.Proof.Fts.MessageDeficitHashMoments
+import SphincsSecurity.Completeness.Uniform
 
 /-!
 # The randomizer search
@@ -11,7 +10,8 @@ digest if its last index group is zero, which a fresh answer does with probabili
 second query need not be fresh: a randomizer can repeat one an earlier trial drew, and then the
 digest is the earlier, rejected one. So the induction carries the set `R` of randomizers drawn so
 far. A trial lands in `R` with probability at most `|R| / 2 ^ 128`, and otherwise its digest query
-is fresh; either way one trial fails with probability at most `1023/1024 + 2 ^ 32 / 2 ^ 128`.
+is fresh; either way one trial fails with probability at most `1023/1024 + 2 ^ 20 / 2 ^ 128`, since
+at most `A_max = 2 ^ 20` randomizers are ever drawn.
 -/
 
 open OracleComp OracleSpec ENNReal Finset
@@ -54,14 +54,14 @@ theorem randInput_ne_msgInput (secretKey : Seeded.SecretKey) (message : Message)
     (randomness : Randomness) :
     randInput secretKey message trial ≠ msgInput secretKey message randomness := by
   intro h
-  have h' : fieldBytes ⟨7#8, 0#8, 0#32, BitVec.ofNat 32 trial, 0#32⟩ ++ bytesLE 16 secretKey.parameter
+  have h' : fieldBytes ⟨7#8, 0#8, 0#40, BitVec.ofNat 32 trial, 0#32⟩ ++ bytesLE 16 secretKey.parameter
         ++ (bytesLE 32 secretKey.seed ++ bytesLE 32 message)
       = fieldBytes (hashDomainFields .message) ++ bytesLE 16 secretKey.parameter
         ++ messageDigestPayload secretKey.root message randomness := by
     simpa only [randInput, msgInput, randomizerHashInput, tweakableHashInput, tweakBytes,
       List.append_assoc] using h
   exact fieldInput_ne_of_tag_ne secretKey.parameter
-    (fields1 := ⟨7#8, 0#8, 0#32, BitVec.ofNat 32 trial, 0#32⟩)
+    (fields1 := ⟨7#8, 0#8, 0#40, BitVec.ofNat 32 trial, 0#32⟩)
     (fields2 := hashDomainFields .message) (by simp [hashDomainFields, tweakFields]) _ _ h'
 
 theorem cached_run (input : HashInput) (cache : QueryCache HashSpec) (answer : HashOutput)
@@ -78,7 +78,7 @@ theorem digestReject_add : digestReject + (1024 : ℝ≥0∞)⁻¹ = 1 := by
   have h := probEvent_compl ($ᵗ HashOutput : ProbComp HashOutput)
     (fun u => Admissible (truncateMessageDigest u))
   have hfail : Pr[⊥ | ($ᵗ HashOutput : ProbComp HashOutput)] = 0 := by simp
-  rw [SphincsSecurity.probEvent_uniformHashOutput_admissible, hfail, tsub_zero] at h
+  rw [probEvent_admissible, hfail, tsub_zero] at h
   rw [add_comm]
   exact h
 
@@ -97,22 +97,21 @@ theorem tsum_uniform_ite (P : HashOutput → Prop) [DecidablePred P] (x y : ℝ�
   by_cases hu : P u <;> simp [hu, mul_comm]
 
 /-- One trial's failure share. -/
-noncomputable def digestFactor : ℝ≥0∞ := digestReject + (2 : ℝ≥0∞) ^ 32 / (2 : ℝ≥0∞) ^ 128
+noncomputable def digestFactor : ℝ≥0∞ := digestReject + (2 : ℝ≥0∞) ^ 20 / (2 : ℝ≥0∞) ^ 128
 
-theorem probEvent_truncate_mem_le (R : Finset Randomness) (hR : R.card ≤ 2 ^ 32) :
+theorem probEvent_truncate_mem_le (R : Finset Randomness) (hR : R.card ≤ 2 ^ 20) :
     Pr[fun u : HashOutput => truncateHash u ∈ R | ($ᵗ HashOutput : ProbComp HashOutput)]
-      ≤ (2 : ℝ≥0∞) ^ 32 / (2 : ℝ≥0∞) ^ 128 := by
-  rw [SphincsSecurity.probEvent_uniform_truncateHash_mem R,
-    show Fintype.card Digest = 2 ^ 128 by simp [digestBits], Nat.cast_pow, Nat.cast_ofNat]
-  have hcast : (R.card : ℝ≥0∞) ≤ (2 : ℝ≥0∞) ^ 32 := by exact_mod_cast hR
+      ≤ (2 : ℝ≥0∞) ^ 20 / (2 : ℝ≥0∞) ^ 128 := by
+  rw [probEvent_truncateHash_mem R, show digestBits = 128 from rfl]
+  have hcast : (R.card : ℝ≥0∞) ≤ (2 : ℝ≥0∞) ^ 20 := by exact_mod_cast hR
   gcongr
 
 set_option maxHeartbeats 1000000 in
 /-- The randomizer search exhausts `n` trials with probability at most `digestFactor ^ n`. -/
 theorem probEvent_signDigestLoop (sk : Seeded.SecretKey) (message : Message) :
     ∀ (n t : Nat) (cache : QueryCache HashSpec) (R : Finset Randomness),
-      t + n ≤ 2 ^ 32 → R.card ≤ t →
-      (∀ s, t ≤ s → s < 2 ^ 32 → cache (randInput sk message s) = none) →
+      t + n ≤ 2 ^ 20 → R.card ≤ t →
+      (∀ s, t ≤ s → s < 2 ^ 20 → cache (randInput sk message s) = none) →
       (∀ ρ, ρ ∉ R → cache (msgInput sk message ρ) = none) →
       Pr[fun r => r.1 = none | (simulateQ randomOracle
           (Seeded.signDigestLoop sk message n t
@@ -131,12 +130,13 @@ theorem probEvent_signDigestLoop (sk : Seeded.SecretKey) (message : Message) :
         * (if truncateHash u ∈ R then digestFactor ^ n else digestReject * digestFactor ^ n))
         fun u => mul_le_mul_right ?_ _).trans ?_
       · dsimp only
-        have hc1rand : ∀ s, t + 1 ≤ s → s < 2 ^ 32 →
+        have hwrap : (2 : Nat) ^ 20 ≤ 2 ^ 32 := by norm_num
+        have hc1rand : ∀ s, t + 1 ≤ s → s < 2 ^ 20 →
             (QueryCache.cacheQuery cache (randInput sk message t) u) (randInput sk message s)
               = none := by
           intro s hs hsb
           exact (QueryCache.cacheQuery_of_ne cache u (fun h => by
-            have := randInput_inj sk message hsb (by omega) h
+            have := randInput_inj sk message (by omega) (by omega) h
             omega)).trans (hrand s (by omega) hsb)
         have hc1msg : ∀ ρ', (QueryCache.cacheQuery cache (randInput sk message t) u)
             (msgInput sk message ρ') = cache (msgInput sk message ρ') := fun ρ' =>
@@ -189,12 +189,12 @@ theorem probEvent_signDigestLoop (sk : Seeded.SecretKey) (message : Message) :
                 ($ᵗ HashOutput : ProbComp HashOutput)]
               + digestReject * digestFactor ^ n * Pr[fun u : HashOutput => ¬ truncateHash u ∈ R |
                 ($ᵗ HashOutput : ProbComp HashOutput)]
-            ≤ digestFactor ^ n * ((2 : ℝ≥0∞) ^ 32 / (2 : ℝ≥0∞) ^ 128)
+            ≤ digestFactor ^ n * ((2 : ℝ≥0∞) ^ 20 / (2 : ℝ≥0∞) ^ 128)
               + digestReject * digestFactor ^ n * 1 :=
               add_le_add (mul_le_mul_right hcoll _) (mul_le_mul_right probEvent_le_one _)
           _ = digestFactor ^ (n + 1) := by
-              have hF : digestFactor = digestReject + (2 : ℝ≥0∞) ^ 32 / (2 : ℝ≥0∞) ^ 128 := rfl
-              generalize (2 : ℝ≥0∞) ^ 32 / (2 : ℝ≥0∞) ^ 128 = C at hF ⊢
+              have hF : digestFactor = digestReject + (2 : ℝ≥0∞) ^ 20 / (2 : ℝ≥0∞) ^ 128 := rfl
+              generalize (2 : ℝ≥0∞) ^ 20 / (2 : ℝ≥0∞) ^ 128 = C at hF ⊢
               rw [pow_succ, hF]
               ring
 

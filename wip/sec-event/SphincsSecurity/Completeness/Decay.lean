@@ -3,7 +3,8 @@ import SphincsSecurity.Scheme
 /-!
 # A search that beats its own odds
 
-The signer's searches are long: `2 ^ 32` trials, each accepted with probability at least `2 ^ -14`.
+The signer's searches are long: `2 ^ 20` trials each, a randomizer trial accepted with probability
+about `2 ^ -10` and a counter trial with probability at least `2 ^ -9`.
 What that buys is stated here, in the elementary form the bound needs. A trial rejected with
 probability at most `1 - 1/m` leaves at most `1/2` after `m` trials, because `(1-a)(1+a) ≤ 1` caps
 the product while Bernoulli's inequality puts `(1+a)^m` above `1 + m a = 2`.
@@ -86,43 +87,56 @@ theorem two_pow_div_two_pow (j k : Nat) :
     mul_comm ((2 : ENNReal) ^ j)⁻¹, mul_assoc, ENNReal.inv_mul_cancel (by simp) (by simp), mul_one,
     ENNReal.inv_pow]
 
-/-- A per-trial rejection share of `1 - 2⁻¹⁰` plus a `2 ^ 32 / 2 ^ 128` collision share still leaves room for `2⁻¹¹`. -/
-theorem digest_room (x : ENNReal) (hx : x + (1024 : ENNReal)⁻¹ = 1) :
-    x + (2 : ENNReal) ^ 32 / (2 : ENNReal) ^ 128 + ((2 ^ 11 : Nat) : ENNReal)⁻¹ ≤ 1 := by
-  have hcoll : (2 : ENNReal) ^ 32 / (2 : ENNReal) ^ 128 = (2⁻¹ : ENNReal) ^ 96 := by
-    rw [show (128 : Nat) = 32 + 96 from rfl, two_pow_div_two_pow]
-  have h11 : ((2 ^ 11 : Nat) : ENNReal)⁻¹ = (2⁻¹ : ENNReal) ^ 11 := by
-    rw [Nat.cast_pow, Nat.cast_ofNat, ENNReal.inv_pow]
-  have h10 : (1024 : ENNReal)⁻¹ = (2⁻¹ : ENNReal) ^ 10 := by
-    rw [show (1024 : ENNReal) = 2 ^ 10 by norm_num, ENNReal.inv_pow]
-  rw [hcoll, h11, add_assoc, ← hx, h10]
-  refine add_le_add le_rfl ?_
-  calc (2⁻¹ : ENNReal) ^ 96 + (2⁻¹ : ENNReal) ^ 11
-      ≤ (2⁻¹ : ENNReal) ^ 11 + (2⁻¹ : ENNReal) ^ 11 := add_le_add (inv_two_pow_anti (by norm_num)) le_rfl
-    _ = (2⁻¹ : ENNReal) ^ 10 := inv_two_pow_succ_add 10
+/-- `1/1025 + 1/(1024 * 1025) = 1/1024`. -/
+theorem inv_1025_add : (1025 : ENNReal)⁻¹ + (1049600 : ENNReal)⁻¹ = (1024 : ENNReal)⁻¹ := by
+  rw [← ENNReal.toReal_eq_toReal_iff' (by simp) (by simp),
+    ENNReal.toReal_add (by simp) (by simp)]
+  simp only [ENNReal.toReal_inv, ENNReal.toReal_ofNat]
+  norm_num
 
-/-- After a union bound over all `2²⁵⁶` messages, the four search failures stay below `2⁻²⁵⁶`. -/
+/-- A per-trial rejection share of `1 - 2⁻¹⁰` plus a `2 ^ 20 / 2 ^ 128` collision share still leaves
+room for `1/1025`. -/
+theorem digest_room (x : ENNReal) (hx : x + (1024 : ENNReal)⁻¹ = 1) :
+    x + (2 : ENNReal) ^ 20 / (2 : ENNReal) ^ 128 + ((1025 : Nat) : ENNReal)⁻¹ ≤ 1 := by
+  have hcoll : (2 : ENNReal) ^ 20 / (2 : ENNReal) ^ 128 = (2⁻¹ : ENNReal) ^ 108 := by
+    rw [show (128 : Nat) = 20 + 108 from rfl, two_pow_div_two_pow]
+  have hsmall : (2⁻¹ : ENNReal) ^ 108 ≤ (1049600 : ENNReal)⁻¹ := by
+    rw [← ENNReal.inv_pow]
+    refine ENNReal.inv_le_inv.mpr ?_
+    calc (1049600 : ENNReal) ≤ ((2 ^ 108 : Nat) : ENNReal) := by exact_mod_cast (by norm_num)
+      _ = 2 ^ 108 := by rw [Nat.cast_pow, Nat.cast_ofNat]
+  rw [hcoll, Nat.cast_ofNat, add_assoc, ← hx, ← inv_1025_add]
+  refine add_le_add le_rfl ?_
+  rw [add_comm]
+  exact add_le_add le_rfl hsmall
+
+/-- After a union bound over all `2²⁵⁶` messages, the digest search (`2⁻¹⁰²³`) and the seven counter
+searches (`2⁻²⁰⁴⁸` each) stay below `2⁻²⁵⁶`. -/
 theorem closing_sum :
     (2 : ENNReal) ^ 256 *
-      ((2⁻¹ : ENNReal) ^ (2 ^ 21) + 3 * (2⁻¹ : ENNReal) ^ (2 ^ 18))
+      ((2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ (2 ^ 11))
       ≤ ((2 ^ 256 : Nat) : ENNReal)⁻¹ := by
   have hcast : ((2 ^ 256 : Nat) : ENNReal)⁻¹ = (2⁻¹ : ENNReal) ^ 256 := by
     rw [Nat.cast_pow, Nat.cast_ofNat, ENNReal.inv_pow]
-  have ha : (2⁻¹ : ENNReal) ^ (2 ^ 21) ≤ (2⁻¹ : ENNReal) ^ 514 := inv_two_pow_anti (by norm_num)
-  have hb : (2⁻¹ : ENNReal) ^ (2 ^ 18) ≤ (2⁻¹ : ENNReal) ^ 514 := inv_two_pow_anti (by norm_num)
-  have hfour : (2⁻¹ : ENNReal) ^ 514 + 3 * (2⁻¹ : ENNReal) ^ 514 = (2⁻¹ : ENNReal) ^ 512 := by
-    have h1 := inv_two_pow_succ_add 513
-    have h2 := inv_two_pow_succ_add 512
-    calc (2⁻¹ : ENNReal) ^ 514 + 3 * (2⁻¹ : ENNReal) ^ 514
-        = ((2⁻¹ : ENNReal) ^ 514 + (2⁻¹ : ENNReal) ^ 514)
-          + ((2⁻¹ : ENNReal) ^ 514 + (2⁻¹ : ENNReal) ^ 514) := by ring
-      _ = (2⁻¹ : ENNReal) ^ 512 := by rw [h1, h2]
+  have ha : (2⁻¹ : ENNReal) ^ 1023 ≤ (2⁻¹ : ENNReal) ^ 513 := inv_two_pow_anti (by norm_num)
+  have hb : 7 * (2⁻¹ : ENNReal) ^ (2 ^ 11) ≤ (2⁻¹ : ENNReal) ^ 513 := by
+    have hy : (2⁻¹ : ENNReal) ^ (2 ^ 11) ≤ (2⁻¹ : ENNReal) ^ 516 := inv_two_pow_anti (by norm_num)
+    have h1 := inv_two_pow_succ_add 515
+    have h2 := inv_two_pow_succ_add 514
+    have h3 := inv_two_pow_succ_add 513
+    calc 7 * (2⁻¹ : ENNReal) ^ (2 ^ 11) ≤ 8 * (2⁻¹ : ENNReal) ^ 516 :=
+          mul_le_mul' (by norm_num) hy
+      _ = (((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)
+            + ((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516))
+          + (((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)
+            + ((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)) := by ring
+      _ = (2⁻¹ : ENNReal) ^ 513 := by rw [h1, h2, h3]
+  have hsum : (2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ (2 ^ 11) ≤ (2⁻¹ : ENNReal) ^ 512 :=
+    (add_le_add ha hb).trans_eq (inv_two_pow_succ_add 512)
   rw [hcast]
   calc
-    (2 : ENNReal) ^ 256 *
-          ((2⁻¹ : ENNReal) ^ (2 ^ 21) + 3 * (2⁻¹ : ENNReal) ^ (2 ^ 18))
-        ≤ (2 : ENNReal) ^ 256 * (2⁻¹ : ENNReal) ^ 512 :=
-          mul_le_mul_right ((add_le_add ha (mul_le_mul_right hb _)).trans_eq hfour) _
+    (2 : ENNReal) ^ 256 * ((2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ (2 ^ 11))
+        ≤ (2 : ENNReal) ^ 256 * (2⁻¹ : ENNReal) ^ 512 := mul_le_mul_right hsum _
     _ = (2⁻¹ : ENNReal) ^ 256 := by
       rw [← ENNReal.inv_pow, mul_comm, ← ENNReal.div_eq_inv_mul,
         show (512 : Nat) = 256 + 256 by norm_num, two_pow_div_two_pow]

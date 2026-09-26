@@ -13,7 +13,7 @@ attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs canon
   frontierRoot maskOtsPrefixes frontierSigningRun boundaryEval
 
 theorem forced_original_completedRun_budget (dummy : OtsReferenceWords) (adversary : Adversary) (q slot : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter)
+    (hbound : HasHashQueryBound scheme adversary q) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support)
@@ -21,7 +21,7 @@ theorem forced_original_completedRun_budget (dummy : OtsReferenceWords) (adversa
     (hr : forcedRun (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary)) slot
       (completedRun parameter (canonicalGraphRoot labels) labels adversary) (initialState PUnit.unit) result ≠ 0) :
     keygenHashCost + completedWork result.1 ≤ q ∧ result.2.probes ≤ completedWork result.1 :=
-  lazy_original_completedRun_budget dummy adversary q hbound parameter otsSecret labels auxiliary hauxiliary result
+  lazy_original_completedRun_budget dummy adversary q hbound parameter hparameter otsSecret labels auxiliary hauxiliary result
     (SecretGuessObservation.forcedRun_nonzero _ slot _ _ result hr)
 
 end SphincsSecurity.Concrete.FtsGuessHash
@@ -63,9 +63,9 @@ theorem reference_completed_nearCertificate (key : SecretKey) (f : QueryImpl Has
     (hevent : completedNearGuess { key with root := root } f (completedAtRoot key.parameter root f before)) :
     completedNearCertificate key.parameter root (completedAtRoot key.parameter root f before) := by
   rw [completedNearCertificate_iff { key with root := root }]
-  obtain ⟨hvalid, omitted, hcertificate, _⟩ := hevent
+  obtain ⟨hvalid, hcounters, omitted, hcertificate, _⟩ := hevent
   refine ⟨hvalid, omitted, ?_⟩
-  have h := referenceForgeryRest_certificate_atRoot key f root hroot dummy adversary before hb _ _ hcertificate
+  have h := referenceForgeryRest_certificate_atRoot key f root hroot dummy adversary before hb _ _ hcounters hcertificate
   simpa only [completeCertificateRest, completedAtRoot] using h
 
 private theorem map_nonzero {First Result : Type} (function : First → Result) (law : SPMF First) (result : Result) :

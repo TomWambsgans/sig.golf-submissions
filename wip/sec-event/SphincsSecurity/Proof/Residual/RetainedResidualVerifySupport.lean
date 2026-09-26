@@ -34,7 +34,7 @@ open AdaptiveResidualLabels hiding World State Environment
 open FtsProbeSimulation (liftHashSource)
 attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs sourceInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
-  signDigestLoop signAfterDigest sequenceFin chainWalk
+  signDigestLoop sequenceFin chainWalk
 set_option backward.isDefEq.respectTransparency false
 
 theorem fixedHashStep_cache {inputs : Finset HashInput} (context : Context inputs) (input : HashInput)
