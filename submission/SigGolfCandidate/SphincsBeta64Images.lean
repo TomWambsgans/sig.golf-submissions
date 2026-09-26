@@ -14819,3 +14819,35 @@ def verify_7bd0 : Pad80StubClass.Site where
   returns := by decide
 #print axioms verify_7bd0
 end Pad80Sites
+
+namespace Padding64Decode
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+
+theorem queryBytes_pad520 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    SphincsSecurity.bytesLE (64 * ((hashInput (ready520 s)).1 + 1))
+      (hashInput (ready520 s)).2 =
+      (List.range 520).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 56 0 := by
+  have hsource : (ready520 s).getReg .x10 = 0x40000 := by
+    exact Padding64Cells.pad520_source s source
+  have hbytes := Padding64Bytes.queryBytes_hashInput (ready520 s)
+  have hrange : 64 * ((576 : Word).toNat / 64 - 1 + 1) = 576 := by decide
+  simp only [show (ready520 s).getReg .x11 = (576 : Word) by
+    exact MachineState.getReg_setReg_eq (by decide), hrange, hsource] at hbytes
+  rw [hbytes]
+  rw [show 576 = 520 + 56 by decide, List.range_add, List.map_append]
+  congr 1
+  apply List.ext_getElem
+  · simp
+  · intro i hi hj
+    have hi' : i < 56 := by simpa using hi
+    simp only [List.getElem_map, List.getElem_range, List.getElem_replicate]
+    have hpad := Padding64Cells.pad520_byte s (520 + i) (by omega)
+    simpa [ready520, MachineState.getByte, MachineState.getMem_setReg,
+      hsource] using congrArg UInt8.ofBitVec hpad
+
+#print axioms queryBytes_pad520
+end Padding64Decode
