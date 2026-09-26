@@ -6,7 +6,7 @@ This plan targets a valid sig.golf beta PR from `compact-sphincs-wip`. Its proof
 
 Freeze the proven instance for the first record: 160-bit digests, 24 FORS trees of height 8, 52 WOTS chains with target sum 194, six XMSS layers of heights `(11, 5, 5, 5, 4, 4)`, and lifetime `2^32`. Its signature and witness are 11,324 bytes. Redistributing the 34 height bits changes neither signature size nor the main verification hash count, yet forces edits through the specialized 127-bit proof and machine traces. A top layer of 12 exceeds both the keygen compression budget and the 128 KiB cache; the previous-VM keygen proof gives 1,007,616 of 1,048,576 allowed compressions; this result still needs transport to the final beta image. Change parameters only after a certified baseline and a measured score benefit.
 
-Use the existing Lean SPHINCS security, correctness, and completeness theorems as the cryptographic core. The submitted program must implement *that exact scheme*, including byte serialization, retry order, and random-oracle queries. Keep `S = W = 11324`; `expand` copies the signature. Choose `C` from a proof of the accepting verifier path, not a single measured run.
+Use the existing Lean SPHINCS security, correctness, and completeness theorems as the cryptographic core. The submitted program must implement *that exact scheme*, including byte serialization, retry order, and random-oracle queries. Keep `S = W = 11324`; `expand` copies the signature. Choose `C` from a proof of the accepting verifier path, not a single measured run. The working target is `C < 200000`, which would score below 2,264,800,000; keep the stated bound honest if the exact proof yields a larger value.
 
 ## Parallel work and interfaces
 

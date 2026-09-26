@@ -3693,3 +3693,115 @@ theorem encoding_exhaustion_after_retries (location : Fin 5) (hash : Hash)
 #print axioms encoding_exhaustion_after_retries
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsMaskedChainDomain
+
+/-- The first WOTS chain with digit zero is serialized byte-for-byte. -/
+theorem first_bottom_zero_chain_serialized (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3bfc) (chainZero : s.getMem 0x43050 = 0)
+    (digitZero : s.getByte 0x44000 = 0)
+    (initialWords : Words20 s 0x44b00 initial)
+    (pointer : s.getMem 0x430a0 = 0x20060) :
+    let emitted := firstBottomEmitCopy (firstBottomChainDigit s)
+    Trace hash SphincsMaskedImages.sign s 36 36 0 0 emitted ∧
+    Words20 emitted 0x20060
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
+  let walked := firstBottomChainDigit s
+  let emitted := firstBottomEmitCopy walked
+  have zero := first_bottom_chain_zero hash s parameter initial lay treeIdx leaf chain
+    pc chainZero digitZero initialWords
+  have pointerWalked : walked.getMem 0x430a0 = 0x20060 := by
+    change (firstBottomChainDigit s).getMem 0x430a0 = 0x20060
+    rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
+    exact pointer
+  have copied := first_bottom_emit_copy_trace_generic walked (⟨0, by decide⟩ : Fin 52)
+    zero.2.1 (by simpa using pointerWalked)
+  have bytes := first_bottom_emit_copy_words_generic walked (⟨0, by decide⟩ : Fin 52)
+    zero.2.1 (by simpa using pointerWalked)
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) zero.2.2.2
+  exact ⟨by simpa [walked, emitted] using zero.1.trans (copied.trace (hash := hash)),
+    by simpa [walked, emitted] using bytes⟩
+
+
+/-- The chain walk never changes the signature destination pointer. -/
+theorem first_bottom_chain_walk_pointer (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val)
+    (pointer : s.getMem 0x430a0 = 0x20060) :
+    ∀ n ≤ digit.val,
+      (firstBottomChainWalk hash n s).getMem 0x430a0 = 0x20060 := by
+  intro n hn
+  induction n with
+  | zero => simpa [firstBottomChainWalk] using pointer
+  | succ n ih =>
+    have nlt : n < digit.val := by omega
+    have pcN := (first_bottom_chain_nonfinal hash s parameter initial
+      lay treeIdx leaf chain digit pc ctx loaded n nlt).2.2.1
+    change (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).getMem
+      0x430a0 = 0x20060
+    rw [first_bottom_chain_iteration_frame hash (firstBottomChainWalk hash n s)
+      pcN 0x430a0 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide)]
+    exact ih (by omega)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_walk_pointer' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_walk_pointer
+
+/-- A positive first WOTS digit is walked and then serialized byte-for-byte. -/
+theorem first_bottom_positive_chain_serialized (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (chainZero : chain.val = 0)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (digitValue : s.getByte 0x44000 = BitVec.ofNat 8 digit.val)
+    (positive : 0 < digit.val)
+    (pointer : s.getMem 0x430a0 = 0x20060) :
+    let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
+    let emitted := firstBottomEmitCopy walked
+    Trace hash SphincsMaskedImages.sign s (36 + 95 * digit.val)
+      (36 + 102 * digit.val) digit.val digit.val emitted ∧
+    Words20 emitted 0x20060
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
+  let walked := firstBottomChainWalk hash digit.val (firstBottomChainDigit s)
+  let emitted := firstBottomEmitCopy walked
+  have positiveRun := first_bottom_chain_positive hash s parameter initial
+    lay treeIdx leaf chain digit chainZero pc ctx digitValue positive
+  have pointerDigit : (firstBottomChainDigit s).getMem 0x430a0 = 0x20060 := by
+    rw [first_bottom_chain_digit_mem_frame s 0x430a0 (by decide) (by decide)]
+    exact pointer
+  have entry := first_bottom_chain_digit_positive_entry s parameter initial
+    lay treeIdx leaf chain digit chainZero pc ctx digitValue positive
+  have pointerWalked := first_bottom_chain_walk_pointer hash (firstBottomChainDigit s)
+    parameter initial lay treeIdx leaf chain digit entry.1 entry.2.2 entry.2.1
+    pointerDigit digit.val (le_refl _)
+  have copied := first_bottom_emit_copy_trace_generic walked
+    (⟨0, by decide⟩ : Fin 52) positiveRun.2.1 (by simpa using pointerWalked)
+  have bytes := first_bottom_emit_copy_words_generic walked
+    (⟨0, by decide⟩ : Fin 52) positiveRun.2.1
+    (by simpa using pointerWalked)
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val)
+    positiveRun.2.2
+  refine ⟨?_, by simpa [walked, emitted] using bytes⟩
+  have run := positiveRun.1.trans (copied.trace (hash := hash))
+  convert run using 1 <;> omega
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_positive_chain_serialized' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_positive_chain_serialized
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_zero_chain_serialized' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_zero_chain_serialized
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
