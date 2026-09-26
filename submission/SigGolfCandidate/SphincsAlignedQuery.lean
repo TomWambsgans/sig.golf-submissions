@@ -879,3 +879,42 @@ theorem betaRandomOracle_reindex {α : Type}
 #print axioms betaRandomOracle_reindex
 
 end SigGolfCandidate.BetaQuery
+
+namespace SigGolfCandidate.BetaQuery
+open OracleComp OracleSpec SphincsSecurity
+
+noncomputable def abstractWorldOnBeta : QueryImpl SphincsSecurity.OracleWorld
+    (StateT (QueryCache SigGolf.HashSpec) ProbComp) :=
+  unifFwdImpl SigGolf.HashSpec +
+    (fun input => (randomOracle : QueryImpl SigGolf.HashSpec
+      (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (betaToQuery input))
+
+private theorem abstractWorldOnBeta_step (query : SphincsSecurity.OracleWorld.Domain)
+    (cache : QueryCache SigGolf.HashSpec) :
+    Prod.map id pullAbstractCache <$> (abstractWorldOnBeta query).run cache =
+      (SphincsSecurity.romImpl query).run (pullAbstractCache cache) := by
+  cases query with
+  | inl coin => rfl
+  | inr input => exact randomOracle_pull input cache
+
+/-- Injectively renaming the scheme's hash calls preserves its entire random-world law,
+including all private uniform-sampling calls. -/
+theorem betaWorld_reindex {α : Type}
+    (program : OracleComp SphincsSecurity.OracleWorld α) :
+    (simulateQ abstractWorldOnBeta program).run' ∅ =
+      (simulateQ SphincsSecurity.romImpl program).run' ∅ := by
+  have h := run'_simulateQ_eq_of_query_map_eq
+    abstractWorldOnBeta SphincsSecurity.romImpl pullAbstractCache
+    abstractWorldOnBeta_step program (∅ : QueryCache SigGolf.HashSpec)
+  have hempty : pullAbstractCache (∅ : QueryCache SigGolf.HashSpec) =
+      (∅ : QueryCache SphincsSecurity.HashSpec) := by
+    funext input
+    rfl
+  rw [hempty] at h
+  exact h
+
+/-- info: 'SigGolfCandidate.BetaQuery.betaWorld_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms betaWorld_reindex
+
+end SigGolfCandidate.BetaQuery

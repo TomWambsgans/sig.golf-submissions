@@ -1,5 +1,6 @@
 import SigGolf.Statements
 import RiscvZkvm.Rv64.Logic.MemRegion
+import SigGolfCandidate.SphincsImages
 set_option linter.unusedSimpArgs false
 namespace Pc64KeygenImage
 open SigGolf.Riscv RiscvZkvm.Rv64
@@ -7517,3 +7518,125 @@ def verify_6de4 : ExactBlockClass.Site where
 #print axioms verify_5e18
 #print axioms verify_6de4
 end ExactBlockSites
+
+
+-- BEGIN GLOBAL ORDINARY FETCH: GenericWordTransport.lean
+namespace GenericWordTransport
+
+private theorem zip_all_pointwise {α β : Type} (xs : List α) (ys : List β)
+    (f : α → β → Bool) (h : (xs.zipWith f ys).all id = true)
+    (i : Nat) (hx : i < xs.length) (hy : i < ys.length) :
+    f xs[i] ys[i] = true := by
+  have hz : i < (xs.zipWith f ys).length := by
+    simp [List.length_zipWith]
+    omega
+  have hmem : (xs.zipWith f ys)[i] ∈ xs.zipWith f ys := List.getElem_mem hz
+  have hh := (List.all_eq_true.mp h) _ hmem
+  simpa only [List.getElem_zipWith, id_eq] using hh
+
+private theorem word_or_of_bool (a b c : BitVec 32)
+    (h : (a == b || a == c) = true) : a = b ∨ a = c := by
+  rcases (Bool.or_eq_true _ _).mp h with h | h
+  · exact Or.inl (beq_iff_eq.mp h)
+  · exact Or.inr (beq_iff_eq.mp h)
+
+theorem pointwise {xs ys : List (BitVec 32)} {n i : Nat}
+    (marker : BitVec 32)
+    (h : (xs.zipWith (fun a b => a == marker || a == b) (ys.take n)).all id = true)
+    (hx : i < xs.length) (hy : i < ys.length) (hn : i < n) :
+    xs[i]? = some marker ∨ xs[i]? = ys[i]? := by
+  have htake : i < (ys.take n).length := by
+    simp only [List.length_take]
+    omega
+  have hb := zip_all_pointwise xs (ys.take n)
+    (fun a b => a == marker || a == b) h i hx htake
+  rcases word_or_of_bool _ _ _ hb with heq | heq
+  · left
+    rw [List.getElem?_eq_getElem hx, heq]
+  · right
+    rw [List.getElem_take] at heq
+    rw [List.getElem?_eq_getElem hx, List.getElem?_eq_getElem hy, heq]
+
+#print axioms pointwise
+end GenericWordTransport
+
+-- BEGIN GLOBAL ORDINARY FETCH: UnchangedWholeCert.lean
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+namespace UnchangedWholeCert
+open SigGolfCandidate
+
+theorem whole :
+    (SphincsImages.verify.code.zipWith
+      (fun old new => old == (0x73 : BitVec 32) || old == new)
+      (Pc64VerifyImage.code.take 6954)).all id = true := by decide
+#print axioms whole
+end UnchangedWholeCert
+
+-- BEGIN GLOBAL ORDINARY FETCH: UnchangedPointwise.lean
+namespace UnchangedPointwise
+open SigGolfCandidate
+
+theorem verify_word (i : Nat) (hi : i < 6954) :
+    SphincsImages.verify.code[i]? = some (0x73 : BitVec 32) ∨
+    SphincsImages.verify.code[i]? = Pc64VerifyImage.code[i]? := by
+  apply GenericWordTransport.pointwise (0x73 : BitVec 32) UnchangedWholeCert.whole
+  · rw [SphincsImages.verify_code_length]
+    exact hi
+  · rw [Pc64VerifyImage.code_length]
+    omega
+  · exact hi
+
+#print axioms verify_word
+end UnchangedPointwise
+
+-- BEGIN GLOBAL ORDINARY FETCH: GenericFetchTransport.lean
+namespace GenericFetchTransport
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+theorem ordinary_fetch (old beta : Image) (s : MachineState) (ins : Instruction)
+    (word : ∀ i < old.code.length,
+      old.code[i]? = some (0x73 : BitVec 32) ∨ old.code[i]? = beta.code[i]?)
+    (fetched : fetch old s = some ins)
+    (ordinary : ins ≠ .base .ECALL) :
+    fetch beta s = some ins := by
+  let i := (s.pc.toNat - 0x1000) / 4
+  have guard : ¬ (s.pc.toNat < 0x1000 || s.pc.toNat % 4 != 0) := by
+    by_contra h
+    simp [fetch, h] at fetched
+  have hf : (old.code[i]?).bind decodeInstruction = some ins := by
+    simpa [fetch, guard, i] using fetched
+  cases hcode : old.code[i]? with
+  | none => simp [hcode] at hf
+  | some w =>
+      have hi : i < old.code.length :=
+        (List.getElem?_eq_some_iff.mp hcode).1
+      rcases word i hi with hecall | heq
+      · rw [hcode] at hecall
+        cases hecall
+        simp [hcode] at hf
+        exact False.elim (ordinary (Option.some.inj hf).symm)
+      · simpa [fetch, guard, i, heq] using hf
+
+#print axioms ordinary_fetch
+end GenericFetchTransport
+
+-- BEGIN GLOBAL ORDINARY FETCH: VerifyOrdinaryFetch.lean
+namespace VerifyOrdinaryFetch
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate
+
+theorem verify_ordinary_fetch (s : MachineState) (ins : Instruction)
+    (fetched : fetch SphincsImages.verify s = some ins)
+    (ordinary : ins ≠ .base .ECALL) :
+    fetch Pc64VerifyImage.image s = some ins := by
+  apply GenericFetchTransport.ordinary_fetch SphincsImages.verify
+    Pc64VerifyImage.image s ins
+  · intro i hi
+    have hi' : i < 6954 := by
+      simpa only [SphincsImages.verify_code_length] using hi
+    simpa only [Pc64VerifyImage.image] using UnchangedPointwise.verify_word i hi'
+  · exact fetched
+  · exact ordinary
+
+#print axioms verify_ordinary_fetch
+end VerifyOrdinaryFetch
