@@ -2496,3 +2496,57 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_source_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_source_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+
+theorem initialStoppedSource_jointPotential (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (budget : Nat)
+    (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
+    (hminimum : keygenHashCost ≤ budget) (hbudget : budget ≤ 2 ^ 128) :
+    (∑' result, Pr[= result | lazyRun
+      (environment key.parameter (gameInputs adversary)
+        (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+        (referenceFamilyWords encoding.selections dummy)
+        (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
+        encoding.selections encoding.rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge (gameInputs adversary))
+        (simulateQ (adversaryImpl (gameInputs adversary) key.parameter key.root
+          (referenceFamilyWords encoding.selections dummy) encoding.selections)
+          (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩))
+        (budget - keygenHashCost))
+      (initialState (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) exposed)] *
+      stoppedPrimitiveResultPotential (gameInputs adversary) budget result) ≤
+    ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) -
+      ((budget : ℝ) / 2 ^ digestBits) ^ 2) := by
+  let inputs := gameInputs adversary
+  let words := referenceFamilyWords encoding.selections dummy
+  let publicReplies := coordinateGraphLabels (initialKnown words exposed) high
+  let source := FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩
+  let initial := initialState inputs words exposed
+  have hd : 2 * budget ≤ 2 ^ digestBits := by
+    norm_num only [digestBits]
+    omega
+  have hremaining : initial.memory.external.hashCalls + (budget - keygenHashCost) = budget := by
+    simp only [initial, initialState, initialMemory]
+    omega
+  exact (lazyRun_stopped_source_jointPotential key inputs
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+    words publicReplies encoding.selections encoding.rows source
+    (sourceInputs_unlogged_subset_gameInputs adversary key) initial budget
+    (budget - keygenHashCost) (referenceEncodingAuxiliary_select encoding hencoding)
+    (initialAllowed_nonempty words exposed) (initialState_rowsCovered inputs words exposed)
+    (initialState_hiddenCandidateBound inputs words exposed)
+    (ResidualByteFrontend.replyClean_empty _) (Nat.zero_le _) hremaining hd).trans
+    (primitiveLivePotential_initial_le inputs words exposed budget hminimum hd)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialStoppedSource_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialStoppedSource_jointPotential
