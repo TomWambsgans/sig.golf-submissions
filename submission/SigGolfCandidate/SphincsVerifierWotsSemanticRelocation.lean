@@ -1941,6 +1941,54 @@ theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
         (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52))
       (upper_path_pointer_bound future) pathWitness
 
+/-- The low-byte frame returned by an inter-layer handoff supplies every
+    witness-backed semantic input of the next upper-layer decoder. -/
+theorem loaded_next_upper_witness_inputs (next : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial nextState : MachineState)
+    (loaded : initialState SigGolfCandidate.SphincsSubmission.submission
+      .verify (message, publicKey,
+        SigGolfCandidate.SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      nextState.getByte address = initial.getByte address) :
+    let ready := SphincsVerifierDecoderRelocation.setupState next
+      (SphincsVerifierDecoderRelocation.upperDecoderState next nextState)
+    SphincsVerifierHashBytes.WitnessPrefix nextState pk ∧
+    (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      nextState.getByte (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase next +
+          20 * chain.val + j)) =
+        ((signature.layers
+          (SphincsVerifierXmssTransition.targetLayer next)).chainValues
+            chain).extractLsb' (8 * j) 8) ∧
+    SphincsVerifierXmssPathControl.PathWitness nextState signature
+      (SphincsVerifierXmssTransition.targetLayer next)
+      (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase next + 20 * 52)) ∧
+    SphincsVerifierHashBytes.WitnessPrefix ready pk ∧
+    (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      ready.getByte (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase next +
+          20 * chain.val + j)) =
+        ((signature.layers
+          (SphincsVerifierXmssTransition.targetLayer next)).chainValues
+            chain).extractLsb' (8 * j) 8) := by
+  have hprefix := loaded_upper_prefix_after_frame publicKey message pk
+    signature initial nextState loaded frame
+  have source := loaded_upper_chain_source_after_frame next publicKey
+    message pk signature initial nextState loaded frame
+  have path := loaded_upper_path_witness_after_frame next publicKey
+    message pk signature initial nextState loaded frame
+  exact ⟨hprefix, source, path,
+    upper_ready_prefix next nextState pk hprefix,
+    upper_ready_source next nextState _ source⟩
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_next_upper_witness_inputs' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_next_upper_witness_inputs
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_path_handoff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_decoder_path_handoff
