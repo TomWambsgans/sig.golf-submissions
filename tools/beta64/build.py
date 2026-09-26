@@ -72,9 +72,15 @@ def main() -> None:
     assert got == MODULE_HASH, ('Lean image-section hash mismatch', got)
     committed = (submission / 'SphincsBeta64Images.lean').read_text()
     # The proof appendix imports the original image; the generated prefix does not.
-    extra_import = 'import SigGolfCandidate.SphincsImages\n'
-    assert committed.startswith('import SigGolf.Statements\nimport RiscvZkvm.Rv64.Logic.MemRegion\n' + extra_import)
-    committed = committed.replace(extra_import, '', 1)
+    extra_imports = (
+        'import SigGolfCandidate.SphincsSecurity.Scheme\n',
+        'import SigGolfCandidate.SphincsImages\n',
+    )
+    expected_header = ('import SigGolf.Statements\n' + extra_imports[0] +
+                       'import RiscvZkvm.Rv64.Logic.MemRegion\n' + extra_imports[1])
+    assert committed.startswith(expected_header)
+    for extra_import in extra_imports:
+        committed = committed.replace(extra_import, '', 1)
     assert committed.startswith(module.read_text()), 'committed image section differs'
     print('Reproduced image section', module, got)
 
