@@ -193,3 +193,68 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialExceptionHistorySource_exception_of_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.initialExceptionHistorySource_exception_of_budget
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem exceptionHistorySourceGame_exception_of_budget (dummy : OtsReferenceWords) (adversary : Adversary)
+    (budget : Nat) (hbudget : budget ≤ 2 ^ 128)
+    (result : Option (Forgery × Bool) × ExceptionHistoryState (gameInputs adversary))
+    (hresult : exceptionHistorySourceGame dummy adversary budget result ≠ 0)
+    (hexception : MonitoredStrongException (result.1, result.2.1))
+    (hwithin : result.2.1.1.memory.external.hashCalls ≤ budget) :
+    result.2.2.1 = true ∨ result.2.2.2 = true := by
+  rw [exceptionHistorySourceGame, RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨parameter, hparameter, hresult⟩ := hresult
+  rw [RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨encoding, hencoding, hresult⟩ := hresult
+  rw [RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨high, _, hresult⟩ := hresult
+  rw [RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨exposed, _, hresult⟩ := hresult
+  rw [initialExceptionHistoryPrior, RetainedObservation.bind_nonzero] at hresult
+  obtain ⟨labels, _, hresult⟩ := hresult
+  exact initialExceptionHistorySource_exception_of_budget _ adversary encoding dummy exposed high budget
+    hbudget result hresult hexception hwithin
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.exceptionHistorySourceGame_exception_of_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.exceptionHistorySourceGame_exception_of_budget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem monitoredSourceGame_exception_budget_le_history
+    (dummy : OtsReferenceWords) (adversary : Adversary)
+    (budget : Nat) (hbudget : budget ≤ 2 ^ 128) :
+    Pr[fun result => MonitoredStrongException result ∧
+        result.2.1.memory.external.hashCalls ≤ budget |
+      monitoredSourceGame dummy adversary budget (fun _ _ _ _ => false)] ≤
+    Pr[fun result => result.2.2.1 = true ∧
+        result.2.1.1.memory.external.hashCalls ≤ budget |
+      exceptionHistorySourceGame dummy adversary budget] +
+    Pr[fun result => result.2.2.2 = true |
+      exceptionHistorySourceGame dummy adversary budget] := by
+  rw [← exceptionHistorySourceGame_erasure dummy adversary budget, probEvent_map]
+  apply le_trans ?_ (probEvent_or_le _ _ _)
+  apply probEvent_mono
+  intro result hsupport ⟨hexception, hwithin⟩
+  have hresult := probOutput_ne_zero_of_mem_support hsupport
+  rw [SPMF.probOutput_eq_apply] at hresult
+  rcases exceptionHistorySourceGame_exception_of_budget dummy adversary budget hbudget
+    result hresult hexception hwithin with hcache | hproposal
+  · exact Or.inl ⟨hcache, hwithin⟩
+  · exact Or.inr hproposal
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_exception_budget_le_history' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_exception_budget_le_history
