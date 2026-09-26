@@ -52,6 +52,27 @@ theorem compression_bound (secretKey : SecretKey) :
   rw [support_cost secretKey result mem]
   norm_num
 
+/-- The two completed program analyses discharge their universal termination cases. -/
+theorem keygen_expand_terminate (hash : Hash) (phase : Phase)
+    (hphase : phase = .keygen ∨ phase = .expand)
+    (input : Input SphincsSubmission.submission.sizes phase) :
+    let result := SphincsSubmission.submission.runWith hash phase input
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  rcases hphase with rfl | rfl
+  · exact SphincsKeygenCost.runWith_termination hash input
+  · exact runWith_termination hash input
+
+/-- The two completed compression-budget cases can be reused in the final certificate. -/
+theorem keygen_expand_compression_bound (secretKey : SecretKey) (phase : Phase)
+    (hphase : phase = .keygen ∨ phase = .expand) :
+    OracleComp.EvalDist.expectedValue
+      (SphincsSubmission.submission.honestWorkload secretKey)
+      (fun result => ENNReal.ofReal (Real.rpow 2
+        ((result.costs phase : ℝ) / (phase.budget : ℝ)))) ≤ 2 := by
+  rcases hphase with rfl | rfl
+  · exact SphincsKeygenMoment.compression_bound secretKey
+  · exact compression_bound secretKey
+
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.honest_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms honest_cost
@@ -64,5 +85,13 @@ theorem compression_bound (secretKey : SecretKey) :
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.compression_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms compression_bound
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_expand_terminate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms keygen_expand_terminate
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_expand_compression_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms keygen_expand_compression_bound
 
 end SigGolfCandidate.SphincsExpandMoment
