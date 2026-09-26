@@ -1930,11 +1930,41 @@ theorem signer_encoding_bad (location : Fin 5) (s : MachineState)
   exact ⟨by simpa using (digits.append checked).append jumped,
     sumFailureJump_pc location _ rejectedPc⟩
 
+theorem signer_decoder_counter_step (i : Fin 52) (s : MachineState) :
+    (signerDecoderState i s).getMem 0x430b8 = s.getMem 0x430b8 := by
+  fin_cases i <;>
+    simp [signerDecoderState, decoderSuffixState, signerDecoderMiddleState,
+      decoderPrefixState, execInstrBr, MachineState.setByte,
+      MachineState.getMem_setMem_ne, alignToDword, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem signer_decoder_counter_run (count : Nat) (s : MachineState)
+    (bound : count ≤ 52) :
+    (signerDecoderRun count s).getMem 0x430b8 = s.getMem 0x430b8 := by
+  induction count with
+  | zero => rfl
+  | succ count ih =>
+      have small : count < 52 := by omega
+      let i : Fin 52 := ⟨count, small⟩
+      have next : signerDecoderRun (count + 1) s =
+          signerDecoderState i (signerDecoderRun count s) := by
+        simp [signerDecoderRun, i, Nat.mod_eq_of_lt small]
+      rw [next, signer_decoder_counter_step i, ih (by omega)]
+
+theorem signer_encoding_counter (s : MachineState) :
+    (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
+      0x430b8 = s.getMem 0x430b8 := by
+  calc
+    _ = (signerDecoderRun 52 (sumInit s)).getMem 0x430b8 := by
+      simp [sumFailureJump, sumTest, execInstrBr]
+    _ = (sumInit s).getMem 0x430b8 :=
+      signer_decoder_counter_run 52 (sumInit s) (by decide)
+    _ = s.getMem 0x430b8 := by simp [sumInit, execInstrBr]
+
 theorem signer_encoding_retry (location : Fin 5) (s : MachineState)
     (pc : s.pc = 0x1bc4 + delta location)
     (bad : answerSum 52 (sumInit s) ≠ 194)
-    (under : (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
-      0x430b8 + 1 ≠ (2 ^ 20 : Word)) :
+    (under : s.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word)) :
     OrdinarySteps SphincsMaskedImages.sign s 513
       (retryDecision (retryCounter location
         (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))))) ∧
@@ -1942,14 +1972,18 @@ theorem signer_encoding_retry (location : Fin 5) (s : MachineState)
       (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))))).pc =
       0x1a78 + delta location := by
   obtain ⟨rejected, rejectedPc⟩ := signer_encoding_bad location s pc bad
-  obtain ⟨retried, retryPc⟩ := retryCounter_continue location _ rejectedPc under
+  have under' :
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
+        0x430b8 + 1 ≠ (2 ^ 20 : Word) := by
+    rw [signer_encoding_counter]
+    exact under
+  obtain ⟨retried, retryPc⟩ := retryCounter_continue location _ rejectedPc under'
   exact ⟨by simpa using rejected.append retried, retryPc⟩
 
 theorem signer_encoding_exhausted (location : Fin 5) (s : MachineState)
     (pc : s.pc = 0x1bc4 + delta location)
     (bad : answerSum 52 (sumInit s) ≠ 194)
-    (atLimit : (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
-      0x430b8 + 1 = (2 ^ 20 : Word)) :
+    (atLimit : s.getMem 0x430b8 + 1 = (2 ^ 20 : Word)) :
     OrdinarySteps SphincsMaskedImages.sign s 514
       (retryRejectJump location (retryDecision (retryCounter location
         (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s))))))) ∧
@@ -1957,7 +1991,13 @@ theorem signer_encoding_exhausted (location : Fin 5) (s : MachineState)
       (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s))))))).pc =
       0x1004 := by
   obtain ⟨rejected, rejectedPc⟩ := signer_encoding_bad location s pc bad
-  obtain ⟨exhausted, exhaustedPc⟩ := retryCounter_exhausted location _ rejectedPc atLimit
+  have atLimit' :
+      (sumFailureJump (sumTest (signerDecoderRun 52 (sumInit s)))).getMem
+        0x430b8 + 1 = (2 ^ 20 : Word) := by
+    rw [signer_encoding_counter]
+    exact atLimit
+  obtain ⟨exhausted, exhaustedPc⟩ :=
+    retryCounter_exhausted location _ rejectedPc atLimit'
   have jump := retryRejectJump_block location _ exhaustedPc
   exact ⟨by simpa using (rejected.append exhausted).append jump,
     retryRejectJump_pc location _ exhaustedPc⟩
