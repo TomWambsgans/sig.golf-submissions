@@ -6373,3 +6373,128 @@ theorem signer_jal_site_shift (location : Fin 5) (hash : Hash)
 #print axioms signer_jal_site_shift
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy SphincsMaskedChainLoop
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+/-- Schedule instruction support for the signer body: ordinary PC-independent instructions and JAL x0. -/
+def signerSupported (i : Instr) : Prop :=
+  SphincsMaskedSignOtsShift.Supported i ∨
+    ∃ offset : BitVec 21, i = .JAL .x0 offset
+
+theorem signer_jal_x0_shift_word (delta : Word) (s : MachineState)
+    (offset : BitVec 21) :
+    execInstrBr (SphincsMaskedSignOtsShift.shift delta s) (.JAL .x0 offset) =
+      SphincsMaskedSignOtsShift.shift delta (execInstrBr s (.JAL .x0 offset)) := by
+  simp [execInstrBr, MachineState.setReg, SphincsMaskedSignOtsShift.shift,
+    SphincsMaskedSignOtsShift.setPC_twice, BitVec.add_assoc, BitVec.add_comm]
+
+theorem signer_exec_shift (delta : Word) (s : MachineState) (i : Instr)
+    (ok : signerSupported i) :
+    execInstrBr (SphincsMaskedSignOtsShift.shift delta s) i =
+      SphincsMaskedSignOtsShift.shift delta (execInstrBr s i) := by
+  rcases ok with supported | ⟨offset, rfl⟩
+  · exact SphincsMaskedSignOtsShift.exec_shift delta s i supported
+  · exact signer_jal_x0_shift_word delta s offset
+
+theorem signer_ordinary_shift (delta : Word) (s : MachineState)
+    (i : Instr) (ok : signerSupported i)
+    (step : ordinaryStep s (.base i) = some (execInstrBr s i)) :
+    ordinaryStep (SphincsMaskedSignOtsShift.shift delta s) (.base i) =
+      some (SphincsMaskedSignOtsShift.shift delta (execInstrBr s i)) := by
+  rcases ok with supported | ⟨offset, rfl⟩
+  · rw [← SphincsMaskedSignOtsShift.exec_shift delta s i supported]
+    exact SphincsMaskedSignOtsShift.ordinary_shift delta s i supported step
+  · simpa [ordinaryStep, memoryArgumentsValid] using
+      congrArg some (signer_jal_x0_shift_word delta s offset)
+
+theorem signer_run_shift (delta : Word) (code : List (Word × Instr))
+    (ok : ∀ e ∈ code, signerSupported e.2) (s : MachineState) :
+    runSchedule (SphincsMaskedSignOtsShift.schedule delta code)
+      (SphincsMaskedSignOtsShift.shift delta s) =
+        SphincsMaskedSignOtsShift.shift delta (runSchedule code s) := by
+  induction code generalizing s with
+  | nil => rfl
+  | cons e rest ih =>
+    simp only [SphincsMaskedSignOtsShift.schedule, List.map_cons, runSchedule]
+    rw [signer_exec_shift delta s e.2 (ok e (by simp))]
+    exact ih (by intro e he; exact ok e (by simp [he])) _
+
+theorem signer_checked_shift (delta : Word) (code : List (Word × Instr))
+    (ok : ∀ e ∈ code, signerSupported e.2) (s : MachineState)
+    (checked : Checked code s) :
+    Checked (SphincsMaskedSignOtsShift.schedule delta code)
+      (SphincsMaskedSignOtsShift.shift delta s) := by
+  induction code generalizing s with
+  | nil => trivial
+  | cons e rest ih =>
+    obtain ⟨pc, step, tail⟩ := checked
+    refine ⟨by simp [SphincsMaskedSignOtsShift.schedule,
+      SphincsMaskedSignOtsShift.shift_pc, pc],
+      ?_, ?_⟩
+    · rw [signer_exec_shift delta s e.2 (ok e (by simp))]
+      exact signer_ordinary_shift delta s e.2 (ok e (by simp)) step
+    · rw [signer_exec_shift delta s e.2 (ok e (by simp))]
+      exact ih (by intro e he; exact ok e (by simp [he])) _ tail
+
+/-- Reuse a checked base-layer signer schedule at any lower-layer bytecode copy. -/
+theorem signer_block_shift (location : Fin 5)
+    (code : List (Word × Instr))
+    (ok : ∀ e ∈ code, signerSupported e.2)
+    (inside : ∀ e ∈ code,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0)
+    (encoded : ∀ e ∈ code,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2))
+    (s : MachineState) (checked : Checked code s) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      code.length
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (runSchedule code s)) := by
+  let delta := signerShiftBytes location
+  have encodedShift : ∀ e ∈ code,
+      instructionAt SphincsMaskedImages.sign (e.1 + delta) =
+        some (.base e.2) := by
+    intro e he
+    have bounds := inside e he
+    rw [signer_five_layer_instruction_transfer location e.1
+      bounds.1 bounds.2.1 bounds.2.2]
+    exact encoded e he
+  have run := checked_sound SphincsMaskedImages.sign
+    (SphincsMaskedSignOtsShift.schedule delta code) (by
+      intro e he
+      obtain ⟨original, member, rfl⟩ := List.mem_map.mp he
+      exact encodedShift original member) _
+      (signer_checked_shift delta code ok s checked)
+  rw [signer_run_shift delta code ok s] at run
+  simpa only [SphincsMaskedSignOtsShift.schedule, List.length_map] using run
+
+#print axioms signer_block_shift
+
+/-- The complete eight-instruction counter-and-backward-jump segment relocates to all five layers. -/
+theorem signer_continue_shift (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3d90) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s) 8
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomChainContinue s)) := by
+  have supported : ∀ e ∈ firstBottomChainContinueCode,
+      signerSupported e.2 := by
+    intro e he
+    simp only [firstBottomChainContinueCode, List.mem_cons,
+      List.not_mem_nil, or_false] at he
+    rcases he with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals simp [signerSupported, SphincsMaskedSignOtsShift.Supported]
+  have inside : ∀ e ∈ firstBottomChainContinueCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have run := signer_block_shift location firstBottomChainContinueCode
+    supported inside first_bottom_chain_continue_code s
+    (first_bottom_chain_continue_checked s pc)
+  simpa [firstBottomChainContinue, firstBottomChainContinueCode] using run
+
+#print axioms signer_continue_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
