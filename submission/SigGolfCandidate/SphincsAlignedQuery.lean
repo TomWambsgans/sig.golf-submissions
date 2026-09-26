@@ -3,6 +3,8 @@ import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Bytes
 import SigGolfCandidate.SphincsSecurity.Proof.RandomizedStatement
 import SigGolfCandidate.SphincsBeta64Images
 import SigGolf.Security
+import SigGolfCandidate.SphincsCommitment
+import SigGolf.Riscv
 
 namespace SigGolfCandidate.QueryDecoder
 open SigGolf SphincsSecurity
@@ -488,3 +490,278 @@ end SigGolfCandidate.QueryDecoder
 /-- info: 'SigGolfCandidate.QueryDecoder.tweakable_sourceLength' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.QueryDecoder.tweakable_sourceLength
+
+namespace SigGolfCandidate.BetaQuery
+open SigGolf SphincsSecurity RiscvZkvm.Rv64
+
+private def byteValue (data : Nat → UInt8) (n : Nat) : Nat :=
+  (List.range n).foldl (fun acc i => acc + (data i).toNat * 2 ^ (8 * i)) 0
+
+private theorem byteValue_succ (data : Nat → UInt8) (n : Nat) :
+    byteValue data (n + 1) = byteValue data n + (data n).toNat * 2 ^ (8 * n) := by
+  simp [byteValue, List.range_succ, List.foldl_append]
+
+private theorem ofDigits_range (data : Nat → UInt8) (n : Nat) :
+    byteValue data n = Nat.ofDigits 256 ((List.range n).map fun i => (data i).toNat) := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [byteValue_succ, ih, List.range_succ, List.map_append, Nat.ofDigits_append]
+      simp only [List.map_singleton, Nat.ofDigits_singleton, List.length_map,
+        List.length_range, Nat.pow_mul]
+      norm_num
+      ac_rfl
+
+private theorem byteValue_digit (data : Nat → UInt8) (n i : Nat) (hi : i < n) :
+    (byteValue data n / 256 ^ i) % 256 = (data i).toNat := by
+  let ds := (List.range n).map fun j => (data j).toNat
+  have bound : ∀ l ∈ ds, l < 256 := by
+    intro l hl
+    obtain ⟨j, _, rfl⟩ := List.mem_map.mp hl
+    exact (data j).toBitVec.isLt
+  have hlen : ds.length = n := by simp [ds]
+  have get : ds[i]'(by omega) = (data i).toNat := by simp [ds]
+  have hdrop : ds.drop i = (data i).toNat :: ds.drop (i + 1) := by
+    rw [List.drop_eq_getElem_cons (by omega)]
+    rw [get]
+  rw [ofDigits_range, Nat.ofDigits_div_pow_eq_ofDigits_drop i (by decide) ds bound,
+    hdrop, Nat.ofDigits_cons]
+  simp [Nat.add_mod]
+
+private theorem byteValue_bound (data : Nat → UInt8) (n : Nat) :
+    byteValue data n < 2 ^ (8 * n) := by
+  rw [ofDigits_range]
+  have h := Nat.ofDigits_lt_base_pow_length (b := 256)
+    (l := (List.range n).map fun i => (data i).toNat) (by decide)
+    (by
+      intro x hx
+      obtain ⟨i, _, rfl⟩ := List.mem_map.mp hx
+      exact (data i).toBitVec.isLt)
+  simpa [Nat.pow_mul] using h
+
+private theorem bytesLE_byteValue (data : Nat → UInt8) (n : Nat) :
+    SphincsSecurity.bytesLE n (BitVec.ofNat (8 * n) (byteValue data n)) =
+      (List.range n).map data := by
+  apply List.ext_getElem
+  · simp [SphincsSecurity.bytesLE]
+  · intro i hi hj
+    have hi' : i < n := by simpa [SphincsSecurity.bytesLE] using hi
+    have hdigit :
+        ((BitVec.ofNat (8 * n) (byteValue data n)).extractLsb' (8 * i) 8).toNat =
+          (data i).toNat := by
+      rw [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow,
+        BitVec.toNat_ofNat, Nat.mod_eq_of_lt (byteValue_bound data n)]
+      simpa [Nat.pow_mul] using byteValue_digit data n i hi'
+    have hbv : (BitVec.ofNat (8 * n) (byteValue data n)).extractLsb' (8 * i) 8 =
+        (data i).toBitVec := BitVec.eq_of_toNat_eq hdigit
+    simpa [SphincsSecurity.bytesLE, List.getElem_ofFn] using
+      congrArg UInt8.ofBitVec hbv
+
+def pack (blocksMinusOne : Nat) (data : List UInt8) : SigGolf.Query :=
+  ⟨blocksMinusOne, BitVec.ofNat (8 * (64 * (blocksMinusOne + 1)))
+    (byteValue (fun i => data[i]?.getD 0) (64 * (blocksMinusOne + 1)))⟩
+
+theorem queryBytes_pack (blocksMinusOne : Nat) (data : List UInt8) :
+    QueryDecoder.queryBytes (pack blocksMinusOne data) =
+      (List.range (64 * (blocksMinusOne + 1))).map (fun i => data[i]?.getD 0) := by
+  exact bytesLE_byteValue _ _
+
+theorem range_getD_eq_take (data : List UInt8) (n : Nat) (h : n ≤ data.length) :
+    (List.range n).map (fun i => data[i]?.getD 0) = data.take n := by
+  apply List.ext_getElem
+  · simp [List.length_take, h]
+  · intro i hi hj
+    have hin : i < n := by simpa using hi
+    have hid : i < data.length := by omega
+    simp [List.getElem_map, List.getElem_take, hid]
+
+theorem queryBytes_pack_padded (blocksMinusOne : Nat) (data : List UInt8)
+    (h : data.length ≤ 64 * (blocksMinusOne + 1)) :
+    QueryDecoder.queryBytes (pack blocksMinusOne data) =
+      data ++ List.replicate (64 * (blocksMinusOne + 1) - data.length) 0 := by
+  rw [queryBytes_pack]
+  apply List.ext_getElem
+  · simp [h]
+  · intro i hi hj
+    have hi' : i < 64 * (blocksMinusOne + 1) := by simpa using hi
+    by_cases hdata : i < data.length
+    · simp [List.getElem_map, hdata, List.getElem_append_left hdata]
+    · simp [List.getElem_map, hdata, List.getElem_append_right (by omega : data.length ≤ i)]
+
+def canonicalTagged (input : HashInput) : Prop :=
+  input[0]? = some 1 ∧ 2 ≤ input.length ∧
+    QueryDecoder.sourceLength (input[1]?.getD 255) = input.length
+
+instance (input : HashInput) : Decidable (canonicalTagged input) := by
+  unfold canonicalTagged
+  infer_instance
+
+def betaToQuery (input : HashInput) : SigGolf.Query :=
+  if canonicalTagged input then
+    pack ((input.length + 63) / 64 - 1) input
+  else
+    pack input.length (0 :: input)
+
+private theorem canonical_blocks (input : HashInput) (h : canonicalTagged input) :
+    1 ≤ (input.length + 63) / 64 ∧
+      input.length ≤ 64 * ((input.length + 63) / 64) := by
+  have hn : 2 ≤ input.length := h.2.1
+  omega
+
+private theorem canonical_queryBytes (input : HashInput) (h : canonicalTagged input) :
+    QueryDecoder.queryBytes (betaToQuery input) =
+      input ++ List.replicate (QueryDecoder.blockLength input.length - input.length) 0 := by
+  have hb := canonical_blocks input h
+  simp only [betaToQuery, if_pos h]
+  rw [queryBytes_pack_padded]
+  · simp [QueryDecoder.blockLength, show (input.length + 63) / 64 - 1 + 1 =
+        (input.length + 63) / 64 by omega]
+  · simpa [show (input.length + 63) / 64 - 1 + 1 =
+        (input.length + 63) / 64 by omega] using hb.2
+
+private theorem fallback_queryBytes (input : HashInput) (h : ¬ canonicalTagged input) :
+    QueryDecoder.queryBytes (betaToQuery input) =
+      (0 :: input) ++ List.replicate
+        (64 * (input.length + 1) - (input.length + 1)) 0 := by
+  simp only [betaToQuery, if_neg h]
+  exact queryBytes_pack_padded _ _ (by simp)
+
+theorem decode_betaToQuery_canonical (input : HashInput) (h : canonicalTagged input) :
+    QueryDecoder.decode (betaToQuery input) = input := by
+  have hbytes := canonical_queryBytes input h
+  apply QueryDecoder.decode_padded (betaToQuery input) input input.length rfl h.2.1
+    h.1 h.2.2 hbytes
+  rw [hbytes]
+  have hb := canonical_blocks input h
+  simp [QueryDecoder.blockLength]
+  omega
+
+theorem canonicalTagged_commitmentInput (pk : SphincsSecurity.PublicKey) :
+    canonicalTagged (SphincsWire.commitmentInput pk) := by
+  refine ⟨?_, ?_, ?_⟩
+  · simp [SphincsWire.commitmentInput, SphincsSecurity.fieldBytes,
+      SphincsSecurity.protocolDomainSep]
+  · rw [SphincsWire.commitmentInput_length]
+    omega
+  · rw [SphincsWire.commitmentInput_length]
+    simp [SphincsWire.commitmentInput, SphincsSecurity.fieldBytes,
+      SphincsSecurity.tweakFields, SphincsSecurity.bytesLE,
+      QueryDecoder.sourceLength]
+    decide
+
+theorem betaToQuery_injective : Function.Injective betaToQuery := by
+  intro first second heq
+  by_cases hf : canonicalTagged first
+  · by_cases hs : canonicalTagged second
+    · have := congrArg QueryDecoder.decode heq
+      simpa [decode_betaToQuery_canonical first hf, decode_betaToQuery_canonical second hs]
+        using this
+    · have hfirst := canonical_queryBytes first hf
+      have hsecond := fallback_queryBytes second hs
+      have hhead := congrArg (fun q : SigGolf.Query =>
+        (QueryDecoder.queryBytes q)[0]?) heq
+      rw [hfirst, hsecond] at hhead
+      have hn : 0 < first.length := by have := hf.2.1; omega
+      simp [hn] at hhead
+      have hbyte : first[0] = 1 := by
+        have := hf.1
+        simpa [List.getElem?_eq_getElem hn] using this
+      rw [hbyte] at hhead
+      cases hhead
+  · by_cases hs : canonicalTagged second
+    · have hfirst := fallback_queryBytes first hf
+      have hsecond := canonical_queryBytes second hs
+      have hhead := congrArg (fun q : SigGolf.Query =>
+        (QueryDecoder.queryBytes q)[0]?) heq
+      rw [hfirst, hsecond] at hhead
+      have hn : 0 < second.length := by have := hs.2.1; omega
+      simp [hn] at hhead
+      have hbyte : second[0] = 1 := by
+        have := hs.1
+        simpa [List.getElem?_eq_getElem hn] using this
+      rw [hbyte] at hhead
+      cases hhead
+    · have hlen : first.length = second.length := by
+        have := congrArg Sigma.fst heq
+        simpa [betaToQuery, hf, hs, pack] using this
+      have hbytes := congrArg QueryDecoder.queryBytes heq
+      rw [fallback_queryBytes first hf, fallback_queryBytes second hs] at hbytes
+      rw [hlen] at hbytes
+      have hp := List.append_cancel_right hbytes
+      exact List.cons.inj hp |>.2
+
+def adaptOracle (hash : SigGolf.Hash) : SphincsSecurity.HashInput → SphincsSecurity.HashOutput :=
+  fun input => hash (betaToQuery input)
+
+theorem commitmentQuery_ne_tweakable (pk : SphincsSecurity.PublicKey)
+    (parameter : PublicParameter) (domain : HashDomain) (payload : HashInput) :
+    betaToQuery (SphincsWire.commitmentInput pk) ≠
+      betaToQuery (tweakableHashInput parameter domain payload) := by
+  intro h
+  exact SphincsWire.commitmentInput_ne_tweakableHashInput pk parameter domain payload
+    (betaToQuery_injective h)
+
+theorem commitmentQuery_ne_keygen (pk : SphincsSecurity.PublicKey)
+    (parameter : PublicParameter) (domain : KeygenDomain) (seed : MasterSeed) :
+    betaToQuery (SphincsWire.commitmentInput pk) ≠
+      betaToQuery (keygenHashInput parameter domain seed) := by
+  intro h
+  exact SphincsWire.commitmentInput_ne_keygenHashInput pk parameter domain seed
+    (betaToQuery_injective h)
+
+theorem commitmentQuery_ne_randomizer (pk : SphincsSecurity.PublicKey)
+    (parameter : PublicParameter) (seed : MasterSeed) (message : SphincsSecurity.Message)
+    (trial : BitVec 32) :
+    betaToQuery (SphincsWire.commitmentInput pk) ≠
+      betaToQuery (randomizerHashInput parameter seed message trial) := by
+  intro h
+  exact SphincsWire.commitmentInput_ne_randomizerHashInput pk parameter seed message trial
+    (betaToQuery_injective h)
+
+/-- State after the beta padding stub, immediately before the commitment HASH service. -/
+structure BetaCommitmentReady (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) : Prop where
+  source : state.getReg .x10 = 0x40000
+  bytes : state.getReg .x11 = 64
+  destination : state.getReg .x12 = 0x42000
+  service : state.getReg .x5 = 0
+  padded : QueryDecoder.queryBytes (SigGolf.Riscv.hashInput state) =
+    SphincsWire.commitmentInput pk ++ List.replicate 4 0
+
+theorem betaCommitmentReady_hashInput (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) (ready : BetaCommitmentReady state pk) :
+    SigGolf.Riscv.hashInput state = betaToQuery (SphincsWire.commitmentInput pk) := by
+  apply QueryDecoder.decode_injective
+  rw [decode_betaToQuery_canonical _ (canonicalTagged_commitmentInput pk)]
+  apply QueryDecoder.decode_padded _ _ 60
+    (SphincsWire.commitmentInput_length pk)
+    (by omega)
+    (canonicalTagged_commitmentInput pk).1
+    (canonicalTagged_commitmentInput pk).2.2
+  · simpa [QueryDecoder.blockLength, SphincsWire.commitmentInput_length] using ready.padded
+  · simp [QueryDecoder.queryBytes_length, SigGolf.Riscv.hashInput,
+      ready.bytes, QueryDecoder.blockLength]
+
+theorem betaCommitmentReady_hashCost (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) (ready : BetaCommitmentReady state pk) :
+    SigGolf.Riscv.hashArgumentsValid state = true ∧
+      (SigGolf.Riscv.hashInput state).blocks = 1 := by
+  constructor
+  · simp [SigGolf.Riscv.hashArgumentsValid, ready.source, ready.bytes,
+      ready.destination, SigGolf.Riscv.accessValid, SigGolf.Riscv.rangeValid,
+      MEMORY_BYTES]
+  · simp [SigGolf.Query.blocks, SigGolf.Riscv.hashInput, ready.bytes]
+
+/-- info: 'SigGolfCandidate.BetaQuery.betaToQuery_injective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms betaToQuery_injective
+
+/-- info: 'SigGolfCandidate.BetaQuery.betaCommitmentReady_hashInput' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms betaCommitmentReady_hashInput
+
+/-- info: 'SigGolfCandidate.BetaQuery.betaCommitmentReady_hashCost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms betaCommitmentReady_hashCost
+
+end SigGolfCandidate.BetaQuery
