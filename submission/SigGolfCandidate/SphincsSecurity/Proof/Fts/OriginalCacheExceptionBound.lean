@@ -2008,6 +2008,61 @@ theorem certificateStoppedKeygenInit_joint_relation (q : Nat) (stopped : Bool)
   rcases h with ⟨hcost, rfl, hclean⟩
   exact ⟨hcost, rfl, rfl, rfl, hclean⟩
 
+
+open FtsProbeSimulation (messageHashCharge)
+
+noncomputable def stoppedCacheHistoryWeight (key : SecretKey)
+    (state : CertificateStoppedCacheState) : ENNReal :=
+  if state.2.1 then 1 else certificateCacheExceptionWeight key state.1
+
+theorem expected_stoppedCacheHistoryWeight_step (key : SecretKey)
+    (input : OracleWorld.Domain) (state : CertificateStoppedCacheState)
+    (hfinite : Finite state.1) :
+    (∑' result, Pr[= result | (certificateStoppedRomImpl key input).run state] *
+      stoppedCacheHistoryWeight key result.2) ≤
+      stoppedCacheHistoryWeight key state +
+        hashQueryCharge (fun cache hash => messageHashCharge key.parameter cache hash *
+          certificateCacheExceptionRate) state.1 input := by
+  simp only [certificateStoppedRomImpl, StateT.run_mk]
+  rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
+  by_cases hhit : state.2.1 = true
+  · simp only [stoppedCacheHistoryWeight, hhit, Bool.true_or, if_true, mul_one,
+      tsum_probOutput_of_liftM_PMF]
+    exact le_self_add
+  · by_cases hbad : CertificateCacheExceptional key state.1
+    · simp only [stoppedCacheHistoryWeight, hhit, Bool.false_or, hbad,
+        decide_true, Bool.true_or, if_true, mul_one, tsum_probOutput_of_liftM_PMF]
+      exact (certificateCacheExceptionWeight_bad key state.1 hfinite hbad).trans le_self_add
+    · simp only [stoppedCacheHistoryWeight, hhit, Bool.false_or, hbad, decide_false]
+      have hraw := expected_certificateCacheExceptionWeight_rom key input state.1 hfinite
+      have hpoint (x : OracleWorld.Range input × QueryCache HashSpec) :
+          Pr[= x | (romPmfImpl input).run state.1] =
+            Pr[= x | (romImpl input).run state.1] := rfl
+      simp only [Bool.false_eq_true, if_false]
+      calc
+        _ ≤ ∑' x, Pr[= x | (romPmfImpl input).run state.1] *
+            certificateCacheExceptionWeight key x.2 := by
+          apply ENNReal.tsum_le_tsum
+          intro x
+          by_cases hx : x ∈ ((romPmfImpl input).run state.1).support
+          · apply mul_le_mul' le_rfl
+            by_cases hb : CertificateCacheExceptional key x.2
+            · simp only [hb, decide_true, if_true]
+              have hsource : x ∈ support ((romImpl input).run state.1) := by
+                simpa only [romPmfImpl, StateT.run_mk, probCompLift_support] using hx
+              exact certificateCacheExceptionWeight_bad key x.2
+                (finite_of_mem_support_romImpl hfinite hsource) hb
+            · simp [hb]
+          · have hz : (romPmfImpl input).run state.1 x = 0 := by
+              simpa only [PMF.mem_support_iff, not_not] using hx
+            rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
+        _ = ∑' x, Pr[= x | (romImpl input).run state.1] *
+            certificateCacheExceptionWeight key x.2 := by
+          apply tsum_congr
+          intro x
+          rw [hpoint]
+        _ ≤ _ := hraw
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2201,3 +2256,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedKeygenInit_joint_relation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedKeygenInit_joint_relation
+
+/-- info: 'SphincsSecurity.Concrete.expected_stoppedCacheHistoryWeight_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_stoppedCacheHistoryWeight_step

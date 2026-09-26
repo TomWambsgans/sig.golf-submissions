@@ -1680,6 +1680,34 @@ theorem first_bottom_secret_prelude_seed (s : MachineState) (i : Fin 4) :
       MachineState.getReg_setReg_ne]
   all_goals simp [setWord32_eq, alignToDword, MachineState.getMem_setMem_ne]
 
+theorem first_bottom_secret_prelude_controls (s : MachineState) :
+    (firstBottomSecretPrelude s).getMem 0x43000 = s.getMem 0x43000 ∧
+    (firstBottomSecretPrelude s).getMem 0x43008 = s.getMem 0x43008 ∧
+    (firstBottomSecretPrelude s).getMem 0x43010 = 0 ∧
+    (firstBottomSecretPrelude s).getMem 0x43018 = s.getMem 0x43020 := by
+  simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne]
+  all_goals simp [setWord32_eq, alignToDword, MachineState.getMem_setMem_ne]
+
+theorem first_bottom_secret_prelude_low (s : MachineState) (i : Fin 16) :
+    (firstBottomSecretPrelude s).getMem (wordAddress 0x20 i.val) =
+      s.getMem (wordAddress 0x20 i.val) := by
+  fin_cases i <;>
+    simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+      wordAddress, execInstrBr, signExtend12,
+      MachineState.getMem_setMem_ne, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, setWord32_eq, alignToDword]
+
+theorem first_bottom_secret_prelude_word32 (s : MachineState)
+    (address : Nat) (cell : Fin 16)
+    (aligned : alignToDword (BitVec.ofNat 64 address) =
+      wordAddress 0x20 cell.val) :
+    (firstBottomSecretPrelude s).getWord32 (BitVec.ofNat 64 address) =
+      s.getWord32 (BitVec.ofNat 64 address) := by
+  simp only [MachineState.getWord32, aligned]
+  rw [first_bottom_secret_prelude_low s cell]
+
 /-- The accepted bottom encoding enters the first complete secret-key copy. -/
 theorem first_bottom_secret_copy_from_encoding (s : MachineState)
     (pc : s.pc = 0x3a8c) :
@@ -1701,6 +1729,32 @@ theorem first_bottom_secret_copy_from_encoding (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_copy_from_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_copy_from_encoding
+
+/-- The seed copy changes only its four destination doublewords. -/
+theorem first_bottom_secret_copy_with_frame (s : MachineState)
+    (pc : s.pc = 0x3b08)
+    (source : s.getReg .x6 = 0x20)
+    (destination : s.getReg .x7 = 0x40028)
+    (count : s.getReg .x10 = 4) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 24 t ∧
+      t.pc = 0x3b20 ∧
+      (∀ i, i < 4 → t.getMem (wordAddress 0x40028 i) =
+        s.getMem (wordAddress 0x20 i)) ∧
+      (∀ a, (∀ i, i < 4 → a ≠ wordAddress 0x40028 i) →
+        t.getMem a = s.getMem a) := by
+  have inv : CopyInvariant 0x3b08 0x20 0x40028 4 4 s :=
+    ⟨by decide, by decide, by simpa using pc,
+      by simpa using source, by simpa using destination, by simpa using count⟩
+  obtain ⟨t, copied, done, values, frame⟩ := copy_all
+    SphincsMaskedImages.sign 0x3b08 first_bottom_secret_copy_code
+    0x20 0x40028 4 s inv (by decide) (by decide) (by decide) (by decide)
+    (Or.inl (by decide))
+  exact ⟨t, by simpa using copied,
+    by simpa [CopyInvariant] using done.2.2.1, values, frame⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_copy_with_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_copy_with_frame
 
 /-- First bottom-layer secret HASH setup, through the ECALL instruction. -/
 def firstBottomSecretHashCode : List (Word × Instr) := [
@@ -1950,6 +2004,91 @@ def FirstBottomSecretContext (s : MachineState) (parameter : PublicParameter)
   SphincsMaskedSecretDomain.Words32 s seed ∧
   (∀ i : Fin 8, s.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
     seed.extractLsb' (32 * i.val) 32)
+
+/-- The accepted encoding state enters the first signer secret HASH with its
+    abstract key, layer, tree and selected leaf intact. -/
+theorem first_bottom_secret_context_from_encoding (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (pc : s.pc = 0x3a8c)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf ⟨0, by decide⟩ := by
+  let mid := firstBottomSecretPrelude s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    first_bottom_secret_prelude_registers s pc
+  obtain ⟨t, copied, endPc, values, frame⟩ :=
+    first_bottom_secret_copy_with_frame mid midPc source destination count
+  have outside (a : Word)
+      (ha : a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) :
+      t.getMem a = mid.getMem a := by
+    apply frame a
+    intro j hj eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  have lowWord (address : Nat) (bound : address < 0x100) :
+      t.getWord32 (BitVec.ofNat 64 address) =
+        mid.getWord32 (BitVec.ofNat 64 address) := by
+    simp only [MachineState.getWord32]
+    rw [outside _ (Or.inl (by
+      have h : (alignToDword (BitVec.ofNat 64 address)).toNat ≤ address := by
+        simp only [alignToDword, BitVec.toNat_and, BitVec.toNat_ofNat]
+        exact Nat.and_le_left |>.trans (Nat.mod_le _ _)
+      omega))]
+  have midPar : Words20 mid 0x74 parameter := by
+    intro i
+    have cell : 10 + (i.val + 1) / 2 < 16 := by fin_cases i <;> decide
+    have align : alignToDword (BitVec.ofNat 64 (0x74 + 4 * i.val)) =
+        wordAddress 0x20 (10 + (i.val + 1) / 2) := by fin_cases i <;> decide
+    exact (first_bottom_secret_prelude_word32 s _ ⟨_, cell⟩ align).trans (par i)
+  have midKey : SphincsMaskedSecretDomain.Words32 mid seed := by
+    intro i
+    have cell : i.val / 2 < 16 := by fin_cases i <;> decide
+    have align : alignToDword (BitVec.ofNat 64 (0x20 + 4 * i.val)) =
+        wordAddress 0x20 (i.val / 2) := by fin_cases i <;> decide
+    exact (first_bottom_secret_prelude_word32 s _ ⟨_, cell⟩ align).trans (key i)
+  have midCtrl := first_bottom_secret_prelude_controls s
+  refine ⟨t, by simpa only [mid, Nat.reduceAdd] using
+      (first_bottom_secret_prelude s pc).append copied,
+    endPc, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [outside _ (Or.inr (by decide)), midCtrl.1]
+    exact layer
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.1]
+    exact tree
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.2.2]
+    exact selected
+  · rw [outside _ (Or.inr (by decide)), midCtrl.2.2.1]
+    rfl
+  · intro i
+    exact (lowWord _ (by fin_cases i <;> decide)).trans (midPar i)
+  · intro i
+    exact (lowWord _ (by fin_cases i <;> decide)).trans (midKey i)
+  · intro i
+    let cell : Fin 4 := ⟨i.val / 2, by fin_cases i <;> decide⟩
+    have dstAlign : alignToDword (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+        wordAddress 0x40028 cell.val := by fin_cases i <;> decide
+    have srcAlign : alignToDword (BitVec.ofNat 64 (0x20 + 4 * i.val)) =
+        wordAddress 0x20 cell.val := by fin_cases i <;> decide
+    have offset : byteOffset (BitVec.ofNat 64 (0x40028 + 4 * i.val)) / 4 =
+        byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4 := by
+      fin_cases i <;> decide
+    have copiedWord : t.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+        mid.getWord32 (BitVec.ofNat 64 (0x20 + 4 * i.val)) := by
+      simp only [MachineState.getWord32, dstAlign, srcAlign, offset]
+      exact congrArg (fun word : Word => extractWord32 word
+        (byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4))
+        (values cell.val cell.isLt)
+    exact copiedWord.trans (midKey i)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_context_from_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_context_from_encoding
 
 def firstBottomSecretKeygenView (s : MachineState) : MachineState :=
   (s.setMem 0x43020 (s.getMem 0x43018)).setMem 0x43050 (s.getMem 0x43010)
