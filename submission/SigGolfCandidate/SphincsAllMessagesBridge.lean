@@ -542,6 +542,65 @@ theorem mappedAbstract_distribution {α : Type}
   rw [hcomp]
   exact randomOracle_toQuery p
 
+/-- A fixed-oracle implementation implication transfers failure probability to the abstract scheme. -/
+theorem implementation_failure_le_abstract
+    (implementation : OracleComp SigGolf.HashSpec SigGolf.HonestResult)
+    (abstract : OracleComp SphincsSecurity.HashSpec Bool)
+    (hsem : ∀ hash : SigGolf.Hash,
+      (evalWithAnswerFn hash implementation).success = false →
+        evalWithAnswerFn
+          (QueryImpl.ofFn (adaptOracle hash)) abstract = false) :
+    Pr[fun r => r.success = false | SigGolf.withRandomOracle implementation] ≤
+      Pr[= false |
+        (simulateQ
+          (randomOracle : QueryImpl SphincsSecurity.HashSpec
+            (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) abstract).run' ∅] := by
+  have h := SphincsAllMessagesBridge.QueryFootprint.sharedOracle_event_mono
+    implementation (mappedAbstract abstract)
+    (fun r => r.success = false) (fun b => b = false) (by
+      intro hash hf
+      rw [mappedAbstract_eval]
+      exact hsem hash hf)
+  rw [mappedAbstract_distribution] at h
+  simpa only [probEvent_eq_eq_probOutput] using h
+
+/-- The abstract all-message bound transfers once each implemented honest run refines the abstract one. -/
+theorem implementation_complete_of_abstract
+    (submission : SigGolf.Submission)
+    (abstract : SigGolf.SecretKey → SigGolf.Message →
+      OracleComp SphincsSecurity.HashSpec Bool)
+    (hsem : ∀ (hash : SigGolf.Hash) (secretKey : SigGolf.SecretKey)
+      (message : SigGolf.Message),
+      (evalWithAnswerFn hash (submission.honest secretKey message)).success = false →
+        evalWithAnswerFn
+          (QueryImpl.ofFn (adaptOracle hash)) (abstract secretKey message) = false)
+    (hbound : ∀ secretKey : SigGolf.SecretKey,
+      ∑ message : SigGolf.Message,
+        Pr[= false |
+          (simulateQ
+            (randomOracle : QueryImpl SphincsSecurity.HashSpec
+              (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+            (abstract secretKey message)).run' ∅] ≤ SigGolf.FAILURE) :
+    submission.Complete := by
+  apply SphincsAllMessagesBridge.QueryFootprint.submission_complete_of_failure_sum
+  intro secretKey
+  calc
+    ∑ message : SigGolf.Message,
+      Pr[fun r => r.success = false |
+        SigGolf.withRandomOracle (submission.honest secretKey message)] ≤
+      ∑ message : SigGolf.Message,
+        Pr[= false |
+          (simulateQ
+            (randomOracle : QueryImpl SphincsSecurity.HashSpec
+              (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+            (abstract secretKey message)).run' ∅] := by
+              apply Finset.sum_le_sum
+              intro message _
+              exact implementation_failure_le_abstract
+                (submission.honest secretKey message) (abstract secretKey message)
+                (hsem · secretKey message)
+    _ ≤ SigGolf.FAILURE := hbound secretKey
+
 end SigGolfCandidate.SphincsBridge
 
 /-- info: 'SigGolfCandidate.OracleReindex.randomOracle_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -559,3 +618,11 @@ end SigGolfCandidate.SphincsBridge
 /-- info: 'SigGolfCandidate.SphincsBridge.mappedAbstract_eval' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsBridge.mappedAbstract_eval
+
+/-- info: 'SigGolfCandidate.SphincsBridge.implementation_failure_le_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.implementation_failure_le_abstract
+
+/-- info: 'SigGolfCandidate.SphincsBridge.implementation_complete_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.implementation_complete_of_abstract

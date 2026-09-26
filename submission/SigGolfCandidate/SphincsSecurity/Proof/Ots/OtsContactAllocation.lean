@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsContactTrace
 import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryPauseInvariant
 import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryPauseTrace
+import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryCapAccounting
 namespace SphincsSecurity.Concrete.OtsContactTrace
 
 open _root_.OracleComp OracleSpec
@@ -73,6 +74,23 @@ theorem traced_hash_counted {Result : Type} (computation : OracleComp OracleWorl
   cases input <;> simp only [hashObservationTrace, one_mul, CausalFrontierProgram.IsHash, reduceCtorEq, ↓reduceIte,
     Nat.zero_add, FreeMonoid.toList_mul, FreeMonoid.toList_of, List.length_append, List.length_singleton]
 
+/-- One global cap covers all observed hash calls, including those inside expanded signing. -/
+theorem traced_globalCap_hash_length_le {Result : Type}
+    (computation : OracleComp OracleWorld Result) (budget : Nat)
+    (result : Option (Result × Nat) × Trace)
+    (hresult : result ∈ support (QueryPause.traced hashObservationTrace
+      (QueryCap.run CausalFrontierProgram.IsHash computation budget))) :
+    result.2.toList.length ≤ budget := by
+  have hcounted : (result.1, result.2.toList.length) ∈ support
+      (QueryCap.counted CausalFrontierProgram.IsHash
+        (QueryCap.run CausalFrontierProgram.IsHash computation budget)) := by
+    rw [← traced_hash_counted, support_map]
+    exact ⟨result, hresult, rfl⟩
+  exact QueryCap.counted_le_of_queryBound CausalFrontierProgram.IsHash
+    (QueryCap.run CausalFrontierProgram.IsHash computation budget) budget
+    (QueryCap.run_queryBound CausalFrontierProgram.IsHash computation budget)
+    _ hcounted
+
 private theorem hash_calls_map (entries : List (HashInput × HashOutput)) :
     QueryCap.calls CausalFrontierProgram.IsHash (entries.map fun entry => (.inr entry.1 : OracleWorld.Domain)) = entries.length := by
   induction entries with
@@ -114,3 +132,7 @@ theorem traced_game_cost (parameter : PublicParameter) (external : QueryImpl Has
   exact ⟨result, hresult, rfl⟩
 
 end SphincsSecurity.Concrete.OtsContactTrace
+
+/-- info: 'SphincsSecurity.Concrete.OtsContactTrace.traced_globalCap_hash_length_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.OtsContactTrace.traced_globalCap_hash_length_le
