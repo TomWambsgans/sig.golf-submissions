@@ -272,6 +272,55 @@ theorem certificateCountedLengthImpl_hit_budget_le_stopped_monitor (key : Secret
             · exact hinvariant.2 (of_decide_eq_true hfinal)
     _ = _ := rfl
 
+/-- One adaptive outer-oracle step is controlled by the query-level stopped
+    monitor, even when the chosen query depends on the preceding history. -/
+theorem certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor
+    {History : Type} (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (history : PMF (History × CertificateCountedState))
+    (input : History → (OracleWorld + SigningSpec).Domain) (q : Nat) :
+    Pr[fun after => after.2.1.2 = true ∧ after.2.2 ≤ q |
+      history.bind (fun before =>
+        Prod.snd <$> (certificateCountedLengthImpl key budget required stopAfter
+          (input before.1)).run before.2)] ≤
+    ∑' before, Pr[= before | history] *
+      if before.2.2.2 ≤ q then
+        Pr[QueryCap.stoppedStateEvent (fun _ finalState => finalState.2.1 = true) |
+          (simulateQ (certificateStoppedRomImpl key) (QueryCap.run
+            (fun query : OracleWorld.Domain => query matches .inr _)
+            (expandedAdversaryImpl key (input before.1)) (q - before.2.2.2))).run
+            (before.2.1,
+              (before.2.2.1.2 || decide (CertificateCacheExceptional key before.2.1),
+                q - before.2.2.2))]
+      else 0 := by
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  apply ENNReal.tsum_le_tsum
+  intro before
+  apply mul_le_mul' le_rfl
+  change Pr[fun after => after.2.1.2 = true ∧ after.2.2 ≤ q |
+      PMF.map Prod.snd
+        ((certificateCountedLengthImpl key budget required stopAfter
+          (input before.1)).run before.2)] ≤ _
+  rw [← PMF.monad_map_eq_map, probEvent_map]
+  simp only [Function.comp_def]
+  by_cases hspent : before.2.2.2 ≤ q
+  · simp only [if_pos hspent]
+    exact certificateCountedLengthImpl_hit_budget_le_stopped_monitor key budget
+      required stopAfter (input before.1) before.2 q hspent
+  · simp only [if_neg hspent]
+    rw [certificateCountedLengthImpl_event_of_record key budget required stopAfter
+      (input before.1) before.2
+      (fun after => after.2.1.2 = true ∧ after.2.2 ≤ q)
+      (fun record =>
+        (before.2.2.1.2 || decide (CertificateCacheExceptional key before.2.1) ||
+          decide (CertificateCacheExceptional key record.cache)) = true ∧
+        before.2.2.2 + record.trace.hashCalls ≤ q)
+      (by intro length record; rfl)]
+    have hcost (record : ProposalExecutionRecord (input before.1)) :
+        ¬ before.2.2.2 + record.trace.hashCalls ≤ q := by omega
+    simp only [probEvent_eq_tsum_ite, hcost, and_false, if_false, tsum_zero]
+    exact le_rfl
+
 /-- The stopped bridge remains valid after an arbitrary adaptive prefix. An
     already exhausted prefix contributes zero to the within-budget event. -/
 theorem certificateCountedLengthImpl_hit_budget_stopped_after_prefix {History : Type}
@@ -727,3 +776,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_stopped_monitor' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_stopped_monitor
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_adaptive_hit_budget_le_stopped_monitor
