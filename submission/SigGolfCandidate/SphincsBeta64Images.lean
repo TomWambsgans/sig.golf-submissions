@@ -14851,3 +14851,124 @@ theorem queryBytes_pad520 (s : MachineState)
 
 #print axioms queryBytes_pad520
 end Padding64Decode
+
+namespace Padding64Decode
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+
+theorem padded_range (n pad : Nat) (f g : Nat → UInt8)
+    (h : ∀ i, i < n + pad → g i = if i < n then f i else 0) :
+    (List.range (n + pad)).map g =
+      (List.range n).map f ++ List.replicate pad 0 := by
+  apply List.ext_getElem
+  · simp
+  · intro i hi hj
+    have hib : i < n + pad := by simpa using hi
+    by_cases hin : i < n
+    · simp [List.getElem_map, List.getElem_append, h i hib, hin]
+    · have hip : i - n < pad := by omega
+      simp [List.getElem_map, List.getElem_append, h i hib, hin, hip]
+
+theorem queryBytes_of_padded (s ready : MachineState) (base : Word) (n pad : Nat)
+    (hlen : ready.getReg .x11 = BitVec.ofNat 64 (n + pad))
+    (hcount : 64 * (((BitVec.ofNat 64 (n + pad)).toNat / 64 - 1) + 1) = n + pad)
+    (hsource : ready.getReg .x10 = base)
+    (hbyte : ∀ i, i < n + pad →
+      ready.getByte (base + BitVec.ofNat 64 i) =
+        if i < n then s.getByte (base + BitVec.ofNat 64 i) else 0) :
+    SphincsSecurity.bytesLE (64 * ((hashInput ready).1 + 1)) (hashInput ready).2 =
+      (List.range n).map (fun i => UInt8.ofBitVec
+        (s.getByte (base + BitVec.ofNat 64 i))) ++ List.replicate pad 0 := by
+  have hbytes := Padding64Bytes.queryBytes_hashInput ready
+  simp only [hlen, hcount, hsource] at hbytes
+  rw [hbytes]
+  apply padded_range
+  intro i hi
+  rw [hbyte i hi]
+  split_ifs <;> rfl
+
+#print axioms padded_range
+#print axioms queryBytes_of_padded
+end Padding64Decode
+
+namespace Padding64Decode
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+set_option maxRecDepth 16384
+set_option maxHeartbeats 2000000
+
+theorem queryBytes_pad104 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    let ready := (Padding64Cells.padMany s Pad104112.cells104).setReg .x11 128
+    SphincsSecurity.bytesLE (64 * ((hashInput ready).1 + 1)) (hashInput ready).2 =
+      (List.range 104).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 24 0 := by
+  dsimp only
+  refine queryBytes_of_padded s
+    ((Padding64Cells.padMany s Pad104112.cells104).setReg .x11 128)
+    0x40000 104 24 ?_ ?_ ?_ ?_
+  · exact MachineState.getReg_setReg_eq (by decide)
+  · decide
+  · simpa only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide)]
+      using Pad104112.source104 s source
+  · intro i hi
+    simpa only [MachineState.getByte, MachineState.getMem_setReg]
+      using Pad104112.byte104 s i (by omega)
+
+theorem queryBytes_pad112 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    let ready := (Padding64Cells.padMany s Pad104112.cells112).setReg .x11 128
+    SphincsSecurity.bytesLE (64 * ((hashInput ready).1 + 1)) (hashInput ready).2 =
+      (List.range 112).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 16 0 := by
+  dsimp only
+  refine queryBytes_of_padded s
+    ((Padding64Cells.padMany s Pad104112.cells112).setReg .x11 128)
+    0x40000 112 16 ?_ ?_ ?_ ?_
+  · exact MachineState.getReg_setReg_eq (by decide)
+  · decide
+  · simpa only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide)]
+      using Pad104112.source112 s source
+  · intro i hi
+    simpa only [MachineState.getByte, MachineState.getMem_setReg]
+      using Pad104112.byte112 s i (by omega)
+
+theorem queryBytes_pad1080 (s : MachineState)
+    (source : s.getReg .x10 = 0x40000) :
+    let ready := (Aligned1080.padded s).setReg .x11 1088
+    SphincsSecurity.bytesLE (64 * ((hashInput ready).1 + 1)) (hashInput ready).2 =
+      (List.range 1080).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x40000 + BitVec.ofNat 64 i))) ++ List.replicate 8 0 := by
+  dsimp only
+  refine queryBytes_of_padded s ((Aligned1080.padded s).setReg .x11 1088)
+    0x40000 1080 8 ?_ ?_ ?_ ?_
+  · exact MachineState.getReg_setReg_eq (by decide)
+  · decide
+  · simpa only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide)]
+      using Aligned1080.padded_source s source
+  · intro i hi
+    simpa only [MachineState.getByte, MachineState.getMem_setReg]
+      using Aligned1080.padded_byte s i (by omega)
+
+theorem queryBytes_padMac (s : MachineState)
+    (source : s.getReg .x10 = 0x18) :
+    let ready := (AlignedMac.padded s).setReg .x11 131136
+    SphincsSecurity.bytesLE (64 * ((hashInput ready).1 + 1)) (hashInput ready).2 =
+      (List.range 131124).map (fun i => UInt8.ofBitVec
+        (s.getByte (0x18 + BitVec.ofNat 64 i))) ++ List.replicate 12 0 := by
+  dsimp only
+  refine queryBytes_of_padded s ((AlignedMac.padded s).setReg .x11 131136)
+    0x18 131124 12 ?_ ?_ ?_ ?_
+  · exact MachineState.getReg_setReg_eq (by decide)
+  · decide
+  · simpa only [MachineState.getReg_setReg_ne _ .x11 .x10 _ (by decide)]
+      using AlignedMac.padded_source s source
+  · intro i hi
+    simpa only [MachineState.getByte, MachineState.getMem_setReg]
+      using AlignedMac.padded_byte s i (by omega)
+
+#print axioms queryBytes_pad104
+#print axioms queryBytes_pad112
+#print axioms queryBytes_pad1080
+#print axioms queryBytes_padMac
+end Padding64Decode
