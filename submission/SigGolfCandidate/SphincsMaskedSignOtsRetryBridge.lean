@@ -8288,3 +8288,141 @@ theorem signerPrelude_trace (location : Fin 5) (s : MachineState)
 
 #print axioms signerPrelude_trace
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signerPreludeSeedCopyCode (location : Fin 5) :
+    CopyCode SphincsMaskedImages.sign
+      (0x3b08 + signerShiftBytes location) := by
+  fin_cases location <;> decide
+
+#print axioms signerPreludeSeedCopyCode
+
+theorem signerPrelude_registers (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location) :
+    (signerPreludeState location s).pc = 0x3b08 + signerShiftBytes location ∧
+    (signerPreludeState location s).getReg .x6 = 0x20 ∧
+    (signerPreludeState location s).getReg .x7 = 0x40028 ∧
+    (signerPreludeState location s).getReg .x10 = 4 := by
+  fin_cases location <;>
+    simp [signerPreludeState, signerPreludeCode, signerPreludeInstr,
+      signerPreludeHigh, signerPreludeBeforeLow, signerPreludeOutputLow,
+      signerShiftBytes, signerShiftWords,
+      SphincsMaskedSignOtsParents.offset, SphincsMaskedSignOtsShift.chainOffset,
+      firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+#print axioms signerPrelude_registers
+
+theorem signerPreludeSeedCopy (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 + signerShiftBytes location ∧
+      (∀ i, i < 4 → t.getMem (wordAddress 0x40028 i) =
+        (signerPreludeState location s).getMem (wordAddress 0x20 i)) ∧
+      (∀ a, (∀ i, i < 4 → a ≠ wordAddress 0x40028 i) →
+        t.getMem a = (signerPreludeState location s).getMem a) := by
+  let mid := signerPreludeState location s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    signerPrelude_registers location s pc
+  have inv : CopyInvariant (0x3b08 + signerShiftBytes location)
+      0x20 0x40028 4 4 mid :=
+    ⟨by decide, by decide, by simpa [mid] using midPc,
+      by simpa [mid] using source, by simpa [mid] using destination,
+      by simpa [mid] using count⟩
+  obtain ⟨t, copied, done, values, frame⟩ := copy_all
+    SphincsMaskedImages.sign (0x3b08 + signerShiftBytes location)
+    (signerPreludeSeedCopyCode location) 0x20 0x40028 4 mid inv
+    (by decide) (by decide) (by decide) (by decide) (Or.inl (by decide))
+  refine ⟨t, ?_, ?_, values, frame⟩
+  · simpa only [mid, Nat.reduceAdd, Nat.reduceMul] using
+      (signerPrelude_trace location s pc).append copied
+  · have finish := done.2.2.1
+    dsimp [CopyInvariant] at done
+    simp only [if_true] at finish
+    bv_omega
+
+#print axioms signerPreludeSeedCopy
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signerPrelude_low_frame (location : Fin 5) (s : MachineState)
+    (a : Word) (low : a.toNat < 0x100) :
+    (signerPreludeState location s).getMem a = s.getMem a := by
+  have alignedLow : (alignToDword a).toNat < 0x100 := by
+    rw [align_nat]
+    omega
+  have separate (n : Nat) (large : 0x100 ≤ n) (small : n < 2 ^ 64) :
+      alignToDword a ≠ BitVec.ofNat 64 n := by
+    intro h
+    have eq := congrArg BitVec.toNat h
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small] at eq
+    omega
+  have notHigh (n : Nat) (large : 0x100 ≤ n) (small : n < 2 ^ 64) :
+      a ≠ BitVec.ofNat 64 n := by
+    intro h
+    have eq := congrArg BitVec.toNat h
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small] at eq
+    omega
+  have notAligned (n : Nat)
+      (large : 0x100 ≤ (alignToDword (BitVec.ofNat 64 n)).toNat) :
+      a ≠ alignToDword (BitVec.ofNat 64 n) := by
+    intro h
+    have eq := congrArg BitVec.toNat h
+    omega
+  have h0 := notHigh 274456 (by decide) (by decide)
+  have h1 := notHigh 274448 (by decide) (by decide)
+  have h2 := notHigh 274592 (by decide) (by decide)
+  have h3 := notHigh 274512 (by decide) (by decide)
+  have out0 := notAligned 136812 (by decide)
+  have out1 := notAligned 137956 (by decide)
+  have out2 := notAligned 139100 (by decide)
+  have out3 := notAligned 140244 (by decide)
+  have out4 := notAligned 141368 (by decide)
+  fin_cases location <;>
+    simp [signerPreludeState, signerPreludeCode, signerPreludeInstr,
+      signerPreludeHigh, signerPreludeBeforeLow, signerPreludeOutputLow,
+      signerShiftBytes, signerShiftWords,
+      SphincsMaskedSignOtsParents.offset, SphincsMaskedSignOtsShift.chainOffset,
+      firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setMem_ne, setWord32_eq, h0, h1, h2, h3,
+      out0, out1, out2, out3, out4]
+
+#print axioms signerPrelude_low_frame
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signerPrelude_controls (location : Fin 5) (s : MachineState) :
+    (signerPreludeState location s).getMem 0x43000 = s.getMem 0x43000 ∧
+    (signerPreludeState location s).getMem 0x43008 = s.getMem 0x43008 ∧
+    (signerPreludeState location s).getMem 0x43010 = 0 ∧
+    (signerPreludeState location s).getMem 0x43018 = s.getMem 0x43020 ∧
+    (signerPreludeState location s).getMem 0x43020 = s.getMem 0x43020 ∧
+    (signerPreludeState location s).getMem 0x43050 = 0 := by
+  fin_cases location <;>
+    simp [signerPreludeState, signerPreludeCode, signerPreludeInstr,
+      signerPreludeHigh, signerPreludeBeforeLow, signerPreludeOutputLow,
+      signerShiftBytes, signerShiftWords,
+      SphincsMaskedSignOtsParents.offset, SphincsMaskedSignOtsShift.chainOffset,
+      firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne,
+      setWord32_eq, alignToDword]
+
+#print axioms signerPrelude_controls
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue

@@ -71,6 +71,10 @@ def main() -> None:
     got = hashlib.sha256(module.read_bytes()).hexdigest()
     assert got == MODULE_HASH, ('Lean image-section hash mismatch', got)
     committed = (submission / 'SphincsBeta64Images.lean').read_text()
+    # The proof appendix imports the original image; the generated prefix does not.
+    extra_import = 'import SigGolfCandidate.SphincsImages\n'
+    assert committed.startswith('import SigGolf.Statements\nimport RiscvZkvm.Rv64.Logic.MemRegion\n' + extra_import)
+    committed = committed.replace(extra_import, '', 1)
     assert committed.startswith(module.read_text()), 'committed image section differs'
     print('Reproduced image section', module, got)
 
