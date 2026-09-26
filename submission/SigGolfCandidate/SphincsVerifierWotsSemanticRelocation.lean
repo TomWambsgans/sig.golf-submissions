@@ -1470,6 +1470,29 @@ theorem upper_handoff_low_byte_frame (target : Fin 5) (state : MachineState)
       SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoff_low_mem
         target state read small) address low
 
+/-- An inter-layer handoff leaves the authentication paths for later layers intact. -/
+theorem upper_handoff_path_witness (target future : Fin 5)
+    (state : MachineState) (signature : SphincsSecurity.Signature)
+    (pointer : Word)
+    (bound : pointer.toNat + 20 * layerHeight
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer future) ≤
+        0x40000)
+    (siblings : SphincsVerifierXmssPathControl.PathWitness state signature
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer future)
+      pointer) :
+    SphincsVerifierXmssPathControl.PathWitness
+      (SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoffState
+        target state) signature
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer future)
+      pointer := by
+  exact pathWitness_of_low_byte_frame state
+    (SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoffState
+      target state) signature
+    (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer future)
+    pointer bound
+    (fun address low => upper_handoff_low_byte_frame target state address low)
+    siblings
+
 theorem upper_path_node_pc (target : Fin 5) :
     SphincsVerifierXmssParity.nodePc
       (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) =
@@ -1730,6 +1753,10 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_low_byte_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_handoff_low_byte_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_path_witness' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_path_witness
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_pointer_bound' depends on axioms: [propext,
  Classical.choice,
