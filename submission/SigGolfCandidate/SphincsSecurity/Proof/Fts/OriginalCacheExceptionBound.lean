@@ -458,6 +458,143 @@ theorem enrichedStoppedSigningRecord_some (key : SecretKey) (message : Message)
     rw [hpred] at h
     simpa [hb, probEvent_eq_tsum_ite] using h
 
+/-- A joint signing outcome retains the proposal record, sampled synthetic
+    length, updated certificate state, and stopped lazy-oracle monitor. -/
+abbrev CertificateStoppedSigningJointOutput (message : Message) :=
+  ProposalExecutionRecord (.inr message) × Nat × CertificateCountedState × CertificateStoppedCacheState
+
+noncomputable def certificateSigningLengthLaw (key : SecretKey)
+    (budget : Nat) (_required : Finset FtsTree) (_stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState) : PMF Nat :=
+  if originalProposalActive key (fun state => state.2.1.1.spent)
+      (fun message state => certificateMonitorEnabled key budget message
+        (certificateCacheMonitorProject (certificateCountedProject state)))
+      (.inr message) state then
+    proposalBlockLength targetProposalAcceptance targetProposalAcceptance_ne_zero
+      targetProposalAcceptance_lt_one.le
+  else PMF.pure 0
+
+noncomputable def certificateStoppedSigningJointKernel (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (x : ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) :
+    PMF (CertificateStoppedSigningJointOutput message) :=
+  (certificateSigningLengthLaw key budget required stopAfter message state).map fun length =>
+    (x.1, length, originalProposalAdvance
+      (certificateCountedUpdate key budget required stopAfter)
+      (.inr message) state length x.1, x.2)
+
+noncomputable def certificateStoppedSigningJointStep (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) :
+    PMF (Option (CertificateStoppedSigningJointOutput message)) :=
+  (enrichedStoppedSigningRecord key message ghost).bind fun result =>
+    match result with
+    | none => PMF.pure none
+    | some x => (certificateStoppedSigningJointKernel key budget required stopAfter
+        message state x).map some
+
+theorem certificateStoppedSigningJointStep_event (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (event : CertificateStoppedSigningJointOutput message → Prop) :
+    Pr[fun result => result.elim False event |
+      certificateStoppedSigningJointStep key budget required stopAfter message state ghost] =
+    Pr[fun result => result.elim False event |
+      (enrichedSigningRecord key message ghost).bind fun x =>
+        if x.1.trace.hashCalls ≤ ghost.2.2 then
+          (certificateStoppedSigningJointKernel key budget required stopAfter
+            message state x).map some else PMF.pure none] := by
+  rw [certificateStoppedSigningJointStep]
+  convert some_kernel_transfer
+    (enrichedStoppedSigningRecord key message ghost)
+    (enrichedSigningRecord key message ghost)
+    (fun x => x.1.trace.hashCalls ≤ ghost.2.2)
+    (enrichedStoppedSigningRecord_some key message ghost)
+    (certificateStoppedSigningJointKernel key budget required stopAfter message state)
+    event using 1
+  all_goals
+    congr 1
+    congr 1
+    funext r
+    cases r <;> rfl
+
+noncomputable def certificateUnboundedSigningJointStep (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) :
+    PMF (CertificateStoppedSigningJointOutput message) :=
+  (enrichedSigningRecord key message ghost).bind
+    (certificateStoppedSigningJointKernel key budget required stopAfter message state)
+
+/-- Dropping the record and ghost state recovers the actual certificate
+    length step, provided both runs begin with the same lazy-oracle cache. -/
+theorem certificateUnboundedSigningJointStep_project (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (hcache : ghost.1 = state.1) :
+    (certificateUnboundedSigningJointStep key budget required stopAfter message state ghost).map
+      (fun output => (output.1.output, output.2.2.1)) =
+    ((certificateCountedLengthImpl key budget required stopAfter (.inr message)).run state) := by
+  unfold certificateUnboundedSigningJointStep certificateStoppedSigningJointKernel
+    certificateSigningLengthLaw certificateCountedLengthImpl originalLengthImpl
+    lengthRecordImpl
+  rw [PMF.map_bind]
+  simp only [PMF.map_comp, StateT.run_mk]
+  by_cases ha : originalProposalActive key (fun state => state.2.1.1.spent)
+      (fun message state => certificateMonitorEnabled key budget message
+        (certificateCacheMonitorProject (certificateCountedProject state)))
+      (.inr message) state = true
+  · simp only [ha, if_true, recordLengthBridge, PMF.map_bind, PMF.map_comp]
+    rw [← hcache, ← enrichedSigningRecord_project]
+    rw [PMF.bind_map]
+    apply PMF.bind_congr
+    intro x _
+    rfl
+  · simp [ha]
+    rw [← hcache, ← enrichedSigningRecord_project]
+    simp only [PMF.pure_map]
+    rw [PMF.map_comp]
+    change (enrichedSigningRecord key message ghost).bind
+      (PMF.pure ∘ fun a =>
+        (a.1.output, originalProposalAdvance
+          (certificateCountedUpdate key budget required stopAfter)
+          (.inr message) state 0 a.1)) = _
+    rw [PMF.bind_pure_comp]
+    rfl
+
+/-- This joint one-step law keeps every field needed for later adaptive
+    composition while charging the actual trace's hash calls. -/
+theorem certificateStoppedSigningJointStep_unbounded_budget_event (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (message : Message) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState)
+    (event : CertificateStoppedSigningJointOutput message → Prop) :
+    Pr[fun result => result.elim False event |
+      certificateStoppedSigningJointStep key budget required stopAfter message state ghost] =
+    Pr[fun result => result.1.trace.hashCalls ≤ ghost.2.2 ∧ event result |
+      certificateUnboundedSigningJointStep key budget required stopAfter message state ghost] := by
+  classical
+  rw [certificateStoppedSigningJointStep_event]
+  unfold certificateUnboundedSigningJointStep
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+    ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  apply tsum_congr
+  intro x
+  congr 1
+  by_cases hb : x.1.trace.hashCalls ≤ ghost.2.2
+  · simp only [if_pos hb, ← PMF.monad_map_eq_map, probEvent_map,
+      Function.comp_def, Option.elim_some, certificateStoppedSigningJointKernel]
+    simp [hb]
+  · simp only [if_neg hb]
+    simp only [← PMF.monad_map_eq_map, probEvent_map, certificateStoppedSigningJointKernel,
+      Function.comp_def]
+    simp [hb, probEvent_eq_tsum_ite]
+    intro i hi
+    cases i <;> simp at *
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -1261,3 +1398,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_some' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_some
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedSigningJointStep_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedSigningJointStep_event
+
+/-- info: 'SphincsSecurity.Concrete.certificateUnboundedSigningJointStep_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateUnboundedSigningJointStep_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedSigningJointStep_unbounded_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedSigningJointStep_unbounded_budget_event
