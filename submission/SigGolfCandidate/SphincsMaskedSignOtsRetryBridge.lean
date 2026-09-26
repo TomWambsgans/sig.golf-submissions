@@ -8426,3 +8426,213 @@ theorem signerPrelude_controls (location : Fin 5) (s : MachineState) :
 
 #print axioms signerPrelude_controls
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+open SphincsSecurity SphincsMaskedChainDomain SphincsBridge
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signerPrelude_entry_context (location : Fin 5) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 + signerShiftBytes location ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf
+        ⟨0, by decide⟩ ∧
+      t.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+      t.getMem 0x43050 = 0 ∧
+      t.getMem 0x430a0 =
+        BitVec.ofNat 64 (match location.val with
+          | 0 => 0x21670
+          | 1 => 0x21ae8
+          | 2 => 0x21f60
+          | 3 => 0x223d8
+          | _ => 0x2283c) := by
+  let mid := signerPreludeState location s
+  obtain ⟨t, run, endPc, values, frame⟩ :=
+    signerPreludeSeedCopy location s pc
+  have outside (a : Word)
+      (ha : a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) :
+      t.getMem a = mid.getMem a := by
+    apply frame a
+    intro j hj eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  have lowWord (address : Nat) (bound : address < 0x100) :
+      t.getWord32 (BitVec.ofNat 64 address) =
+        mid.getWord32 (BitVec.ofNat 64 address) := by
+    simp only [MachineState.getWord32]
+    rw [outside _ (Or.inl (by
+      have h : (alignToDword (BitVec.ofNat 64 address)).toNat ≤ address := by
+        simp only [alignToDword, BitVec.toNat_and, BitVec.toNat_ofNat]
+        exact Nat.and_le_left |>.trans (Nat.mod_le _ _)
+      omega))]
+  have midPar : Words20 mid 0x74 parameter := by
+    intro i
+    simp only [MachineState.getWord32]
+    rw [signerPrelude_low_frame location s _ (by fin_cases i <;> decide)]
+    exact par i
+  have midKey : SphincsMaskedSecretDomain.Words32 mid seed := by
+    intro i
+    simp only [MachineState.getWord32]
+    rw [signerPrelude_low_frame location s _ (by fin_cases i <;> decide)]
+    exact key i
+  obtain ⟨layerKeep, treeKeep, chainReset, leafSet, selectedKeep, counterReset⟩ :=
+    signerPrelude_controls location s
+  have pointerMid := signerPrelude_pointer location s
+  refine ⟨t, run, endPc, ?_, ?_, ?_, ?_⟩
+  · refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · rw [outside _ (Or.inr (by decide)), layerKeep]
+      exact layer
+    · rw [outside _ (Or.inr (by decide)), treeKeep]
+      exact tree
+    · rw [outside _ (Or.inr (by decide)), leafSet]
+      exact selected
+    · rw [outside _ (Or.inr (by decide)), chainReset]
+      rfl
+    · intro i
+      exact (lowWord _ (by fin_cases i <;> decide)).trans (midPar i)
+    · intro i
+      exact (lowWord _ (by fin_cases i <;> decide)).trans (midKey i)
+    · intro i
+      let cell : Fin 4 := ⟨i.val / 2, by fin_cases i <;> decide⟩
+      have dstAlign : alignToDword (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+          wordAddress 0x40028 cell.val := by fin_cases i <;> decide
+      have srcAlign : alignToDword (BitVec.ofNat 64 (0x20 + 4 * i.val)) =
+          wordAddress 0x20 cell.val := by fin_cases i <;> decide
+      have offset : byteOffset (BitVec.ofNat 64 (0x40028 + 4 * i.val)) / 4 =
+          byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4 := by
+        fin_cases i <;> decide
+      have copiedWord : t.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * i.val)) =
+          mid.getWord32 (BitVec.ofNat 64 (0x20 + 4 * i.val)) := by
+        simp only [MachineState.getWord32, dstAlign, srcAlign, offset]
+        exact congrArg (fun word : Word => extractWord32 word
+          (byteOffset (BitVec.ofNat 64 (0x20 + 4 * i.val)) / 4))
+          (values cell.val cell.isLt)
+      exact copiedWord.trans (midKey i)
+  · rw [outside _ (Or.inr (by decide)), selectedKeep]
+    exact selected
+  · rw [outside _ (Or.inr (by decide)), counterReset]
+  · rw [outside _ (Or.inr (by decide))]
+    exact pointerMid
+
+#print axioms signerPrelude_entry_context
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+open SphincsSecurity SphincsMaskedChainDomain SphincsBridge
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signerPrelude_high_frame (location : Fin 5) (s : MachineState)
+    (a : Word) (high : 0x44000 ≤ a.toNat) :
+    (signerPreludeState location s).getMem a = s.getMem a := by
+  have notLow (n : Nat) (small : n < 0x44000) :
+      a ≠ BitVec.ofNat 64 n := by
+    intro h
+    have eq := congrArg BitVec.toNat h
+    simp [BitVec.toNat_ofNat] at eq
+    omega
+  have notAligned (n : Nat)
+      (small : (alignToDword (BitVec.ofNat 64 n)).toNat < 0x44000) :
+      a ≠ alignToDword (BitVec.ofNat 64 n) := by
+    intro h
+    have eq := congrArg BitVec.toNat h
+    omega
+  have h0 := notLow 274456 (by decide)
+  have h1 := notLow 274448 (by decide)
+  have h2 := notLow 274592 (by decide)
+  have h3 := notLow 274512 (by decide)
+  have out0 := notAligned 136812 (by decide)
+  have out1 := notAligned 137956 (by decide)
+  have out2 := notAligned 139100 (by decide)
+  have out3 := notAligned 140244 (by decide)
+  have out4 := notAligned 141368 (by decide)
+  fin_cases location <;>
+    simp [signerPreludeState, signerPreludeCode, signerPreludeInstr,
+      signerPreludeHigh, signerPreludeBeforeLow, signerPreludeOutputLow,
+      signerShiftBytes, signerShiftWords,
+      SphincsMaskedSignOtsParents.offset, SphincsMaskedSignOtsShift.chainOffset,
+      firstBottomSecretPreludeCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setMem_ne, setWord32_eq, h0, h1, h2, h3,
+      out0, out1, out2, out3, out4]
+
+#print axioms signerPrelude_high_frame
+
+theorem signerPrelude_digit_frame (location : Fin 5) (s : MachineState)
+    (j : ChainIndex) :
+    (signerPreludeState location s).getByte
+      (BitVec.ofNat 64 (0x44000 + j.val)) =
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) := by
+  simp only [MachineState.getByte]
+  rw [signerPrelude_high_frame location s _ (by
+    rw [align_nat, BitVec.toNat_ofNat]
+    have hj : j.val < 52 := by simpa [numChains] using j.isLt
+    omega)]
+
+#print axioms signerPrelude_digit_frame
+
+theorem signerPrelude_entry_digits (location : Fin 5) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 + signerShiftBytes location ∧
+      FirstBottomSecretContext t parameter seed lay treeIdx leaf
+        ⟨0, by decide⟩ ∧
+      t.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+      t.getMem 0x43050 = 0 ∧
+      t.getMem 0x430a0 =
+        BitVec.ofNat 64 (match location.val with
+          | 0 => 0x21670
+          | 1 => 0x21ae8
+          | 2 => 0x21f60
+          | 3 => 0x223d8
+          | _ => 0x2283c) ∧
+      (∀ j : ChainIndex,
+        t.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+          s.getByte (BitVec.ofNat 64 (0x44000 + j.val))) := by
+  obtain ⟨t, run, done, ctx, selectedT, counterT, pointerT⟩ :=
+    signerPrelude_entry_context location s parameter seed lay treeIdx leaf
+      pc layer tree selected par key
+  obtain ⟨u, runU, _, _, frame⟩ := signerPreludeSeedCopy location s pc
+  have same : t = u := ordinarySteps_unique run runU
+  subst u
+  refine ⟨t, run, done, ctx, selectedT, counterT, pointerT, ?_⟩
+  intro j
+  let address := BitVec.ofNat 64 (0x44000 + j.val)
+  have high : (alignToDword address).toNat ≥ 0x44000 := by
+    rw [align_nat]
+    have hj : j.val < 52 := by simpa [numChains] using j.isLt
+    simp only [address, BitVec.toNat_ofNat]
+    omega
+  have untouched : t.getMem (alignToDword address) =
+      (signerPreludeState location s).getMem (alignToDword address) := by
+    apply frame
+    intro i hi eq
+    have h := congrArg BitVec.toNat eq
+    simp [wordAddress, BitVec.toNat_ofNat] at h
+    omega
+  simp only [MachineState.getByte]
+  rw [untouched]
+  exact signerPrelude_digit_frame location s j
+
+#print axioms signerPrelude_entry_digits
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
