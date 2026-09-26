@@ -145,6 +145,68 @@ theorem enrichedSigningRecord_project (key : SecretKey) (message : Message)
   simp only [PMF.map_comp]
   rfl
 
+/-- A capped signer run retains the complete signing trace as well as the
+    monitored cache. A successful result can therefore be made into the same
+    proposal record as an uncapped signing run. -/
+noncomputable def stoppedTracedSigningRun (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    PMF (Option (((Option Signature × Option FewTimeView) × SigningBoundaryTrace) × Nat) ×
+      CertificateStoppedCacheState) :=
+  (simulateQ (certificateStoppedRomImpl key) (QueryCap.run
+    (fun input : OracleWorld.Domain => input matches .inr _)
+    (boundaryComputation key.parameter (signWithView key message)) state.2.2)).run state
+
+noncomputable def enrichedStoppedSigningRecord (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    PMF (Option (ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState)) :=
+  (stoppedTracedSigningRun key message state).bind fun result =>
+    match result.1 with
+    | none => PMF.pure none
+    | some (output, _) =>
+        (liftM (completeSelectedIndex output.1.2) : PMF Index).map fun index =>
+          some (⟨output.1.1, result.2.1, output.2, output.1.2, index⟩, result.2)
+
+/-- For a boundary-traced computation, the selected-query counter and the
+    trace's hash-call count agree on the same outcome. -/
+theorem counted_boundaryComputation_eq_trace {α : Type} (parameter : PublicParameter)
+    (computation : OracleComp OracleWorld α) :
+    QueryCap.counted (fun input : OracleWorld.Domain => input matches .inr _)
+      (boundaryComputation parameter computation) =
+    (fun result : α × SigningBoundaryTrace => (result, result.2.hashCalls)) <$>
+      boundaryComputation parameter computation := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      simp [boundaryComputation, QueryCap.counted_pure, SigningBoundaryTrace.hashCalls]
+  | query_bind input next ih =>
+      rw [show boundaryComputation parameter
+        (liftM (OracleWorld.query input) >>= next) =
+        QueryPause.traced (signingBoundaryTrace parameter)
+          (liftM (OracleWorld.query input) >>= next) from rfl]
+      rw [QueryPause.traced_query_bind]
+      rw [QueryCap.counted_query_bind]
+      simp only [QueryCap.counted_map]
+      simp_rw [show ∀ answer, QueryPause.traced (signingBoundaryTrace parameter) (next answer) =
+        boundaryComputation parameter (next answer) from fun _ => rfl]
+      simp_rw [ih]
+      simp only [map_bind, Functor.map_map, SigningBoundaryTrace.hashCalls_mul,
+        signingBoundaryTrace_hashCalls_eq]
+      simp only [bind_pure_comp, Functor.map_map]
+      cases input <;> rfl
+
+/-- A capped, stateful signing run has exactly the uncapped probability of
+    each successful result whose trace fits the initial query budget. -/
+theorem stoppedTracedSigningRun_budget_event (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (event : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) →
+      CertificateStoppedCacheState → Prop) :
+    Pr[QueryCap.stoppedStateEvent event | stoppedTracedSigningRun key message state] =
+    Pr[fun output => output.1.2.hashCalls ≤ state.2.2 ∧ event output.1 output.2 |
+      (simulateQ (certificateStoppedRomImpl key)
+        (boundaryComputation key.parameter (signWithView key message))).run state] := by
+  rw [stoppedTracedSigningRun, QueryCap.run_budget_event_state]
+  rw [counted_boundaryComputation_eq_trace]
+  simp only [simulateQ_map, StateT.run_map, probEvent_map, Function.comp_def]
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -912,3 +974,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.enrichedSigningRecord_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.enrichedSigningRecord_project
+
+/-- info: 'SphincsSecurity.Concrete.counted_boundaryComputation_eq_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.counted_boundaryComputation_eq_trace
+
+/-- info: 'SphincsSecurity.Concrete.stoppedTracedSigningRun_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.stoppedTracedSigningRun_budget_event
