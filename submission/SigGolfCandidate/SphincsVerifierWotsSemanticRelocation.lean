@@ -4012,6 +4012,41 @@ theorem upper_decoder_checksum_of_abstract (target : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_decoder_checksum_of_abstract
 
+theorem upper_ready_decoded_digit (target : Fin 5) (state : MachineState)
+    (i : Fin 52) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getByte
+        (BitVec.ofNat 64 (0x44000 + i.val)) =
+      SphincsVerifierWotsDecodeData.answerDigit i state := by
+  let address : Word := BitVec.ofNat 64 (0x44000 + i.val)
+  let aligned := alignToDword address
+  have counter : aligned ≠ 0x43050 := by
+    fin_cases i <;> decide
+  have pointer : aligned ≠ 0x43028 := by
+    fin_cases i <;> decide
+  have setup := SphincsVerifierDecoderRelocation.setup_mem_other target
+    (SphincsVerifierDecoderRelocation.upperDecoderState target state)
+    aligned counter pointer
+  have byteSetup :
+      (SphincsVerifierDecoderRelocation.setupState target
+        (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getByte
+          address =
+        (SphincsVerifierDecoderRelocation.upperDecoderState target state).getByte
+          address := by
+    simpa only [MachineState.getByte, aligned] using
+      congrArg (fun value : Word => extractByte value (byteOffset address)) setup
+  rw [show BitVec.ofNat 64 (0x44000 + i.val) = address from rfl, byteSetup]
+  let base := shift (-SphincsVerifierWotsRelocationTrace.delta target) state
+  have digit := SphincsVerifierWotsDecodeData.decoder_run_digit 52 base
+    (by decide) i i.isLt
+  simpa [SphincsVerifierDecoderRelocation.upperDecoderState,
+    shift_byte, base, SphincsVerifierWotsDecodeData.answerDigit,
+    SphincsVerifierDecoderRelocation.answerWord_shift] using digit
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_decoded_digit' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_ready_decoded_digit
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upperAnswerDigit_eq_encoding
