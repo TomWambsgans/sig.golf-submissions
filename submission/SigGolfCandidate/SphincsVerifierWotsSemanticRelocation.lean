@@ -4397,6 +4397,50 @@ theorem upper_prehash_low_byte_frame (target : Fin 5) (state : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_prehash_low_byte_frame
 
+theorem upper_decoder_start_low_byte_frame (target : Fin 5) (hash : Hash)
+    (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (firstUpperPaddingState
+      (writeHash (upperPrehashState target state)
+        (hash (hashInput (upperPrehashState target state))))).getByte address =
+      state.getByte address := by
+  let ready := upperPrehashState target state
+  let answer := hash (hashInput ready)
+  let read := alignToDword address
+  have readLow : read.toNat < 0x40000 := by
+    have le : read.toNat ≤ address.toNat := by
+      unfold read alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    omega
+  obtain ⟨_run, _readyPc, _source, _bits, destination, _service⟩ :=
+    upper_prehash_block target state pc small
+  have outside (high : Word) (highBound : 0x40000 ≤ high.toNat) :
+      read ≠ high := by
+    intro equal
+    have same := congrArg BitVec.toNat equal
+    omega
+  have hashFrame : (writeHash ready answer).getMem read = ready.getMem read :=
+    SphincsVerifierFtsLevelInit.writeHash_mem_frame ready answer destination
+      read (outside 0x42000 (by decide)) (outside 0x42008 (by decide))
+        (outside 0x42010 (by decide)) (outside 0x42018 (by decide))
+  calc
+    _ = (writeHash ready answer).getByte address :=
+      firstUpperPaddingState_byte _ _
+    _ = ready.getByte address := by
+      simpa only [MachineState.getByte, read] using
+        congrArg (fun value : Word => extractByte value (byteOffset address))
+          hashFrame
+    _ = state.getByte address :=
+      upper_prehash_low_byte_frame target state address low
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_start_low_byte_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_start_low_byte_frame
+
 theorem upper_prehash_counter_bytes (target : Fin 5)
     (state : MachineState) (counter : Counter)
     (counterWord : state.getWord32 (upperCounterSource target) =
