@@ -1,0 +1,198 @@
+        ; copy 620 words head
+start:
+      0 00002337  lui t1, 0x2
+      1 65030313  addi t1, t1, 1616
+      2 000013b7  lui t2, 0x1
+      3 80038393  addi t2, t2, -2048
+      4 26c00413  addi s0, x0, 620
+copy_head_1:
+      5 00036183  lwu gp, 0(t1)
+      6 0033a023  sw gp, 0(t2)
+      7 00430313  addi t1, t1, 4
+      8 00438393  addi t2, t2, 4
+      9 fff40413  addi s0, s0, -1
+     10 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr0
+     11 00003337  lui t1, 0x3
+     12 000023b7  lui t2, 0x2
+     13 63038393  addi t2, t2, 1584
+     14 00100413  addi s0, x0, 1
+copy_ctr0_2:
+     15 00036183  lwu gp, 0(t1)
+     16 0033a023  sw gp, 0(t2)
+     17 00430313  addi t1, t1, 4
+     18 00438393  addi t2, t2, 4
+     19 fff40413  addi s0, s0, -1
+     20 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body0
+     21 00003337  lui t1, 0x3
+     22 00430313  addi t1, t1, 4
+     23 000013b7  lui t2, 0x1
+     24 1b038393  addi t2, t2, 432
+     25 0bc00413  addi s0, x0, 188
+copy_body0_3:
+     26 00036183  lwu gp, 0(t1)
+     27 0033a023  sw gp, 0(t2)
+     28 00430313  addi t1, t1, 4
+     29 00438393  addi t2, t2, 4
+     30 fff40413  addi s0, s0, -1
+     31 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr1
+     32 00003337  lui t1, 0x3
+     33 2f430313  addi t1, t1, 756
+     34 000023b7  lui t2, 0x2
+     35 63438393  addi t2, t2, 1588
+     36 00100413  addi s0, x0, 1
+copy_ctr1_4:
+     37 00036183  lwu gp, 0(t1)
+     38 0033a023  sw gp, 0(t2)
+     39 00430313  addi t1, t1, 4
+     40 00438393  addi t2, t2, 4
+     41 fff40413  addi s0, s0, -1
+     42 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body1
+     43 00003337  lui t1, 0x3
+     44 2f830313  addi t1, t1, 760
+     45 000013b7  lui t2, 0x1
+     46 4a038393  addi t2, t2, 1184
+     47 0bc00413  addi s0, x0, 188
+copy_body1_5:
+     48 00036183  lwu gp, 0(t1)
+     49 0033a023  sw gp, 0(t2)
+     50 00430313  addi t1, t1, 4
+     51 00438393  addi t2, t2, 4
+     52 fff40413  addi s0, s0, -1
+     53 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr2
+     54 00003337  lui t1, 0x3
+     55 5e830313  addi t1, t1, 1512
+     56 000023b7  lui t2, 0x2
+     57 63838393  addi t2, t2, 1592
+     58 00100413  addi s0, x0, 1
+copy_ctr2_6:
+     59 00036183  lwu gp, 0(t1)
+     60 0033a023  sw gp, 0(t2)
+     61 00430313  addi t1, t1, 4
+     62 00438393  addi t2, t2, 4
+     63 fff40413  addi s0, s0, -1
+     64 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body2
+     65 00003337  lui t1, 0x3
+     66 5ec30313  addi t1, t1, 1516
+     67 000013b7  lui t2, 0x1
+     68 79038393  addi t2, t2, 1936
+     69 0bc00413  addi s0, x0, 188
+copy_body2_7:
+     70 00036183  lwu gp, 0(t1)
+     71 0033a023  sw gp, 0(t2)
+     72 00430313  addi t1, t1, 4
+     73 00438393  addi t2, t2, 4
+     74 fff40413  addi s0, s0, -1
+     75 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr3
+     76 00004337  lui t1, 0x4
+     77 8dc30313  addi t1, t1, -1828
+     78 000023b7  lui t2, 0x2
+     79 63c38393  addi t2, t2, 1596
+     80 00100413  addi s0, x0, 1
+copy_ctr3_8:
+     81 00036183  lwu gp, 0(t1)
+     82 0033a023  sw gp, 0(t2)
+     83 00430313  addi t1, t1, 4
+     84 00438393  addi t2, t2, 4
+     85 fff40413  addi s0, s0, -1
+     86 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body3
+     87 00004337  lui t1, 0x4
+     88 8e030313  addi t1, t1, -1824
+     89 000023b7  lui t2, 0x2
+     90 a8038393  addi t2, t2, -1408
+     91 0bc00413  addi s0, x0, 188
+copy_body3_9:
+     92 00036183  lwu gp, 0(t1)
+     93 0033a023  sw gp, 0(t2)
+     94 00430313  addi t1, t1, 4
+     95 00438393  addi t2, t2, 4
+     96 fff40413  addi s0, s0, -1
+     97 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr4
+     98 00004337  lui t1, 0x4
+     99 bd030313  addi t1, t1, -1072
+    100 000023b7  lui t2, 0x2
+    101 64038393  addi t2, t2, 1600
+    102 00100413  addi s0, x0, 1
+copy_ctr4_10:
+    103 00036183  lwu gp, 0(t1)
+    104 0033a023  sw gp, 0(t2)
+    105 00430313  addi t1, t1, 4
+    106 00438393  addi t2, t2, 4
+    107 fff40413  addi s0, s0, -1
+    108 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body4
+    109 00004337  lui t1, 0x4
+    110 bd430313  addi t1, t1, -1068
+    111 000023b7  lui t2, 0x2
+    112 d7038393  addi t2, t2, -656
+    113 0bc00413  addi s0, x0, 188
+copy_body4_11:
+    114 00036183  lwu gp, 0(t1)
+    115 0033a023  sw gp, 0(t2)
+    116 00430313  addi t1, t1, 4
+    117 00438393  addi t2, t2, 4
+    118 fff40413  addi s0, s0, -1
+    119 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr5
+    120 00004337  lui t1, 0x4
+    121 ec430313  addi t1, t1, -316
+    122 000023b7  lui t2, 0x2
+    123 64438393  addi t2, t2, 1604
+    124 00100413  addi s0, x0, 1
+copy_ctr5_12:
+    125 00036183  lwu gp, 0(t1)
+    126 0033a023  sw gp, 0(t2)
+    127 00430313  addi t1, t1, 4
+    128 00438393  addi t2, t2, 4
+    129 fff40413  addi s0, s0, -1
+    130 fe0416e3  bne s0, x0, -20
+        ; copy 188 words body5
+    131 00004337  lui t1, 0x4
+    132 ec830313  addi t1, t1, -312
+    133 000023b7  lui t2, 0x2
+    134 06038393  addi t2, t2, 96
+    135 0bc00413  addi s0, x0, 188
+copy_body5_13:
+    136 00036183  lwu gp, 0(t1)
+    137 0033a023  sw gp, 0(t2)
+    138 00430313  addi t1, t1, 4
+    139 00438393  addi t2, t2, 4
+    140 fff40413  addi s0, s0, -1
+    141 fe0416e3  bne s0, x0, -20
+        ; copy 1 words ctr6
+    142 00004337  lui t1, 0x4
+    143 1b830313  addi t1, t1, 440
+    144 000023b7  lui t2, 0x2
+    145 64838393  addi t2, t2, 1608
+    146 00100413  addi s0, x0, 1
+copy_ctr6_14:
+    147 00036183  lwu gp, 0(t1)
+    148 0033a023  sw gp, 0(t2)
+    149 00430313  addi t1, t1, 4
+    150 00438393  addi t2, t2, 4
+    151 fff40413  addi s0, s0, -1
+    152 fe0416e3  bne s0, x0, -20
+        ; copy 184 words body6
+    153 00004337  lui t1, 0x4
+    154 1bc30313  addi t1, t1, 444
+    155 000023b7  lui t2, 0x2
+    156 35038393  addi t2, t2, 848
+    157 0b800413  addi s0, x0, 184
+copy_body6_15:
+    158 00036183  lwu gp, 0(t1)
+    159 0033a023  sw gp, 0(t2)
+    160 00430313  addi t1, t1, 4
+    161 00438393  addi t2, t2, 4
+    162 fff40413  addi s0, s0, -1
+    163 fe0416e3  bne s0, x0, -20
+    164 00100293  addi t0, x0, 1
+    165 00000513  addi a0, x0, 0
+    166 00000073  ecall

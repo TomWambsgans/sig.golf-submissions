@@ -1,0 +1,112 @@
+        ; copy S into the prf buffer
+start:
+      0 08003083  ld ra, 128(x0)
+      1 6c103023  sd ra, 1728(x0)
+      2 08803083  ld ra, 136(x0)
+      3 6c103423  sd ra, 1736(x0)
+      4 09003083  ld ra, 144(x0)
+      5 6c103823  sd ra, 1744(x0)
+      6 09803083  ld ra, 152(x0)
+      7 6c103c23  sd ra, 1752(x0)
+      8 00000413  addi s0, x0, 0
+      9 00000f13  addi t5, x0, 0
+     10 00500493  addi s1, x0, 5
+        ; tree build: tweak words
+     11 000349b7  lui s3, 0x34
+     12 10098993  addi s3, s3, 256
+     13 01041193  slli gp, s0, 16
+     14 0011ee93  ori t4, gp, 1
+     15 6bd02023  sw t4, 1696(x0)
+     16 1011ee93  ori t4, gp, 257
+     17 0dd02023  sw t4, 192(x0)
+     18 2011ee93  ori t4, gp, 513
+     19 35d03023  sd t4, 832(x0)
+     20 00100193  addi gp, x0, 1
+     21 009198b3  sll a7, gp, s1
+     22 00000a13  addi s4, x0, 0
+tb_leaf_loop:
+     23 020a1193  slli gp, s4, 32
+     24 01e1e1b3  or gp, gp, t5
+     25 6a303423  sd gp, 1704(x0)
+     26 0c303423  sd gp, 200(x0)
+     27 34303423  sd gp, 840(x0)
+     28 00000a93  addi s5, x0, 0
+     29 00000c13  addi s8, x0, 0
+tb_chain_loop:
+     30 6b502223  sw s5, 1700(x0)
+     31 6a000513  addi a0, x0, 1696
+     32 04000593  addi a1, x0, 64
+     33 0e000613  addi a2, x0, 224
+     34 00000073  ecall
+     35 0e003823  sd x0, 240(x0)
+     36 0e003c23  sd x0, 248(x0)
+     37 00000b93  addi s7, x0, 0
+tb_step_loop:
+     38 001b8b93  addi s7, s7, 1
+     39 0d802223  sw s8, 196(x0)
+     40 0c000513  addi a0, x0, 192
+     41 0e000613  addi a2, x0, 224
+     42 00000073  ecall
+     43 0e003823  sd x0, 240(x0)
+     44 0e003c23  sd x0, 248(x0)
+     45 001c0c13  addi s8, s8, 1
+     46 00700193  addi gp, x0, 7
+     47 fc3b9ee3  bne s7, gp, -36
+     48 001c0c13  addi s8, s8, 1
+     49 004a9193  slli gp, s5, 4
+     50 0e003083  ld ra, 224(x0)
+     51 0e803103  ld sp, 232(x0)
+     52 3611b023  sd ra, 864(gp)
+     53 3621b423  sd sp, 872(gp)
+     54 001a8a93  addi s5, s5, 1
+     55 02a00193  addi gp, x0, 42
+     56 f83a9ce3  bne s5, gp, -104
+     57 34000513  addi a0, x0, 832
+     58 2c000593  addi a1, x0, 704
+     59 004a1193  slli gp, s4, 4
+     60 00398633  add a2, s3, gp
+     61 00000073  ecall
+     62 001a0a13  addi s4, s4, 1
+     63 f71a10e3  bne s4, a7, -160
+        ; tree build: levels
+     64 00100793  addi a5, x0, 1
+tb_level_loop:
+     65 02079193  slli gp, a5, 32
+     66 01041e93  slli t4, s0, 16
+     67 01d1e1b3  or gp, gp, t4
+     68 3011e193  ori gp, gp, 769
+     69 1c303023  sd gp, 448(x0)
+     70 1de02423  sw t5, 456(x0)
+     71 0018d893  srli a7, a7, 1
+     72 00000813  addi a6, x0, 0
+tb_node_loop:
+     73 1d002623  sw a6, 460(x0)
+     74 00581193  slli gp, a6, 5
+     75 013181b3  add gp, gp, s3
+     76 0001b083  ld ra, 0(gp)
+     77 1e103023  sd ra, 480(x0)
+     78 0081b083  ld ra, 8(gp)
+     79 1e103423  sd ra, 488(x0)
+     80 0101b083  ld ra, 16(gp)
+     81 1e103823  sd ra, 496(x0)
+     82 0181b083  ld ra, 24(gp)
+     83 1e103c23  sd ra, 504(x0)
+     84 1c000513  addi a0, x0, 448
+     85 04000593  addi a1, x0, 64
+     86 00481193  slli gp, a6, 4
+     87 00398633  add a2, s3, gp
+     88 00000073  ecall
+     89 00180813  addi a6, a6, 1
+     90 fb181ee3  bne a6, a7, -68
+     91 00178793  addi a5, a5, 1
+     92 f8f4dae3  bge s1, a5, -108
+        ; root -> public key
+     93 000349b7  lui s3, 0x34
+     94 10098993  addi s3, s3, 256
+     95 0009b083  ld ra, 0(s3)
+     96 0089b103  ld sp, 8(s3)
+     97 0a103023  sd ra, 160(x0)
+     98 0a203423  sd sp, 168(x0)
+     99 00100293  addi t0, x0, 1
+    100 00000513  addi a0, x0, 0
+    101 00000073  ecall
