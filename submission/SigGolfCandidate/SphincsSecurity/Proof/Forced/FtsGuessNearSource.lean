@@ -649,3 +649,25 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_le_uniform' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_le_uniform
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp ENNReal
+
+theorem referenceForgeryGame_remainingFts_budget_le
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hsmall : q ≤ budgetSplit) :
+    Pr[fun sample => sample.remainingFts dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+      pairRate q + (q : ENNReal) / 2 ^ 159 := by
+  exact (referenceForgeryGame_remainingFts_budget_cases dummy adversary q).trans
+    (add_le_add
+      (referenceForgeryGame_two_guesses_budget_event dummy adversary q)
+      (referenceForgeryGame_near_guess_budget_le_uniform dummy adversary q
+        ((hsmall.trans budgetSplit_le).trans (by norm_num))))
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_remainingFts_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_remainingFts_budget_le

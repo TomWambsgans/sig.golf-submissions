@@ -349,6 +349,32 @@ theorem submission_allMessages_failure_le_sum
   intro hash hfail
   exact (allMessages_failure_iff submission hash secretKey).mp hfail
 
+
+/-- A per-secret-key sum of single-message failure probabilities proves the competition completeness claim. -/
+theorem submission_complete_of_failure_sum
+    (submission : Submission)
+    (hbound : ∀ secretKey : SecretKey,
+      ∑ message : Message,
+        Pr[fun result => result.success = false |
+          SigGolf.withRandomOracle (submission.honest secretKey message)] ≤ FAILURE) :
+    submission.Complete := by
+  intro secretKey
+  let p := submission.allMessages secretKey
+  have hrun : NeverFail ((simulateQ randomOracle p).run ∅) :=
+    neverFail_simulateQ_randomOracle_run p ∅
+  have htotal : NeverFail (SigGolf.withRandomOracle p) := by
+    change NeverFail (Prod.fst <$> (simulateQ randomOracle p).run ∅)
+    exact (neverFail_map_iff _ Prod.fst).mpr hrun
+  have hfailed :
+      Pr[fun summary => summary.allSucceed = false |
+        SigGolf.withRandomOracle p] ≤ FAILURE :=
+    (submission_allMessages_failure_le_sum submission secretKey).trans (hbound secretKey)
+  have hcompl :
+      Pr[fun summary => ¬ summary.allSucceed = true |
+        SigGolf.withRandomOracle p] ≤ FAILURE := by
+    simpa only [Bool.not_eq_true] using hfailed
+  exact probEvent_one_sub_le_of_compl_le htotal.probFailure_eq_zero hcompl
+
 end SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint
 
 /-- info: 'SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.eagerFootprint_empty' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -361,3 +387,7 @@ end SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint
 /-- info: 'SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_allMessages_failure_le_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_allMessages_failure_le_sum
+
+/-- info: 'SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_complete_of_failure_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_complete_of_failure_sum
