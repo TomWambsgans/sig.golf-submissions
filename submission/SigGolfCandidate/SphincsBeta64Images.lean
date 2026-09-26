@@ -7640,3 +7640,253 @@ theorem verify_ordinary_fetch (s : MachineState) (ins : Instruction)
 
 #print axioms verify_ordinary_fetch
 end VerifyOrdinaryFetch
+
+
+-- BEGIN HALT TRANSPORT: HaltStubClass.lean
+namespace HaltStubClass
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def block : List (BitVec 32) := [0x00100293, 0x00154513, 0x00000073]
+
+structure Site where
+  image : Image
+  oldPC : Word
+  oldIndex : Nat
+  originalWord : BitVec 32
+  jump : BitVec 21
+  stubPC : Word
+  stubIndex : Nat
+  oldNat : oldPC.toNat = 0x1000 + 4 * oldIndex
+  oldWord : image.code[oldIndex]? = some originalWord
+  oldDecode : decodeInstruction originalWord = some (.base (.JAL .x0 jump))
+  jumpTarget : oldPC + signExtend21 jump = stubPC
+  stubNat : stubPC.toNat = 0x1000 + 4 * stubIndex
+  stubBound : stubPC.toNat + 12 < 2 ^ 64
+  stubSlice : (image.code.drop stubIndex).take 3 = block
+
+theorem Site.fetchOriginal (site : Site) (s : MachineState)
+    (pc : s.pc = site.oldPC) :
+    fetch site.image s = some (.base (.JAL .x0 site.jump)) := by
+  have hlow : ¬ s.pc.toNat < 0x1000 := by rw [pc, site.oldNat]; omega
+  have halign : ¬ s.pc.toNat % 4 != 0 := by
+    rw [pc, site.oldNat]
+    simp [Nat.add_mod]
+  have hidx : (s.pc.toNat - 0x1000) / 4 = site.oldIndex := by
+    rw [pc, site.oldNat]
+    omega
+  simp only [fetch, hlow, halign, hidx]
+  rw [site.oldWord]
+  exact site.oldDecode
+
+theorem Site.fetchStub (site : Site) (s : MachineState) (j : Nat)
+    (inside : j < 3)
+    (pc : s.pc.toNat = site.stubPC.toNat + 4 * j)
+    (decoded : (block[j]?).bind decodeInstruction = some ins) :
+    fetch site.image s = some ins := by
+  apply Padding64Trace.fetch_of_block site.image s block
+    site.stubIndex 3 j site.stubSlice inside
+  · rw [site.stubNat] at pc
+    omega
+  · exact decoded
+
+theorem Site.jumpStep (site : Site) (s : MachineState)
+    (pc : s.pc = site.oldPC) :
+    ordinaryStep s (.base (.JAL .x0 site.jump)) =
+      some (s.setPC site.stubPC) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr,
+    MachineState.setReg, pc]
+  congr 1
+  have h := site.jumpTarget
+  bv_omega
+
+private theorem setHaltSelector (s : MachineState) :
+    ordinaryStep s (.base (.ADDI .x5 .x0 1)) =
+      some ((s.setReg .x5 1).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr,
+    MachineState.getReg, signExtend12]
+
+private theorem flipVerdict (s : MachineState) :
+    ordinaryStep s (.base (.XORI .x10 .x10 1)) =
+      some ((s.setReg .x10 (s.getReg .x10 ^^^ 1)).setPC (s.pc + 4)) := by
+  simp [ordinaryStep, memoryArgumentsValid, execInstrBr, signExtend12]
+
+def ready (site : Site) (s : MachineState) : MachineState :=
+  let s1 := s.setPC site.stubPC
+  let s2 := (s1.setReg .x5 1).setPC (s1.pc + 4)
+  (s2.setReg .x10 (s2.getReg .x10 ^^^ 1)).setPC (s2.pc + 4)
+
+theorem Site.preHalt (site : Site) (s : MachineState)
+    (pc : s.pc = site.oldPC) :
+    Padding64Trace.OrdinaryTrace site.image 3 s (ready site s) := by
+  let s1 := s.setPC site.stubPC
+  let s2 := (s1.setReg .x5 1).setPC (s1.pc + 4)
+  have pc1 : s1.pc.toNat = site.stubPC.toNat := by
+    simp [s1, MachineState.setPC]
+  have pc2 : s2.pc.toNat = site.stubPC.toNat + 4 := by
+    simp [s2, MachineState.setPC]
+    have h := site.stubBound
+    bv_omega
+  apply Padding64Trace.OrdinaryTrace.step (.base (.JAL .x0 site.jump))
+    (site.fetchOriginal s pc) (by intro h; cases h)
+    (site.jumpStep s pc) (by simp [instructionCycles])
+  apply Padding64Trace.OrdinaryTrace.step (.base (.ADDI .x5 .x0 1))
+    (site.fetchStub s1 0 (by decide) (by simpa using pc1) (by rfl))
+    (by intro h; cases h) (setHaltSelector s1) (by decide)
+  apply Padding64Trace.OrdinaryTrace.step (.base (.XORI .x10 .x10 1))
+    (site.fetchStub s2 1 (by decide) (by simpa using pc2) (by rfl))
+    (by intro h; cases h) (flipVerdict s2) (by decide)
+  simpa only [ready, s1, s2] using
+    (Padding64Trace.OrdinaryTrace.refl
+      ((s2.setReg .x10 (s2.getReg .x10 ^^^ 1)).setPC (s2.pc + 4)))
+
+#print axioms Site.fetchOriginal
+#print axioms Site.preHalt
+
+theorem Site.haltFetch (site : Site) (s : MachineState) :
+    fetch site.image (ready site s) = some (.base .ECALL) := by
+  have hpc : (ready site s).pc.toNat = site.stubPC.toNat + 8 := by
+    simp [ready, MachineState.setPC]
+    have h := site.stubBound
+    bv_omega
+  exact site.fetchStub (ready site s) 2 (by decide) (by simpa using hpc) (by rfl)
+
+theorem ready_selector (site : Site) (s : MachineState) :
+    (ready site s).getReg .x5 = 1 := by
+  simp [ready, MachineState.getReg_setPC, MachineState.getReg_setReg_ne,
+    MachineState.getReg_setReg_eq]
+
+theorem ready_verdict (site : Site) (s : MachineState) :
+    (ready site s).getReg .x10 = s.getReg .x10 ^^^ 1 := by
+  simp [ready, MachineState.getReg_setPC, MachineState.getReg_setReg_ne,
+    MachineState.getReg_setReg_eq]
+
+theorem ready_memory (site : Site) (s : MachineState) :
+    (ready site s).mem = s.mem := by
+  rfl
+
+theorem Site.halt_eval (site : Site) (hash : Hash) (s : MachineState)
+    (fuel : Nat) :
+    evalWithAnswerFn hash (execute (fuel + 1) site.image (ready site s)) =
+      ⟨if s.getReg .x10 = 1 then .success else .failure,
+       ready site s, 1, 0, 0⟩ := by
+  simp [execute, site.haltFetch s, ready_selector]
+  by_cases h : s.getReg .x10 = (1#64)
+  · have hh : (ready site s).getReg .x10 = (0#64) := by
+      rw [ready_verdict]
+      exact BitVec.xor_eq_zero_iff.mpr h
+    simp [h, hh]
+  · have hh : (ready site s).getReg .x10 ≠ (0#64) := by
+      rw [ready_verdict]
+      intro hx
+      exact h (BitVec.xor_eq_zero_iff.mp hx)
+    simp [h, hh]
+
+theorem Site.service_transport (site : Site) (hash : Hash) (s : MachineState)
+    (pc : s.pc = site.oldPC) (fuel : Nat) :
+    evalWithAnswerFn hash (execute (fuel + 4) site.image s) =
+      ⟨if s.getReg .x10 = 1 then .success else .failure,
+       ready site s, 4, 0, 0⟩ := by
+  have trace := site.preHalt s pc
+  have heval := trace.eval hash site.image (fuel + 1)
+  have hfuel : fuel + 4 = (fuel + 1) + 3 := by omega
+  rw [hfuel, heval]
+  have hh' := site.halt_eval hash s fuel
+  rw [hh']
+  simp [Execution.charge]
+
+#print axioms Site.haltFetch
+#print axioms Site.halt_eval
+#print axioms Site.service_transport
+end HaltStubClass
+
+-- BEGIN HALT TRANSPORT: HaltStubSites.lean
+
+namespace HaltStubSites
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 HaltStubClass
+
+def keygen_1e10 : HaltStubClass.Site where
+  image := Pc64KeygenImage.image
+  oldPC := 0x1e10
+  oldIndex := 900
+  originalWord := 0x3100006f
+  jump := 0x310
+  stubPC := 0x2120
+  stubIndex := 1096
+  oldNat := by decide
+  oldWord := by exact Pc64KeygenImage.original_1e10_word
+  oldDecode := by rfl
+  jumpTarget := by decide
+  stubNat := by decide
+  stubBound := by decide
+  stubSlice := by exact Pc64KeygenImage.stub_2120_block
+
+def sign_100c : HaltStubClass.Site where
+  image := Pc64SignImage.image
+  oldPC := 0x100c
+  oldIndex := 3
+  originalWord := 0x3290a06f
+  jump := 0xab28
+  stubPC := 0xbb34
+  stubIndex := 10957
+  oldNat := by decide
+  oldWord := by exact Pc64SignImage.original_100c_word
+  oldDecode := by rfl
+  jumpTarget := by decide
+  stubNat := by decide
+  stubBound := by decide
+  stubSlice := by exact Pc64SignImage.stub_bb34_block
+
+def sign_bb30 : HaltStubClass.Site where
+  image := Pc64SignImage.image
+  oldPC := 0xbb30
+  oldIndex := 10956
+  originalWord := 0x2340106f
+  jump := 0x1234
+  stubPC := 0xcd64
+  stubIndex := 12121
+  oldNat := by decide
+  oldWord := by exact Pc64SignImage.original_bb30_word
+  oldDecode := by rfl
+  jumpTarget := by decide
+  stubNat := by decide
+  stubBound := by decide
+  stubSlice := by exact Pc64SignImage.stub_cd64_block
+
+def verify_100c : HaltStubClass.Site where
+  image := Pc64VerifyImage.image
+  oldPC := 0x100c
+  oldIndex := 3
+  originalWord := 0x49d0606f
+  jump := 0x6c9c
+  stubPC := 0x7ca8
+  stubIndex := 6954
+  oldNat := by decide
+  oldWord := by exact Pc64VerifyImage.original_100c_word
+  oldDecode := by rfl
+  jumpTarget := by decide
+  stubNat := by decide
+  stubBound := by decide
+  stubSlice := by exact Pc64VerifyImage.stub_7ca8_block
+
+def verify_7ca4 : HaltStubClass.Site where
+  image := Pc64VerifyImage.image
+  oldPC := 0x7ca4
+  oldIndex := 6953
+  originalWord := 0x7900006f
+  jump := 0x790
+  stubPC := 0x8434
+  stubIndex := 7437
+  oldNat := by decide
+  oldWord := by exact Pc64VerifyImage.original_7ca4_word
+  oldDecode := by rfl
+  jumpTarget := by decide
+  stubNat := by decide
+  stubBound := by decide
+  stubSlice := by exact Pc64VerifyImage.stub_8434_block
+
+#print axioms keygen_1e10
+#print axioms sign_100c
+#print axioms sign_bb30
+#print axioms verify_100c
+#print axioms verify_7ca4
+end HaltStubSites
