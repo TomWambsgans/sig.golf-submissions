@@ -4441,6 +4441,26 @@ theorem upper_decoder_start_low_byte_frame (target : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_decoder_start_low_byte_frame
 
+theorem upper_decoder_start_after_loaded_frame (target : Fin 5) (hash : Hash)
+    (initial state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address) :
+    ∀ address, address.toNat < 0x40000 →
+      (firstUpperPaddingState
+        (writeHash (upperPrehashState target state)
+          (hash (hashInput (upperPrehashState target state))))).getByte address =
+        initial.getByte address := by
+  intro address low
+  exact (upper_decoder_start_low_byte_frame target hash state pc small
+    address low).trans (frame address low)
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_start_after_loaded_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_start_after_loaded_frame
+
 theorem upper_prehash_counter_bytes (target : Fin 5)
     (state : MachineState) (counter : Counter)
     (counterWord : state.getWord32 (upperCounterSource target) =
