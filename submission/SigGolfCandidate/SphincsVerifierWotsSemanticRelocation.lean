@@ -24,6 +24,11 @@ open SigGolfCandidate.SphincsMaskedSignOtsShift
 set_option maxRecDepth 16384
 set_option maxHeartbeats 0
 
+/-- Bytes needed by the XMSS path, excluding leaf-copy's position scratch word. -/
+def LeafPathRetained (read : Word) : Prop :=
+  read.toNat < 0x40000 ∨
+    (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048 ∧ read ≠ 0x43010)
+
 /-- The semantically identified WOTS walk stays inside the relocatable code segment. -/
 theorem walk_inside (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
@@ -924,6 +929,25 @@ theorem leaf_copy_dest_other (address : Word)
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small] at value
   omega
 
+theorem leaf_copy_path_frame (state final : MachineState)
+    (frame : ∀ address, address ≠ 0x43010 →
+      (∀ i, i < 130 → address ≠ BitVec.ofNat 64 (0x40028 + 8 * i)) →
+        final.getMem address = state.getMem address)
+    (read : Word) (retained : LeafPathRetained read) :
+    final.getMem read = state.getMem read := by
+  apply frame read
+  · rcases retained with low | high
+    · intro equal
+      subst read
+      have impossible : ¬ ((0x43010 : Word).toNat < 0x40000) := by decide
+      exact impossible low
+    · exact high.2.2
+  · intro i hi
+    exact leaf_copy_dest_other read
+      (by rcases retained with low | high
+          · exact Or.inl low
+          · exact Or.inr high.1) i hi
+
 /-- A completed leaf copy preserves the public-key prefix and XMSS coordinates. -/
 theorem leaf_copy_context_of_frame (state final : MachineState)
     (pk : SphincsSecurity.PublicKey)
@@ -999,7 +1023,9 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
-      SphincsVerifierHashBytes.WitnessPrefix final pk := by
+      SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      (∀ read, LeafPathRetained read →
+        final.getMem read = state.getMem read) := by
   obtain ⟨final, run, done, payload, frame, positionZero⟩ :=
     upper_rootCopy_payload target hash state values pc endpoints
   obtain ⟨layerFinal, treeFinal, leafFinal, prefixFinal⟩ :=
@@ -1009,7 +1035,8 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
     final pk layer tree leaf values layerFinal positionZero
       treeFinal leafFinal prefixFinal payload
   exact ⟨final, run, done, query,
-    layerFinal, treeFinal, leafFinal, prefixFinal⟩
+    layerFinal, treeFinal, leafFinal, prefixFinal,
+    fun read retained => leaf_copy_path_frame state final frame read retained⟩
 
 /-- XMSS initialization does not change the freshly computed leaf digest. -/
 theorem xmssInit_current_byte (state : MachineState)
@@ -1113,6 +1140,9 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
               (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = state.getMem 0x43020 ∧
+      (∀ read, read.toNat < 0x40000 ∨
+        (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048) →
+          final.getMem read = state.getMem read) ∧
       SegmentInterior hash run := by
   obtain ⟨final, run, done, exact, inside⟩ :=
     SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_finish_trace
@@ -1126,7 +1156,7 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
       SphincsVerifierWotsLeafQuery.leafInput] using
       SigGolfCandidate.SphincsMaskedChainDomain.eval_hash hash
         pk.parameter (.leaf layer tree leaf) (Concrete.leafPayload endpoints)
-  refine ⟨final, run, done, ?_, ?_, ?_, inside⟩
+  refine ⟨final, run, done, ?_, ?_, ?_, ?_, inside⟩
   · intro i hi
     rw [exact, xmssInit_current_byte _ i hi,
       SphincsVerifierWotsLeafResult.leafHashNext_byte_of_query
@@ -1135,6 +1165,9 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
     exact SphincsVerifierXmssInit.xmssInit_level _
   · rw [exact]
     exact leaf_finish_bit hash state
+  · intro read retained
+    rw [exact]
+    exact leaf_finish_frame hash state read retained
 
 /-- Rewriting schedule addresses does not change pure instruction execution. -/
 theorem runSchedule_schedule (offset : Word)
@@ -1190,7 +1223,10 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
             (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
               (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
-      final.getMem 0x43070 = state.getMem 0x43020 := by
+      final.getMem 0x43070 = state.getMem 0x43020 ∧
+      (∀ read, read.toNat < 0x40000 ∨
+        (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048) →
+          final.getMem read = state.getMem read) := by
   let base := shift (-delta target) state
   have basePc : base.pc = 0x29c8 := by
     change state.pc + -delta target = 0x29c8
@@ -1211,15 +1247,17 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
               pk.parameter layer tree leaf endpoints) := by
       simpa only [restored] using query
     simpa only [leafHashReady_shift, hashInput_shift] using shifted
-  obtain ⟨finish, run, done, digest, level, bit, inside⟩ :=
+  obtain ⟨finish, run, done, digest, level, bit, frame, inside⟩ :=
     leaf_finish_semantic hash base pk layer tree leaf endpoints basePc baseQuery
-  refine ⟨shift (delta target) finish, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨shift (delta target) finish, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · simpa only [restored] using trace_shift target hash run inside
   · rw [shift_pc, done]
   · intro i hi
     simpa using digest i hi
   · simpa only [shift_mem] using level
   · simpa only [shift_mem, base] using bit
+  · intro read retained
+    simpa only [shift_mem, base] using frame read retained
 
 /-- From recovered WOTS endpoints to the XMSS starting root in an upper layer. -/
 theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
@@ -1242,16 +1280,27 @@ theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
           (evalWithAnswerFn (adaptOracle hash)
             (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
               (8 * i) 8) ∧
-      final.getMem 0x43048 = 1 := by
+      final.getMem 0x43048 = 1 ∧
+      final.getMem 0x43070 = state.getMem 0x43020 ∧
+      (∀ read, LeafPathRetained read →
+        final.getMem read = state.getMem read) := by
   obtain ⟨copied, copyRun, copiedPc, query,
-    _layerFinal, _treeFinal, _leafFinal, _prefixFinal⟩ :=
+    _layerFinal, _treeFinal, _leafFinal, _prefixFinal, copyFrame⟩ :=
     upper_leaf_query target hash state pk layer tree leaf endpoints
       pc layerCell treeCell leafCell hprefix values
-  obtain ⟨final, finishRun, done, digest, level, _bit⟩ :=
+  obtain ⟨final, finishRun, done, digest, level, bit, finishFrame⟩ :=
     upper_leaf_finish_semantic target hash copied pk layer tree leaf endpoints
       copiedPc query
-  refine ⟨final, ?_, done, digest, level⟩
-  simpa [Nat.add_assoc] using copyRun.trans finishRun
+  refine ⟨final, ?_, done, digest, level, ?_, ?_⟩
+  · simpa [Nat.add_assoc] using copyRun.trans finishRun
+  · exact bit.trans (copyFrame 0x43020 (Or.inr (by decide)))
+  · intro read retained
+    have simple : read.toNat < 0x40000 ∨
+        (0x43000 ≤ read.toNat ∧ read.toNat < 0x43048) := by
+      rcases retained with low | high
+      · exact Or.inl low
+      · exact Or.inr ⟨high.1, high.2.1⟩
+    exact (finishFrame read simple).trans (copyFrame read retained)
 
 /-- One upper-layer decoder, WOTS verifier, and leaf hash reach the XMSS path. -/
 theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
@@ -1303,7 +1352,7 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     evalWithAnswerFn (adaptOracle hash)
       (Concrete.recoverChain pk.parameter layer tree leaf chain
         (digits chain) (values chain))
-  obtain ⟨final, leafRun, done, digest, level⟩ :=
+  obtain ⟨final, leafRun, done, digest, level, _bit, _frame⟩ :=
     upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
       chainsPc layerFinal treeFinal leafFinal prefixFinal
       (by intro chain j hj; exact endpointBytes chain j hj)
@@ -1382,6 +1431,10 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms xmssInit_current_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_copy_path_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_copy_path_frame
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leafHashNext_frame' depends on axioms: [propext,
  Classical.choice,
