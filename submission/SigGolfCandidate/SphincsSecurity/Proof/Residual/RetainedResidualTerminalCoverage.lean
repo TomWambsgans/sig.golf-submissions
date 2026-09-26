@@ -153,3 +153,39 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.expected_initialMonitoredSource_full_unit_count_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.expected_initialMonitoredSource_full_unit_count_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+/-- The certificate bank remains bounded when selecting only traces whose
+actual total hash-call count is within the organizer's budget. -/
+theorem initialMonitoredSource_count_budget_le_rate
+    (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (q : Nat)
+    (stopAfter : CertificateStopRule) (stopped : Bool)
+    (hbudget : q ≤ 2 ^ 128) :
+    (∑' result, Pr[= result | initialMonitoredSource key adversary encoding
+      dummy exposed high q Finset.univ (proposalStop stopAfter) stopped] *
+      (if result.2.1.memory.external.hashCalls ≤ q then
+        certificateBankCount result.2.2.bank else 0)) ≤
+      (q : ENNReal) * fullCertificateTotalRate := by
+  calc
+    _ ≤ ∑' result, Pr[= result | initialMonitoredSource key adversary encoding
+        dummy exposed high q Finset.univ (proposalStop stopAfter) stopped] *
+        certificateBankCount result.2.2.bank := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases h : result.2.1.memory.external.hashCalls ≤ q
+      · simp only [h, if_true, le_refl]
+      · simp only [h, if_false, mul_zero, zero_le]
+    _ ≤ _ := expected_initialMonitoredSource_full_unit_count_le key adversary
+      encoding dummy exposed high q stopAfter stopped hbudget
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_count_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_count_budget_le_rate
