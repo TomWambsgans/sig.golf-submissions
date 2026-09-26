@@ -2081,6 +2081,114 @@ theorem upper_handoff_control_cells (next : Fin 5)
   · rw [keepLeaf, keepIndex]
     exact SphincsVerifierXmssTransition.transition_index next state
 
+/- The first upper layer begins at 0x6d1c after its XMSS-root handoff.
+   Its signed 20-bit encoding counter is stored at witness address 0x23dbc. -/
+private def firstUpperCounterSchedule : List (Word × Instr) := [
+  (0x6d1c, .LUI .x6 0x24),
+  (0x6d20, .ADDI .x6 .x6 (-580)),
+  (0x6d24, .LWU .x10 .x6 0),
+  (0x6d28, .SRLI .x11 .x10 20),
+  (0x6d2c, .BEQ .x11 .x0 8),
+  (0x6d34, .LUI .x7 0x40),
+  (0x6d38, .ADDI .x7 .x7 0),
+  (0x6d3c, .SW .x7 .x10 60)]
+
+private theorem firstUpperCounter_code :
+    ∀ entry ∈ firstUpperCounterSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def firstUpperCounterState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule firstUpperCounterSchedule state
+
+private theorem firstUpperCounter_checked (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
+    SphincsMaskedKeygenPrefix.Checked firstUpperCounterSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, firstUpperCounterSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setWord32, alignToDword, byteOffset, pc]
+  all_goals
+    refine ⟨small, ?_⟩
+    have small' : BitVec.setWidth 64 (state.getWord32 (146876#64)) >>> 20 = (0#64) := small
+    rw [small']
+    decide
+
+theorem first_upper_counter_block (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
+    OrdinarySteps SphincsImages.verify state 8
+      (firstUpperCounterState state) := by
+  simpa only [firstUpperCounterState, firstUpperCounterSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      firstUpperCounterSchedule firstUpperCounter_code state
+      (firstUpperCounter_checked state pc small)
+
+theorem first_upper_counter_pc (state : MachineState)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
+    (firstUpperCounterState state).pc = 0x6d40 := by
+  simp [firstUpperCounterState, firstUpperCounterSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    signExtend13, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+  have small' : BitVec.setWidth 64 (state.getWord32 (146876#64)) >>> 20 = (0#64) := small
+  rw [small']
+  decide
+
+private def firstUpperHeaderSchedule : List (Word × Instr) := [
+  (0x6d40, .ADDI .x6 .x0 1025),
+  (0x6d44, .LUI .x28 0x43),
+  (0x6d48, .ADDI .x28 .x28 0),
+  (0x6d4c, .LD .x7 .x28 0),
+  (0x6d50, .SLLI .x7 .x7 16),
+  (0x6d54, .ADD .x6 .x6 .x7),
+  (0x6d58, .LUI .x7 0x40),
+  (0x6d5c, .ADDI .x7 .x7 0),
+  (0x6d60, .SW .x7 .x6 0),
+  (0x6d64, .LUI .x28 0x43),
+  (0x6d68, .ADDI .x28 .x28 16),
+  (0x6d6c, .LD .x6 .x28 0),
+  (0x6d70, .SW .x7 .x6 4),
+  (0x6d74, .LUI .x28 0x43),
+  (0x6d78, .ADDI .x28 .x28 8),
+  (0x6d7c, .LD .x6 .x28 0),
+  (0x6d80, .SD .x7 .x6 8),
+  (0x6d84, .LUI .x28 0x43),
+  (0x6d88, .ADDI .x28 .x28 24),
+  (0x6d8c, .LD .x6 .x28 0),
+  (0x6d90, .SW .x7 .x6 16)]
+
+private theorem firstUpperHeader_code :
+    ∀ entry ∈ firstUpperHeaderSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def firstUpperHeaderState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule firstUpperHeaderSchedule state
+
+private theorem firstUpperHeader_checked (state : MachineState)
+    (pc : state.pc = 0x6d40) :
+    SphincsMaskedKeygenPrefix.Checked firstUpperHeaderSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, firstUpperHeaderSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setWord32, alignToDword, byteOffset, pc]
+
+theorem first_upper_header_block (state : MachineState)
+    (pc : state.pc = 0x6d40) :
+    OrdinarySteps SphincsImages.verify state 21
+      (firstUpperHeaderState state) := by
+  simpa only [firstUpperHeaderState, firstUpperHeaderSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      firstUpperHeaderSchedule firstUpperHeader_code state
+      (firstUpperHeader_checked state pc)
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_control_cells' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_handoff_control_cells
