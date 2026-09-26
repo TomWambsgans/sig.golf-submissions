@@ -179,3 +179,46 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_reference_two_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_reference_two_witnesses_budget_event
+
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+open SecretGuessObservation (State fixedRun lazyRun initialState)
+theorem initial_original_two_witnesses_budget_event
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
+    (hauxiliary : auxiliary ∈
+      (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
+    let inputs := canonicalGraphGameInputs adversary
+    let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
+    let residual := finiteHashAnswer ∅ inputs
+      (canonicalReferenceResidual parameter inputs hencoding labels
+        auxiliary.rows auxiliary.seed)
+    Pr[fun result => completedTwoGuesses
+      ⟨parameter, canonicalGraphRoot labels, otsSecret,
+        FtsGuessSigning.secretTable.symm result.1⟩
+      (programmedHash parameter otsSecret
+        (FtsGuessSigning.secretTable.symm result.1) labels residual) result.2 ∧
+      keygenHashCost + completedWork result.2 ≤ q |
+      complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
+        (fun value => (secrets, value)) <$> 𝒮[simulateQ
+          (fixedAnswers (originalAnswers dummy adversary parameter otsSecret
+            labels auxiliary) secrets)
+          (completedRun parameter (canonicalGraphRoot labels) labels adversary)]] ≤
+      pairRate q := by
+  exact (initial_reference_two_witnesses_budget_event parameter
+    (canonicalGraphRoot labels) otsSecret (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+    labels auxiliary hauxiliary dummy adversary q).trans
+    (lazy_original_two_guesses_budget_event dummy adversary q parameter otsSecret
+      labels auxiliary)
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.initial_original_two_witnesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.initial_original_two_witnesses_budget_event
