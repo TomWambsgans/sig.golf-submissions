@@ -125,10 +125,11 @@ theorem chainEntry_stableFrame (state : MachineState)
 theorem walkInv_loop_stable (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat)
     (state : MachineState)
-    (initialInv : WalkInv hash pk layer tree leaf chain start initial 0 state) :
+    (initialInv : WalkInv hash pk layer tree leaf chain start initial sourceBase 0 state) :
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
-      WalkInv hash pk layer tree leaf chain start initial
+      WalkInv hash pk layer tree leaf chain start initial sourceBase
         (7 - start.val) final ∧
       (∀ address, StableAddr address →
         final.getMem address = state.getMem address) ∧
@@ -141,7 +142,7 @@ theorem walkInv_loop_stable (hash : Hash) (pk : SphincsSecurity.PublicKey)
         Executes hash SphincsImages.verify state (tailSteps + steps)
           (result.charge cycles calls blocks) := by
   let Inv : Nat → MachineState → Prop := fun i current =>
-    WalkInv hash pk layer tree leaf chain start initial i current ∧
+    WalkInv hash pk layer tree leaf chain start initial sourceBase i current ∧
     ∀ address, StableAddr address →
       current.getMem address = state.getMem address
   have next (i : Nat) (current : MachineState)
@@ -158,7 +159,7 @@ theorem walkInv_loop_stable (hash : Hash) (pk : SphincsSecurity.PublicKey)
     have currentCell : current.getMem 0x43058 =
         BitVec.ofNat 64 digit.val := inv.1.stepCell
     refine ⟨stepRound hash current, 94, 101, 1, 1,
-      ⟨walkInv_step hash pk layer tree leaf chain start initial i
+      ⟨walkInv_step hash pk layer tree leaf chain start initial sourceBase i
           current small inv.1, ?_⟩,
       by decide, by decide, by decide, by decide, ?_⟩
     · intro address stable
@@ -230,7 +231,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
     hprefix value
   obtain ⟨seven, steps, cycles, calls, blocks, finalInv, stable,
     stepBound, cycleBound, callBound, blockBound, run⟩ :=
-    walkInv_loop_stable hash pk layer tree leaf chain digit initial
+    walkInv_loop_stable hash pk layer tree leaf chain digit initial 0x2547c
       (chainEntryState state) initialInv
   have cell : seven.getMem 0x43058 = 7 := by
     simpa [show digit.val + (7 - digit.val) = 7 by
@@ -258,7 +259,7 @@ theorem chainRound_recover (hash : Hash) (state : MachineState)
             (8 * i) 8 := by
     rw [stepCheck_byte]
     exact walkInv_recoverChain hash pk layer tree leaf chain digit
-      initial seven finalInv i hi
+      initial 0x2547c seven finalInv i hi
   obtain ⟨endTrace, endPc, endCounter⟩ :=
     chainEnd_block middle chain (by simpa [middle] using checked.2)
       middleCounter

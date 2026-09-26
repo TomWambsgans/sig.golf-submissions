@@ -153,7 +153,7 @@ theorem chainEntry_walkInv (hash : Hash) (state : MachineState)
     (value : ∀ i, (hi : i < 20) →
       state.getByte (BitVec.ofNat 64 (0x2547c + 20 * chain.val + i)) =
         initial.extractLsb' (8 * i) 8) :
-    WalkInv hash pk layer tree leaf chain digit initial 0
+    WalkInv hash pk layer tree leaf chain digit initial 0x2547c 0
       (chainEntryState state) := by
   have frame := chainEntry_controlCells state
   constructor
@@ -214,7 +214,7 @@ theorem chainEntry_recover (hash : Hash) (state : MachineState)
     hprefix value
   obtain ⟨seven, steps, cycles, calls, blocks, finalInv,
     stepBound, cycleBound, callBound, blockBound, run⟩ :=
-    walkInv_loop hash pk layer tree leaf chain digit initial
+    walkInv_loop hash pk layer tree leaf chain digit initial 0x2547c
       (chainEntryState state) initialInv
   have cell : seven.getMem 0x43058 = 7 := by
     simpa [show digit.val + (7 - digit.val) = 7 by
@@ -235,7 +235,7 @@ theorem chainEntry_recover (hash : Hash) (state : MachineState)
   · intro i hi
     rw [stepCheck_byte]
     exact walkInv_recoverChain hash pk layer tree leaf chain digit
-      initial seven finalInv i hi
+      initial 0x2547c seven finalInv i hi
   · intro tailSteps result tail
     have after := checked.1.then_executes tail
     have before := run (tailSteps + 5) (result.charge 5 0 0) after
@@ -257,6 +257,7 @@ end SigGolfCandidate.SphincsVerifierWotsSemanticEntry
 
 namespace SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate
+open OracleComp
 open SigGolfCandidate.SphincsVerifierWotsChainEntry
 open SigGolfCandidate.SphincsVerifierWotsEndpointCopy
 open SigGolfCandidate.SphincsVerifierFtsGenericBytes
@@ -329,10 +330,155 @@ theorem chainValueCopied_byte_general (state : MachineState)
     (fun index => chainValueCopied_word_general state sourceBase small pointer index)
     i hi
 
+theorem chainEntry_valueByte_general (state : MachineState)
+    (sourceBase : Nat) (small : sourceBase + 20 ≤ 0x40000)
+    (aligned : sourceBase % 4 = 0)
+    (pointer : state.getMem 0x43028 = BitVec.ofNat 64 sourceBase)
+    (i : Nat) (hi : i < 20) :
+    (chainEntryState state).getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+      state.getByte (BitVec.ofNat 64 (sourceBase + i)) := by
+  have frame : (chainDigitState (chainValueCopied state)).getByte
+      (BitVec.ofNat 64 (0x44b00 + i)) =
+      (chainValueCopied state).getByte (BitVec.ofNat 64 (0x44b00 + i)) := by
+    simp only [MachineState.getByte]
+    rw [SphincsVerifierWotsSemanticEntry.chainDigit_mem
+      (chainValueCopied state) _ (by interval_cases i <;> decide)]
+  exact frame.trans (chainValueCopied_byte_general state sourceBase small aligned pointer i hi)
+
+/-- The semantic WOTS invariant starts at any aligned signature buffer below scratch memory. -/
+theorem chainEntry_walkInv_general (hash : Hash) (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) (layer : SphincsSecurity.Layer)
+    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex)
+    (chain : SphincsSecurity.ChainIndex) (digit : Fin 8)
+    (initial : SphincsSecurity.Digest) (base : Nat)
+    (baseBound : base + 20 * 52 ≤ 0x40000)
+    (baseAligned : base % 4 = 0)
+    (pc : state.pc = 0x2710)
+    (pointer : state.getMem 0x43028 =
+      BitVec.ofNat 64 (base + 20 * chain.val))
+    (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (decoded : state.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (value : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (base + 20 * chain.val + i)) =
+        initial.extractLsb' (8 * i) 8) :
+    SphincsVerifierWotsSemanticChain.WalkInv hash pk layer tree leaf chain
+      digit initial base 0 (chainEntryState state) := by
+  have sourceBound : base + 20 * chain.val + 20 ≤ 0x40000 := by
+    have h := chain.isLt
+    change chain.val < 52 at h
+    omega
+  have sourceAligned : (base + 20 * chain.val) % 4 = 0 := by omega
+  have frame := SphincsVerifierWotsSemanticEntry.chainEntry_controlCells state
+  constructor
+  · exact (SphincsVerifierWotsChainEntryGeneral.chainEntry_block_general
+      state chain (base + 20 * chain.val) sourceBound sourceAligned pc pointer counter).2
+  · rw [chainEntry_step state chain counter, decoded]
+    fin_cases digit <;> decide
+  · rw [frame.1]; exact layerCell
+  · rw [frame.2.1]; exact treeCell
+  · rw [frame.2.2.1]; exact leafCell
+  · rw [frame.2.2.2]; exact counter
+  · rw [SphincsVerifierWotsChainRound.chainEntry_controlFrame state 0x43028 (Or.inr rfl)]
+    exact pointer
+  · exact SphincsVerifierWotsSemanticEntry.chainEntry_witnessPrefix state pk hprefix
+  · intro i hi
+    rw [chainEntry_valueByte_general state (base + 20 * chain.val)
+      sourceBound sourceAligned pointer i hi, value i hi]
+    simp [SphincsSecurity.Concrete.walkValue, SphincsSecurity.Concrete.chainWalk]
+
+/-- An arbitrary aligned WOTS source buffer yields the abstract recovered chain endpoint. -/
+theorem chainEntry_recover_general (hash : Hash) (state : MachineState)
+    (pk : SphincsSecurity.PublicKey) (layer : SphincsSecurity.Layer)
+    (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex)
+    (chain : SphincsSecurity.ChainIndex) (digit : Fin 8)
+    (initial : SphincsSecurity.Digest) (base : Nat)
+    (baseBound : base + 20 * 52 ≤ 0x40000)
+    (baseAligned : base % 4 = 0)
+    (pc : state.pc = 0x2710)
+    (pointer : state.getMem 0x43028 =
+      BitVec.ofNat 64 (base + 20 * chain.val))
+    (counter : state.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (decoded : state.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (value : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (base + 20 * chain.val + i)) =
+        initial.extractLsb' (8 * i) 8) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      final.pc = 0x28ec ∧
+      final.getMem 0x43050 = BitVec.ofNat 64 chain.val ∧
+      final.getMem 0x43028 = BitVec.ofNat 64 (base + 20 * chain.val) ∧
+      SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      (∀ i, (hi : i < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44b00 + i)) =
+          (evalWithAnswerFn (SphincsBridge.adaptOracle hash)
+            (SphincsSecurity.Concrete.recoverChain pk.parameter layer tree leaf
+              chain digit initial)).extractLsb' (8 * i) 8) ∧
+      steps ≤ 94 * (7 - digit.val) + 30 ∧
+      cycles ≤ 101 * (7 - digit.val) + 30 ∧
+      calls ≤ 7 - digit.val ∧ blocks ≤ 7 - digit.val ∧
+      ∀ (tailSteps : Nat) (result : Execution),
+        Executes hash SphincsImages.verify final tailSteps result →
+        Executes hash SphincsImages.verify state (tailSteps + steps)
+          (result.charge cycles calls blocks) := by
+  have sourceBound : base + 20 * chain.val + 20 ≤ 0x40000 := by
+    have h := chain.isLt
+    change chain.val < 52 at h
+    omega
+  have sourceAligned : (base + 20 * chain.val) % 4 = 0 := by omega
+  have entry := SphincsVerifierWotsChainEntryGeneral.chainEntry_block_general
+    state chain (base + 20 * chain.val) sourceBound sourceAligned pc pointer counter
+  have initialInv := chainEntry_walkInv_general hash state pk layer tree leaf
+    chain digit initial base baseBound baseAligned pc pointer counter decoded
+    layerCell treeCell leafCell hprefix value
+  obtain ⟨seven, steps, cycles, calls, blocks, finalInv,
+    stepBound, cycleBound, callBound, blockBound, run⟩ :=
+    SphincsVerifierWotsSemanticChain.walkInv_loop hash pk layer tree leaf
+      chain digit initial base (chainEntryState state) initialInv
+  have cell : seven.getMem 0x43058 = 7 := by
+    simpa [show digit.val + (7 - digit.val) = 7 by
+      have := digit.isLt; omega] using finalInv.stepCell
+  have checked := SphincsVerifierWotsStepCheck.stepCheck_block
+    seven ⟨7, by decide⟩ finalInv.pc (by simpa using cell)
+  refine ⟨SphincsVerifierWotsStepCheck.stepCheckState seven,
+    steps + 30, cycles + 30, calls, blocks,
+    by simpa using checked.2, ?_, ?_, ?_, ?_, by omega, by omega,
+    callBound, blockBound, ?_⟩
+  · rw [SphincsVerifierWotsSemanticWalk.stepCheck_mem]; exact finalInv.chainCell
+  · rw [SphincsVerifierWotsSemanticWalk.stepCheck_mem]; exact finalInv.pointerCell
+  · apply SphincsVerifierFtsPostForestCopy.witnessPrefix_of_low_mem_frame
+      seven (SphincsVerifierWotsStepCheck.stepCheckState seven) pk finalInv.publicKey
+    intro address _
+    exact SphincsVerifierWotsSemanticWalk.stepCheck_mem seven address
+  · intro i hi
+    rw [SphincsVerifierWotsSemanticWalk.stepCheck_byte]
+    exact SphincsVerifierWotsSemanticChain.walkInv_recoverChain hash pk layer tree
+      leaf chain digit initial base seven finalInv i hi
+  · intro tailSteps result tail
+    have after := checked.1.then_executes tail
+    have before := run (tailSteps + 5) (result.charge 5 0 0) after
+    have full := entry.1.then_executes before
+    simpa [Execution.charge, Nat.add_assoc, Nat.add_comm,
+      Nat.add_left_comm] using full
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral.chainValueCopied_byte_general' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms chainValueCopied_byte_general
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral.chainEntry_recover_general' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms chainEntry_recover_general
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticEntryGeneral

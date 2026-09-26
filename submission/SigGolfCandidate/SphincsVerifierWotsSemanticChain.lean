@@ -46,6 +46,7 @@ theorem stepRound_pointerCell (hash : Hash) (state : MachineState) :
 structure WalkInv (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat)
     (i : Nat) (state : MachineState) : Prop where
   pc : state.pc = 0x2774
   stepCell : state.getMem 0x43058 = BitVec.ofNat 64 (start.val + i)
@@ -54,7 +55,7 @@ structure WalkInv (hash : Hash) (pk : SphincsSecurity.PublicKey)
   leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val
   chainCell : state.getMem 0x43050 = BitVec.ofNat 64 chain.val
   pointerCell : state.getMem 0x43028 =
-    BitVec.ofNat 64 (0x2547c + 20 * chain.val)
+    BitVec.ofNat 64 (sourceBase + 20 * chain.val)
   publicKey : SphincsVerifierHashBytes.WitnessPrefix state pk
   value : ∀ j, (hj : j < 20) →
     state.getByte (BitVec.ofNat 64 (0x44b00 + j)) =
@@ -64,10 +65,11 @@ structure WalkInv (hash : Hash) (pk : SphincsSecurity.PublicKey)
 theorem walkInv_step (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat)
     (i : Nat) (state : MachineState)
     (small : i < 7 - start.val)
-    (inv : WalkInv hash pk layer tree leaf chain start initial i state) :
-    WalkInv hash pk layer tree leaf chain start initial (i + 1)
+    (inv : WalkInv hash pk layer tree leaf chain start initial sourceBase i state) :
+    WalkInv hash pk layer tree leaf chain start initial sourceBase (i + 1)
       (stepRound hash state) := by
   let step : Fin 8 := ⟨start.val + i, by have := start.isLt; omega⟩
   have stepSmall : step.val < 7 := by dsimp [step]; omega
@@ -96,10 +98,11 @@ theorem walkInv_step (hash : Hash) (pk : SphincsSecurity.PublicKey)
 theorem walkInv_loop (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat)
     (state : MachineState)
-    (initialInv : WalkInv hash pk layer tree leaf chain start initial 0 state) :
+    (initialInv : WalkInv hash pk layer tree leaf chain start initial sourceBase 0 state) :
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
-      WalkInv hash pk layer tree leaf chain start initial
+      WalkInv hash pk layer tree leaf chain start initial sourceBase
         (7 - start.val) final ∧
       steps ≤ 94 * (7 - start.val) ∧
       cycles ≤ 101 * (7 - start.val) ∧
@@ -109,7 +112,7 @@ theorem walkInv_loop (hash : Hash) (pk : SphincsSecurity.PublicKey)
         Executes hash SphincsImages.verify final tailSteps result →
         Executes hash SphincsImages.verify state (tailSteps + steps)
           (result.charge cycles calls blocks) := by
-  let Inv := WalkInv hash pk layer tree leaf chain start initial
+  let Inv := WalkInv hash pk layer tree leaf chain start initial sourceBase
   have next (i : Nat) (current : MachineState)
       (small : i < 7 - start.val) (inv : Inv i current) :
       ∃ (following : MachineState) (steps cycles calls blocks : Nat),
@@ -124,7 +127,7 @@ theorem walkInv_loop (hash : Hash) (pk : SphincsSecurity.PublicKey)
     have currentCell : current.getMem 0x43058 =
         BitVec.ofNat 64 digit.val := inv.stepCell
     refine ⟨stepRound hash current, 94, 101, 1, 1,
-      walkInv_step hash pk layer tree leaf chain start initial i current
+      walkInv_step hash pk layer tree leaf chain start initial sourceBase i current
         small inv, by decide, by decide, by decide, by decide, ?_⟩
     intro tailSteps result tail
     exact stepRound_exec hash current digit inv.pc currentCell
@@ -137,8 +140,9 @@ theorem walkInv_loop (hash : Hash) (pk : SphincsSecurity.PublicKey)
 theorem walkInv_recoverChain (hash : Hash) (pk : SphincsSecurity.PublicKey)
     (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (chain : ChainIndex) (start : Fin 8) (initial : Digest)
+    (sourceBase : Nat)
     (state : MachineState)
-    (inv : WalkInv hash pk layer tree leaf chain start initial
+    (inv : WalkInv hash pk layer tree leaf chain start initial sourceBase
       (7 - start.val) state) (i : Nat) (hi : i < 20) :
     state.getByte (BitVec.ofNat 64 (0x44b00 + i)) =
       (evalWithAnswerFn (adaptOracle hash)
