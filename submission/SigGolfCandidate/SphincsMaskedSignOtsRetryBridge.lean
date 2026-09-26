@@ -507,4 +507,41 @@ theorem encoding_success_from_entry (location : Fin 5) (hash : Hash) (s : Machin
 #guard_msgs (whitespace := lax) in
 #print axioms encoding_success_from_entry
 
+set_option backward.isDefEq.respectTransparency false
+
+/-- The first concrete WOTS encoding HASH result carries the abstract digest
+    whenever its prepared query is the abstract encoding query. -/
+theorem initial_encoding_digest_words (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (message : Digest) (counter : Counter)
+    (query : hashInput (otsHashPrep location (otsPrelude location s)) =
+      toQuery (tweakableHashInput parameter (.encoding lay treeIdx leaf)
+        (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat)))) :
+    Words20 (initialEncodingState location hash s) 0x42000
+      (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+        (Concrete.tweakableHash parameter (.encoding lay treeIdx leaf)
+          (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat)) :
+          OracleComp SphincsSecurity.HashSpec Digest)) := by
+  have answer_words (i : Fin 5) :
+      (initialEncodingState location hash s).getWord32
+        (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
+        (hash (hashInput (otsHashPrep location (otsPrelude location s)))).extractLsb'
+          (32 * i.val) 32 := by
+    have dst := (otsHashPrep_registers location (otsPrelude location s)).2.2.1
+    fin_cases i <;>
+      simp [initialEncodingState, writeHash, dst, MachineState.writeWords,
+        MachineState.getWord32, alignToDword, byteOffset, extractWord32]
+    all_goals ext j hj; interval_cases j <;> simp
+  have value := SphincsMaskedChainDomain.eval_hash hash parameter
+    (.encoding lay treeIdx leaf)
+    (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat))
+  rw [value]
+  intro i
+  rw [answer_words, query]
+  exact (BitVec.extractLsb'_extractLsb'_of_le (by omega)).symm
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.initial_encoding_digest_words' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms initial_encoding_digest_words
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
