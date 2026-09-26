@@ -636,6 +636,28 @@ theorem decode_betaToQuery_canonical (input : HashInput) (h : canonicalTagged in
   simp [QueryDecoder.blockLength]
   omega
 
+theorem canonicalTagged_keygen (p : PublicParameter) (d : KeygenDomain)
+    (seed : MasterSeed) : canonicalTagged (keygenHashInput p d seed) := by
+  refine ⟨QueryDecoder.keygen_first p d seed, ?_,
+    QueryDecoder.keygen_sourceLength p d seed⟩
+  cases d <;> simp [keygenHashInput, keygenDomainFields,
+    fieldBytes, bytesLE]
+
+theorem canonicalTagged_randomizer (p : PublicParameter) (seed : MasterSeed)
+    (message : SphincsSecurity.Message) (trial : BitVec 32) :
+    canonicalTagged (randomizerHashInput p seed message trial) := by
+  refine ⟨QueryDecoder.randomizer_first p seed message trial, ?_,
+    QueryDecoder.randomizer_sourceLength p seed message trial⟩
+  simp [randomizerHashInput, fieldBytes, bytesLE]
+
+theorem canonicalTagged_tweakable (p : PublicParameter) (d : HashDomain)
+    (payload : HashInput) (h : payload.length = QueryDecoder.expectedPayloadLength d) :
+    canonicalTagged (tweakableHashInput p d payload) := by
+  refine ⟨QueryDecoder.tweakable_first p d payload, ?_,
+    QueryDecoder.tweakable_sourceLength p d payload h⟩
+  cases d <;> simp [tweakableHashInput, tweakBytes, hashDomainFields,
+    fieldBytes, bytesLE]
+
 theorem canonicalTagged_commitmentInput (pk : SphincsSecurity.PublicKey) :
     canonicalTagged (SphincsWire.commitmentInput pk) := by
   refine ⟨?_, ?_, ?_⟩
@@ -763,5 +785,17 @@ theorem betaCommitmentReady_hashCost (state : MachineState)
 /-- info: 'SigGolfCandidate.BetaQuery.betaCommitmentReady_hashCost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms betaCommitmentReady_hashCost
+
+/-- info: 'SigGolfCandidate.BetaQuery.canonicalTagged_keygen' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms canonicalTagged_keygen
+
+/-- info: 'SigGolfCandidate.BetaQuery.canonicalTagged_randomizer' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms canonicalTagged_randomizer
+
+/-- info: 'SigGolfCandidate.BetaQuery.canonicalTagged_tweakable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms canonicalTagged_tweakable
 
 end SigGolfCandidate.BetaQuery
