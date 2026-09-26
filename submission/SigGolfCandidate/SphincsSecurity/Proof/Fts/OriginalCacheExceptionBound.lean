@@ -95,6 +95,53 @@ theorem certificateStoppedRomImpl_hit_run {Result : Type} (key : SecretKey)
       have hnext := ih middle.1 middle.2 result hstep.2 htail
       exact ⟨fun hhit => hnext.1 (hstep.1 hhit), hnext.2⟩
 
+theorem certificateStoppedRomImpl_remaining_step (key : SecretKey)
+    (input : OracleWorld.Domain) (state : CertificateStoppedCacheState)
+    (result : OracleWorld.Range input × CertificateStoppedCacheState)
+    (hr : result ∈ ((certificateStoppedRomImpl key input).run state).support) :
+    result.2.2.2 = state.2.2 - if input matches .inr _ then 1 else 0 := by
+  simp only [certificateStoppedRomImpl, StateT.run_mk, PMF.mem_support_map_iff] at hr
+  obtain ⟨source, _, rfl⟩ := hr
+  cases input <;> rfl
+
+/-- The ghost budget is exact for a full boundary-traced run, even though
+    subtraction saturates when a run exceeds the starting budget. -/
+theorem certificateStoppedRomImpl_remaining_boundary {α : Type} (key : SecretKey)
+    (computation : OracleComp OracleWorld α) :
+    ∀ (state : CertificateStoppedCacheState)
+      (result : (α × SigningBoundaryTrace) × CertificateStoppedCacheState),
+      result ∈ ((simulateQ (certificateStoppedRomImpl key)
+        (boundaryComputation key.parameter computation)).run state).support →
+      result.2.2.2 = state.2.2 - result.1.2.hashCalls := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state result hr
+      change result ∈ (PMF.pure ((value, 1), state)).support at hr
+      simp only [PMF.mem_support_pure_iff] at hr
+      subst result
+      simp [SigningBoundaryTrace.hashCalls]
+  | query_bind input next ih =>
+      intro state result hr
+      rw [show boundaryComputation key.parameter
+        (liftM (OracleWorld.query input) >>= next) =
+        QueryPause.traced (signingBoundaryTrace key.parameter)
+          (liftM (OracleWorld.query input) >>= next) from rfl] at hr
+      rw [QueryPause.traced_query_bind, simulateQ_bind, simulateQ_spec_query,
+        StateT.run_bind, PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, htail⟩ := hr
+      change result ∈ ((simulateQ (certificateStoppedRomImpl key)
+        ((fun tail => (tail.1, signingBoundaryTrace key.parameter input middle.1 * tail.2)) <$>
+          boundaryComputation key.parameter (next middle.1))).run middle.2).support at htail
+      rw [simulateQ_map, StateT.run_map] at htail
+      rw [PMF.monad_map_eq_map, PMF.mem_support_map_iff] at htail
+      obtain ⟨tail, htail, heq⟩ := htail
+      subst result
+      have hnext := ih middle.1 middle.2 tail htail
+      have hstep := certificateStoppedRomImpl_remaining_step key input state middle hmiddle
+      simp only [SigningBoundaryTrace.hashCalls_mul,
+        signingBoundaryTrace_hashCalls_eq] at *
+      cases input <;> simp at hstep ⊢ <;> omega
+
 /-- A ghost state can be carried through the independent proposal-length
     sample without changing the original length/record distribution. -/
 theorem recordLengthBridge_joint_project {Ω Γ : Type} (law : PMF (Ω × Γ))
@@ -1410,3 +1457,11 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedSigningJointStep_unbounded_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedSigningJointStep_unbounded_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_step' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_step
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_boundary' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_remaining_boundary

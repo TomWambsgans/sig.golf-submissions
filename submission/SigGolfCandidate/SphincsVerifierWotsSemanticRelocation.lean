@@ -3411,6 +3411,130 @@ theorem first_upper_encoding_query_after_frame
     (signature.layers topLayer).counter pc small layerCell positionZero
     treeCell leafCell witness payload counterWord
 
+theorem first_upper_handoff_root_and_frame (hash : Hash)
+    (initial state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (tree : TreeIndex) (leaf : LeafIndex)
+    (signature : SphincsSecurity.Signature) (first : Digest)
+    (pointer : Word)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (pc : state.pc = SphincsVerifierXmssParity.nodePc
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)))
+    (pointerValue : state.getMem 0x43028 = pointer)
+    (pointerBound : pointer.toNat + 20 * layerHeight
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)) ≤ 0x40000)
+    (pointerAligned : pointer.toNat % 4 = 0)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)).val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (levelCell : state.getMem 0x43048 = 1)
+    (bitCell : state.getMem 0x43070 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (current : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+        first.extractLsb' (8 * i) 8)
+    (siblings : SphincsVerifierXmssPathControl.PathWitness state signature
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)) pointer) :
+    let previous := SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)
+    let pathEnd := SphincsVerifierXmssPathControl.pathState hash previous
+      (layerHeight previous) state
+    let nextState := SphincsVerifierXmssTransitionMessage.handoffState
+      (0 : Fin 5) pathEnd
+    (∀ i, (hi : i < 20) →
+      nextState.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+        (SphincsSecurity.Concrete.foldValue (adaptOracle hash) pk.parameter
+          previous tree leaf
+          (SphincsSecurity.Concrete.signaturePath signature previous) first
+          (layerHeight previous)).extractLsb' (8*i) 8) ∧
+    (∀ address, address.toNat < 0x40000 →
+      nextState.getByte address = initial.getByte address) := by
+  constructor
+  · exact (SphincsVerifierXmssTransitionComplete.complete_path_handoff hash
+      (0 : Fin 5) state pk tree leaf signature first pointer pc pointerValue
+      pointerBound pointerAligned layerCell treeCell levelCell bitCell
+      hprefix current siblings).2
+  · intro address low
+    exact first_upper_handoff_low_frame hash initial state frame address low
+
+theorem first_upper_encoding_query_after_previous_path (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (initial state nextState : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (priorTree nextTree : TreeIndex) (priorLeaf nextLeaf : LeafIndex)
+    (signature : SphincsSecurity.Signature) (first : Digest)
+    (pointer : Word)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (pc : state.pc = SphincsVerifierXmssParity.nodePc
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)))
+    (pointerValue : state.getMem 0x43028 = pointer)
+    (pointerBound : pointer.toNat + 20 * layerHeight
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)) ≤ 0x40000)
+    (pointerAligned : pointer.toNat % 4 = 0)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)).val)
+    (priorTreeCell : state.getMem 0x43008 = BitVec.ofNat 64 priorTree.val)
+    (levelCell : state.getMem 0x43048 = 1)
+    (bitCell : state.getMem 0x43070 = BitVec.ofNat 64 priorLeaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (current : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+        first.extractLsb' (8 * i) 8)
+    (siblings : SphincsVerifierXmssPathControl.PathWitness state signature
+      (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)) pointer)
+    (nextEq : nextState =
+      SphincsVerifierXmssTransitionMessage.handoffState (0 : Fin 5)
+        (SphincsVerifierXmssPathControl.pathState hash
+          (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5))
+          (layerHeight (SphincsVerifierXmssTransition.previousLayer
+            (0 : Fin 5))) state))
+    (nextTreeCell : nextState.getMem 0x43008 = BitVec.ofNat 64 nextTree.val)
+    (nextLeafCell : nextState.getMem 0x43018 = BitVec.ofNat 64 nextLeaf.val) :
+    hashInput (firstUpperPrehashState nextState) =
+      toQuery (firstUpperEncodingInput pk topLayer nextTree nextLeaf
+        (SphincsSecurity.Concrete.foldValue (adaptOracle hash) pk.parameter
+          (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5))
+          priorTree priorLeaf
+          (SphincsSecurity.Concrete.signaturePath signature
+            (SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)))
+          first (layerHeight (SphincsVerifierXmssTransition.previousLayer
+            (0 : Fin 5))))
+        (signature.layers topLayer).counter) := by
+  subst nextState
+  let previous := SphincsVerifierXmssTransition.previousLayer (0 : Fin 5)
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash previous
+    (layerHeight previous) state
+  obtain ⟨root, frameNext⟩ := first_upper_handoff_root_and_frame hash
+    initial state pk priorTree priorLeaf signature first pointer frame pc
+    pointerValue pointerBound pointerAligned layerCell priorTreeCell
+    levelCell bitCell hprefix current siblings
+  have pathPc := (SphincsVerifierXmssPathComplete.complete_path hash previous
+    state pk priorTree priorLeaf signature first pointer pc pointerValue
+    pointerBound pointerAligned layerCell priorTreeCell levelCell bitCell
+    hprefix current siblings).1
+  have transitionPc : pathEnd.pc =
+      SphincsVerifierXmssTransition.transitionPc (0 : Fin 5) := by
+    simpa [pathEnd, SphincsVerifierXmssTransition.transitionPc] using pathPc
+  have nextPc : (SphincsVerifierXmssTransitionMessage.handoffState
+      (0 : Fin 5) pathEnd).pc = 0x6d1c := by
+    calc
+      _ = SphincsVerifierXmssTransitionMessage.messagePc (0 : Fin 5) + 56 :=
+        upper_handoff_prefix_pc (0 : Fin 5) pathEnd transitionPc
+      _ = 0x6d1c := by decide
+  have controls := upper_handoff_control_cells (0 : Fin 5) pathEnd
+  have topCell : (SphincsVerifierXmssTransitionMessage.handoffState
+      (0 : Fin 5) pathEnd).getMem 0x43000 =
+      BitVec.ofNat 64 topLayer.val := by
+    simpa [SphincsVerifierXmssTransition.targetLayer, topLayer] using controls.1
+  have positionZero := upper_handoff_position_zero (0 : Fin 5) pathEnd
+  have witness := loaded_upper_prefix_after_frame publicKey inputMessage pk
+    signature initial _ loaded frameNext
+  exact first_upper_encoding_query_after_frame publicKey inputMessage pk
+    signature initial _ loaded frameNext topLayer nextTree nextLeaf _ nextPc
+    topCell positionZero nextTreeCell nextLeafCell witness root
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_of_parts' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_encoding_query_of_parts
@@ -3710,5 +3834,13 @@ theorem first_upper_encoding_query_after_frame
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_encoding_query_after_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_handoff_root_and_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_handoff_root_and_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_after_previous_path' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_encoding_query_after_previous_path
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
