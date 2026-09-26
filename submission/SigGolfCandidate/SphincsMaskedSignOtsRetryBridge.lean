@@ -4623,3 +4623,197 @@ theorem first_bottom_positive_chain_serialized_weak (hash : Hash) (s : MachineSt
 #print axioms first_bottom_positive_chain_serialized_weak
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain SphincsMaskedKeygenPrefix
+open SphincsVerifierFtsRootCopy SphincsVerifierCopy
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem first_bottom_secret_hash_prep_low_frame (s : MachineState) (a : Word)
+    (safe : a.toNat < 0x40000 ∨ 0x43000 ≤ a.toNat) :
+    (firstBottomSecretHashPrep s).getMem a = s.getMem a := by
+  have ne (n : Nat) (lower : 0x40000 ≤ n) (upper : n < 0x43000) :
+      a ≠ BitVec.ofNat 64 n := by
+    intro h
+    have e := congrArg BitVec.toNat h
+    simp [BitVec.toNat_ofNat] at e
+    omega
+  simp [firstBottomSecretHashPrep, firstBottomSecretHashCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, MachineState.getMem_setMem_ne,
+    MachineState.getMem_setMem_eq, MachineState.setWord32,
+    MachineState.getWord32, alignToDword, byteOffset]
+  simp [ne 0x40000 (by decide) (by decide),
+    ne 0x40008 (by decide) (by decide),
+    ne 0x40010 (by decide) (by decide),
+    ne 0x40018 (by decide) (by decide),
+    ne 0x40020 (by decide) (by decide)]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_hash_prep_low_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_hash_prep_low_frame
+
+theorem first_bottom_secret_initial_mem_frame (hash : Hash) (s : MachineState)
+    (a : Word) (safe : a.toNat < 0x40000 ∨ 0x43000 ≤ a.toNat)
+    (h0 : a ≠ 0x44b00) (h8 : a ≠ 0x44b08) (h16 : a ≠ 0x44b10) :
+    (firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)).getMem a =
+      s.getMem a := by
+  let prep := firstBottomSecretHashPrep s
+  let answer := firstBottomSecretHashAnswer hash s
+  let setup := firstBottomSecretAnswerSetup answer
+  have dst : setup.getReg .x7 = 0x44b00 := by
+    simpa [setup, firstBottomSecretAnswerSetup, firstBottomSecretAnswerSetupCode,
+      runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  change (copyRootState setup).getMem a = s.getMem a
+  rw [SphincsVerifierCopyMemory.copyRoot_mem_frame]
+  · have setupFrame : setup.getMem a = answer.getMem a := by
+      simp [setup, firstBottomSecretAnswerSetup, firstBottomSecretAnswerSetupCode,
+        runSchedule, execInstrBr]
+    rw [setupFrame]
+    have dstHash : prep.getReg .x12 = 0x42000 := by
+      simp [prep, firstBottomSecretHashPrep, firstBottomSecretHashCode,
+        runSchedule, execInstrBr, signExtend12,
+        MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+    have ne (n : Nat) (lower : 0x40000 ≤ n) (upper : n < 0x43000) :
+        a ≠ BitVec.ofNat 64 n := by
+      intro h
+      have e := congrArg BitVec.toNat h
+      simp [BitVec.toNat_ofNat] at e
+      omega
+    change (writeHash prep (hash (hashInput prep))).getMem a = s.getMem a
+    rw [SphincsVerifierFtsLevelInit.writeHash_mem_frame prep _ dstHash a
+      (ne 0x42000 (by decide) (by decide))
+      (ne 0x42008 (by decide) (by decide))
+      (ne 0x42010 (by decide) (by decide))
+      (ne 0x42018 (by decide) (by decide))]
+    exact first_bottom_secret_hash_prep_low_frame s a safe
+  · intro i
+    rw [dst]
+    fin_cases i <;> simp_all [signExtend12, alignToDword]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_initial_mem_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_initial_mem_frame
+
+theorem first_bottom_secret_initial_fixed_context (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
+    (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val)) :
+    let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+    SphincsMaskedSignOtsDomain.Chain.FixedContext t parameter lay treeIdx leaf chain ∧
+    t.getMem 0x43020 = s.getMem 0x43020 ∧
+    t.getMem 0x430a0 = BitVec.ofNat 64 (0x20060 + 20 * chain.val) ∧
+    SphincsMaskedSecretDomain.Words32 t seed := by
+  let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+  obtain ⟨layer, tree, leafMem, _, par, key, _⟩ := ctx
+  have frame (a : Word) (safe : a.toNat < 0x40000 ∨ 0x43000 ≤ a.toNat)
+      (h0 : a ≠ 0x44b00) (h8 : a ≠ 0x44b08) (h16 : a ≠ 0x44b10) :
+      t.getMem a = s.getMem a :=
+    first_bottom_secret_initial_mem_frame hash s a safe h0 h8 h16
+  dsimp only [t] at frame
+  refine ⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_⟩
+  · rw [frame (0x43000#64) (Or.inr (by decide)) (by decide) (by decide) (by decide)]
+    exact layer
+  · rw [frame (0x43008#64) (Or.inr (by decide)) (by decide) (by decide) (by decide)]
+    exact tree
+  · rw [frame (0x43018#64) (Or.inr (by decide)) (by decide) (by decide) (by decide)]
+    exact leafMem
+  · rw [frame (0x43050#64) (Or.inr (by decide)) (by decide) (by decide) (by decide)]
+    exact chainControl
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame _ (Or.inl (by fin_cases i <;> decide))
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact par i
+  · exact frame (0x43020#64) (Or.inr (by decide)) (by decide) (by decide) (by decide)
+  · exact (frame (0x430a0#64) (Or.inr (by decide))
+      (by decide) (by decide) (by decide)).trans pointer
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [frame _ (Or.inl (by fin_cases i <;> decide))
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact key i
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_initial_fixed_context' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_initial_fixed_context
+
+def firstBottomSignedChain (hash : Hash) (s : MachineState) (digit : Digit) :
+    MachineState :=
+  let initial := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+  if digit.val = 0 then firstBottomEmitCopy (firstBottomChainDigit initial)
+  else firstBottomEmitCopy
+    (firstBottomChainWalk hash digit.val (firstBottomChainDigit initial))
+
+theorem first_bottom_signed_chain (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (digit : Digit)
+    (pc : s.pc = 0x3b20)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain)
+    (chainControl : s.getMem 0x43050 = BitVec.ofNat 64 chain.val)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (0x20060 + 20 * chain.val))
+    (digitByte : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val) :
+    let initial := truncateHash (hash (toQuery
+      (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))
+    Trace hash SphincsMaskedImages.sign s (91 + 95 * digit.val)
+      (106 + 102 * digit.val) (1 + digit.val) (2 + digit.val)
+      (firstBottomSignedChain hash s digit) ∧
+    Words20 (firstBottomSignedChain hash s digit)
+      (0x20060 + 20 * chain.val)
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
+  let initial := truncateHash (hash (toQuery
+    (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))
+  let afterSecret := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+  have secret := first_bottom_secret_initial_value hash s parameter seed lay
+    treeIdx leaf chain pc ctx
+  have carried := first_bottom_secret_initial_fixed_context hash s parameter
+    seed lay treeIdx leaf chain ctx chainControl pointer
+  have digitAt : afterSecret.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val := by
+    simp only [MachineState.getByte]
+    rw [first_bottom_secret_initial_mem_frame hash s _
+      (Or.inr (by fin_cases chain <;> decide))
+      (by fin_cases chain <;> decide)
+      (by fin_cases chain <;> decide)
+      (by fin_cases chain <;> decide)]
+    exact digitByte
+  by_cases hd : digit.val = 0
+  · have zero : afterSecret.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0 := by
+      rw [digitAt, hd]
+      rfl
+    have emitted := first_bottom_zero_chain_serialized_weak hash afterSecret
+      parameter initial lay treeIdx leaf chain secret.2.1 carried.1 secret.2.2
+      zero carried.2.2.1
+    refine ⟨?_, ?_⟩
+    · simpa [firstBottomSignedChain, afterSecret, hd] using
+        secret.1.trans emitted.1
+    · simpa [firstBottomSignedChain, afterSecret, hd] using emitted.2
+  · have pos : 0 < digit.val := Nat.pos_of_ne_zero hd
+    have emitted := first_bottom_positive_chain_serialized_weak hash afterSecret
+      parameter initial lay treeIdx leaf chain digit secret.2.1 carried.1
+      secret.2.2 digitAt pos carried.2.2.1
+    refine ⟨?_, ?_⟩
+    · simp only [firstBottomSignedChain, if_neg hd]
+      change Trace hash SphincsMaskedImages.sign s (91 + 95 * digit.val)
+        (106 + 102 * digit.val) (1 + digit.val) (2 + digit.val)
+        (firstBottomEmitCopy (firstBottomChainWalk hash digit.val
+          (firstBottomChainDigit afterSecret)))
+      convert secret.1.trans emitted.1 using 1 <;> omega
+    · simpa [firstBottomSignedChain, afterSecret, hd] using emitted.2
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_signed_chain' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_signed_chain
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
