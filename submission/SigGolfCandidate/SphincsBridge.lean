@@ -1,6 +1,6 @@
 import SigGolfCandidate.SphincsCommitment
 import SigGolfCandidate.Serialization
-import SigGolfCandidate.Hypertree.SecurityPacking
+import SigGolfCandidate.Execution
 
 /-!
 # Byte-string oracle bridge
@@ -14,10 +14,10 @@ an abstract scheme call.
 namespace SigGolfCandidate.SphincsBridge
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SphincsSecurity OracleComp
 
-def toQuery (input : HashInput) : Query :=
-  Hypertree.Reference.packed (input.map UInt8.toBitVec)
+def toQuery (input : HashInput) : SigGolfCandidate.Legacy.Query :=
+  Serialization.legacyPacked (input.map UInt8.toBitVec)
 
-def adaptOracle (hash : Hash) : SphincsSecurity.HashInput → SphincsSecurity.HashOutput :=
+def adaptOracle (hash : SigGolfCandidate.Legacy.Hash) : SphincsSecurity.HashInput → SphincsSecurity.HashOutput :=
   fun input => hash (toQuery input)
 
 /-- The scheme's fixed-width encoding and the organizer's buffer encoding have the same bytes. -/
@@ -38,7 +38,7 @@ theorem toQuery_bytesLE (n : Nat) (value : BitVec (8 * n)) :
 /-- The VM's length-tagged query loses no scheme input bytes. -/
 theorem toQuery_injective : Function.Injective toQuery := by
   intro first second h
-  have hbytes := Hypertree.SecurityPacking.packed_injective h
+  have hbytes := Serialization.legacyPacked_injective h
   exact (List.map_injective_iff.mpr (fun _ _ heq => UInt8.toBitVec_inj.mp heq)) hbytes
 
 /-- Domain separation survives the conversion to organizer oracle queries. -/
@@ -80,7 +80,7 @@ structure CommitmentReady (state : MachineState) (pk : SphincsSecurity.PublicKey
 /-- A prepared commitment instruction makes the exact abstract commitment query. -/
 theorem commitmentReady_hashInput (state : MachineState) (pk : SphincsSecurity.PublicKey)
     (ready : CommitmentReady state pk) :
-    hashInput state = toQuery (SphincsWire.commitmentInput pk) := by
+    SigGolfCandidate.hashInput state = toQuery (SphincsWire.commitmentInput pk) := by
   apply Serialization.hashInput_of_list state 0x40000
     ((SphincsWire.commitmentInput pk).map UInt8.toBitVec)
   · exact ready.source
@@ -92,13 +92,14 @@ theorem commitmentReady_hashInput (state : MachineState) (pk : SphincsSecurity.P
 /-- The exact HASH call is valid and charges one compression, hence eight cycles. -/
 theorem commitmentReady_hashCost (state : MachineState) (pk : SphincsSecurity.PublicKey)
     (ready : CommitmentReady state pk) :
-    hashArgumentsValid state = true ∧ compressions (hashInput state).1 = 1 := by
+    SigGolfCandidate.hashArgumentsValid state = true ∧
+      SigGolfCandidate.compressions (SigGolfCandidate.hashInput state).1 = 1 := by
   constructor
-  · simp [hashArgumentsValid, ready.source, ready.bits, ready.destination,
+  · simp [SigGolfCandidate.hashArgumentsValid, ready.source, ready.bits, ready.destination,
       accessValid, rangeValid, MEMORY_BYTES]
   · rw [commitmentReady_hashInput state pk ready]
-    simp [toQuery, Hypertree.Reference.packed,
-      SphincsWire.commitmentInput_length, compressions]
+    simp [toQuery, Serialization.legacyPacked,
+      SphincsWire.commitmentInput_length, SigGolfCandidate.compressions]
 
 /-- info: 'SigGolfCandidate.SphincsBridge.toQuery_injective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
