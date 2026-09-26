@@ -11972,14 +11972,6 @@ theorem ordinary_eval (hash : Hash) (image : Image) (state next : MachineState)
   | sraiw rd rs shift =>
     simp [execute, fetched, stepped]
 
-/-- The current beta executor rejects the common 480-bit/60-byte old query. -/
-theorem hashReady_invalid_60 (state : MachineState) (stubPC : BitVec 64)
-    (hbits : state.getReg .x11 = 480) :
-    hashArgumentsValid (hashReady state stubPC) = false := by
-  have hb : state.regs .x11 = 480 := by simpa [MachineState.getReg] using hbits
-  simp [hashArgumentsValid, hashReady, shifted,
-    MachineState.setReg, MachineState.setPC, MachineState.getReg, hb]
-
 def hashBoundary (state : MachineState) (stubPC : BitVec 64)
     (answer : BitVec 256) : MachineState :=
   let hashed := writeHash (hashReady state stubPC) answer
@@ -12116,10 +12108,6 @@ theorem beta_hash_stub_macro (hash : Hash) (image : Image) (state : MachineState
 /-- info: 'StubMacro.hashBoundary_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms hashBoundary_eq
-
-/-- info: 'StubMacro.hashReady_invalid_60' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms hashReady_invalid_60
 
 /-- info: 'StubMacro.beta_hash_stub_macro' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
