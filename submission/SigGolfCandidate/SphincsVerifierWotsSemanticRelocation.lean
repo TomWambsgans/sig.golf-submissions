@@ -494,6 +494,108 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
   · intro address low
     simpa using lowFrame address low
 
+/-- The upper-layer WOTS block recovers semantic endpoints at its actual PC. -/
+theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
+    (ready : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (pc : ready.pc = BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierWotsRelocation.chainPc target))
+    (counter : ready.getMem 0x43050 = 0)
+    (pointer : ready.getMem 0x43028 = BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target))
+    (layerCell : ready.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : ready.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix ready pk)
+    (decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (digits chain).val)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      ready.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      Trace hash SphincsImages.verify ready steps cycles calls blocks final ∧
+      final.pc = 0x298c + delta target ∧
+      (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.recoverChain pk.parameter layer tree leaf chain
+              (digits chain) (values chain))).extractLsb' (8 * j) 8) ∧
+      steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
+      calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 := by
+  let base := shift (-delta target) ready
+  have basePc : base.pc = 0x2710 := by
+    fin_cases target <;> simp [base, pc, shift_pc,
+      SigGolfCandidate.SphincsVerifierWotsRelocation.chainPc, delta]
+  have shiftedStart : shift (delta target) base = ready := by
+    simp [base, shift, MachineState.setPC]
+  obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
+    _counter, _pointer, endpoints, _lowFrame,
+    stepBound, cycleBound, callBound, blockBound⟩ :=
+    upper_chains_semantics target hash base pk layer tree leaf digits values
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_bound target)
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_aligned target)
+      basePc (by simpa [base] using counter)
+      (by simpa [base] using pointer)
+      (by simpa [base] using layerCell)
+      (by simpa [base] using treeCell)
+      (by simpa [base] using leafCell)
+      (by
+        constructor
+        · intro i hi
+          simpa [base] using hprefix.root i hi
+        · intro i hi
+          simpa [base] using hprefix.parameter i hi)
+      (by intro chain; simpa [base] using decoded chain)
+      (by intro chain j hj; simpa [base] using source chain j hj)
+  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc, endpoints,
+    stepBound, cycleBound, callBound, blockBound⟩
+  simpa only [shiftedStart] using run
+
+/-- Digit decoding and WOTS setup form a fixed-cost prefix before each upper layer. -/
+theorem upper_prepare_trace (target : Fin 5) (hash : Hash)
+    (state : MachineState)
+    (pc : state.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SigGolfCandidate.SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (checksum : state.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 state = 194) :
+    Trace hash SphincsImages.verify state 507 507 0 0
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state)) ∧
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+        target state)).pc =
+      BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierWotsRelocation.chainPc target) ∧
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+        target state)).getMem 0x43050 = 0 ∧
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+        target state)).getMem 0x43028 = BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target) := by
+  obtain ⟨decoderRun, decodedPc, decodedChecksum⟩ :=
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.decoder_upper target state pc
+  let decoded :=
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState target state
+  have goodChecksum : decoded.getReg .x15 = 194 := by
+    rw [decodedChecksum]
+    exact checksum
+  have setupRun := SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_block
+    target decoded decodedPc goodChecksum
+  obtain ⟨done, counter, pointer⟩ :=
+    SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_final
+      target decoded decodedPc goodChecksum
+  refine ⟨?_, done, counter, pointer⟩
+  have all := (decoderRun.trace (hash := hash)).trans
+    (setupRun.trace (hash := hash))
+  simpa [decoded] using all
+
 /-- Digit decoding writes only its scratch digit array, never the input witness. -/
 theorem upper_decoder_low_byte_frame (target : Fin 5) (state : MachineState)
     (address : Word) (low : address.toNat < 0x40000) :
@@ -613,6 +715,64 @@ theorem upper_ready_source (target : Fin 5) (state : MachineState)
       chain j hj)]
   exact source chain j hj
 
+/-- The full upper-layer decoder and WOTS chains recover from the original witness. -/
+theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
+    (state ready : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (readyEq : ready =
+      SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state))
+    (pc : state.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SigGolfCandidate.SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (checksum : state.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 state = 194)
+    (layerCell : ready.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : ready.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (digits chain).val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
+      final.pc = 0x298c + delta target ∧
+      (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.recoverChain pk.parameter layer tree leaf chain
+              (digits chain) (values chain))).extractLsb' (8 * j) 8) ∧
+      steps ≤ 507 + 728 * 52 ∧ cycles ≤ 507 + 777 * 52 ∧
+      calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 := by
+  obtain ⟨pre, preparedPc, preparedCounter, preparedPointer⟩ :=
+    upper_prepare_trace target hash state pc checksum
+  have preRun : Trace hash SphincsImages.verify state 507 507 0 0 ready := by
+    simpa only [← readyEq] using pre
+  have readyPrefix : SphincsVerifierHashBytes.WitnessPrefix ready pk := by
+    simpa only [readyEq] using upper_ready_prefix target state pk hprefix
+  have readySource : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      ready.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8 := by
+    simpa only [readyEq] using upper_ready_source target state values source
+  obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
+    done, endpoints, stepBound, cycleBound, callBound, blockBound⟩ :=
+    upper_chains_from_ready target hash ready pk layer tree leaf digits values
+      (by simpa only [readyEq] using preparedPc)
+      (by simpa only [readyEq] using preparedCounter)
+      (by simpa only [readyEq] using preparedPointer)
+      layerCell treeCell leafCell readyPrefix decoded readySource
+  refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
+    ?_, done, endpoints, by omega, by omega, callBound, blockBound⟩
+  simpa [Nat.add_assoc] using preRun.trans wotsRun
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -624,6 +784,24 @@ theorem upper_ready_source (target : Fin 5) (state : MachineState)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_ready_source
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_from_ready' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_chains_from_ready
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_prepare_trace' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_prepare_trace
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_chains_semantics' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_decoder_chains_semantics
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,
