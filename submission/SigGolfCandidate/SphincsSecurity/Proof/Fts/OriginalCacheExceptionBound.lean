@@ -3124,3 +3124,108 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedContextGame_cache_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedContextGame_cache_hit_budget_le_rate
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+private theorem stateTpmf_support_subset {I State Result : Type} {spec : OracleSpec I}
+    (impl : QueryImpl spec (StateT State PMF))
+    (computation : OracleComp spec Result) (state : State) :
+    ∀ result ∈ ((simulateQ impl computation).run state).support,
+      result.1 ∈ support computation := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value =>
+      intro result hr
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      simp only [mem_support_pure_iff]
+  | query_bind input next ih =>
+      intro result hr
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, _, htail⟩ := hr
+      rw [mem_support_bind_iff]
+      exact ⟨middle.1, by simp only [support_query, Set.mem_univ],
+        ih middle.1 middle.2 result htail⟩
+
+
+theorem counted_game_query_le_cost
+    (parameter : PublicParameter) (external : QueryImpl HashSpec Id)
+    (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords)
+    (frontier : OtsFrontierValues) (adversary : Adversary)
+    (cache : QueryCache HashSpec)
+    (result : ((Bool × SigningBoundaryTrace) × Nat) × QueryCache HashSpec)
+    (hr : result ∈ ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+      (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache).support) :
+    result.1.2 ≤ result.1.1.2.hashCalls := by
+  have hsource : result.1 ∈ support (QueryCap.counted CausalFrontierProgram.IsHash
+      (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary)) :=
+    stateTpmf_support_subset romPmfImpl _ cache result hr
+  exact CausalFrontierProgram.game_counted_le parameter external ftsSecret words frontier adversary result.1 hsource
+
+theorem counted_game_run_forget
+    (parameter : PublicParameter) (external : QueryImpl HashSpec Id)
+    (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords)
+    (frontier : OtsFrontierValues) (adversary : Adversary)
+    (cache : QueryCache HashSpec) :
+    (fun output : ((Bool × SigningBoundaryTrace) × Nat) × QueryCache HashSpec =>
+      (output.1.1, output.2)) <$>
+      ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+        (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache) =
+      ((simulateQ romPmfImpl (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary)).run cache) := by
+  rw [← StateT.run_map, ← simulateQ_map, QueryCap.counted_forget]
+
+
+/-- The organizer's actual-cost event is preserved by one shared hash-query cap. -/
+theorem causal_game_globalCap_budget_event
+    (parameter : PublicParameter) (external : QueryImpl HashSpec Id)
+    (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords)
+    (frontier : OtsFrontierValues) (adversary : Adversary)
+    (cache : QueryCache HashSpec) (q : Nat)
+    (event : (Bool × SigningBoundaryTrace) → QueryCache HashSpec → Prop) :
+    Pr[QueryCap.stoppedStateEvent
+        (fun output finalCache => output.2.hashCalls ≤ q ∧ event output finalCache) |
+      (simulateQ romPmfImpl (QueryCap.run CausalFrontierProgram.IsHash
+        (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary) q)).run cache] =
+    Pr[fun output => output.1.2.hashCalls ≤ q ∧ event output.1 output.2 |
+      (simulateQ romPmfImpl (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary)).run cache] := by
+  have hcap := QueryCap.run_budget_event_state CausalFrontierProgram.IsHash romPmfImpl
+    (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary) q cache
+    (fun output finalCache => output.2.hashCalls ≤ q ∧ event output finalCache)
+  rw [hcap]
+  have hmap := counted_game_run_forget parameter external ftsSecret words frontier adversary cache
+  rw [← hmap, probEvent_map]
+  change probEvent (liftM ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+    (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache) : SPMF _) _ =
+    probEvent (liftM ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+    (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache) : SPMF _) _
+  apply le_antisymm
+  · apply probEvent_mono
+    intro output _ h
+    exact h.2
+  · apply probEvent_mono
+    intro output houtput h
+    change output ∈ (liftM ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+      (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache) : SPMF _).support at houtput
+    have hpmf : output ∈ ((simulateQ romPmfImpl (QueryCap.counted CausalFrontierProgram.IsHash
+        (CausalFrontierProgram.game parameter external ftsSecret words frontier adversary))).run cache).support := by
+      simpa only [SPMF.support_liftM] using houtput
+    exact ⟨(counted_game_query_le_cost parameter external ftsSecret words frontier adversary cache output hpmf).trans h.1, h⟩
+
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.counted_game_query_le_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.counted_game_query_le_cost
+
+/-- info: 'SphincsSecurity.Concrete.counted_game_run_forget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.counted_game_run_forget
+
+/-- info: 'SphincsSecurity.Concrete.causal_game_globalCap_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.causal_game_globalCap_budget_event
