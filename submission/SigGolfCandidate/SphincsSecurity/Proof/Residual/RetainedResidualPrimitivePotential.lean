@@ -2392,3 +2392,107 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_success_support' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_counted_stopped_success_support
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+set_option maxHeartbeats 1000000
+
+theorem lazyRun_stopped_source_jointPotential {Result : Type} (key : SecretKey)
+    (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (hselect : ∀ position, FirstSuccessTable.select decodeEncodingOutput
+      (fun counter => rows (position, counter)) = selections position)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcandidates : ResidualByteFrontend.HiddenCandidateBound words state.memory.routing.disclosed (project state))
+    (hclean : ResidualByteFrontend.ReplyClean
+      (PublicEncodingMatch.Match key.parameter (knownEncodingMessage state.memory.routing.known) words selections)
+      state.memory.external.cache)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits) :
+    (∑' result, Pr[= result | lazyRun
+      (environment key.parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (simulateQ (adversaryImpl inputs key.parameter key.root words selections) computation)
+        remaining) state] * stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  induction computation using OracleComp.inductionOn generalizing state remaining with
+  | pure value =>
+      simp only [simulateQ_pure, WeightedCutoff.run_pure, lazyRun, runWith_pure,
+        tsum_probOutput_pure_mul, stoppedPrimitiveResultPotential,
+        primitiveResultPotential, Option.elim_some, primitiveLivePotential, le_refl]
+  | query_bind input next ih =>
+      have hin := (requestInputs_subset key input next).trans hinputs
+      have hnext : ∀ answer, sourceInputs key (next answer) ⊆ inputs :=
+        fun answer => (sourceInputs_next_subset key input next answer).trans hinputs
+      apply le_trans ?_ (lazyRun_stopped_request_jointPotential key inputs hencoding words
+        publicReplies selections rows input hin state budget remaining hselect ha hcovered
+        hcandidates hclean hresources hremaining hbudget)
+      rw [simulateQ_bind, simulateQ_spec_query, WeightedCutoff.run_bind_counted,
+        lazyRun_bind, tsum_probOutput_bind_mul]
+      rw [← expected_stoppedPotential_counted_forget key.parameter inputs hencoding words
+        publicReplies selections rows
+        (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+          (adversaryImpl inputs key.parameter key.root words selections input) remaining)
+        state budget]
+      apply ENNReal.tsum_le_tsum
+      intro middle
+      by_cases hm : Pr[= middle | lazyRun
+          (environment key.parameter inputs hencoding words publicReplies selections rows)
+          (WeightedCutoff.counted (WeightedCutoff.residualCharge inputs)
+            (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+              (adversaryImpl inputs key.parameter key.root words selections input) remaining)) state] = 0
+      · simp only [hm, zero_mul, le_refl]
+      · apply mul_le_mul' le_rfl
+        rcases middle with ⟨option, after⟩
+        cases option with
+        | none =>
+            simp only [Option.elim_none, tsum_probOutput_pure_mul, Option.map_none]
+            rfl
+        | some pair =>
+            rcases pair with ⟨answer, cost⟩
+            cases answer with
+            | none =>
+                simp only [Option.elim_some, lazyRun, runWith_pure,
+                  tsum_probOutput_pure_mul, Option.map_some,
+                  stoppedPrimitiveResultPotential, le_refl]
+            | some answer =>
+                have hsource := lazyRun_counted_stopped_success_support
+                  key.parameter inputs hencoding words publicReplies selections rows
+                  (adversaryImpl inputs key.parameter key.root words selections input)
+                  remaining state answer cost after hm
+                have ha' := lazyRun_nonempty
+                  (environment key.parameter inputs hencoding words publicReplies selections rows)
+                  _ state ha (some answer, after) hsource
+                have hc' := lazyRun_rowsCovered key.parameter inputs hencoding words
+                  publicReplies selections rows _ state ha hcovered (some answer, after) hsource
+                have hp' := lazyRun_request_hiddenCandidateBound key inputs hencoding words
+                  publicReplies selections rows input hin state ha hcovered hcandidates
+                  (some answer, after) hsource
+                have hr' := lazyRun_request_probeMessageBound inputs words publicReplies
+                  selections rows key hencoding input hin state ha hcovered hresources
+                  (some answer, after) hsource
+                have he' := lazyRun_request_encodingClean inputs words publicReplies
+                  selections rows key hencoding input hin state ha hcovered hclean
+                  (some answer, after) hsource (by simp)
+                have hrem := lazyRun_counted_stopped_remaining key.parameter inputs
+                  hencoding words publicReplies selections rows
+                  (adversaryImpl inputs key.parameter key.root words selections input)
+                  state budget remaining (some answer) cost after hremaining hm
+                convert ih answer (hnext answer) after (remaining - cost) ha' hc' hp' he'
+                    hr' hrem using 1 <;> rfl
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_source_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_source_jointPotential
