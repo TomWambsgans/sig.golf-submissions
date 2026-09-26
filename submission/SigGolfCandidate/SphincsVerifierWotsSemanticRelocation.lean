@@ -6041,4 +6041,27 @@ theorem upper_decoder_start_control_cell (target : Fin 5) (hash : Hash)
 #print axioms upper_prehash_control_cell
 #print axioms upper_decoder_start_control_cell
 
+
+theorem upper_ready_control_cell (target : Fin 5) (hash : Hash)
+    (state : MachineState)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (read : Word) (lo : 0x43000 ≤ read.toNat) (hi : read.toNat < 0x44000)
+    (counter : read ≠ 0x43050) (pointer : read ≠ 0x43028) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target
+        (firstUpperPaddingState
+          (writeHash (upperPrehashState target state)
+            (hash (hashInput (upperPrehashState target state))))))).getMem read =
+      state.getMem read := by
+  let decoder := firstUpperPaddingState
+    (writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state))))
+  calc
+    _ = decoder.getMem read := ready_control_cell target decoder read hi counter pointer
+    _ = state.getMem read := upper_decoder_start_control_cell target hash state pc small read lo hi
+
+#print axioms upper_ready_control_cell
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
