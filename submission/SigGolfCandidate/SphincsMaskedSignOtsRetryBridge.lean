@@ -544,4 +544,192 @@ theorem initial_encoding_digest_words (location : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms initial_encoding_digest_words
 
+def encodingQueryWord (s : MachineState) (i : Fin 16) : BitVec 32 :=
+  if i.val = 0 then (0x401#64 + (s.getMem 0x43000 <<< 16)).setWidth 32
+  else if i.val = 1 then (s.getMem 0x43010).setWidth 32
+  else if i.val = 2 then extractWord32 (s.getMem 0x43008) 0
+  else if i.val = 3 then extractWord32 (s.getMem 0x43008) 1
+  else if i.val = 4 then (s.getMem 0x43018).setWidth 32
+  else if i.val < 10 then s.getWord32 (BitVec.ofNat 64 (0x74 + 4*(i.val-5)))
+  else if i.val < 15 then s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4*(i.val-10)))
+  else extractWord32 (s.getMem 0x430b8) 0
+
+theorem encoding_prepared_word (location : Fin 5) (s : MachineState) (i : Fin 16) :
+    (otsHashPrep location s).getWord32 (BitVec.ofNat 64 (0x40000 + 4*i.val)) =
+      encodingQueryWord s i := by
+  fin_cases i <;>
+    simp [otsHashPrep, otsHashPrepState, otsHashPrepCode, runSchedule,
+      encodingQueryWord, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.setWord32, MachineState.getWord32, alignToDword, byteOffset,
+      SphincsMaskedChainStep.extract_replace_low,
+      SphincsMaskedChainStep.extract_replace_high,
+      SphincsMaskedChainStep.extract_replace_high_other]
+
+
+def EncodingContext (s : MachineState) (parameter message : Digest)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex) (counter : Counter) : Prop :=
+  s.getMem 0x43000 = BitVec.ofNat 64 lay.val ∧
+  s.getMem 0x43010 = 0 ∧
+  s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
+  s.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+  s.getMem 0x430b8 = BitVec.ofNat 64 counter.toNat ∧
+  Words20 s 0x74 parameter ∧ Words20 s 0x44a00 message
+
+def encodingPayload (parameter message : Digest) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (counter : Counter) : List Byte :=
+  (tweakableHashInput parameter (.encoding lay treeIdx leaf)
+    (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat))).map UInt8.toBitVec
+
+theorem encodingPayload_length (parameter message : Digest) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (counter : Counter) :
+    (encodingPayload parameter message lay treeIdx leaf counter).length = 64 := by
+  simp [encodingPayload, tweakableHashInput, tweakBytes, hashDomainFields,
+    tweakFields, fieldBytes, bytesLE]
+
+theorem encoding_prepared_byte (location : Fin 5) (s : MachineState) (i : Fin 64) :
+    (otsHashPrep location s).getByte (BitVec.ofNat 64 (0x40000+i.val)) =
+      (encodingQueryWord s ⟨i.val / 4, by omega⟩).extractLsb' (8*(i.val%4)) 8 := by
+  have h := SphincsVerifierFtsGenericBytes.variableWord_byte (otsHashPrep location s)
+    (0x40000 + 4*(i.val/4)) (by omega) (by omega)
+    0 ⟨i.val%4, Nat.mod_lt _ (by decide)⟩
+  simp only [Fin.val_zero, Nat.mul_zero, Nat.add_zero] at h
+  rw [show 0x40000 + 4*(i.val/4) + i.val%4 = 0x40000 + i.val by omega] at h
+  rw [h, encoding_prepared_word location s ⟨i.val/4, by omega⟩]
+
+private theorem ofNat_width_byte (n start : Nat) (h : start + 8 ≤ 32) :
+    (BitVec.ofNat 32 n).extractLsb' start 8 =
+      (BitVec.ofNat 64 n).extractLsb' start 8 := by
+  rw [← BitVec.setWidth_ofNat_of_le (show 32 ≤ 64 by decide) n]
+  exact BitVec.extractLsb'_setWidth_of_le h
+
+theorem encoding_context_byte (s : MachineState) (parameter message : Digest)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex) (counter : Counter)
+    (ctx : EncodingContext s parameter message lay treeIdx leaf counter) (i : Fin 64) :
+    (encodingQueryWord s ⟨i.val/4, by omega⟩).extractLsb' (8*(i.val%4)) 8 =
+      (encodingPayload parameter message lay treeIdx leaf counter)[i.val]'(by
+        rw [encodingPayload_length]; exact i.isLt) := by
+  obtain ⟨layer,zero,tree,index,ctr,par,msg⟩ := ctx
+  have p0 := par 0
+  have p1 := par 1
+  have p2 := par 2
+  have p3 := par 3
+  have p4 := par 4
+  have m0 := msg 0
+  have m1 := msg 1
+  have m2 := msg 2
+  have m3 := msg 3
+  have m4 := msg 4
+  norm_num at p0 p1 p2 p3 p4 m0 m1 m2 m3 m4
+  unfold encodingQueryWord
+  simp only [layer, zero, tree, index, ctr]
+  fin_cases i <;>
+    simp [p0, p1, p2, p3, p4, m0, m1, m2, m3, m4,
+      encodingPayload, tweakableHashInput, tweakBytes, hashDomainFields,
+      tweakFields, fieldBytes, bytesLE, protocolDomainSep, extractWord32,
+      BitVec.setWidth_ushiftRight_eq_extractLsb,
+      SphincsMaskedSignForestDomain.nested_extract]
+
+
+  case «8» => exact ofNat_width_byte treeIdx.val 0 (by decide)
+  case «9» => exact ofNat_width_byte treeIdx.val 8 (by decide)
+  case «10» => exact ofNat_width_byte treeIdx.val 16 (by decide)
+  case «11» => exact ofNat_width_byte treeIdx.val 24 (by decide)
+  case «0» => fin_cases lay <;> decide
+  case «1» => fin_cases lay <;> decide
+  case «2» => fin_cases lay <;> decide
+  case «3» => fin_cases lay <;> decide
+
+
+theorem encoding_context_query (location : Fin 5) (s : MachineState)
+    (parameter message : Digest) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (counter : Counter)
+    (ctx : EncodingContext s parameter message lay treeIdx leaf counter) :
+    hashInput (otsHashPrep location s) =
+      toQuery (tweakableHashInput parameter (.encoding lay treeIdx leaf)
+        (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 counter.toNat))) := by
+  apply Serialization.hashInput_of_list (otsHashPrep location s) 0x40000
+    (encodingPayload parameter message lay treeIdx leaf counter)
+  · exact (otsHashPrep_registers location s).1
+  · rw [encodingPayload_length, (otsHashPrep_registers location s).2.1]
+    rfl
+  · intro i hi
+    have bound : i < 64 := by simpa only [encodingPayload_length] using hi
+    rw [encoding_prepared_byte location s ⟨i, bound⟩]
+    exact encoding_context_byte s parameter message lay treeIdx leaf counter ctx ⟨i, bound⟩
+
+
+theorem encoding_entry_context (location : Fin 5) (s : MachineState)
+    (parameter message : Digest) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x430a8 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (msg : Words20 s 0x44a00 message) :
+    EncodingContext (otsPrelude location s) parameter message lay treeIdx leaf (0 : Counter) := by
+  have controls := otsPrelude_controls location s leaf.val selected
+  refine ⟨?_, controls.2.2.1, ?_, controls.2.2.2, ?_, ?_, ?_⟩
+  · rw [otsPrelude_frame location s 0x43000 (by decide)]
+    exact layer
+  · rw [otsPrelude_frame location s 0x43008 (by decide)]
+    exact tree
+  · simpa using controls.2.1
+  · intro i
+    rw [otsPrelude_low_word location s (0x74+4*i.val) (by omega)]
+    exact par i
+  · intro i
+    have frame : (otsPrelude location s).getWord32
+        (BitVec.ofNat 64 (0x44a00 + 4*i.val)) =
+        s.getWord32 (BitVec.ofNat 64 (0x44a00 + 4*i.val)) := by
+      fin_cases i <;>
+        simp [MachineState.getWord32, otsPrelude_frame, otsPreludeWrites,
+          alignToDword, byteOffset]
+    rw [frame]
+    exact msg i
+
+
+/-- The live WOTS entry fields determine the first encoding HASH query. -/
+theorem encoding_entry_query (location : Fin 5) (s : MachineState)
+    (parameter message : Digest) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x430a8 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (msg : Words20 s 0x44a00 message) :
+    hashInput (otsHashPrep location (otsPrelude location s)) =
+      toQuery (tweakableHashInput parameter (.encoding lay treeIdx leaf)
+        (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 (0 : Counter).toNat))) := by
+  exact encoding_context_query location (otsPrelude location s) parameter message lay
+    treeIdx leaf 0 (encoding_entry_context location s parameter message lay treeIdx leaf
+      layer tree selected par msg)
+
+
+/-- The first concrete HASH result equals the abstract encoding digest under the live entry fields. -/
+theorem initial_encoding_digest_words_from_entry (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (message : Digest)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x430a8 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (msg : Words20 s 0x44a00 message) :
+    Words20 (initialEncodingState location hash s) 0x42000
+      (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+        (Concrete.tweakableHash parameter (.encoding lay treeIdx leaf)
+          (bytesLE 20 message ++ bytesLE 4 (BitVec.ofNat 32 (0 : Counter).toNat)) :
+          OracleComp SphincsSecurity.HashSpec Digest)) := by
+  exact initial_encoding_digest_words location hash s parameter lay treeIdx leaf message 0
+    (encoding_entry_query location s parameter message lay treeIdx leaf
+      layer tree selected par msg)
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_entry_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_entry_query
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.initial_encoding_digest_words_from_entry' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms initial_encoding_digest_words_from_entry
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
