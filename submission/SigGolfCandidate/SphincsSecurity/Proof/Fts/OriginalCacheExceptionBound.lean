@@ -110,6 +110,41 @@ theorem recordLengthBridge_joint_project {Ω Γ : Type} (law : PMF (Ω × Γ))
   simp only [PMF.map_comp]
   rfl
 
+/-- The enriched signing record retains the cache-hit monitor while exposing
+    the same signing view, boundary trace, and selected index as the original
+    proposal record. -/
+noncomputable def enrichedSigningRecord (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    PMF (ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) :=
+  ((simulateQ (certificateStoppedRomImpl key)
+      (boundaryComputation key.parameter (signWithView key message))).run state).bind
+    fun result =>
+      (liftM (completeSelectedIndex result.1.1.2) : PMF Index).map fun index =>
+        (⟨result.1.1.1, result.2.1, result.1.2, result.1.1.2, index⟩, result.2)
+
+theorem enrichedSigningRecord_project (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    (enrichedSigningRecord key message state).map Prod.fst =
+      originalProposalRecord key (.inr message) state.1 := by
+  have hsource := certificateStoppedRomImpl_run_cache_project key
+    (boundaryComputation key.parameter (signWithView key message)) state
+  unfold romPmfImpl at hsource
+  rw [simulateQ_liftProbCompImpl_run romImpl] at hsource
+  conv_rhs at hsource => rw [simulateQ_boundaryComputation]
+  change (Prod.map id Prod.fst <$>
+    (simulateQ (certificateStoppedRomImpl key)
+      (boundaryComputation key.parameter (signWithView key message))).run state) =
+    (liftM (tracedSigningRun (signingBoundaryTrace key.parameter) key message state.1) : PMF _) at hsource
+  rw [enrichedSigningRecord, PMF.map_bind]
+  simp only [PMF.map_comp]
+  rw [originalProposalRecord, completedSigningRecord, PMF.map_bind]
+  rw [← hsource]
+  rw [PMF.monad_map_eq_map, PMF.bind_map]
+  apply PMF.bind_congr
+  intro result _
+  simp only [PMF.map_comp]
+  rfl
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -873,3 +908,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.recordLengthBridge_joint_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.recordLengthBridge_joint_project
+
+/-- info: 'SphincsSecurity.Concrete.enrichedSigningRecord_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedSigningRecord_project
