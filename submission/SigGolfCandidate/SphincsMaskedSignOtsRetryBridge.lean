@@ -7327,3 +7327,48 @@ theorem first_bottom_signed_chain_prior_emission_at (hash : Hash) (s : MachineSt
 
 #print axioms first_bottom_signed_chain_prior_emission_at
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem words20_advance_at (outputBase : Nat)
+  (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+  (signed v : MachineState)
+  (advanceFrame : ∀ a : Word,
+    (a.toNat < 0x40028 ∨ 0x40048 ≤ a.toNat) →
+    a ≠ 0x43010 → a ≠ 0x43018 → a ≠ 0x430a0 → a ≠ 0x43050 →
+    v.getMem a = signed.getMem a)
+  (j : ChainIndex) (value : BitVec 160)
+  (present : Words20 signed (outputBase + 20 * j.val) value) :
+  Words20 v (outputBase + 20 * j.val) value := by
+  intro k
+  let read := BitVec.ofNat 64 (outputBase + 20 * j.val + 4 * k.val)
+  have hj : j.val < 52 := by simpa [numChains] using j.isLt
+  have readNat : read.toNat = outputBase + 20 * j.val + 4 * k.val := by
+    simp [read, BitVec.toNat_ofNat]
+    have hk := k.isLt
+    omega
+  have low : (alignToDword read).toNat < 0x40028 := by
+    rw [align_nat, readNat]
+    have hk := k.isLt
+    omega
+  have neHigh (n : Nat) (bound : 0x43000 ≤ n) (small : n < 2 ^ 64) :
+      alignToDword read ≠ BitVec.ofNat 64 n := by
+    intro h
+    have e := congrArg BitVec.toNat h
+    simp [BitVec.toNat_ofNat] at e
+    omega
+  have frame := advanceFrame (alignToDword read) (Or.inl low)
+    (neHigh 0x43010 (by decide) (by decide))
+    (neHigh 0x43018 (by decide) (by decide))
+    (neHigh 0x430a0 (by decide) (by decide))
+    (neHigh 0x43050 (by decide) (by decide))
+  simp only [MachineState.getWord32]
+  rw [frame]
+  exact present k
+
+#print axioms words20_advance_at
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue

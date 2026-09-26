@@ -115,12 +115,12 @@ theorem firstHash_input (s : MachineState) (seed : MasterSeed)
     rw [firstHash_parameterWords s seed zero key ⟨i / 8, by omega⟩]
     exact SphincsMaskedKeygenPrefix.parameterPayload_byte seed ⟨i, bound⟩
 
-def afterHashState (hash : SigGolf.Hash) (s : MachineState)
+def afterHashState (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState)
     (seed : MasterSeed) : MachineState :=
   writeHash (firstHashState s)
     (hash (toQuery (keygenHashInput 0 .parameter seed)))
 
-theorem firstHash_trace (hash : SigGolf.Hash) (s : MachineState)
+theorem firstHash_trace (hash : SigGolfCandidate.Legacy.Hash) (s : MachineState)
     (seed : MasterSeed) (pc : s.pc = 0x1010)
     (zero : ∀ i : Fin 3,
       s.getMem (BitVec.ofNat 64 (0x40010 + 8 * i.val)) = 0)
@@ -274,7 +274,7 @@ theorem afterJump_word (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
 
 /-- The actual sign loader reaches the same 576-bit seed-parameter query as
     keygen, without receiving a public-key input. -/
-theorem loaded_firstHash_trace (hash : SigGolf.Hash)
+theorem loaded_firstHash_trace (hash : SigGolfCandidate.Legacy.Hash)
     (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
     (message : SigGolf.Message) :
     Trace hash SphincsMaskedImages.sign
