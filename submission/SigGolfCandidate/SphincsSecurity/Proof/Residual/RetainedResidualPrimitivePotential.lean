@@ -2992,3 +2992,77 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_fault_event_eq_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_fault_event_eq_budget
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem prob_stopped_fault_le_expected_primitivePotential {Result : Type}
+    (inputs : Finset HashInput) (budget : Nat)
+    (law : SPMF (Option (Option Result) × State inputs)) :
+    Pr[fun result => result.1 = none | law] ≤
+      ∑' result, Pr[= result | law] * stoppedPrimitiveResultPotential inputs budget result := by
+  rw [probEvent_eq_tsum_ite]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  rcases result with ⟨answer, after⟩
+  cases answer with
+  | none =>
+      simp only [ite_true, stoppedPrimitiveResultPotential,
+        primitiveResultPotential, Option.elim_none]
+      exact le_mul_of_one_le_right' (by exact le_add_of_nonneg_left (zero_le))
+  | some answer =>
+      simp only [reduceCtorEq, ite_false, zero_le]
+end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem initialSource_fault_within_budget_le (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (budget : Nat)
+    (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
+    (hminimum : keygenHashCost ≤ budget) (hbudget : budget ≤ 2 ^ 128) :
+    Pr[fun result => result.1 = none ∧
+      result.2.memory.external.hashCalls ≤ budget |
+      lazyRun (environment key.parameter (gameInputs adversary)
+        (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+        (referenceFamilyWords encoding.selections dummy)
+        (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
+        encoding.selections encoding.rows)
+      (simulateQ (adversaryImpl (gameInputs adversary) key.parameter key.root
+        (referenceFamilyWords encoding.selections dummy) encoding.selections)
+        (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩))
+      (initialState (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) exposed)] ≤
+    ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) -
+      ((budget : ℝ) / 2 ^ digestBits) ^ 2) := by
+  let inputs := gameInputs adversary
+  let words := referenceFamilyWords encoding.selections dummy
+  let publicReplies := coordinateGraphLabels (initialKnown words exposed) high
+  let source := FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩
+  let program := simulateQ (adversaryImpl inputs key.parameter key.root words encoding.selections) source
+  let initial := initialState inputs words exposed
+  have hremaining : initial.memory.external.hashCalls + (budget - keygenHashCost) = budget := by
+    simp only [initial, initialState, initialMemory]
+    omega
+  rw [← lazyRun_stopped_fault_event_eq_budget key.parameter inputs
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+    words publicReplies encoding.selections encoding.rows program initial budget
+    (budget - keygenHashCost) hremaining]
+  exact (prob_stopped_fault_le_expected_primitivePotential inputs budget _).trans
+    (initialStoppedSource_jointPotential key adversary encoding dummy exposed high budget
+      hencoding hminimum hbudget)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.prob_stopped_fault_le_expected_primitivePotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.prob_stopped_fault_le_expected_primitivePotential
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialSource_fault_within_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialSource_fault_within_budget_le
