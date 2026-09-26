@@ -469,6 +469,9 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       final.pc = 0x298c + delta target ∧
       final.getMem 0x43050 = 52 ∧
       final.getMem 0x43028 = BitVec.ofNat 64 (base + 20 * 52) ∧
+      final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+      final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+      final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -479,17 +482,20 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
       steps ≤ 728 * 52 ∧ cycles ≤ 777 * 52 ∧
       calls ≤ 7 * 52 ∧ blocks ≤ 7 * 52 := by
   obtain ⟨final, steps, cycles, calls, blocks, run, done, count,
-    sourcePointer, _layer, _tree, _leaf, valuesDone, lowFrame,
+    sourcePointer, layerFinal, treeFinal, leafFinal, valuesDone, lowFrame,
     stepBound, cycleBound, callBound, blockBound, inside⟩ :=
     all_chains_inside_semantics hash state pk layer tree leaf digits values
       base baseBound baseAligned pc counter pointer layerCell treeCell
       leafCell hprefix decoded source
   refine ⟨shift (delta target) final, steps, cycles, calls, blocks,
-    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_,
+    trace_shift target hash run inside, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     stepBound, cycleBound, callBound, blockBound⟩
   · simp [shift_pc, done]
   · simpa using count
   · simpa using sourcePointer
+  · simpa using layerFinal
+  · simpa using treeFinal
+  · simpa using leafFinal
   · intro chain j hj
     simpa using valuesDone chain j hj
   · intro address low
@@ -520,6 +526,9 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       Trace hash SphincsImages.verify ready steps cycles calls blocks final ∧
       final.pc = 0x298c + delta target ∧
+      final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+      final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+      final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -534,7 +543,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
   have shiftedStart : shift (delta target) base = ready := by
     simp [base, shift, MachineState.setPC]
   obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
-    _counter, _pointer, endpoints, _lowFrame,
+    _counter, _pointer, layerFinal, treeFinal, leafFinal, endpoints, _lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_semantics target hash base pk layer tree leaf digits values
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
@@ -553,7 +562,8 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
           simpa [base] using hprefix.parameter i hi)
       (by intro chain; simpa [base] using decoded chain)
       (by intro chain j hj; simpa [base] using source chain j hj)
-  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc, endpoints,
+  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc,
+    layerFinal, treeFinal, leafFinal, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩
   simpa only [shiftedStart] using run
 
@@ -744,6 +754,9 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
       final.pc = 0x298c + delta target ∧
+      final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+      final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+      final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -764,15 +777,34 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
         (values chain).extractLsb' (8 * j) 8 := by
     simpa only [readyEq] using upper_ready_source target state values source
   obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
-    done, endpoints, stepBound, cycleBound, callBound, blockBound⟩ :=
+    done, layerFinal, treeFinal, leafFinal, endpoints,
+    stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_from_ready target hash ready pk layer tree leaf digits values
       (by simpa only [readyEq] using preparedPc)
       (by simpa only [readyEq] using preparedCounter)
       (by simpa only [readyEq] using preparedPointer)
       layerCell treeCell leafCell readyPrefix decoded readySource
   refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
-    ?_, done, endpoints, by omega, by omega, callBound, blockBound⟩
+    ?_, done, layerFinal, treeFinal, leafFinal, endpoints,
+    by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
+
+/-- The leaf-copy setup changes only the scratch position word. -/
+theorem rootCopySetup_mem_other (state : MachineState) (address : Word)
+    (different : address ≠ 0x43010) :
+    (SphincsVerifierWotsRootCopy.rootCopySetupState state).getMem address =
+      state.getMem address := by
+  simp [SphincsVerifierWotsRootCopy.rootCopySetupState, execInstrBr,
+    signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  intro equal
+  exact (different (by simpa using equal)).elim
+
+theorem rootCopySetup_position_zero (state : MachineState) :
+    (SphincsVerifierWotsRootCopy.rootCopySetupState state).getMem 0x43010 = 0 := by
+  simp [SphincsVerifierWotsRootCopy.rootCopySetupState, execInstrBr,
+    signExtend12, MachineState.getMem_setMem_eq,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
 
 /-- The relocated upper-layer copy serializes recovered WOTS endpoints as a leaf. -/
 theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
@@ -789,7 +821,11 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
           ((Concrete.leafPayload values).map UInt8.toBitVec)[i]'(by
             rw [List.length_map,
               SphincsVerifierWotsSemanticLeaf.leafPayload_length]
-            exact hi)) := by
+            exact hi)) ∧
+      (∀ address, address ≠ 0x43010 →
+        (∀ i, i < 130 → address ≠ BitVec.ofNat 64 (0x40028 + 8 * i)) →
+        final.getMem address = state.getMem address) ∧
+      final.getMem 0x43010 = 0 := by
   let base := shift (-delta target) state
   have basePc : base.pc = 0x298c := by
     change state.pc + -delta target = 0x298c
@@ -808,7 +844,7 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
   have setupTrace := setup.trace (hash := hash)
   have setupInside := SigGolfCandidate.SphincsVerifierWotsRank.trace_inside_of_rank
     hash setupTrace (by rw [basePc]; decide)
-  obtain ⟨insideFinal, loopTrace, _loopPc, _words, _frame, loopInside⟩ :=
+  obtain ⟨insideFinal, loopTrace, _loopPc, _words, loopFrame, loopInside⟩ :=
     SigGolfCandidate.SphincsVerifierWotsLeafInterior.root_copy_inside hash
       (SigGolfCandidate.SphincsVerifierWotsRootCopy.rootCopySetupState base)
       setupPc sourceReg destination count
@@ -823,13 +859,27 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
       (copy.trace (hash := hash)) fullInside
   have shiftedStart : shift (delta target) base = state := by
     simp [base, shift, MachineState.setPC]
-  refine ⟨shift (delta target) insideFinal, ?_, ?_, ?_⟩
+  refine ⟨shift (delta target) insideFinal, ?_, ?_, ?_, ?_, ?_⟩
   · simpa only [shiftedStart] using trace_shift target hash
       fullInside interior
   · rw [shift_pc, ← sameFinal, done]
   · intro i hi
     rw [← sameFinal]
     simpa using payload i hi
+  · intro address different outside
+    rw [shift_mem, loopFrame address outside,
+      rootCopySetup_mem_other base address different]
+    simp [base]
+  · have outside : ∀ i, i < 130 →
+        (0x43010 : Word) ≠ BitVec.ofNat 64 (0x40028 + 8 * i) := by
+      intro i hi equal
+      have value := congrArg BitVec.toNat equal
+      have left : (0x43010 : Word).toNat = 0x43010 := by decide
+      have right : 0x40028 + 8 * i < 2 ^ 64 := by omega
+      rw [left, BitVec.toNat_ofNat, Nat.mod_eq_of_lt right] at value
+      omega
+    rw [shift_mem, loopFrame 0x43010 outside,
+      rootCopySetup_position_zero]
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
@@ -866,6 +916,16 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_rootCopy_payload
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.rootCopySetup_mem_other' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms rootCopySetup_mem_other
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.rootCopySetup_position_zero' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms rootCopySetup_position_zero
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,
