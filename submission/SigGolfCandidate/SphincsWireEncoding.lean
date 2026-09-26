@@ -1,5 +1,4 @@
 import SigGolfCandidate.SphincsBridge
-import SigGolfCandidate.Hypertree.SecurityPacking
 import SigGolfCandidate.SphincsVerifierLoader
 import SigGolfCandidate.SphincsVerifierLoadedMessageHash
 
@@ -27,16 +26,16 @@ theorem encodeBytes_length (pk : SphincsSecurity.PublicKey)
 
 def wire (pk : SphincsSecurity.PublicKey)
     (signature : SphincsSecurity.Signature) : Bytes SphincsWire.signatureBytes :=
-  (Hypertree.Reference.packed (encodeBytes pk signature)).2.cast (by
+  (SigGolfCandidate.Serialization.legacyPacked (encodeBytes pk signature)).2.cast (by
     change 8 * (encodeBytes pk signature).length = 8 * SphincsWire.signatureBytes
     rw [encodeBytes_length])
 
 private theorem packed_cast_bytes {n : Nat} (data : List Byte)
     (length : data.length = n) :
-    SigGolf.bytes ((Hypertree.Reference.packed data).2.cast (by
+    SigGolf.bytes ((SigGolfCandidate.Serialization.legacyPacked data).2.cast (by
       change 8 * data.length = 8 * n
       rw [length]) : Bytes n) = data := by
-  apply Hypertree.SecurityPacking.packed_injective
+  apply SigGolfCandidate.Serialization.legacyPacked_injective
   rw [SigGolfCandidate.Serialization.packed_bytes]
   apply SigGolfCandidate.Serialization.query_eq
   · change 8 * n = 8 * data.length
