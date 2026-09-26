@@ -51,16 +51,16 @@ theorem referenceContactGame_twoContacts_le_sum (inputs : Finset HashInput)
   exact Finset.mem_univ address
 
 theorem referenceContactGame_distinct_restart_le (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hcontact : ContactBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     let law := referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
       Pr[fun result => result.2.2.TwoContacts result.1 (referenceFamilyWords result.2.1 dummy) | law] ≤
       ((2 * budget : Nat) : ENNReal) * Pr[fun result => result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) | law] := by
   dsimp only
   have hsum := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    fun address _ => referenceContactGame_newContact_le address dummy adversary budget hbound hsmall
+    fun address _ => referenceContactGame_newContact_le address dummy adversary budget hprefix hsmall
   rw [← Finset.mul_sum] at hsum
   exact (mul_le_mul' le_rfl (referenceContactGame_twoContacts_le_sum _ _ dummy adversary)).trans
-    (hsum.trans (referenceContactGame_restart_allocation dummy adversary budget hbound))
+    (hsum.trans (referenceContactGame_restart_allocation dummy adversary budget hcontact))
 
 end SphincsSecurity.Concrete

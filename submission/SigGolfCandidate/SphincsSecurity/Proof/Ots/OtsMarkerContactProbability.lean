@@ -58,7 +58,7 @@ theorem referenceContactGame_markerContact_partition (inputs : Finset HashInput)
   exact referenceContactGame_marker_residual_le_checkpoint inputs hencoding address dummy adversary
 
 theorem referenceContactGame_markerContact_shared_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hcontact : ContactBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
       Pr[fun result => result.2.2.MarkerContact result.1 (referenceFamilyWords result.2.1 dummy) |
         referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
@@ -72,11 +72,11 @@ theorem referenceContactGame_markerContact_shared_bound (dummy : OtsReferenceWor
     (referenceContactGame_markerContact_partition (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)
   rw [mul_add] at h
-  exact h.trans (add_le_add (referenceContactGame_contactMarker_shared_bound dummy adversary budget hbound hsmall)
-    (markerCheckpointGame_contact_shared_bound dummy adversary budget hbound hsmall))
+  exact h.trans (add_le_add (referenceContactGame_contactMarker_shared_bound dummy adversary budget hprefix hcontact hsmall)
+    (markerCheckpointGame_contact_shared_bound dummy adversary budget hprefix hsmall))
 
 theorem referenceContactGame_markerContact_le (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hcontact : ContactBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     Pr[fun result => result.2.2.MarkerContact result.1 (referenceFamilyWords result.2.1 dummy) |
       referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
       (((2 * (OtsCode.unitNeighborBound : ENNReal)) * ((budget : ENNReal) / Fintype.card Digest)) * (∑' result,
@@ -92,6 +92,6 @@ theorem referenceContactGame_markerContact_le (dummy : OtsReferenceWords) (adver
     rw [ENNReal.div_lt_iff (Or.inl hcard) (Or.inl (by finiteness)), one_mul]
     exact_mod_cast hsmall
   apply (ENNReal.le_div_iff_mul_le (Or.inl (mul_ne_zero (ne_of_gt hpositive) hcard)) (Or.inl (by finiteness))).mpr
-  simpa only [mul_comm] using referenceContactGame_markerContact_shared_bound dummy adversary budget hbound hsmall
+  simpa only [mul_comm] using referenceContactGame_markerContact_shared_bound dummy adversary budget hprefix hcontact hsmall
 
 end SphincsSecurity.Concrete

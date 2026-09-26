@@ -43,9 +43,7 @@ variable (segment : OtsPrefix) (inputs : Finset HashInput)
   (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords) (adversary : Adversary)
 
 theorem instrumentedSeed_newContact_le (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => uniformImpl)
-      (fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary) (fun _ _ => none)).support,
-      result.2.1.2.hashCalls ≤ budget)
+    (hseed : SeedCost segment inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     let law := realRun (fun _ => uniformImpl)
       (fun endpoint => segment.instrumentedSeedGame contactObserver inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary)
@@ -58,6 +56,6 @@ theorem instrumentedSeed_newContact_le (budget : Nat)
         if result.2.1.Marked segment.parameter words ∧ ¬OtsContactTrace.Seen segment result.1 result.2.1.before then 1 else 0) := by
   simpa only [ContactResult.Marked, checkpointObserver_contact] using
     segment.instrumentedCheckpoint_newContact_le OtsContactTrace.Stopped inputs hencoding hgraph auxiliary secrets ftsSecret words adversary
-      budget hreal hsmall
+      budget hseed hsmall
 
 end SphincsSecurity.Concrete.OtsPrefix

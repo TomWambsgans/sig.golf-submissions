@@ -75,6 +75,16 @@ theorem referenceContactGame_cost (inputs : Finset HashInput)
     (mx' := 𝒮[referenceInstrumentedRest contactObserver _ _ _ _ dummy adversary]) rfl output).mpr houtput
   exact contactObserver_cost _ _ _ _ _ adversary output (QueryCap.simulate_oracle_mem_support _ _ output hsyntax)
 
+/-- Every contact run observes at most `budget` hash queries. -/
+def ContactBudget (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) : Prop :=
+  ∀ result ∈ support (referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary)
+    dummy adversary), (result.2.2.before * result.2.2.after).toList.length ≤ budget
+
+theorem contactBudget_of_hasHashQueryBound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
+    (hbound : HasHashQueryBound scheme adversary budget) : ContactBudget dummy adversary budget :=
+  fun result hresult => (referenceContactGame_cost _ _ dummy adversary result hresult).trans
+    (referenceContactGame_hashCalls_le dummy adversary budget hbound result hresult)
+
 def ContactResult.Marked (parameter : PublicParameter) (words : OtsReferenceWords) (result : ContactResult) : Prop :=
   OtsContactTrace.Stopped parameter words result.frontier result.before
 

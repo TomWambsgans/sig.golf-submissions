@@ -471,23 +471,30 @@ def keygenRootValue (seed : MasterSeed) : Digest :=
   (evalWithAnswerFn f (buildLayerTree 0 topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree)
     ⟨0, Nat.two_pow_pos _⟩ zeroEncoding : OracleComp HashSpec _)).2.2
 
+/-- `keygenRootValue`'s definition, proved at the level of the function: the generated equation
+lemma would make the kernel unfold `Prod.snd` first and so run the whole tree build. -/
+theorem keygenRootValue_def (seed : MasterSeed) :
+    keygenRootValue f seed = (evalWithAnswerFn f (buildLayerTree 0 topLayer rootTree
+      (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
+        : OracleComp HashSpec _)).2.2 :=
+  congrFun (congrFun (show keygenRootValue = fun f seed => (evalWithAnswerFn f (buildLayerTree 0
+    topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
+      : OracleComp HashSpec _)).2.2 from rfl) f) seed
+
 theorem eval_keygenFromSeed (seed : MasterSeed) :
     evalWithAnswerFn f (Seeded.keygenFromSeed seed)
       = (⟨keygenRootValue f seed, 0⟩, ⟨seed, 0, keygenRootValue f seed⟩) := by
-  unfold Seeded.keygenFromSeed keygenRootValue
-  rw [evalWithAnswerFn_bind]
-  generalize evalWithAnswerFn f (buildLayerTree 0 topLayer rootTree
-    (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
-      : OracleComp HashSpec _) = result
-  rcases result with ⟨values, path, root⟩
-  rfl
+  rw [Seeded.keygenFromSeed, evalWithAnswerFn_bind, keygenRootValue_def]
+  split
+  next values path root h => rw [h]; rfl
 
 /-- The root is the specification's root of the top tree for the derived secrets. -/
 theorem keygenRootValue_eq (seed : MasterSeed) :
     keygenRootValue f seed = honestNode f 0 topLayer rootTree
       (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
         : OracleComp HashSpec Digest)) (layerHeight topLayer) 0 :=
-  (eval_buildLayerTree f 0 topLayer rootTree _ ⟨0, Nat.two_pow_pos _⟩ (Nat.two_pow_pos _)
-    zeroEncoding).2.2
+  (keygenRootValue_def f seed).trans
+    (eval_buildLayerTree f 0 topLayer rootTree _ ⟨0, Nat.two_pow_pos _⟩ (Nat.two_pow_pos _)
+      zeroEncoding).2.2
 
 end SphincsSecurity.Completeness

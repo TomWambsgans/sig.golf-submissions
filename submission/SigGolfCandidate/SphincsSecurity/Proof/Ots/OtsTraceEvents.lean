@@ -40,9 +40,8 @@ theorem checkpointSeed_newContact_le_mark (stop : FrontierStop)
     (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (hgraph : canonicalGraphInputs parameter ⊆ inputs)
     (auxiliary : (OtsPrefix.atAddress parameter words address).ReferenceAuxSeed inputs hencoding hgraph) (secrets : OtsFrontierValues)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (adversary : Adversary) (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => OtsPrefix.uniformImpl)
-      (fun endpoint => (OtsPrefix.atAddress parameter words address).seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary)
-      (fun _ _ => none)).support, result.2.1.2.hashCalls ≤ budget)
+    (hseed : OtsPrefix.SeedCost (OtsPrefix.atAddress parameter words address) inputs hencoding hgraph auxiliary secrets ftsSecret words
+      adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     let segment := OtsPrefix.atAddress parameter words address
     let law := realRun (fun _ => OtsPrefix.uniformImpl)
@@ -71,6 +70,6 @@ theorem checkpointSeed_newContact_le_mark (stop : FrontierStop)
   change (1 - (budget : ENNReal) / Fintype.card Digest) * ((Fintype.card Digest : ENNReal) *
     Pr[fun result => result.2.1.ContactAfterStop stop parameter words address | law]) ≤ _
   rw [hevent]
-  exact segment.instrumentedCheckpoint_newContact_le_mark stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hreal hsmall
+  exact segment.instrumentedCheckpoint_newContact_le_mark stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hseed hsmall
 
 end SphincsSecurity.Concrete

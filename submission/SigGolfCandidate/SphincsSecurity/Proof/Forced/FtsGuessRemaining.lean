@@ -35,7 +35,8 @@ theorem referenceForgeryGame_remainingFts_le (dummy : OtsReferenceWords) (advers
     (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)
     (fun sample h => sample.remainingFts_cases dummy h)).trans ?_
   exact (probEvent_or_le _ _ _).trans
-    (add_le_add (FtsGuessHash.referenceForgeryGame_two_guesses dummy adversary budget hbudget) le_rfl)
+    (add_le_add (FtsGuessHash.referenceForgeryGame_two_guesses dummy adversary budget
+      (FtsGuessHash.probeBudget_of_hasHashQueryBound dummy adversary budget hbudget)) le_rfl)
 
 theorem forgeAdvantage_le_nearGuess_small_budget (dummy : OtsReferenceWords)
     (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))

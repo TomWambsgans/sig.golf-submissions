@@ -167,4 +167,20 @@ theorem lazy_original_completedRun_probes (dummy : OtsReferenceWords) (adversary
   obtain ⟨hw, hp⟩ := lazy_original_completedRun_budget dummy adversary q hbound parameter hparameter otsSecret labels auxiliary hauxiliary result hr
   omega
 
+/-- Every forced run of the original game makes at most `budget` probes. -/
+def ProbeBudget (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) : Prop :=
+  ∀ parameter ∈ support sampleParameter, ∀ (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels) (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary)),
+    auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support →
+    ∀ result : Completed × State Coordinate Digest PUnit,
+      SecretGuessObservation.lazyRun
+        (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary) (SecretGuessObservation.initialState PUnit.unit) result ≠ 0 →
+      result.2.probes ≤ budget
+
+theorem probeBudget_of_hasHashQueryBound (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hbound : HasHashQueryBound scheme adversary q) : ProbeBudget dummy adversary q :=
+  fun parameter hparameter otsSecret labels auxiliary hauxiliary result hr => (Nat.le_add_left _ _).trans
+    (lazy_original_completedRun_probes dummy adversary q hbound parameter hparameter otsSecret labels auxiliary hauxiliary result hr)
+
 end SphincsSecurity.Concrete.FtsGuessHash

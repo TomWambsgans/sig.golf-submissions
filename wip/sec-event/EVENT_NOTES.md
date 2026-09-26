@@ -67,3 +67,18 @@ nonmessage hash queries. Syntactic: own + G·#sign ≤ b - K (weighted IsQueryBo
    where m + messageCalls = own + 1 + Σ attempts + V_msg ≤ b - K - G·#sign + Σ attempts + 1 and
    E[attempts per signing | cache] ≤ 2^11 ≤ G (lazy ROM, fresh randomizer, cache ≤ q' ≤ 2^127).
 6. Closing: same shape at b = q + 1 (plus q'·excess and pair/near at b + V_max); slack absorbs.
+
+## Status: DONE (full `lake build SphincsSecurity` passes, axioms = propext, Classical.choice, Quot.sound)
+Final: `SphincsSecurity.security127_event` (SphincsSecurity.lean, with `#guard_msgs` axiom check);
+`sphincs_has_127_bits_of_classical_security` now derived from it via `hasClassicalSecurityBits_of_event`.
+Route: Security.experiment → (outer layers) Concrete.scheme event form → split at q + 1 ≤ budgetSplit:
+- large: `security127_event_of_large_budget` (unchanged arithmetic);
+- small (Event/Small/*): coupling to `visAdversary A (q+1)` (Coupling), then plain forgeAdvantage of the capped
+  adversary ≤ `visSmallBound (q+1)` (SmallBound) ≤ q/2^127 (Closing); q < keygenHashCost: event empty.
+Generalized hypotheses in existing accounting files (old chain supplies them from HasHashQueryBound):
+`ProbeBudget` (Forced/FtsGuessBudget; pair and near-slot games), `PrefixBudget`/`SeedCost` (Ots seed games,
+Ots/OtsSeedCost, Ots/OtsPrefixObservedBudget), `ContactBudget` (Reference/ReferenceContactGame),
+`nearMixedBound`/`nearLaw_certificate_mixed_le` (Forced/FtsGuessNearAssembly: separate mass budget).
+Arithmetic changes (small range only): full-certificate excess paid at 297(q+1) (≈0.05x), all terms at
+b = q+1 (marker query), extra 2^-127 absorbed since q ≥ keygenHashCost; joint budget exact in expectation
+(E[attempts] ≤ 2^11 ≤ ftsOpenHashCost per signing, verifyHashBound = 2263 with 2·2263 ≤ keygenHashCost = 9471).

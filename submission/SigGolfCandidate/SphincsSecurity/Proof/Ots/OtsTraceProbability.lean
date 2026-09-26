@@ -31,7 +31,7 @@ private theorem pmf_mem_of_evalDist {Result : Type} (law : PMF Result) (result :
 theorem referenceCheckpointGame_newContact_le_mark (stop : FrontierStop)
     [∀ parameter words frontier, DecidablePred (stop parameter words frontier)]
     (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     let law := referenceInstrumentedGame (checkpointObserver stop) (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
@@ -55,13 +55,9 @@ theorem referenceCheckpointGame_newContact_le_mark (stop : FrontierStop)
   let inputs := canonicalGraphGameInputs adversary
   let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
   let hgraph := canonicalGraphInputs_subset_gameInputs adversary parameter
-  have hreal : ∀ result ∈ (PartialChainEndpoint.realRun (fun _ => OtsPrefix.uniformImpl)
-      (fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary other.val ftsSecret words endpoint adversary) (fun _ _ => none)).support,
-      result.2.1.2.hashCalls ≤ budget :=
-    prefixObservedRun_hashCalls_le parameter (probComp_mem_of_evalDist _ parameter hparameter) ftsSecret
-      address.1 address.2.1 address.2.2.1 address.2.2.2 dummy adversary selections (pmf_mem_of_evalDist _ selections hselections)
-      budget hbound other auxiliary (pmf_mem_of_evalDist _ auxiliary hauxiliary)
-  have hseed := checkpointSeed_newContact_le_mark stop parameter words address inputs hencoding hgraph auxiliary other.val ftsSecret adversary budget hreal hsmall
+  have hseed := hprefix parameter (probComp_mem_of_evalDist _ parameter hparameter) ftsSecret address
+    selections (pmf_mem_of_evalDist _ selections hselections) other auxiliary (pmf_mem_of_evalDist _ auxiliary hauxiliary)
+  have hseed := checkpointSeed_newContact_le_mark stop parameter words address inputs hencoding hgraph auxiliary other.val ftsSecret adversary budget hseed hsmall
   simpa only [bind_pure_comp, ← PMF.monad_map_eq_map, evalSPMF_map, probEvent_map, Function.comp_def,
     PMF.evalSPMF_eq, SPMF.probEvent_liftM, mul_assoc] using hseed
 

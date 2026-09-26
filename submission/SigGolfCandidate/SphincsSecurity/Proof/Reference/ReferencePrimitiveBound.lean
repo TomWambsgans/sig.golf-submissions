@@ -95,7 +95,7 @@ theorem primitive_rates_small (q : Nat) (hq : q ≤ budgetSplit) :
     norm_num [hcard, OtsCode.neighborBound_eq]
 
 theorem referenceGraphContextGame_primitive_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hcontact : ContactBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     Pr[GraphPrimitiveEvent dummy | referenceGraphContextGame contactObserver (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
       primitivePrefixRate q * (∑' result,
@@ -112,9 +112,9 @@ theorem referenceGraphContextGame_primitive_le (dummy : OtsReferenceWords) (adve
   have he := referenceEncodingContextGame_match_le_encodingCost dummy adversary
   rw [← referenceGraphContextGame_encoding contactObserver _ _ dummy adversary, probEvent_map] at he
   have hs := referenceGraphContextGame_match_le_otherCost dummy adversary
-  have ht := referenceContactGame_twoEdge_le dummy adversary q hbound hsmall
-  have hd := referenceContactGame_distinct_le dummy adversary q hbound hsmall
-  have hm := referenceContactGame_markerContact_le dummy adversary q hbound hsmall
+  have ht := referenceContactGame_twoEdge_le dummy adversary q hprefix hsmall
+  have hd := referenceContactGame_distinct_le dummy adversary q hprefix hcontact hsmall
+  have hm := referenceContactGame_markerContact_le dummy adversary q hprefix hcontact hsmall
   rw [← referenceGraphContextGame_contact_event _ _ dummy adversary] at ht hd hm
   have h := (probEvent_or_le law _ _).trans (add_le_add he
     ((probEvent_or_le law _ _).trans (add_le_add hs
@@ -135,7 +135,8 @@ theorem referenceGraphContextGame_primitive_joint_budget (dummy : OtsReferenceWo
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] * (result.messageCalls : ENNReal)) ≤ rate * q := by
   let law := referenceRecordedGame (canonicalGraphGameInputs adversary)
     (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
-  have h := add_le_add (referenceGraphContextGame_primitive_le dummy adversary q hbound hsmall)
+  have h := add_le_add (referenceGraphContextGame_primitive_le dummy adversary q (prefixBudget_of_hasHashQueryBound dummy adversary q hbound)
+    (contactBudget_of_hasHashQueryBound dummy adversary q hbound) hsmall)
     (le_refl (rate * ∑' result, Pr[= result | law] * (result.messageCalls : ENNReal)))
   refine h.trans ?_
   calc

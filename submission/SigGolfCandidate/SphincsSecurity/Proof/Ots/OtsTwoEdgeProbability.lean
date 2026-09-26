@@ -57,7 +57,7 @@ theorem referenceContactGame_twoEdge_le_sum (inputs : Finset HashInput)
   exact ⟨address, Finset.mem_univ address, ha⟩
 
 theorem referenceContactGame_twoEdge_sum_cost_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     (1 - (q : ENNReal) / Fintype.card Digest) *
       (∑ address : OtsPrefix.ChainAddress, Pr[fun result => result.2.2.TwoEdgeAt result.1 (referenceFamilyWords result.2.1 dummy) address |
         referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary]) ≤
@@ -65,10 +65,10 @@ theorem referenceContactGame_twoEdge_sum_cost_le (dummy : OtsReferenceWords) (ad
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] * (result.prefixCalls dummy : ENNReal)) := by
   simp only [referenceContactGame_twoEdge_eq _ _ (canonicalGraphInputs_subset_gameInputs adversary)]
   have hsum := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    fun address _ => prefixTwoEdgeGame_le address dummy adversary q hbound hsmall
+    fun address _ => prefixTwoEdgeGame_le address dummy adversary q hprefix hsmall
   rw [← Finset.mul_sum] at hsum
   have hlower := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    fun address _ => prefixIdealCostGame_lower address dummy adversary q hbound
+    fun address _ => prefixIdealCostGame_lower address dummy adversary q hprefix
   rw [← Finset.mul_sum] at hlower
   simp only [prefixCountedObservedGame_original, tsum_probOutput_map_mul, ReferenceRecordedResult.prefixCounted] at hlower
   conv at hlower =>
@@ -80,17 +80,17 @@ theorem referenceContactGame_twoEdge_sum_cost_le (dummy : OtsReferenceWords) (ad
   exact hscaled.trans (mul_le_mul' le_rfl hlower)
 
 theorem referenceContactGame_twoEdge_cost_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     (1 - (q : ENNReal) / Fintype.card Digest) *
       Pr[fun result => result.2.2.TwoEdge result.1 (referenceFamilyWords result.2.1 dummy) |
         referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
       prefixTwoEdgeRate q * (∑' result : ReferenceRecordedResult, Pr[= result | referenceRecordedGame (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] * (result.prefixCalls dummy : ENNReal)) :=
   (mul_le_mul' le_rfl (referenceContactGame_twoEdge_le_sum _ _ dummy adversary)).trans
-    (referenceContactGame_twoEdge_sum_cost_le dummy adversary q hbound hsmall)
+    (referenceContactGame_twoEdge_sum_cost_le dummy adversary q hprefix hsmall)
 
 theorem referenceContactGame_twoEdge_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     Pr[fun result => result.2.2.TwoEdge result.1 (referenceFamilyWords result.2.1 dummy) |
       referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
       (prefixTwoEdgeRate q * (∑' result : ReferenceRecordedResult, Pr[= result | referenceRecordedGame (canonicalGraphGameInputs adversary)
@@ -102,6 +102,6 @@ theorem referenceContactGame_twoEdge_le (dummy : OtsReferenceWords) (adversary :
     rw [ENNReal.div_lt_iff (Or.inl hcard) (Or.inl (by finiteness)), one_mul]
     exact_mod_cast hsmall
   apply (ENNReal.le_div_iff_mul_le (Or.inl (ne_of_gt hpositive)) (Or.inl (by finiteness))).mpr
-  simpa only [mul_comm] using referenceContactGame_twoEdge_cost_le dummy adversary q hbound hsmall
+  simpa only [mul_comm] using referenceContactGame_twoEdge_cost_le dummy adversary q hprefix hsmall
 
 end SphincsSecurity.Concrete

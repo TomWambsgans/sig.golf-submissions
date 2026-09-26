@@ -59,7 +59,7 @@ theorem markerCheckpointGame_marker_probability (inputs : Finset HashInput)
   simpa only [probEvent_map, Function.comp_def] using h
 
 theorem markerCheckpointGame_contact_le_marker (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords)
-    (adversary : Adversary) (budget : Nat) (hbound : HasHashQueryBound scheme adversary budget)
+    (adversary : Adversary) (budget : Nat) (hprefix : PrefixBudget dummy adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
       Pr[fun result => result.2.2.ContactAfterStop (OtsEncodingMarker.stopAt address) result.1 (referenceFamilyWords result.2.1 dummy) address |
@@ -67,7 +67,7 @@ theorem markerCheckpointGame_contact_le_marker (address : OtsPrefix.ChainAddress
       (2 * budget : Nat) * Pr[fun result => OtsEncodingMarker.Seen result.1 (referenceFamilyWords result.2.1 dummy) address
         (result.2.2.before * result.2.2.after) | referenceContactGame (canonicalGraphGameInputs adversary)
           (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] := by
-  have h := referenceCheckpointGame_newContact_le_mark (OtsEncodingMarker.stopAt address) address dummy adversary budget hbound hsmall
+  have h := referenceCheckpointGame_newContact_le_mark (OtsEncodingMarker.stopAt address) address dummy adversary budget hprefix hsmall
   refine h.trans (mul_le_mul' le_rfl ?_)
   rw [← markerCheckpointGame_marker_probability]
   exact _root_.probEvent_mono (fun result _ hm => (OtsEncodingMarker.seen_mul _ _ _ _ _).mpr (Or.inl hm))

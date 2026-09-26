@@ -43,7 +43,7 @@ theorem pairRate_le_normalized (budget : Nat) :
       exact (ENNReal.mul_div_mul_right _ _ (pow_ne_zero _ (by simp)) (by finiteness)).symm
 
 theorem lazy_original_two_guesses (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
+    (hprobe : ProbeBudget dummy adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -53,8 +53,7 @@ theorem lazy_original_two_guesses (dummy : OtsReferenceWords) (adversary : Adver
   have hbound := SecretGuessObservation.lazyRun_two_guesses
     (SecretGuessObservation.environment (originalAnswers dummy adversary parameter otsSecret labels auxiliary))
     (completedRun parameter (canonicalGraphRoot labels) labels adversary) PUnit.unit budget
-    (fun result hr => (Nat.le_add_left _ _).trans
-      (lazy_original_completedRun_probes dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary result hr))
+    (fun result hr => hprobe parameter hparameter otsSecret labels auxiliary hauxiliary result hr)
   simpa only [pairRate, show Fintype.card Digest = 2 ^ 128 by simp [digestBits]] using hbound
 
 end SphincsSecurity.Concrete.FtsGuessHash

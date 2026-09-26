@@ -74,7 +74,7 @@ theorem referenceContactGame_sum_contact_probability (inputs : Finset HashInput)
   rw [tsum_fintype, Fintype.sum_ite_mem, Finset.sum_const, nsmul_eq_mul, mul_comm]
 
 theorem referenceContactGame_contacts_cost_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     (1 - (q : ENNReal) / Fintype.card Digest) *
       (∑' result, Pr[= result | referenceContactGame (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] *
@@ -85,10 +85,10 @@ theorem referenceContactGame_contacts_cost_le (dummy : OtsReferenceWords) (adver
           (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] * (result.prefixCalls dummy : ENNReal)) := by
   rw [← referenceContactGame_sum_contact_probability _ _ (canonicalGraphInputs_subset_gameInputs adversary)]
   have hsum := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    fun address _ => prefixContactGame_le address dummy adversary q hbound hsmall
+    fun address _ => prefixContactGame_le address dummy adversary q hprefix hsmall
   rw [← Finset.mul_sum] at hsum
   have hlower := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    fun address _ => prefixIdealCostGame_lower address dummy adversary q hbound
+    fun address _ => prefixIdealCostGame_lower address dummy adversary q hprefix
   rw [← Finset.mul_sum] at hlower
   simp only [prefixCountedObservedGame_original, tsum_probOutput_map_mul, ReferenceRecordedResult.prefixCounted] at hlower
   conv at hlower =>
@@ -100,7 +100,7 @@ theorem referenceContactGame_contacts_cost_le (dummy : OtsReferenceWords) (adver
   exact hscaled.trans (mul_le_mul' le_rfl hlower)
 
 theorem referenceContactGame_marked_cost_le (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     (1 - (q : ENNReal) / Fintype.card Digest) *
       Pr[fun result => result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy) |
         referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
@@ -111,6 +111,6 @@ theorem referenceContactGame_marked_cost_le (dummy : OtsReferenceWords) (adversa
     (referenceContactGame_marked_le_sum _ (canonicalEncodingInputs_subset_gameInputs adversary)
       (canonicalGraphInputs_subset_gameInputs adversary) dummy adversary)
   rw [referenceContactGame_sum_contact_probability] at h
-  exact h.trans (referenceContactGame_contacts_cost_le dummy adversary q hbound hsmall)
+  exact h.trans (referenceContactGame_contacts_cost_le dummy adversary q hprefix hsmall)
 
 end SphincsSecurity.Concrete

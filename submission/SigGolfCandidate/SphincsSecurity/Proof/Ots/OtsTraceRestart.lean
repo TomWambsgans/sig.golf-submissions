@@ -37,9 +37,7 @@ theorem traceCheckpointRun_newContact_probability :
     simp only [hz, ite_self]
 
 theorem instrumentedCheckpoint_newContact_le (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => uniformImpl)
-      (fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary) (fun _ _ => none)).support,
-      result.2.1.2.hashCalls ≤ budget)
+    (hseed : SeedCost segment inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     let law := realRun (fun _ => uniformImpl)
       (fun endpoint => segment.instrumentedSeedGame (checkpointObserver stop) inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary)
@@ -62,7 +60,7 @@ theorem instrumentedCheckpoint_newContact_le (budget : Nat)
     (fun _ middle => QueryPause.traced (segment.visibleObservationTrace auxiliary.high) middle.1.1.2) (fun _ _ => none)
     marked budget (fun _ _ h => h.2)
     (fun endpoint middle hmiddle _ result hresult =>
-      (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hreal hsmall
+      (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hseed hsmall
         endpoint middle hmiddle result hresult).2)
   rw [segment.traceCheckpointRun_newContact_probability stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary]
   apply hkernel.trans
@@ -89,9 +87,7 @@ theorem instrumentedCheckpoint_newContact_le (budget : Nat)
     simp only [hz, zero_mul, zero_le]
 
 theorem instrumentedCheckpoint_newContact_le_mark (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => uniformImpl)
-      (fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary) (fun _ _ => none)).support,
-      result.2.1.2.hashCalls ≤ budget)
+    (hseed : SeedCost segment inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     let law := realRun (fun _ => uniformImpl)
       (fun endpoint => segment.instrumentedSeedGame (checkpointObserver stop) inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary)
@@ -112,11 +108,11 @@ theorem instrumentedCheckpoint_newContact_le_mark (budget : Nat)
       ¬Contact middle.2 endpoint
   have hkernel := realCheckpointRun_contact_le_mark aux before after (fun _ _ => none) marked budget (fun _ _ h => h.2)
     (fun endpoint middle hmiddle _ result hresult =>
-      (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hreal hsmall
+      (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hseed hsmall
         endpoint middle hmiddle result hresult).2)
     (fun result hresult _ => by
       have hs := realCheckpointRun_support aux before after (fun _ _ => none) result hresult
-      exact (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hreal hsmall
+      exact (segment.traceCheckpoint_budget stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hseed hsmall
         result.1 result.2.1 hs.1 result.2.2 hs.2).1)
   rw [segment.traceCheckpointRun_newContact_probability stop inputs hencoding hgraph auxiliary secrets ftsSecret words adversary]
   rw [← realCheckpointRun_mark_probability aux before after (fun _ _ => none) marked] at hkernel

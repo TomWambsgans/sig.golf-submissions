@@ -213,14 +213,13 @@ theorem eval_keygenRoot (parameter : PublicParameter) (secret : LeafIndex → Ch
   have h := eval_buildLayerTree_root f parameter topLayer rootTree
     (fun leaf chainIdx => pure (secret leaf chainIdx)) ⟨0, Nat.two_pow_pos _⟩
     (Nat.two_pow_pos _) zeroEncoding
+  simp only [evalWithAnswerFn_pure] at h
   unfold keygenRoot
   rw [evalWithAnswerFn_bind]
-  revert h
-  generalize evalWithAnswerFn f (buildLayerTree parameter topLayer rootTree
-    (fun leaf chainIdx => pure (secret leaf chainIdx)) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding) = result
-  rcases result with ⟨values, path, root⟩
-  intro h
-  exact h
+  -- `split` keeps the tree build opaque; generalizing it makes the kernel run the whole build
+  split
+  next values path root hresult =>
+    rw [evalWithAnswerFn_pure, ← h, hresult]
 
 /-! ### The forest -/
 

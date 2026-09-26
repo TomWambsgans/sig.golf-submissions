@@ -346,9 +346,8 @@ theorem boundaryEval_keygenRoot (parameter : PublicParameter) (f : QueryImpl Has
   apply boundaryEval_eq_of_snd
   unfold keygenRoot
   rw [boundaryEval_bind, boundaryEval_buildLayerTree_pure, keygenHashCost_def]
-  rcases evalWithAnswerFn f (buildLayerTree parameter topLayer rootTree
-    (fun leaf chainIdx => pure (secret leaf chainIdx)) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding) with
-    ⟨values, path, root⟩
+  -- `split` keeps the scrutinee opaque; generalizing it makes the kernel evaluate the tree build
+  split
   simp only [boundaryEval_pure, mul_one]
 
 theorem boundaryEval_buildFtsTree_pure (parameter : PublicParameter) (f : QueryImpl HashSpec Id)

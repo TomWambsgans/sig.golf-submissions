@@ -27,7 +27,7 @@ theorem referenceContactGame_contactMarker_le_cost (inputs : Finset HashInput)
   · exact bot_le
 
 theorem referenceContactGame_contactMarker_le_contacts (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) :
+    (hcontact : ContactBudget dummy adversary budget) :
     Pr[fun result => ContactBeforeMarker result.1 (referenceFamilyWords result.2.1 dummy) result.2.2.frontier
       (result.2.2.before * result.2.2.after) | referenceContactGame (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
@@ -47,8 +47,7 @@ theorem referenceContactGame_contactMarker_le_contacts (dummy : OtsReferenceWord
     intro result
     by_cases hr : result ∈ support (referenceContactGame (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary)
-    · have hl := (referenceContactGame_cost _ _ dummy adversary result hr).trans
-        (referenceContactGame_hashCalls_le dummy adversary budget hbound result hr)
+    · have hl := hcontact result hr
       have hc := (contactMarkerCost_le result.1 (referenceFamilyWords result.2.1 dummy) result.2.2.frontier 1
         (result.2.2.before * result.2.2.after)).trans (Nat.mul_le_mul_right _ hl)
       simp only [one_mul] at hc
@@ -62,7 +61,7 @@ theorem referenceContactGame_contactMarker_le_contacts (dummy : OtsReferenceWord
   ring
 
 theorem referenceContactGame_contactMarker_shared_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hcontact : ContactBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
       Pr[fun result => ContactBeforeMarker result.1 (referenceFamilyWords result.2.1 dummy) result.2.2.frontier
         (result.2.2.before * result.2.2.after) | referenceContactGame (canonicalGraphGameInputs adversary)
@@ -71,9 +70,9 @@ theorem referenceContactGame_contactMarker_shared_bound (dummy : OtsReferenceWor
         Pr[= result | referenceRecordedGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] *
           (result.prefixCalls dummy : ENNReal) := by
   have hraw := mul_le_mul' (le_refl (1 - (budget : ENNReal) / Fintype.card Digest))
-    (referenceContactGame_contactMarker_le_contacts dummy adversary budget hbound)
+    (referenceContactGame_contactMarker_le_contacts dummy adversary budget hcontact)
   rw [mul_left_comm] at hraw
-  have hc := hraw.trans (mul_le_mul' le_rfl (referenceContactGame_contacts_cost_le dummy adversary budget hbound hsmall))
+  have hc := hraw.trans (mul_le_mul' le_rfl (referenceContactGame_contacts_cost_le dummy adversary budget hprefix hsmall))
   have hn : (Fintype.card Digest : ENNReal) ≠ 0 := by exact_mod_cast Fintype.card_ne_zero
   have h := mul_le_mul' (le_refl (Fintype.card Digest : ENNReal)) hc
   have hcancel : (Fintype.card Digest : ENNReal) * (Fintype.card Digest : ENNReal)⁻¹ = 1 := ENNReal.mul_inv_cancel hn (by finiteness)

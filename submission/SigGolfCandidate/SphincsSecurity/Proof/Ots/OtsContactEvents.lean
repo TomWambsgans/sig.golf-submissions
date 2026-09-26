@@ -40,9 +40,8 @@ variable (parameter : PublicParameter) (words : OtsReferenceWords) (address : Ot
   (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (adversary : Adversary)
 
 theorem contactSeed_newContact_le (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => OtsPrefix.uniformImpl)
-      (fun endpoint => (OtsPrefix.atAddress parameter words address).seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary)
-      (fun _ _ => none)).support, result.2.1.2.hashCalls ≤ budget)
+    (hseed : OtsPrefix.SeedCost (OtsPrefix.atAddress parameter words address) inputs hencoding hgraph auxiliary secrets ftsSecret words
+      adversary budget)
     (hsmall : budget < Fintype.card Digest) :
     let segment := OtsPrefix.atAddress parameter words address
     let law := realRun (fun _ => OtsPrefix.uniformImpl)
@@ -89,6 +88,6 @@ theorem contactSeed_newContact_le (budget : Nat)
     Pr[fun result => result.2.1.NewContact parameter words address | law]) ≤ _
   rw [hevent]
   rw [show (∑' result, law result * (result.2.1.restartCharge parameter words address : ENNReal)) = _ from hcost]
-  exact segment.instrumentedSeed_newContact_le inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hreal hsmall
+  exact segment.instrumentedSeed_newContact_le inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget hseed hsmall
 
 end SphincsSecurity.Concrete

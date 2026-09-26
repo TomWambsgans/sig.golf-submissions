@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsPrefixObservedSource
 import SigGolfCandidate.SphincsSecurity.Proof.Chains.AdaptiveChainSupport
+import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsSeedCost
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec
@@ -51,5 +52,27 @@ theorem prefixObservedRun_hashCalls_le (parameter : PublicParameter) (hparameter
     rw [PMF.mem_support_map_iff]
     exact ⟨result, hresult, rfl⟩
   · exact (mem_support_pure_iff _ _).mpr rfl
+
+/-- Every seed game of a chain segment admits a cost bounding its prefix queries within `budget`. -/
+def PrefixBudget (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat) : Prop :=
+  ∀ parameter ∈ support sampleParameter, ∀ (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (address : OtsPrefix.ChainAddress)
+    (selections : ReferenceFamily), selections ∈ (FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit).support →
+    ∀ (other : (OtsPrefix.atAddress parameter (referenceFamilyWords selections dummy) address).ErasedSecrets)
+      (auxiliary : (OtsPrefix.atAddress parameter (referenceFamilyWords selections dummy) address).ReferenceAuxSeed
+        (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+        (canonicalGraphInputs_subset_gameInputs adversary parameter)),
+      auxiliary ∈ ((OtsPrefix.atAddress parameter (referenceFamilyWords selections dummy) address).referenceAuxSeedLaw
+        (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+        (canonicalGraphInputs_subset_gameInputs adversary parameter) selections).support →
+      OtsPrefix.SeedCost (OtsPrefix.atAddress parameter (referenceFamilyWords selections dummy) address) (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary parameter) (canonicalGraphInputs_subset_gameInputs adversary parameter)
+        auxiliary other.val ftsSecret (referenceFamilyWords selections dummy) adversary budget
+
+theorem prefixBudget_of_hasHashQueryBound (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hbound : HasHashQueryBound scheme adversary q) : PrefixBudget dummy adversary q := by
+  intro parameter hparameter ftsSecret address selections hselections other auxiliary hauxiliary
+  exact OtsPrefix.SeedCost.of_hashCalls _ _ _ _ _ _ _ _ _ _
+    (prefixObservedRun_hashCalls_le parameter hparameter ftsSecret address.1 address.2.1 address.2.2.1 address.2.2.2 dummy adversary
+      selections hselections q hbound other auxiliary hauxiliary)
 
 end SphincsSecurity.Concrete

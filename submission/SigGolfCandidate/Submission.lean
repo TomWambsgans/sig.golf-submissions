@@ -26,11 +26,52 @@ theorem submission_eq_images : submission = Images.submission := by
 
 theorem submission_sizes : submission.sizes = ⟨7756, 7756⟩ := rfl
 
+/-! ### Admission, image by image
+
+Deciding `Image.Valid` outright makes the kernel run `List.append` over the concatenated code
+chunks (20 046 words for `verify`), which peaks near 10 GB. Instead the code list is rewritten to its
+chunks, `List.length_append` splits the length, and the kernel only counts each chunk. The equation
+for the code list is obtained by `delta` inside an equation (a plain `unfold` would generate an
+equation lemma whose elaboration evaluates the list), and every step is a rewrite, so no
+definitional check ever reduces closed arithmetic over the full length. The layout half only reads
+the (empty) data section and is decided directly. -/
+
+/-- Proves `(submission.image phase).Valid submission.sizes submission.layout` for an image whose
+code list is `code`, a concatenation of chunks. -/
+local macro "image_valid " code:ident : tactic => `(tactic| (
+  have hcode : $code = $code := rfl
+  conv at hcode => rhs; delta $code:ident
+  rw [Riscv.Image.Valid]
+  refine ⟨?_, by decide +kernel⟩
+  rw [Riscv.Image.byteSize, show Riscv.Image.code _ = $code from rfl, hcode]
+  try simp only [List.length_append]
+  decide +kernel))
+
+theorem submission_keygen_valid :
+    (submission.image .keygen).Valid submission.sizes submission.layout := by
+  image_valid Images.keygenCode
+
+theorem submission_sign_valid :
+    (submission.image .sign).Valid submission.sizes submission.layout := by
+  image_valid Images.signCode
+
+theorem submission_expand_valid :
+    (submission.image .expand).Valid submission.sizes submission.layout := by
+  image_valid Images.expandCode
+
+theorem submission_verify_valid :
+    (submission.image .verify).Valid submission.sizes submission.layout := by
+  image_valid Images.verifyCode
+
 /-- Static admission (sizes, image-size limits, aligned nonoverlapping buffers). -/
 theorem submission_admissible : submission.Admissible := by
   refine ⟨by unfold Sizes.Valid; decide, ?_⟩
   intro phase
-  cases phase <;> decide +kernel
+  cases phase
+  · exact submission_keygen_valid
+  · exact submission_sign_valid
+  · exact submission_expand_valid
+  · exact submission_verify_valid
 
 end SigGolfCandidate
 

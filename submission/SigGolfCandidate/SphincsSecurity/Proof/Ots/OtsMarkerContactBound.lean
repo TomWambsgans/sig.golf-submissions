@@ -28,7 +28,7 @@ theorem referenceContactGame_sum_marker_probability (inputs : Finset HashInput)
     (fun result => OtsEncodingMarker.markers result.1 (referenceFamilyWords result.2.1 dummy) (result.2.2.before * result.2.2.after))
 
 theorem markerCheckpointGame_contact_shared_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) (hsmall : budget < Fintype.card Digest) :
+    (hprefix : PrefixBudget dummy adversary budget) (hsmall : budget < Fintype.card Digest) :
     ((1 - (budget : ENNReal) / Fintype.card Digest) * (Fintype.card Digest : ENNReal)) *
       (∑ address : OtsPrefix.ChainAddress,
         Pr[fun result => result.2.2.ContactAfterStop (OtsEncodingMarker.stopAt address) result.1 (referenceFamilyWords result.2.1 dummy) address |
@@ -37,7 +37,7 @@ theorem markerCheckpointGame_contact_shared_bound (dummy : OtsReferenceWords) (a
         Pr[= result | referenceRecordedGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] *
           (result.encodingCalls : ENNReal) := by
   have hsum := Finset.sum_le_sum (s := (Finset.univ : Finset OtsPrefix.ChainAddress))
-    (fun address _ => markerCheckpointGame_contact_le_marker address dummy adversary budget hbound hsmall)
+    (fun address _ => markerCheckpointGame_contact_le_marker address dummy adversary budget hprefix hsmall)
   rw [← Finset.mul_sum, ← Finset.mul_sum, referenceContactGame_sum_marker_probability] at hsum
   refine hsum.trans ((mul_le_mul' le_rfl (referenceContactGame_markers_le_encodingCost dummy adversary)).trans_eq ?_)
   simp only [Nat.cast_mul, Nat.cast_ofNat, div_eq_mul_inv]

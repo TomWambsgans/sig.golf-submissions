@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsTraceCheckpointLaw
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsPrefixVisibleAccounting
+import SigGolfCandidate.SphincsSecurity.Proof.Ots.OtsSeedCost
 import SigGolfCandidate.SphincsSecurity.Proof.Chains.AdaptiveChainActualBudget
 import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryTraceInvariant
 namespace SphincsSecurity.Concrete.OtsPrefix
@@ -16,9 +17,7 @@ variable (segment : OtsPrefix) (stop : FrontierStop)
   (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (words : OtsReferenceWords) (adversary : Adversary)
 
 theorem traceCheckpoint_budget (budget : Nat)
-    (hreal : ∀ result ∈ (realRun (fun _ => uniformImpl)
-      (fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint adversary) (fun _ _ => none)).support,
-      result.2.1.2.hashCalls ≤ budget)
+    (hseed : SeedCost segment inputs hencoding hgraph auxiliary secrets ftsSecret words adversary budget)
     (hsmall : budget < Fintype.card Digest) (endpoint : Digest)
     (middle : ((OtsContactTrace.Trace × OracleComp segment.VisibleWorld (Bool × SigningBoundaryTrace)) × Nat) ×
       (Fin segment.digit.val → Digest → Option Digest))
@@ -28,9 +27,10 @@ theorem traceCheckpoint_budget (budget : Nat)
     (hresult : result ∈ (lazyRun (extendAux uniformImpl (segment.seedOracle inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint))
       (QueryCap.counted IsPrefixQuery (QueryPause.traced (segment.visibleObservationTrace auxiliary.high) middle.1.1.2)) middle.2).support) :
     queryCount middle.2 + result.1.2 ≤ budget ∧ queryCount result.2 ≤ budget := by
+  obtain ⟨cost, _, hvisible, hreal⟩ := hseed
   let aux := fun endpoint => extendAux uniformImpl (segment.seedOracle inputs hencoding hgraph auxiliary secrets ftsSecret words endpoint)
   let program := segment.visibleSeedGame inputs hencoding hgraph auxiliary secrets ftsSecret words adversary
-  have hreal' : ∀ result ∈ (realRun aux program (fun _ _ => none)).support, result.2.1.2.hashCalls ≤ budget := by
+  have hreal' : ∀ result ∈ (realRun aux program (fun _ _ => none)).support, cost result.2.1 ≤ budget := by
     rw [segment.visibleSeedGame_real inputs hencoding hgraph auxiliary secrets ftsSecret words adversary]
     exact hreal
   have hresult' : ((result.1.1.1, result.1.2), result.2) ∈
@@ -40,8 +40,8 @@ theorem traceCheckpoint_budget (budget : Nat)
     rw [lazyRun_map] at hforget
     rw [← hforget, PMF.mem_support_map_iff]
     exact ⟨result, hresult, rfl⟩
-  exact lazyRun_pause_budget_of_real aux program (fun output => output.2.hashCalls) budget
-    (fun endpoint output houtput => segment.visibleSeedGame_counted_le inputs hencoding hgraph auxiliary secrets ftsSecret words adversary endpoint output houtput)
+  exact lazyRun_pause_budget_of_real aux program cost budget
+    (fun endpoint output houtput => hvisible endpoint output houtput)
     hreal' hsmall endpoint
     (stop segment.parameter words (segment.seedFrontier inputs hencoding hgraph auxiliary secrets words endpoint))
     (fun input answer history => history * segment.visibleObservationTrace auxiliary.high input answer)

@@ -36,7 +36,7 @@ private theorem pmf_mem_of_evalDist {Result : Type} (law : PMF Result) (result :
   simpa only [PMF.evalSPMF_eq, SPMF.support_liftM] using hresult
 
 theorem prefixTwoEdgeGame_le (address : OtsPrefix.ChainAddress) (dummy : OtsReferenceWords)
-    (adversary : Adversary) (q : Nat) (hbound : HasHashQueryBound scheme adversary q) (hsmall : q < Fintype.card Digest) :
+    (adversary : Adversary) (q : Nat) (hprefix : PrefixBudget dummy adversary q) (hsmall : q < Fintype.card Digest) :
     Pr[= true | prefixTwoEdgeGame (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary) (canonicalGraphInputs_subset_gameInputs adversary) address dummy adversary] ≤
       (prefixTwoEdgeRate q) * ∑' count, Pr[= count | prefixIdealCostGame (canonicalGraphGameInputs adversary)
@@ -65,16 +65,8 @@ theorem prefixTwoEdgeGame_le (address : OtsPrefix.ChainAddress) (dummy : OtsRefe
     let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
     let hgraph := canonicalGraphInputs_subset_gameInputs adversary parameter
     let computation := fun endpoint => segment.seedGame inputs hencoding hgraph auxiliary other.val ftsSecret words endpoint adversary
-    let cost := fun result : Bool × SigningBoundaryTrace => result.2.hashCalls
-    have hcharge : ∀ endpoint result, result ∈ support (QueryCap.counted PartialChainEndpoint.IsPrefixQuery (computation endpoint)) →
-        result.2 ≤ cost result.1 :=
-      fun endpoint result hresult => segment.seedGame_counted_le inputs hencoding hgraph auxiliary other.val
-        ftsSecret words endpoint adversary result hresult
-    have hreal : ∀ result ∈ (PartialChainEndpoint.realRun (fun _ => OtsPrefix.uniformImpl) computation (fun _ _ => none)).support,
-        cost result.2.1 ≤ q :=
-      prefixObservedRun_hashCalls_le parameter (probComp_mem_of_evalDist _ parameter hparameter) ftsSecret
-        address.1 address.2.1 address.2.2.1 address.2.2.2 dummy adversary selections (pmf_mem_of_evalDist _ selections hselections)
-        q hbound other auxiliary (pmf_mem_of_evalDist _ auxiliary hauxiliary)
+    obtain ⟨cost, hcharge, _, hreal⟩ := hprefix parameter (probComp_mem_of_evalDist _ parameter hparameter) ftsSecret address
+      selections (pmf_mem_of_evalDist _ selections hselections) other auxiliary (pmf_mem_of_evalDist _ auxiliary hauxiliary)
     have htwoEdge := PartialChainEndpoint.realRun_twoEdgeEvent_le_cap_cost (fun _ => OtsPrefix.uniformImpl) computation cost q hcharge hreal hsmall
     simp only [one_mul, tsum_probOutput_bind_mul, tsum_probOutput_pure_mul]
     simpa only [prefixTwoEdgeRate, PMF.evalSPMF_eq, SPMF.probOutput_liftM, PMF.probOutput_eq_apply, decide_eq_true_eq,

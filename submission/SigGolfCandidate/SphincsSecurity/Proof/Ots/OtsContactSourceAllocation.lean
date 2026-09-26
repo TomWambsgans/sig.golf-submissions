@@ -19,7 +19,7 @@ theorem prefixContactObservedGame_original (inputs : Finset HashInput)
   prefixInstrumentedObservedGame_original contactObserver inputs hencoding hgraph address dummy adversary
 
 theorem referenceContactGame_restart_allocation (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbound : HasHashQueryBound scheme adversary budget) :
+    (hcontact : ContactBudget dummy adversary budget) :
     let law := referenceContactGame (canonicalGraphGameInputs adversary) (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary
     (∑ address : OtsPrefix.ChainAddress, ∑' result : InstrumentedResult ContactResult,
       Pr[= result | law] * (result.2.2.restartCharge result.1 (referenceFamilyWords result.2.1 dummy) address : ENNReal)) ≤
@@ -37,8 +37,7 @@ theorem referenceContactGame_restart_allocation (dummy : OtsReferenceWords) (adv
       intro result
       by_cases hr : result ∈ support law
       · apply mul_le_mul' le_rfl
-        have hcost := (referenceContactGame_cost _ _ dummy adversary result hr).trans
-          (referenceContactGame_hashCalls_le dummy adversary budget hbound result hr)
+        have hcost := hcontact result hr
         have hn := ContactResult.restartCharge_sum_le result.1 (referenceFamilyWords result.2.1 dummy) result.2.2 budget hcost
         by_cases hm : result.2.2.Marked result.1 (referenceFamilyWords result.2.1 dummy)
         · rw [if_pos hm] at hn ⊢

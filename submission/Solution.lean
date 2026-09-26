@@ -1,27 +1,17 @@
 import SigGolf
-import SigGolfCandidate.Final.Main
+import SigGolfCandidate.Final.Discharge
 
 /-!
-# sig.golf solution (template)
+# sig.golf solution: a SPHINCS+ variant
 
-`S = W = 7756`, `C = 18388`. Layout (bytes): message 64, secret key 128, public key 160,
-cache 17568, signature 9808, witness 2048.
+`S = W = 7756` bytes, `C = 18388` cycles. Layout (bytes): message 64, secret key 128,
+public key 160, cache 17568, signature 9808, witness 2048.
 
-The certificate is `SigGolfCandidate.Final.certificate_of`, which takes the bundle
-`SigGolfCandidate.Final.Pending` of the component statements still being proved (see
-`SigGolfCandidate/Final/Pending.lean`). The final step, once those theorems exist, is to replace
-`certificate_of_pending` below by
-
-```lean
-theorem certificate : SigGolf.Certificate submission 18388 :=
-  SigGolfCandidate.Final.certificate_of
-    { signRefinement := <SignRefinementStatement proof>
-      signTermination := <SignTerminationStatement proof>
-      verifyRefinement := <VerifyRefinementStatement proof>
-      verifyTermination := <VerifyTerminationStatement proof>
-      verifyCycles := <VerifyCyclesStatement proof>
-      eventSecurity := <EventSecurityStatement proof> }
-```
+The certificate is `SigGolfCandidate.Final.certificate`: the four RISC-V images are proved to refine
+a byte-level reference (`SigGolfCandidate.Ref`), which is proved equal to the abstract SPHINCS+
+scheme (`SigGolfCandidate.SphincsSecurity`) up to zero-padding of oracle inputs; the abstract
+scheme's 127-bit event-form security, per-seed completeness and correctness are transported to the
+organizer's game through `SigGolfCandidate.Bridge`.
 -/
 
 namespace SigGolf.Challenge
@@ -36,10 +26,7 @@ theorem layout_offsets : submission.layout =
   { message := 64, secretKey := 128, publicKey := 160,
     cache := 17568, signature := 9808, witness := 2048 } := rfl
 
-/-- The certificate, from the pending component statements. PLACEHOLDER: becomes
-`theorem certificate : SigGolf.Certificate submission 18388` once `Pending` is proved. -/
-theorem certificate_of_pending (P : SigGolfCandidate.Final.Pending) :
-    SigGolf.Certificate submission 18388 :=
-  SigGolfCandidate.Final.certificate_of P
+theorem certificate : SigGolf.Certificate submission 18388 :=
+  SigGolfCandidate.Final.certificate
 
 end SigGolf.Challenge

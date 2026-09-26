@@ -41,7 +41,7 @@ theorem referenceNearWitnessRest_program (key : SecretKey) (inputs : Finset Hash
   exact decide_eq_decide.mpr Iff.rfl
 
 theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
+    (hprobe : ProbeBudget dummy adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
@@ -56,7 +56,7 @@ theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adve
         ∑ slot ∈ Finset.range budget, forcedNearProbability dummy adversary slot parameter otsSecret labels auxiliary := by
   have h := (initial_reference_near_witnesses parameter otsSecret (canonicalGraphGameInputs adversary)
     (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary hauxiliary dummy adversary).trans
-    (lazy_original_near_event_le dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary hauxiliary)
+    (lazy_original_near_event_le dummy adversary budget hprobe parameter hparameter otsSecret labels auxiliary hauxiliary)
   have hprior := congrArg (fun law : SPMF (Coordinate → Digest) => law >>= fun secrets =>
       (fun result => (secrets, result)) <$> 𝒮[simulateQ
         (fixedAnswers (originalAnswers dummy adversary parameter otsSecret labels auxiliary) secrets)
@@ -104,7 +104,7 @@ private theorem pmf_support_nonzero {Result : Type} (law : PMF Result) (result :
   simpa only [PMF.mem_support_iff, SPMF.liftM_apply] using hr
 
 theorem referenceForgeryGame_near_guess_le_forced (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
-    (hbudget : HasHashQueryBound scheme adversary budget) :
+    (hprobe : ProbeBudget dummy adversary budget) :
     Pr[ReferenceForgerySample.nearGuess dummy | referenceForgeryGame (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
       ((2 ^ 128 - budget : Nat) : ENNReal)⁻¹ *
@@ -142,7 +142,7 @@ theorem referenceForgeryGame_near_guess_le_forced (dummy : OtsReferenceWords) (a
   apply ENNReal.tsum_le_tsum
   intro labels
   apply mul_le_mul' le_rfl
-  have h := referenceNearWitnessRest_initial_bound dummy adversary budget hbudget parameter hparameter otsSecret labels auxiliary
+  have h := referenceNearWitnessRest_initial_bound dummy adversary budget hprobe parameter hparameter otsSecret labels auxiliary
     (pmf_support_nonzero _ auxiliary hz)
   simpa only [referenceNearWitnessRest, evalSPMF_map] using h
 
@@ -162,6 +162,7 @@ theorem forgeAdvantage_le_forcedNear_small_budget (dummy : OtsReferenceWords)
       ((2 ^ 128 - q : Nat) : ENNReal)⁻¹ *
         ∑ slot ∈ Finset.range q, Pr[fun hit => hit = true | FtsGuessHash.forcedNearGame dummy adversary slot] :=
   (forgeAdvantage_le_nearGuess_normalized_small_budget dummy hdummy adversary q hbound hsmall).trans
-    (add_le_add le_rfl (FtsGuessHash.referenceForgeryGame_near_guess_le_forced dummy adversary q hbound))
+    (add_le_add le_rfl (FtsGuessHash.referenceForgeryGame_near_guess_le_forced dummy adversary q
+      (FtsGuessHash.probeBudget_of_hasHashQueryBound dummy adversary q hbound)))
 
 end SphincsSecurity.Concrete

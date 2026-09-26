@@ -320,6 +320,33 @@ theorem Sim.run_eq (submission : Submission) (phase : Phase) (input : Input subm
   congr 2
   split <;> simp_all
 
+/-- `Sim.run_eq` including the `finished` flag (always `true`). -/
+theorem Sim.run_eq_fin (submission : Submission) (phase : Phase) (input : Input submission.sizes phase)
+    {s : MachineState} (hinit : initialState submission phase input = some s) {W : Nat}
+    {oa : OracleComp HashSpec α} {Q : α → MachineState → Prop}
+    (hsim : Sim (submission.image phase) s W oa Q) (hW : W < CYCLE_LIMIT)
+    (F : α → Option (Output submission.sizes phase))
+    (hQ : ∀ a t, Q a t → fetch (submission.image phase) t = some (.base .ECALL) ∧
+      t.getReg .x5 = 1 ∧
+      F a = if t.getReg .x10 = 0 then some (readOutput submission.sizes submission.layout phase t)
+        else none) :
+    (fun r => (r.value, r.finished, r.hashCalls, r.hashCompressions)) <$> submission.run phase input =
+      (fun p => (F p.1, true, p.2.1, p.2.2)) <$> countBoth oa := by
+  obtain ⟨oc, hp, hf⟩ := hsim
+  rw [Rv.run_eq submission phase input s hinit, hf CYCLE_LIMIT (le_of_lt hW), ← hp,
+    Functor.map_map]
+  simp only [map_bind, Functor.map_map]
+  rw [map_eq_bind_pure_comp (x := oc)]
+  congr 1; funext o
+  obtain ⟨h1, h2, h3⟩ := hQ _ _ o.2.2.2
+  have hs : o.1.steps < CYCLE_LIMIT := lt_of_le_of_lt (le_trans o.2.1 o.2.2.1) hW
+  obtain ⟨f, hf'⟩ : ∃ f, CYCLE_LIMIT - o.1.steps = f + 1 := ⟨CYCLE_LIMIT - o.1.steps - 1, by omega⟩
+  rw [hf', execute_halt f h1 h2]
+  simp only [map_pure, Function.comp, toRunResult, Execution.charge, h3]
+  congr 2
+  · split <;> simp_all
+  · split <;> rfl
+
 /-- **Termination of a whole phase** under every fixed oracle: finished, and at most `W + 1`
 cycles (`W + 1 < CYCLE_LIMIT`). -/
 theorem Sim.runWith (submission : Submission) (phase : Phase) (input : Input submission.sizes phase)

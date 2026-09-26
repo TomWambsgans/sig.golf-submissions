@@ -253,11 +253,15 @@ theorem Avoids.keygenFromSeed (seed : MasterSeed)
       keygenHashInput 0 (.ots topLayer rootTree leaf chainIdx) seed ≠ target) :
     Avoids f target (Seeded.keygenFromSeed seed) := by
   rw [Seeded.keygenFromSeed]
-  exact Avoids.bind f target
+  refine Avoids.bind f target
     (Avoids.buildLayerTree f target 0 topLayer rootTree _ _ _
       (fun leaf chainIdx => Avoids.deriveKey f target 0 _ seed (hderive leaf chainIdx))
-      hchain hleaf hnode)
-    (Avoids.pure' f target _)
+      hchain hleaf hnode) ?_
+  -- `split` keeps the tree build opaque; unifying `pure _` with the `match` on it makes the kernel
+  -- run the whole build
+  split
+  exact Avoids.pure' f target _
+
 /-! ## The signing side
 
 The digest loop hashes under the randomizer tweak and the message tweak, never under the encoding
