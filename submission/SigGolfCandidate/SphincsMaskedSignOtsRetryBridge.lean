@@ -1332,4 +1332,80 @@ theorem forest_complete_first_bottom_encoding_digest (hash : Hash) (s : MachineS
 #guard_msgs (whitespace := lax) in
 #print axioms forest_complete_first_bottom_encoding_digest
 
+
+/-- A decodable abstract encoding digest clears the first concrete WOTS padding test. -/
+private theorem digest_first_padding_clear (digest : Digest) (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest digest = some encoding) :
+    (((digest.extractLsb' 72 8).setWidth 64) &&& (0xc0 : Word)) = 0 := by
+  unfold TargetSum.decodeDigest at decoded
+  split at decoded
+  · rename_i h
+    rcases h with ⟨h₁, h₂, h₃, h₄, hv⟩
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    interval_cases i <;> simp [h₁, h₂]
+  · simp at decoded
+
+/-- The first concrete WOTS retry check accepts a decodable HASH digest. -/
+theorem first_encoding_padding_of_decode (location : Fin 5) (s : MachineState)
+    (digest : Digest) (encoding : Encoding)
+    (words : Words20 s 0x42000 digest)
+    (decoded : TargetSum.decodeDigest digest = some encoding) :
+    (otsPaddingFirst location s).getReg .x10 = 0 := by
+  rw [otsPaddingFirst_register]
+  have byte := SphincsMaskedPublicKeyDomain.words20_byte s 0x42000 digest
+    (by omega) (by decide) words ⟨9, by decide⟩
+  have addr : (0x42000 + (9 : Nat)) = 0x42009 := by omega
+  simp only [addr] at byte
+  have b : s.getByte 0x42009 = digest.extractLsb' 72 8 := by
+    convert byte using 1 <;> rfl
+  rw [b]
+  exact digest_first_padding_clear digest encoding decoded
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_encoding_padding_of_decode' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_encoding_padding_of_decode
+
+
+/-- The first padding test reads the digest without changing any memory byte. -/
+private theorem otsPaddingFirst_byte (location : Fin 5) (s : MachineState)
+    (address : Word) :
+    (otsPaddingFirst location s).getByte address = s.getByte address := by
+  simp [otsPaddingFirst, otsPaddingFirstState, otsPaddingFirstCode,
+    runSchedule, execInstrBr, MachineState.getByte]
+
+/-- A decodable abstract encoding digest clears the second concrete padding test. -/
+private theorem digest_second_padding_clear (digest : Digest) (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest digest = some encoding) :
+    (((digest.extractLsb' 152 8).setWidth 64) &&& (0xc0 : Word)) = 0 := by
+  unfold TargetSum.decodeDigest at decoded
+  split at decoded
+  · rename_i h
+    rcases h with ⟨h₁, h₂, h₃, h₄, hv⟩
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    interval_cases i <;> simp [h₃, h₄]
+  · simp at decoded
+
+/-- The second concrete WOTS retry check accepts a decodable HASH digest. -/
+theorem second_encoding_padding_of_decode (location : Fin 5) (s : MachineState)
+    (digest : Digest) (encoding : Encoding)
+    (words : Words20 s 0x42000 digest)
+    (decoded : TargetSum.decodeDigest digest = some encoding) :
+    (otsPaddingSecond location (otsPaddingFirst location s)).getReg .x10 = 0 := by
+  rw [otsPaddingSecond_register]
+  rw [otsPaddingFirst_byte]
+  have byte := SphincsMaskedPublicKeyDomain.words20_byte s 0x42000 digest
+    (by omega) (by decide) words ⟨19, by decide⟩
+  have addr : (0x42000 + (19 : Nat)) = 0x42013 := by omega
+  simp only [addr] at byte
+  have b : s.getByte 0x42013 = digest.extractLsb' 152 8 := by
+    convert byte using 1 <;> rfl
+  rw [b]
+  exact digest_second_padding_clear digest encoding decoded
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.second_encoding_padding_of_decode' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms second_encoding_padding_of_decode
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
