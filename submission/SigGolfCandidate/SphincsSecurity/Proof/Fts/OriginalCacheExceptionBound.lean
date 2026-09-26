@@ -3229,3 +3229,28 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.causal_game_globalCap_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.causal_game_globalCap_budget_event
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+
+theorem fixedHashQueryBound_globalCap {Result : Type}
+    (oracle : QueryImpl HashSpec Id) (computation : OracleComp OracleWorld Result) (q : Nat) :
+    FixedHashQueryBound oracle
+      (QueryCap.run CausalFrontierProgram.IsHash computation q) q := by
+  intro result hr
+  have hsyntax : result ∈ support (countHashQueries
+      (QueryCap.run CausalFrontierProgram.IsHash computation q)) :=
+    QueryCap.simulate_oracle_mem_support (fixedHashWorld oracle) _ result hr
+  apply QueryCap.counted_le_of_queryBound CausalFrontierProgram.IsHash
+    (QueryCap.run CausalFrontierProgram.IsHash computation q) q
+    (QueryCap.run_queryBound CausalFrontierProgram.IsHash computation q) result
+  change result ∈ support (QueryCap.counted CausalFrontierProgram.IsHash
+    (QueryCap.run CausalFrontierProgram.IsHash computation q)) at hsyntax
+  exact hsyntax
+
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.fixedHashQueryBound_globalCap' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.fixedHashQueryBound_globalCap
