@@ -59,14 +59,10 @@ theorem expected_initialMonitoredSource_full_unit_count_le
     (key : SecretKey) (adversary : Adversary) (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
     (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
     (q : Nat) (stopAfter : CertificateStopRule) (stopped : Bool)
-    (hparameter : key.parameter ∈ support sampleParameter) (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
-    (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (hq : HasHashQueryBound scheme adversary q) (hbudget : q ≤ 2 ^ 128) :
+    (hbudget : q ≤ 2 ^ 128) :
     (∑' result, Pr[= result | initialMonitoredSource key adversary encoding dummy exposed high q Finset.univ (proposalStop stopAfter) stopped] *
       certificateBankCount result.2.2.bank) ≤
-        (2 ^ 144 : ENNReal)⁻¹ *
-          (∑' result, Pr[= result | initialMonitoredSource key adversary encoding dummy exposed high q Finset.univ (proposalStop stopAfter) stopped] *
-            result.2.1.memory.messageCalls.length) + (q : ENNReal) * fullCertificateExcessRate := by
+        (q : ENNReal) * fullCertificateTotalRate := by
   let state : ProposalState (gameInputs adversary) :=
     ([], initialState (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) exposed, initialCertificateMonitor keygenHashCost stopped)
   let law := proposalRun key (gameInputs adversary) (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
@@ -95,8 +91,21 @@ theorem expected_initialMonitoredSource_full_unit_count_le
     intro result hresult
     have h := map_nonzero law (Prod.map id Prod.snd) result hresult
     rw [hproject] at h
-    exact initialMonitoredSource_creationMass_le key adversary encoding dummy exposed high q Finset.univ (proposalStop stopAfter) stopped
-      hparameter hencoding hroot hq _ h
+    exact initialMonitoredSource_creationMass_le_nominalBudget key adversary
+      encoding dummy exposed high q Finset.univ (proposalStop stopAfter) stopped _ h
+  have hexpect :
+      (∑' result, Pr[= result | law] * result.2.2.2.creationMass) ≤
+        (q : ENNReal) := by
+    calc
+      _ ≤ ∑' result, Pr[= result | law] * (q : ENNReal) := by
+        apply ENNReal.tsum_le_tsum
+        intro result
+        by_cases hr : law result = 0
+        · simp [SPMF.probOutput_eq_apply, hr]
+        · exact mul_le_mul' le_rfl (hmass result hr)
+      _ ≤ (q : ENNReal) := by
+        rw [ENNReal.tsum_mul_right]
+        exact mul_le_of_le_one_left' tsum_probOutput_le_one
   have hcost := expected_proposalRun_creationCost_le_mass_terminalPotential key (gameInputs adversary)
     (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter) (referenceFamilyWords encoding.selections dummy)
     (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
@@ -130,11 +139,17 @@ theorem expected_initialMonitoredSource_full_unit_count_le
         q (2 ^ 144 : ENNReal)⁻¹ hmass fixedProposalLength (terminalCertificatePrice Finset.univ)
     _ ≤ _ := by
       rw [huniform]
-      have hm := herase (fun result => result.2.2.creationMass)
-      dsimp only [Prod.map] at hm
-      rw [hm]
-      exact add_le_add (mul_le_mul' le_rfl
-        (expected_initialMonitoredSource_creationMass_le_messageCalls key adversary encoding dummy exposed high q Finset.univ (proposalStop stopAfter) stopped))
-        (mul_le_mul' le_rfl uniformWordAverage_full_price_excess_le)
+      calc
+        _ ≤ (2 ^ 144 : ENNReal)⁻¹ * (q : ENNReal) +
+            (q : ENNReal) * fullCertificateExcessRate :=
+          add_le_add (mul_le_mul' le_rfl hexpect)
+            (mul_le_mul' le_rfl uniformWordAverage_full_price_excess_le)
+        _ = (q : ENNReal) * fullCertificateTotalRate := by
+          simp only [fullCertificateTotalRate_def, mul_add]
+          rw [mul_comm (q : ENNReal) (2 ^ 144 : ENNReal)⁻¹]
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.expected_initialMonitoredSource_full_unit_count_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.expected_initialMonitoredSource_full_unit_count_le

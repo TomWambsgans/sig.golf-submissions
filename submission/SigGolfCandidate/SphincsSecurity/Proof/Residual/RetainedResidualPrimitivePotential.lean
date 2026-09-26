@@ -625,31 +625,18 @@ theorem initialMonitoredSource_primitive_add_full_count_le (key : SecretKey) (ad
           certificateBankCount result.2.2.bank) ≤
       ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
         (budget : ENNReal) * fullCertificateTotalRate := by
-  let law := initialMonitoredSource key adversary encoding dummy exposed high budget Finset.univ (proposalStop stopAfter) stopped
-  let messages : ENNReal := ∑' result, Pr[= result | law] * (result.2.1.memory.messageCalls.length : ENNReal)
-  have hprimitive := initialMonitoredSource_joint_primitive_messages key adversary encoding dummy exposed high budget Finset.univ
-    (proposalStop stopAfter) stopped hparameter hencoding hroot hcost hbudget
-  have hcoverage := expected_initialMonitoredSource_full_unit_count_le key adversary encoding dummy exposed high budget
-    stopAfter stopped hparameter hencoding hroot hcost hbudget
-  have hmessages := initialMonitoredSource_messageCalls_le key adversary encoding dummy exposed high budget
-    stopAfter stopped hparameter hencoding hroot hcost
+  let law := initialMonitoredSource key adversary encoding dummy exposed high budget
+    Finset.univ (proposalStop stopAfter) stopped
+  have hprimitive := initialMonitoredSource_joint_primitive_messages key adversary
+    encoding dummy exposed high budget Finset.univ (proposalStop stopAfter) stopped
+    hparameter hencoding hroot hcost hbudget
+  have hcoverage := expected_initialMonitoredSource_full_unit_count_le key adversary
+    encoding dummy exposed high budget stopAfter stopped hbudget
   have hprimary : Pr[fun result => result.1 = none | law] ≤
-      ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) :=
+      ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) -
+        ((budget : ℝ) / 2 ^ digestBits) ^ 2) :=
     (le_self_add).trans hprimitive
-  have hmessageRate : messages / 2 ^ 144 ≤ (budget : ENNReal) / 2 ^ 144 := by
-    simpa only [div_eq_mul_inv] using mul_le_mul' hmessages (le_refl ((2 ^ 144 : ENNReal)⁻¹))
-  calc
-    _ ≤ Pr[fun result => result.1 = none | law] +
-        ((2 ^ 144 : ENNReal)⁻¹ * messages + (budget : ENNReal) * fullCertificateExcessRate) :=
-      add_le_add le_rfl hcoverage
-    _ = Pr[fun result => result.1 = none | law] +
-        (messages / 2 ^ 144 + (budget : ENNReal) * fullCertificateExcessRate) := by
-      rw [div_eq_mul_inv, mul_comm (2 ^ 144 : ENNReal)⁻¹ messages]
-    _ ≤ ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) - ((budget : ℝ) / 2 ^ digestBits) ^ 2) +
-        (budget : ENNReal) / 2 ^ 144 + (budget : ENNReal) * fullCertificateExcessRate := by
-      simpa only [add_assoc] using add_le_add hprimary (add_le_add hmessageRate le_rfl)
-    _ = _ := by
-      simp only [fullCertificateTotalRate_def, div_eq_mul_inv, mul_add, add_assoc]
+  exact add_le_add hprimary hcoverage
 
 end SphincsSecurity.Concrete.RetainedResidual
 

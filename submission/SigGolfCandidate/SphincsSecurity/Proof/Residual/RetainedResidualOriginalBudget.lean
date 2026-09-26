@@ -265,3 +265,67 @@ theorem expected_initialMonitoredSource_creationMass_le_messageCalls :
       (initialMonitoredSource_resources key adversary encoding dummy exposed high q required stopAfter stopped result hr).2.2)
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+
+/-- Creation mass on any completed source trace stays inside the *actual*
+query budget of that trace. This uses no global hard cap. -/
+theorem initialMonitoredSource_creationMass_le_of_hashCalls
+    (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (q : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (stopped : Bool)
+    (result : Option (Forgery × Bool) × MonitoredState (gameInputs adversary))
+    (hresult : initialMonitoredSource key adversary encoding dummy exposed high
+      q required stopAfter stopped result ≠ 0)
+    (hbudget : result.2.1.memory.external.hashCalls ≤ q) :
+    result.2.2.creationMass ≤ (q : ENNReal) :=
+  (initialMonitoredSource_resources key adversary encoding dummy exposed high
+    q required stopAfter stopped result hresult).2.1.trans
+      (Nat.cast_le.mpr hbudget)
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_creationMass_le_of_hashCalls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_creationMass_le_of_hashCalls
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+
+/-- The certificate monitor books at most its nominal budget on every source
+trace, even when the actual signing macro overshoots that budget. -/
+theorem initialMonitoredSource_creationMass_le_nominalBudget
+    (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (q : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (stopped : Bool)
+    (result : Option (Forgery × Bool) × MonitoredState (gameInputs adversary))
+    (hresult : initialMonitoredSource key adversary encoding dummy exposed high
+      q required stopAfter stopped result ≠ 0) :
+    result.2.2.creationMass ≤ (q : ENNReal) := by
+  have hnominal := monitoredRun_nominal key (gameInputs adversary)
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+    (referenceFamilyWords encoding.selections dummy)
+    (coordinateGraphLabels (initialKnown
+      (referenceFamilyWords encoding.selections dummy) exposed) high)
+    encoding.selections encoding.rows q required stopAfter
+    (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+      ⟨key.root, key.parameter⟩)
+    (initialState (gameInputs adversary)
+      (referenceFamilyWords encoding.selections dummy) exposed,
+      initialCertificateMonitor keygenHashCost stopped)
+    ⟨initialAllowed_nonempty _ exposed,
+      initialState_rowsCovered _ _ exposed⟩
+    (sourceInputs_unlogged_subset_gameInputs adversary key)
+    (by simp [MonitorNominal, initialCertificateMonitor]) result hresult
+  exact hnominal.2
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_creationMass_le_nominalBudget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_creationMass_le_nominalBudget

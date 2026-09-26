@@ -141,3 +141,205 @@ theorem monitoredRun_resources {Result : Type} (computation : OracleComp (Oracle
             ((sourceInputs_next_subset key input next answer).trans hinputs) hafter result hresult
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+private theorem creationMultiplier_le_macroCost (key : SecretKey)
+    (cache : QueryCache HashSpec)
+    (input : (OracleWorld + SigningSpec).Domain) :
+    targetCreationMultiplier key cache input ≤ signingMacroHashCost input := by
+  cases input with
+  | inl world =>
+      cases world with
+      | inl sample => simp [targetCreationMultiplier, freshWorldTargetHashCost,
+          signingMacroHashCost]
+      | inr hashInput =>
+          simp only [targetCreationMultiplier, signingMacroHashCost,
+            freshWorldTargetHashCost]
+          split_ifs <;> norm_num
+  | inr message =>
+      simp only [targetCreationMultiplier, signingMacroHashCost]
+      simpa only [mul_one] using
+        mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
+          (freshDigestSelectionProbability_le_one key message cache)
+
+def MonitorNominal (monitor : CertificateMonitor) (budget : Nat) : Prop :=
+  monitor.creationMass ≤ (monitor.spent : ENNReal) ∧
+    monitor.creationMass ≤ (budget : ENNReal)
+
+theorem monitorNominal_update (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) {inputs : Finset HashInput}
+    (state : MonitoredState inputs) (length : Nat)
+    (record : ProposalExecutionRecord input)
+    (hpre : MonitorNominal state.2 budget)
+    (hrecord : targetCreationMultiplier key state.1.memory.external.cache input ≤
+      record.trace.hashCalls) :
+    MonitorNominal
+      (certificateMonitorUpdate key budget required stopAfter input
+        (monitorView state) length record) budget := by
+  by_cases ha : CertificateMonitorActive key budget input (monitorView state)
+  · have hspent : state.2.spent ≤ budget := ha.2.1.2.2
+    have hcost : signingMacroHashCost input ≤ budget - state.2.spent := ha.2.2.2
+    have hnew :
+        state.2.creationMass + targetCreationMultiplier key
+            state.1.memory.external.cache input ≤
+          ((state.2.spent + record.trace.hashCalls : Nat) : ENNReal) ∧
+        state.2.creationMass + targetCreationMultiplier key
+            state.1.memory.external.cache input ≤ (budget : ENNReal) := by
+      constructor
+      · rw [Nat.cast_add]
+        exact add_le_add hpre.1 hrecord
+      · calc
+          state.2.creationMass + targetCreationMultiplier key
+              state.1.memory.external.cache input ≤
+            (state.2.spent : ENNReal) +
+              (signingMacroHashCost input : ENNReal) :=
+            add_le_add hpre.1 (creationMultiplier_le_macroCost key _ input)
+          _ = ((state.2.spent + signingMacroHashCost input : Nat) : ENNReal) := by
+            rw [Nat.cast_add]
+          _ ≤ (budget : ENNReal) := Nat.cast_le.mpr (by omega)
+    have ha' : CertificateMonitorActive key budget input
+        (state.1.memory.external.cache, state.2) := by simpa [monitorView] using ha
+    simpa [MonitorNominal, certificateMonitorUpdate, monitorView, ha'] using hnew
+  · have ha' : ¬CertificateMonitorActive key budget input
+        (state.1.memory.external.cache, state.2) := by simpa [monitorView] using ha
+    simpa [MonitorNominal, certificateMonitorUpdate, monitorView, ha'] using hpre
+end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+open InterleavedResidual (SigningRecord)
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition hashInputs sourceInputs
+set_option backward.isDefEq.respectTransparency false
+
+theorem monitoredStep_nominal (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : MonitoredState inputs) (hvalid : MonitoredValid inputs state)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (hpre : MonitorNominal state.2 budget)
+    (result : Option ((OracleWorld + SigningSpec).Range input) × MonitoredState inputs)
+    (hresult : monitoredStep key inputs hencoding words publicReplies selections rows
+      budget required stopAfter input state result ≠ 0) :
+    MonitorNominal result.2.2 budget := by
+  cases input with
+  | inl input =>
+      rw [monitoredStep, map_eq_bind_pure_comp, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨raw, hraw, hresult⟩ := hresult
+      simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+      subst result
+      cases hr : raw.1 with
+      | none => simpa [MonitorNominal, monitoredWorldResult, hr] using hpre
+      | some answer =>
+          simp only [monitoredWorldResult, hr, Option.elim_some]
+          apply monitorNominal_update key budget required stopAfter (.inl input)
+            state 0 _ hpre
+          simp only [proposalOfWorldResult, signingBoundaryTrace_hashCalls_eq,
+            targetCreationMultiplier]
+          cases input with
+          | inl sample => exact le_rfl
+          | inr hashInput =>
+              simp only [freshWorldTargetHashCost]
+              split_ifs <;> norm_num
+  | inr message =>
+      rw [monitoredStep, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨annotation, _, hresult⟩ := hresult
+      rw [map_eq_bind_pure_comp, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨raw, hraw, hresult⟩ := hresult
+      simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+      subst result
+      have hin := digestInputs_of_request key inputs words selections message
+        state.1.memory.routing.known hinputs
+      obtain ⟨record, hr, _⟩ := lazyRun_jointSigningProgram_memory_trace
+        key.parameter inputs hencoding words publicReplies selections rows
+        state.1.memory.routing key.root message
+        (by simpa only [publicDigestLoop_eq] using hin) state.1 hvalid.1 hvalid.2 raw hraw
+      obtain ⟨other, ho, hmin⟩ := lazyRun_jointSigningProgram_hashCalls_min key
+        inputs hencoding words publicReplies selections rows state.1.memory.routing
+        message hin state.1 hvalid.1 hvalid.2 raw hraw
+      have heq : other = record := Option.some.inj (ho.symm.trans hr)
+      subst other
+      have heq : raw = (some record, raw.2) := Prod.ext hr rfl
+      rw [heq]
+      simp only [monitoredSigningResult]
+      apply monitorNominal_update key budget required stopAfter (.inr message)
+        state annotation.1 _ hpre
+      change targetCreationMultiplier key state.1.memory.external.cache (.inr message) ≤
+        record.2.hashCalls
+      have hp := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
+        (freshDigestSelectionProbability_le_one key message state.1.memory.external.cache)
+      calc
+        _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by
+          simpa only [targetCreationMultiplier, mul_one] using hp
+        _ ≤ (ftsOpenHashCost : ENNReal) :=
+          Nat.cast_le.mpr two_pow_ftsTreeHeight_le_ftsOpenHashCost
+        _ ≤ record.2.hashCalls := Nat.cast_le.mpr hmin
+end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+theorem monitoredRun_nominal {Result : Type}
+    (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : MonitoredState inputs) (hvalid : MonitoredValid inputs state)
+    (hinputs : sourceInputs key computation ⊆ inputs)
+    (hpre : MonitorNominal state.2 budget)
+    (result : Option Result × MonitoredState inputs)
+    (hresult : monitoredRun key inputs hencoding words publicReplies selections rows
+      budget required stopAfter computation state result ≠ 0) :
+    MonitorNominal result.2.2 budget := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      rw [monitoredRun_pure] at hresult
+      simp only [ne_eq, SPMF.pure_apply_eq_zero_iff, not_not] at hresult
+      subst result
+      exact hpre
+  | query_bind input next ih =>
+      rw [monitoredRun_query_bind, RetainedObservation.bind_nonzero] at hresult
+      obtain ⟨⟨answer, after⟩, hstep, hresult⟩ := hresult
+      have hafter := monitoredStep_nominal key inputs hencoding words publicReplies
+        selections rows budget required stopAfter input state hvalid
+        ((requestInputs_subset key input next).trans hinputs) hpre
+        (answer, after) hstep
+      cases answer with
+      | none =>
+          simp only [Option.elim_none, ne_eq, SPMF.pure_apply_eq_zero_iff,
+            not_not] at hresult
+          subst result
+          exact hafter
+      | some answer =>
+          exact ih answer after
+            (monitoredStep_valid key inputs hencoding words publicReplies
+              selections rows budget required stopAfter input state hvalid
+              (some answer, after) hstep)
+            ((sourceInputs_next_subset key input next answer).trans hinputs)
+            hafter result hresult
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitoredRun_nominal' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.monitoredRun_nominal
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitorNominal_update' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.monitorNominal_update
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitoredStep_nominal' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.monitoredStep_nominal
