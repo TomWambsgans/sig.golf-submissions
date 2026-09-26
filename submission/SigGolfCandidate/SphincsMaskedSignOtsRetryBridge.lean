@@ -732,4 +732,245 @@ theorem initial_encoding_digest_words_from_entry (location : Fin 5) (hash : Hash
 #guard_msgs (whitespace := lax) in
 #print axioms initial_encoding_digest_words_from_entry
 
+/-- A path sibling copy does not touch the low parameter memory. -/
+theorem pathNext_low_frame (location : Fin 5) (s : MachineState)
+    (level bit pointer : Nat) (ctrl : PathControls location s level bit pointer)
+    (lower : 0x100 ≤ pointer) (upper : pointer + 20 ≤ 0x40000)
+    (a : Word) (low : a.toNat < 0x100) :
+    (pathNext location s).getMem a = s.getMem a := by
+  have outside : a ∉ controlWrites := by
+    simp only [controlWrites, List.mem_cons, List.not_mem_nil,
+      not_or, not_false_eq_true, and_true]
+    repeat' constructor
+    all_goals
+      intro h
+      have hnat := congrArg BitVec.toNat h
+      norm_num at hnat
+      omega
+  rw [pathNext, finish_frame location _ a outside]
+  have regs := setup_regs location s level bit pointer ctrl
+  rw [SphincsMaskedSignForestTail.copy_memory_frame _ pointer 0x100 0x40000
+    regs.2 (by decide) lower upper (by decide) a (Or.inl low)]
+  exact setup_frame location s a
+
+/-- The finite path loop retains every low parameter cell. -/
+theorem paths_execution_low_frame (location : Fin 5) (s : MachineState)
+    (selected pointer : Nat)
+    (pc : s.pc = 0x1938 + delta location)
+    (ctrl : PathControls location s 0 selected pointer)
+    (selectedBound : selected < Levels.width location 0)
+    (pointerBound : pointer + 20 * Levels.height location ≤ 0x40000)
+    (aligned : pointer % 4 = 0)
+    (pointerLow : 0x100 ≤ pointer)
+    (n : Nat) (bound : n ≤ Levels.height location) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s (70*n) t ∧
+      PathControls location t n (selected/2^n) (pointer+20*n) ∧
+      t.pc=(if n=Levels.height location then 0x1a50+delta location
+        else 0x1938+delta location) ∧
+      ∀ a : Word, a.toNat < 0x100 → t.getMem a = s.getMem a := by
+  induction n with
+  | zero =>
+      have positive : 0 < Levels.height location := by fin_cases location <;> decide
+      refine ⟨s, OrdinarySteps.refl _, ?_, ?_, ?_⟩
+      · simpa using ctrl
+      · simpa only [if_neg (show 0 ≠ Levels.height location by omega)] using pc
+      · intro _ _; rfl
+  | succ n ih =>
+      obtain ⟨mid, first, midCtrl, midPc, frame⟩ := ih (by omega)
+      have here : mid.pc = 0x1938 + delta location := by
+        simpa only [if_neg (show n ≠ Levels.height location by omega)] using midPc
+      let level : Fin (Levels.height location) := ⟨n,by omega⟩
+      have bitBound := divided_selector_bound location selected selectedBound level
+      obtain ⟨step, done, loc⟩ := path_step location mid level (selected/2^n)
+        (pointer+20*n) here midCtrl bitBound (by omega) (by omega)
+      refine ⟨pathNext location mid, ?_, ?_, loc, ?_⟩
+      · simpa only [Nat.mul_add,Nat.mul_one,Nat.add_comm] using first.append step
+      · convert done using 1
+        · simp [Nat.pow_succ,Nat.div_div_eq_div_mul]
+        · omega
+      · intro a low
+        rw [pathNext_low_frame location mid n (selected/2^n) (pointer+20*n)
+          midCtrl (by omega) (by omega) a low, frame a low]
+
+
+private theorem ordinary_unique {image : Image}
+    {start left right : MachineState} {n : Nat}
+    (first : OrdinarySteps image start n left)
+    (second : OrdinarySteps image start n right) : left = right := by
+  induction first generalizing right with
+  | refl state => cases second; rfl
+  | step state next final instruction steps hf hs tail ih =>
+      cases second with
+      | step _ other _ otherInstruction _ hf' hs' tail' =>
+          have instrEq := Option.some.inj (hf.symm.trans hf')
+          subst otherInstruction
+          have nextEq := Option.some.inj (hs.symm.trans hs')
+          subst other
+          exact ih tail'
+
+/-- The exact path-data witness also retains low parameter cells. -/
+theorem paths_execution_data_low_frame (location : Fin 5) (s : MachineState)
+    (selected pointer : Nat)
+    (pc : s.pc = 0x1938 + delta location)
+    (ctrl : PathControls location s 0 selected pointer)
+    (selectedBound : selected < Levels.width location 0)
+    (pointerBound : pointer + 20 * Levels.height location ≤ 0x40000)
+    (aligned : pointer % 4 = 0)
+    (pointerLow : 0x100 ≤ pointer)
+    (n : Nat) (bound : n ≤ Levels.height location) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s (70*n) t ∧
+      PathControls location t n (selected/2^n) (pointer+20*n) ∧
+      t.pc=(if n=Levels.height location then 0x1a50+delta location
+        else 0x1938+delta location) ∧
+      (∀ a : Word, a.toNat < 0x100 → t.getMem a = s.getMem a) ∧
+      (∀ a, OtsPathRetained a → t.getMem a = s.getMem a) ∧
+      (∀ j : Fin n, ∀ i : Fin 5,
+        t.getWord32 (BitVec.ofNat 64 (pointer+20*j.val+4*i.val)) =
+        s.getWord32 (BitVec.ofNat 64
+          (Levels.cacheBase location j.val+20*((selected/2^j.val) ^^^ 1)+4*i.val))) := by
+  obtain ⟨t, run, controls, endPc, high, data⟩ :=
+    paths_execution_data location s selected pointer pc ctrl selectedBound pointerBound
+      aligned n bound
+  obtain ⟨u, runLow, _, _, low⟩ :=
+    paths_execution_low_frame location s selected pointer pc ctrl selectedBound
+      pointerBound aligned pointerLow n bound
+  have same : u = t := ordinary_unique runLow run
+  subst u
+  exact ⟨t, run, controls, endPc, low, high, data⟩
+
+
+/-- The completed concrete path retains the signer query inputs. -/
+theorem path_complete_input_frame (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (treeIdx : TreeIndex) (selected : LeafIndex)
+    (pc : s.pc = 0x18d8 + delta location)
+    (selectedMem : s.getMem 0x430a8 = BitVec.ofNat 64 selected.val)
+    (selectedBound : selected.val < Levels.width location 0)
+    (cache : ∀ l, l ≤ Levels.height location → ∀ node,
+      node < Levels.width location l →
+      Words20 s (Levels.cacheBase location l+20*node)
+        (treeValue hash parameter seed (signerLayer location) treeIdx l node)) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s
+      (24+70*Levels.height location) t ∧
+      t.pc = 0x1a50+delta location ∧
+      (∀ j : Fin (Levels.height location),
+        let pathLevel : Fin (layerHeight (signerLayer location)) :=
+          ⟨j.val,by rw [← signerLayer_height]; exact j.isLt⟩
+        Words20 t (pathPointer location+20*j.val)
+          (evalWithAnswerFn (spec:=SphincsSecurity.HashSpec) (adaptOracle hash)
+            (Seeded.treePath parameter (signerLayer location) treeIdx seed selected :
+              OracleComp SphincsSecurity.HashSpec
+                (Fin (layerHeight (signerLayer location)) → Digest)) pathLevel)) ∧
+      (∀ a : Word, a.toNat < 0x100 → t.getMem a = s.getMem a) ∧
+      (∀ a, OtsPathRetained a → t.getMem a = s.getMem a) := by
+  obtain ⟨t, run, done, values⟩ := path_complete location hash s parameter seed treeIdx
+    selected pc selectedMem selectedBound cache
+  have first : OrdinarySteps SphincsMaskedImages.sign s 24 (entryState location s) :=
+    init_block location s pc
+  have ctrl := entry_controls location s selected.val selectedMem
+  have ptrLow : 0x100 ≤ pathPointer location := by fin_cases location <;> decide
+  obtain ⟨u, rest, _, _, low, high, _⟩ := paths_execution_data_low_frame location
+    (entryState location s) selected.val (pathPointer location)
+    (entry_pc location s) ctrl selectedBound (pointer_height_bound location)
+    (pointer_bound location).1 ptrLow (Levels.height location) (le_refl _)
+  have same : u = t := ordinary_unique (first.append rest) run
+  subst u
+  refine ⟨t, run, done, values, ?_, ?_⟩
+  · intro a ha
+    rw [low a ha]
+    simp only [entryState, shift_mem]
+    rw [initialized_frame location _ a]
+    · rfl
+    · simp only [controlWrites,List.mem_cons,List.not_mem_nil,
+        not_or,not_false_eq_true,and_true]
+      repeat' constructor
+      all_goals
+        intro h
+        have hnat := congrArg BitVec.toNat h
+        norm_num at hnat
+        omega
+  · intro a ha
+    rw [high a ha]
+    simp only [entryState, shift_mem]
+    rw [initialized_frame location _ a ha.2]
+    rfl
+
+
+/-- Subtree and path execution deliver the five live encoding-entry fields. -/
+theorem subtree_root_path_encoding_entry (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (treeIdx : TreeIndex) (selected : LeafIndex) (message : Digest)
+    (pc : s.pc = 0x111c+chainDelta location)
+    (counter : s.getMem 0x43020 = 0)
+    (ctx : SphincsMaskedSignOtsParents.KeyContext s parameter seed
+      (signerLayer location) treeIdx)
+    (selectedMem : s.getMem 0x430a8 = BitVec.ofNat 64 selected.val)
+    (selectedBound : selected.val < Levels.width location 0)
+    (msg : Words20 s 0x44a00 message) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s
+      (41220*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        124*Levels.totalNodes location (Levels.height location)+
+        (24+70*Levels.height location))
+      (44683*SphincsMaskedSignOtsTree.Finish.width location+33+39*Levels.height location+
+        139*Levels.totalNodes location (Levels.height location)+
+        (24+70*Levels.height location))
+      (417*SphincsMaskedSignOtsTree.Finish.width location+
+        Levels.totalNodes location (Levels.height location))
+      (485*SphincsMaskedSignOtsTree.Finish.width location+
+        2*Levels.totalNodes location (Levels.height location)) t ∧
+      t.pc = 0x1a50+delta location ∧
+      t.getMem 0x43000 = BitVec.ofNat 64 (signerLayer location).val ∧
+      t.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
+      t.getMem 0x430a8 = BitVec.ofNat 64 selected.val ∧
+      Words20 t 0x74 parameter ∧ Words20 t 0x44a00 message := by
+  obtain ⟨mid, rootRun, midPc, midCtx, _, cache, retained⟩ :=
+    subtree_root location hash s parameter seed treeIdx pc counter ctx
+  have midSelected : mid.getMem 0x430a8 = BitVec.ofNat 64 selected.val := by
+    rw [retained 0x430a8 (by simp [SphincsMaskedSignOtsTree.Frame.Retained,
+      SphincsMaskedSignOtsTree.Frame.controls]) (by decide) (by decide) (by decide)]
+    exact selectedMem
+  have midMessage : Words20 mid 0x44a00 message := by
+    intro i
+    have saved := msg i
+    simp only [MachineState.getWord32] at saved ⊢
+    rw [retained _ (by fin_cases i <;> simp [SphincsMaskedSignOtsTree.Frame.Retained,
+      SphincsMaskedSignOtsTree.Frame.controls, alignToDword]) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)]
+    exact saved
+  obtain ⟨t, pathRun, done, _, low, high⟩ :=
+    path_complete_input_frame location hash mid parameter seed treeIdx selected
+      midPc midSelected selectedBound cache
+  have header (a : Word) (ret : OtsPathRetained a) : t.getMem a = mid.getMem a :=
+    high a ret
+  have wordLow (i : Fin 5) :
+      t.getWord32 (BitVec.ofNat 64 (0x74+4*i.val)) =
+        mid.getWord32 (BitVec.ofNat 64 (0x74+4*i.val)) := by
+    simp only [MachineState.getWord32]
+    rw [low _ (by fin_cases i <;> decide)]
+  have wordHigh (i : Fin 5) :
+      t.getWord32 (BitVec.ofNat 64 (0x44a00+4*i.val)) =
+        mid.getWord32 (BitVec.ofNat 64 (0x44a00+4*i.val)) := by
+    simp only [MachineState.getWord32]
+    rw [high _ (by fin_cases i <;> decide)]
+  refine ⟨t, ?_, done, ?_, ?_, ?_, ?_, ?_⟩
+  · exact rootRun.trans pathRun.trace
+  · exact (header _ (by simp [OtsPathRetained, controlWrites])).trans midCtx.1
+  · exact (header _ (by simp [OtsPathRetained, controlWrites])).trans midCtx.2.1
+  · exact (header _ (by simp [OtsPathRetained, controlWrites])).trans midSelected
+  · intro i
+    rw [wordLow i]
+    exact midCtx.2.2.1 i
+  · intro i
+    rw [wordHigh i]
+    exact midMessage i
+
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.paths_execution_data_low_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms paths_execution_data_low_frame
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.subtree_root_path_encoding_entry' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms subtree_root_path_encoding_entry
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
