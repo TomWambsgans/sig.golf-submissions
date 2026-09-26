@@ -494,6 +494,137 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
   · intro address low
     simpa using lowFrame address low
 
+/-- Digit decoding writes only its scratch digit array, never the input witness. -/
+theorem upper_decoder_low_byte_frame (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+      target state).getByte address = state.getByte address := by
+  let base := shift (-delta target) state
+  have decoded (count : Nat) (within : count ≤ 52) :
+      (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun count base).getByte
+        address = base.getByte address := by
+    induction count with
+    | zero => rfl
+    | succ count ih =>
+        have small : count < 52 := by omega
+        let i : Fin 52 := ⟨count, small⟩
+        have stepEq :
+            SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun (count + 1) base =
+              SigGolfCandidate.SphincsVerifierWotsDecode.decoderState i
+                (SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun count base) := by
+          simp [SigGolfCandidate.SphincsVerifierWotsDecodeData.decoderRun,
+            i, Nat.mod_eq_of_lt small]
+        rw [stepEq,
+          SigGolfCandidate.SphincsVerifierWotsDecodeData.decoder_memory]
+        have different : address ≠ BitVec.ofNat 64 (0x44000 + i.val) := by
+          intro eq
+          have equality := congrArg BitVec.toNat eq
+          have smallAddress : 0x44000 + i.val < 2 ^ 64 := by
+            have := i.isLt
+            omega
+          simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt smallAddress] at equality
+          omega
+        simp only [if_neg different]
+        exact ih (by omega)
+  simpa [SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState,
+    shift_byte, base] using decoded 52 (by decide)
+
+/-- The upper-layer setup changes control words only, preserving the witness. -/
+theorem upper_setup_low_byte_frame (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState
+      target state).getByte address = state.getByte address := by
+  let aligned := alignToDword address
+  have alignedLow : aligned.toNat < 0x40000 := by
+    have le : aligned.toNat ≤ address.toNat := by
+      unfold aligned alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    omega
+  have notCounter : aligned ≠ 0x43050 := by
+    intro equal
+    have value := congrArg BitVec.toNat equal
+    have high : (0x43050 : Word).toNat = 0x43050 := by decide
+    rw [high] at value
+    omega
+  have notPointer : aligned ≠ 0x43028 := by
+    intro equal
+    have value := congrArg BitVec.toNat equal
+    have high : (0x43028 : Word).toNat = 0x43028 := by decide
+    rw [high] at value
+    omega
+  have frame := SigGolfCandidate.SphincsVerifierDecoderRelocation.setup_mem_other
+    target state aligned notCounter notPointer
+  simpa only [MachineState.getByte, aligned] using
+    congrArg (fun value : Word => extractByte value (byteOffset address)) frame
+
+/-- Upper-layer decoding and setup leave every witness byte unchanged. -/
+theorem upper_ready_low_byte_frame (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+        target state)).getByte address = state.getByte address := by
+  rw [upper_setup_low_byte_frame target _ address low,
+    upper_decoder_low_byte_frame target state address low]
+
+/-- The public-key witness prefix survives upper-layer decoding and setup. -/
+theorem upper_ready_prefix (target : Fin 5) (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk) :
+    SphincsVerifierHashBytes.WitnessPrefix
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state)) pk := by
+  constructor
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22ca0 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22ca0 + i < 2 ^ 64)]
+      omega
+    rw [upper_ready_low_byte_frame target state _ low]
+    exact hprefix.root i hi
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22cb4 + i < 2 ^ 64)]
+      omega
+    rw [upper_ready_low_byte_frame target state _ low]
+    exact hprefix.parameter i hi
+
+/-- The signature source for every WOTS chain survives upper-layer preparation. -/
+theorem upper_ready_source (target : Fin 5) (state : MachineState)
+    (values : ChainIndex → Digest)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state)).getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8 := by
+  intro chain j hj
+  rw [upper_ready_low_byte_frame target state _
+    (sourceByteSmall _
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase_bound target)
+      chain j hj)]
+  exact source chain j hj
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_ready_low_byte_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_source' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_ready_source
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
