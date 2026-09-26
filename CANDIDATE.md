@@ -2,7 +2,9 @@
 
 This branch contains a proposed submission in `submission/`. It is **not ready for a PR**: `SigGolf.Challenge.certificate` has not been proved. The values in `claim.json` are targets, not certified results: S = W = 11,324 bytes, C = 1,000,000 cycles, and S × C = 11,324,000,000. The cycle target is deliberately loose while the certificate is completed.
 
-## Proved
+The current beta VM changed HASH lengths from bits to bytes, reversed the service selectors and HALT status, and added a witness-cycle charge. The image traces below were checked against the previous VM contract and do not yet establish claims for the current beta images. A PC-preserving service-stub translation and a Lean compatibility bridge are in progress; 25 HASH sites also need a decision on the current whole-word length rule.
+
+## Lean-checked against the previous beta VM
 
 - The exact keygen image returns the intended 16-byte public key and masked, authenticated cache for every secret key and random oracle. Its full trace, output bytes, 92,369,576-cycle termination, and keygen compression moment are proved.
 - The exact expand image copies every signature byte into the witness. It terminates in 8,500 cycles, makes no hash calls, and meets its compression moment.
