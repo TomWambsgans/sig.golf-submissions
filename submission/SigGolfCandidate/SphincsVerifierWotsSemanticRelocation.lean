@@ -1011,6 +1011,240 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
   exact ⟨final, run, done, query,
     layerFinal, treeFinal, leafFinal, prefixFinal⟩
 
+/-- XMSS initialization does not change the freshly computed leaf digest. -/
+theorem xmssInit_current_byte (state : MachineState)
+    (i : Nat) (hi : i < 20) :
+    (SphincsVerifierXmssInit.xmssInitState state).getByte
+      (BitVec.ofNat 64 (0x44a00 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x44a00 + i)) := by
+  have ha : ((BitVec.ofNat 64 0x44a00).toNat % 8 = 0) := by decide
+  have hover : (BitVec.ofNat 64 0x44a00).toNat + i < 2 ^ 64 := by
+    simp only [BitVec.toNat_ofNat]
+    omega
+  have aligned : alignToDword (BitVec.ofNat 64 (0x44a00 + i)) =
+      BitVec.ofNat 64 (0x44a00 + 8 * (i / 8)) := by
+    simpa only [BitVec.ofNat_add] using
+      (alignToDword_add_ofNat_of_aligned ha hover)
+  have inside : 0x44a00 ≤
+      (alignToDword (BitVec.ofNat 64 (0x44a00 + i))).toNat ∧
+      (alignToDword (BitVec.ofNat 64 (0x44a00 + i))).toNat < 0x44a18 := by
+    rw [aligned, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (by omega : 0x44a00 + 8 * (i / 8) < 2 ^ 64)]
+    omega
+  have frame := SphincsVerifierXmssInit.xmssInit_current state
+    (alignToDword (BitVec.ofNat 64 (0x44a00 + i))) inside
+  simpa only [MachineState.getByte] using
+    congrArg (fun value : Word => extractByte value
+      (byteOffset (BitVec.ofNat 64 (0x44a00 + i)))) frame
+
+/-- The base-layer leaf segment leaves the abstract leaf digest as XMSS's root. -/
+theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (endpoints : ChainIndex → Digest)
+    (pc : state.pc = 0x29c8)
+    (query : hashInput
+      (SphincsVerifierWotsLeafHashReady.leafHashReadyState state) =
+        SphincsBridge.toQuery
+          (SphincsVerifierWotsLeafQuery.leafInput
+            pk.parameter layer tree leaf endpoints)) :
+    ∃ (final : MachineState)
+      (run : Trace hash SphincsImages.verify state 67 202 1 17 final),
+      final.pc = 0x2ad4 ∧
+      (∀ i, (hi : i < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
+              (8 * i) 8) ∧
+      SegmentInterior hash run := by
+  obtain ⟨final, run, done, exact, inside⟩ :=
+    SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_finish_trace
+      hash state pc
+  have abstract : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.leafHash pk.parameter layer tree leaf endpoints) =
+      truncateHash (hash (SphincsBridge.toQuery
+        (SphincsVerifierWotsLeafQuery.leafInput
+          pk.parameter layer tree leaf endpoints))) := by
+    simpa only [Concrete.leafHash,
+      SphincsVerifierWotsLeafQuery.leafInput] using
+      SigGolfCandidate.SphincsMaskedChainDomain.eval_hash hash
+        pk.parameter (.leaf layer tree leaf) (Concrete.leafPayload endpoints)
+  refine ⟨final, run, done, ?_, inside⟩
+  intro i hi
+  rw [exact, xmssInit_current_byte _ i hi,
+    SphincsVerifierWotsLeafResult.leafHashNext_byte_of_query
+      hash state _ query i hi, abstract]
+
+/-- Rewriting schedule addresses does not change pure instruction execution. -/
+theorem runSchedule_schedule (offset : Word)
+    (code : List (Word × Instr)) (state : MachineState) :
+    SphincsMaskedKeygenPrefix.runSchedule
+      (SphincsMaskedSignOtsShift.schedule offset code) state =
+    SphincsMaskedKeygenPrefix.runSchedule code state := by
+  induction code generalizing state with
+  | nil => rfl
+  | cons entry rest ih =>
+      simpa [SphincsMaskedSignOtsShift.schedule,
+        SphincsMaskedKeygenPrefix.runSchedule] using
+        ih (execInstrBr state entry.2)
+
+theorem leafHashSchedule_supported :
+    ∀ entry ∈ SphincsVerifierWotsLeafHashReady.leafHashSchedule,
+      SphincsMaskedSignOtsShift.Supported entry.2 := by decide
+
+/-- Leaf-hash preparation commutes with a program-counter translation. -/
+theorem leafHashReady_shift (offset : Word) (state : MachineState) :
+    SphincsVerifierWotsLeafHashReady.leafHashReadyState
+      (shift offset state) =
+    shift offset
+      (SphincsVerifierWotsLeafHashReady.leafHashReadyState state) := by
+  change SphincsMaskedKeygenPrefix.runSchedule
+      SphincsVerifierWotsLeafHashReady.leafHashSchedule
+      (shift offset state) =
+    shift offset (SphincsMaskedKeygenPrefix.runSchedule
+      SphincsVerifierWotsLeafHashReady.leafHashSchedule state)
+  rw [← runSchedule_schedule offset
+    SphincsVerifierWotsLeafHashReady.leafHashSchedule (shift offset state)]
+  exact SphincsMaskedSignOtsShift.run_shift offset
+    SphincsVerifierWotsLeafHashReady.leafHashSchedule
+    leafHashSchedule_supported state
+
+/-- The relocated leaf HASH stores the abstract digest as the XMSS current root. -/
+theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (endpoints : ChainIndex → Digest)
+    (pc : state.pc = 0x29c8 + delta target)
+    (query : hashInput
+      (SphincsVerifierWotsLeafHashReady.leafHashReadyState state) =
+        SphincsBridge.toQuery
+          (SphincsVerifierWotsLeafQuery.leafInput
+            pk.parameter layer tree leaf endpoints)) :
+    ∃ (final : MachineState),
+      Trace hash SphincsImages.verify state 67 202 1 17 final ∧
+      final.pc = 0x2ad4 + delta target ∧
+      (∀ i, (hi : i < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
+              (8 * i) 8) := by
+  let base := shift (-delta target) state
+  have basePc : base.pc = 0x29c8 := by
+    change state.pc + -delta target = 0x29c8
+    rw [pc]
+    bv_decide
+  have restored : shift (delta target) base = state := by
+    simp [base, shift, MachineState.setPC]
+  have baseQuery : hashInput
+      (SphincsVerifierWotsLeafHashReady.leafHashReadyState base) =
+        SphincsBridge.toQuery
+          (SphincsVerifierWotsLeafQuery.leafInput
+            pk.parameter layer tree leaf endpoints) := by
+    have shifted : hashInput
+        (SphincsVerifierWotsLeafHashReady.leafHashReadyState
+          (shift (delta target) base)) =
+          SphincsBridge.toQuery
+            (SphincsVerifierWotsLeafQuery.leafInput
+              pk.parameter layer tree leaf endpoints) := by
+      simpa only [restored] using query
+    simpa only [leafHashReady_shift, hashInput_shift] using shifted
+  obtain ⟨finish, run, done, digest, inside⟩ :=
+    leaf_finish_semantic hash base pk layer tree leaf endpoints basePc baseQuery
+  refine ⟨shift (delta target) finish, ?_, ?_, ?_⟩
+  · simpa only [restored] using trace_shift target hash run inside
+  · rw [shift_pc, done]
+  · intro i hi
+    simpa using digest i hi
+
+/-- From recovered WOTS endpoints to the XMSS starting root in an upper layer. -/
+theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (endpoints : ChainIndex → Digest)
+    (pc : state.pc = 0x298c + delta target)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (values : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+        (endpoints chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState),
+      Trace hash SphincsImages.verify state 856 991 1 17 final ∧
+      final.pc = 0x2ad4 + delta target ∧
+      (∀ i, (hi : i < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
+              (8 * i) 8) := by
+  obtain ⟨copied, copyRun, copiedPc, query,
+    _layerFinal, _treeFinal, _leafFinal, _prefixFinal⟩ :=
+    upper_leaf_query target hash state pk layer tree leaf endpoints
+      pc layerCell treeCell leafCell hprefix values
+  obtain ⟨final, finishRun, done, digest⟩ :=
+    upper_leaf_finish_semantic target hash copied pk layer tree leaf endpoints
+      copiedPc query
+  refine ⟨final, ?_, done, digest⟩
+  simpa [Nat.add_assoc] using copyRun.trans finishRun
+
+/-- One upper-layer decoder, WOTS verifier, and leaf hash reach the XMSS path. -/
+theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
+    (state ready : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (readyEq : ready =
+      SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state))
+    (pc : state.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SigGolfCandidate.SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (checksum : state.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 state = 194)
+    (layerCell : ready.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : ready.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (digits chain).val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
+      final.pc = 0x2ad4 + delta target ∧
+      (∀ i, (hi : i < 20) →
+        final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+          (evalWithAnswerFn (adaptOracle hash)
+            (Concrete.leafHash pk.parameter layer tree leaf
+              (fun chain => evalWithAnswerFn (adaptOracle hash)
+                (Concrete.recoverChain pk.parameter layer tree leaf chain
+                  (digits chain) (values chain))))).extractLsb' (8 * i) 8) ∧
+      steps ≤ 507 + 728 * 52 + 856 ∧
+      cycles ≤ 507 + 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
+  obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
+    chainRun, chainsPc, layerFinal, treeFinal, leafFinal,
+    prefixFinal, endpointBytes, stepBound, cycleBound,
+    callBound, blockBound⟩ :=
+    upper_decoder_chains_semantics target hash state ready pk layer tree leaf
+      digits values readyEq pc checksum layerCell treeCell leafCell decoded
+      hprefix source
+  let recovered : ChainIndex → Digest := fun chain =>
+    evalWithAnswerFn (adaptOracle hash)
+      (Concrete.recoverChain pk.parameter layer tree leaf chain
+        (digits chain) (values chain))
+  obtain ⟨final, leafRun, done, digest⟩ :=
+    upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
+      chainsPc layerFinal treeFinal leafFinal prefixFinal
+      (by intro chain j hj; exact endpointBytes chain j hj)
+  refine ⟨final, chainSteps + 856, chainCycles + 991,
+    chainCalls + 1, chainBlocks + 17, ?_, done, digest,
+    by omega, by omega, by omega, by omega⟩
+  simpa [Nat.add_assoc] using chainRun.trans leafRun
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -1075,6 +1309,44 @@ theorem upper_leaf_query (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_leaf_query
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.xmssInit_current_byte' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms xmssInit_current_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_finish_semantic' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_finish_semantic
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.runSchedule_schedule' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms runSchedule_schedule
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leafHashReady_shift' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms leafHashReady_shift
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_leaf_finish_semantic' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_leaf_finish_semantic
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_leaf_from_endpoints' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_leaf_from_endpoints
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_leaf_digest' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_decoder_leaf_digest
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,

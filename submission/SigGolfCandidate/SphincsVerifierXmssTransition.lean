@@ -1471,7 +1471,9 @@ set_option maxHeartbeats 0
 theorem leaf_finish_trace (hash : Hash) (state : MachineState)
     (pc : state.pc = 0x29c8) :
     ∃ (final : MachineState) (run : Trace hash SphincsImages.verify state 67 202 1 17 final),
-      final.pc = 0x2ad4 ∧ SegmentInterior hash run := by
+      final.pc = 0x2ad4 ∧
+      final = xmssInitState (leafHashNext hash state) ∧
+      SegmentInterior hash run := by
   have readyBlock := leafHashReady_block state pc
   have readyPc := leafHashReady_pc state pc
   have regs := leafHashReady_regs state
@@ -1502,7 +1504,7 @@ theorem leaf_finish_trace (hash : Hash) (state : MachineState)
   have full : Trace hash SphincsImages.verify state 67 202 1 17 final := by
     simpa [pre, hashTrace, after, hashed, ready, compression,
       Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using pre.trans hashTrace
-  refine ⟨final, full, initializedPc, ?_⟩
+  refine ⟨final, full, initializedPc, rfl, ?_⟩
   apply trace_inside_of_rank
   rw [pc]
   decide
@@ -1533,7 +1535,7 @@ theorem leaf_segment (hash : Hash) (state : MachineState)
   obtain ⟨copied, copyTrace, copyPc, _, _, copyInside⟩ :=
     root_copy_inside hash (rootCopySetupState state)
       setupPc source destination count
-  obtain ⟨final, finishTrace, finishPc, finishInside⟩ :=
+  obtain ⟨final, finishTrace, finishPc, _finishExact, finishInside⟩ :=
     leaf_finish_trace hash copied copyPc
   let before := setupTrace.trans copyTrace
   let run := before.trans finishTrace
