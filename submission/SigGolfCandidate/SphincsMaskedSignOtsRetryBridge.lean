@@ -3915,3 +3915,84 @@ theorem first_bottom_next_chain (s : MachineState) (i : Fin 52)
 #print axioms first_bottom_next_trace
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem first_bottom_chain_digit_checked_any (s : MachineState) (i : Fin 52)
+    (pc : s.pc = 0x3bfc)
+    (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val) :
+    Checked firstBottomChainDigitCode s := by
+  have chainNat : (s.getMem 0x43050#64).toNat = i.val := by
+    have eq := congrArg BitVec.toNat chain
+    simp only [BitVec.toNat_ofNat] at eq
+    rw [Nat.mod_eq_of_lt (by have := i.isLt; omega : i.val < 2 ^ 64)] at eq
+    exact eq
+  simp [firstBottomChainDigitCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne, pc, chainNat]
+  all_goals have := i.isLt; omega
+
+theorem first_bottom_chain_digit_trace_any (s : MachineState) (i : Fin 52)
+    (pc : s.pc = 0x3bfc)
+    (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val) :
+    OrdinarySteps SphincsMaskedImages.sign s 21 (firstBottomChainDigit s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomChainDigitCode
+    first_bottom_chain_digit_code s (first_bottom_chain_digit_checked_any s i pc chain)
+  simpa only [firstBottomChainDigit, firstBottomChainDigitCode, List.length_cons,
+    List.length_nil, Nat.reduceAdd] using run
+
+theorem first_bottom_chain_digit_controls_any (s : MachineState) (i : Fin 52)
+    (pc : s.pc = 0x3bfc)
+    (chain : s.getMem 0x43050 = BitVec.ofNat 64 i.val) :
+    (firstBottomChainDigit s).getMem 0x430c8 =
+      (s.getByte (BitVec.ofNat 64 (0x44000 + i.val))).zeroExtend 64 ∧
+    (firstBottomChainDigit s).getMem 0x43058 = 0 ∧
+    (firstBottomChainDigit s).pc =
+      if s.getByte (BitVec.ofNat 64 (0x44000 + i.val)) = 0 then
+        0x3db0 else 0x3c50 := by
+  have chainWord : s.getMem (0x43050#64) = BitVec.ofNat 64 i.val := by
+    simpa using chain
+  have addressEq : (0x44000#64) + s.getMem (0x43050#64) =
+      BitVec.ofNat 64 (0x44000 + i.val) := by
+    rw [chainWord]
+    simp [BitVec.ofNat_add]
+  simp [firstBottomChainDigit, firstBottomChainDigitCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, MachineState.getMem_setMem_eq,
+    MachineState.getMem_setMem_ne, pc, signExtend13,
+    addressEq]
+  have zeroIff : (0#64 = BitVec.setWidth 64
+      (s.getByte (BitVec.ofNat 64 (0x44000 + i.val)))) ↔
+      s.getByte (BitVec.ofNat 64 (0x44000 + i.val)) = (0#8) := by bv_omega
+  simp [zeroIff]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_controls_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_controls_any
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_trace_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_trace_any
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_checked_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_checked_any
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_next_mem_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_next_mem_frame
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_next_controls' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_next_controls
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_next_trace' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_next_trace
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
