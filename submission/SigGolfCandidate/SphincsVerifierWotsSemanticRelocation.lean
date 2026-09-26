@@ -3628,6 +3628,62 @@ theorem upper_path_handoff_global_index_cell (target : Fin 5)
   rw [upper_handoff_global_index_cell,
     path_global_index_cell]
 
+theorem decoder_step_global_index_cell (i : Fin 52)
+    (state : MachineState) :
+    (SphincsVerifierWotsDecode.decoderState i state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  have separate : alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) ≠
+      (0x43078 : Word) := by
+    fin_cases i <;> decide
+  have storeAddress : (0x44000 : Word) +
+      signExtend12 (BitVec.ofNat 12 i.val) + signExtend12 (0 : BitVec 12) =
+      BitVec.ofNat 64 (0x44000 + i.val) := by
+    fin_cases i <;> decide
+  have distinct : (0x43078 : Word) ≠
+      alignToDword ((0x44000 : Word) +
+        signExtend12 (BitVec.ofNat 12 i.val) +
+        signExtend12 (0 : BitVec 12)) := by
+    intro equal
+    exact separate ((congrArg alignToDword storeAddress).symm.trans equal.symm)
+  simp [SphincsVerifierWotsDecode.decoderState,
+    SphincsVerifierWotsDecode.decoderSuffixState,
+    SphincsVerifierWotsDecode.decoderMiddleState,
+    SphincsVerifierWotsDecode.decoderPrefixState,
+    execInstrBr, MachineState.setByte,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  intro same
+  exact (distinct same).elim
+
+theorem decoder_run_global_index_cell (count : Nat)
+    (state : MachineState) :
+    (SphincsVerifierWotsDecodeData.decoderRun count state).getMem 0x43078 =
+      state.getMem 0x43078 := by
+  induction count with
+  | zero => rfl
+  | succ count ih =>
+      change (SphincsVerifierWotsDecode.decoderState
+        ⟨count % 52, Nat.mod_lt _ (by decide)⟩
+        (SphincsVerifierWotsDecodeData.decoderRun count state)).getMem
+          0x43078 = _
+      exact (decoder_step_global_index_cell _ _).trans ih
+
+theorem upper_decoder_global_index_cell (target : Fin 5)
+    (state : MachineState) :
+    (SphincsVerifierDecoderRelocation.upperDecoderState target state).getMem
+      0x43078 = state.getMem 0x43078 := by
+  simp only [SphincsVerifierDecoderRelocation.upperDecoderState,
+    SphincsMaskedSignOtsShift.shift_mem,
+    decoder_run_global_index_cell]
+
+theorem upper_setup_global_index_cell (target : Fin 5)
+    (state : MachineState) :
+    (SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target state)).getMem
+        0x43078 = state.getMem 0x43078 := by
+  rw [SphincsVerifierDecoderRelocation.setup_mem_other target _ 0x43078
+      (by decide) (by decide),
+    upper_decoder_global_index_cell]
+
 theorem first_upper_encoding_query_with_index (hash : Hash)
     (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
     (initial state nextState : MachineState)
@@ -4028,6 +4084,22 @@ theorem first_upper_encoding_query_with_index (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_handoff_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_path_handoff_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.decoder_step_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms decoder_step_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.decoder_run_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms decoder_run_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_global_index_cell
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_setup_global_index_cell' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_setup_global_index_cell
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_with_index' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

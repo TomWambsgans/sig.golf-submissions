@@ -1965,6 +1965,30 @@ theorem certificateUnboundedOuterRun_project {Result : Type} (key : SecretKey)
               (next a.1)).run a.2) := by rw [PMF.bind_map]; rfl
         _ = _ := by rw [hstep]; rfl
 
+
+theorem certificateStoppedOuterRun_hit_budget_event {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateJointState) (q : Nat)
+    (hcache : state.2.1 = state.1.1) (hspent : state.1.2.2 ≤ q)
+    (hremaining : state.2.2.2 = q - state.1.2.2) :
+    Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+      (simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+        computation).run state.1] =
+    Pr[fun result => result.elim False (fun value => value.2.1.2.1.2 = true) |
+      certificateStoppedOuterRun key budget required stopAfter computation state] := by
+  have hproject := certificateUnboundedOuterRun_project key budget required
+    stopAfter computation state hcache
+  have hbudget := certificateStoppedOuterRun_budget_event key budget required
+    stopAfter computation state q hspent hremaining
+    (fun result => result.2.1.2.1.2 = true)
+  calc
+    _ = Pr[fun result => result.2.1.2.2 ≤ q ∧ result.2.1.2.1.2 = true |
+        certificateUnboundedOuterRun key budget required stopAfter computation state] := by
+          rw [← hproject, ← PMF.monad_map_eq_map, probEvent_map]
+          simp only [Function.comp_def, and_comm]
+    _ = _ := hbudget.symm
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2150,3 +2174,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateUnboundedOuterRun_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateUnboundedOuterRun_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_hit_budget_event
