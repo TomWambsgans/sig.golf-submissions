@@ -115,3 +115,96 @@ theorem referenceForgeryGame_two_guesses (dummy : OtsReferenceWords) (adversary 
   simpa only [referenceTwoWitnessRest, evalSPMF_map] using h
 
 end SphincsSecurity.Concrete.FtsGuessHash
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace
+attribute [local instance] Classical.propDecidable
+
+theorem completedReferenceContact_programmed_cost (key : SecretKey)
+    (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary inputs)
+    (dummy : OtsReferenceWords) (before : AdversaryTrace) :
+    let f := programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs
+        (canonicalReferenceResidual key.parameter inputs hencoding labels
+          auxiliary.rows auxiliary.seed))
+    (completedReferenceContact key.parameter f
+      (referenceFamilyWords auxiliary.selections dummy)
+      (canonicalGraphFrontier key.otsSecret labels
+        (referenceFamilyWords auxiliary.selections dummy)) before).output.2.hashCalls =
+      keygenHashCost + completedWork
+        (completedAtRoot key.parameter (canonicalGraphRoot labels) f before) := by
+  dsimp only
+  unfold completedReferenceContact
+  rw [reference_root]
+  simp only [completedAtRoot, completedWork,
+    SigningBoundaryTrace.hashCalls_mul, SigningBoundaryTrace.hashCalls_pow_none]
+
+noncomputable def referenceTwoWitnessRestCost (key : SecretKey)
+    (f : QueryImpl HashSpec Id) (labels : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (dummy : OtsReferenceWords)
+    (adversary : Adversary) : ProbComp (Bool × Nat) :=
+  (fun before =>
+    (decide (sourceTwoWitnesses key f labels selections dummy before),
+      (completedReferenceContact key.parameter f
+        (referenceFamilyWords selections dummy)
+        (canonicalGraphFrontier key.otsSecret labels
+          (referenceFamilyWords selections dummy)) before).output.2.hashCalls)) <$>
+    referenceForgeryRest key f labels selections dummy adversary
+
+theorem referenceTwoWitnessRestCost_program (key : SecretKey)
+    (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary inputs)
+    (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
+    (dummy : OtsReferenceWords) (adversary : Adversary) :
+    let f := programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs
+        (canonicalReferenceResidual key.parameter inputs hencoding labels
+          auxiliary.rows auxiliary.seed))
+    referenceTwoWitnessRestCost key f labels auxiliary.selections dummy adversary =
+      (fun result =>
+        (decide (completedTwoGuesses { key with root := canonicalGraphRoot labels } f result),
+          keygenHashCost + completedWork result)) <$>
+        simulateQ (fixedAnswers
+          (referenceAnswers key.parameter (canonicalGraphRoot labels)
+            key.otsSecret labels inputs hencoding auxiliary dummy)
+          (FtsGuessSigning.secretTable key.ftsSecret))
+          (completedRun key.parameter (canonicalGraphRoot labels) labels adversary) := by
+  dsimp only
+  rw [fixed_reference_completedForgeryRest key inputs hencoding labels auxiliary
+    hauxiliary dummy adversary, referenceTwoWitnessRestCost, Functor.map_map]
+  congr 1
+  funext before
+  have hfirst :
+      sourceTwoWitnesses key
+        (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+          (finiteHashAnswer ∅ inputs
+            (canonicalReferenceResidual key.parameter inputs hencoding labels
+              auxiliary.rows auxiliary.seed))) labels auxiliary.selections dummy before =
+      completedTwoGuesses { key with root := canonicalGraphRoot labels }
+        (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+          (finiteHashAnswer ∅ inputs
+            (canonicalReferenceResidual key.parameter inputs hencoding labels
+              auxiliary.rows auxiliary.seed)))
+        (completedAtRoot key.parameter (canonicalGraphRoot labels)
+          (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+            (finiteHashAnswer ∅ inputs
+              (canonicalReferenceResidual key.parameter inputs hencoding labels
+                auxiliary.rows auxiliary.seed))) before) := by
+    rw [sourceTwoWitnesses, rootedKey_programmedHash key labels _ dummy]
+    simp only [completedReferenceContact, reference_root, completedTwoGuesses, completedAtRoot]
+  simp only [hfirst, completedReferenceContact_programmed_cost]
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.completedReferenceContact_programmed_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.completedReferenceContact_programmed_cost
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_program' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceTwoWitnessRestCost_program
