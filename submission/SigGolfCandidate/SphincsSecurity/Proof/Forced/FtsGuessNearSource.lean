@@ -671,3 +671,53 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_remainingFts_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_remainingFts_budget_le
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem referenceForgeryGame_ftsOutcome_budget_le_rates
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hsmall : q ≤ budgetSplit) :
+    Pr[fun sample => sample.ftsOutcome dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+      ((q : ENNReal) * (fullCertificateTotalRate + certificateCacheExceptionRate) +
+        proposalPrefixExceptionBound) +
+      (FtsGuessHash.pairRate q + (q : ENNReal) / 2 ^ 159) := by
+  exact (referenceForgeryGame_ftsOutcome_budget_cases dummy adversary q).trans
+    (add_le_add
+      (referenceForgeryGame_full_budget_le_rates dummy adversary q
+        ((hsmall.trans budgetSplit_le).trans (by norm_num)))
+      (FtsGuessHash.referenceForgeryGame_remainingFts_budget_le dummy adversary q hsmall))
+
+end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem originalGame_budget_le_fts_rates_add_primitive
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) (hsmall : q ≤ budgetSplit) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    (((q : ENNReal) * (fullCertificateTotalRate + certificateCacheExceptionRate) +
+        proposalPrefixExceptionBound) +
+      (FtsGuessHash.pairRate q + (q : ENNReal) / 2 ^ 159)) +
+    Pr[fun result => GraphPrimitiveEvent dummy result ∧
+      result.2.2.2.output.2.hashCalls ≤ q |
+      referenceGraphContextGame contactObserver (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] := by
+  exact (referenceGameBudget_cases dummy hdummy adversary q).trans
+    (add_le_add (referenceForgeryGame_ftsOutcome_budget_le_rates dummy adversary q hsmall) le_rfl)
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_le_rates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_ftsOutcome_budget_le_rates
+
+/-- info: 'SphincsSecurity.Concrete.originalGame_budget_le_fts_rates_add_primitive' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalGame_budget_le_fts_rates_add_primitive
