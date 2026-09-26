@@ -1524,8 +1524,9 @@ theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : Machin
       Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
       Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
       u.pc = 0x23cc + delta (4 : Fin 5) ∧
-      u.getByte (BitVec.ofNat 64 0x44000) =
-        BitVec.ofNat 8 (encoding (⟨0, by decide⟩ : ChainIndex)).val ∧
+      (∀ chain : ChainIndex,
+        u.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+          BitVec.ofNat 8 (encoding chain).val) ∧
       t.getMem 0x43000 = BitVec.ofNat 64 bottomLayer.val ∧
       t.getMem 0x43008 = BitVec.ofNat 64 (Concrete.treeIndexAt index bottomLayer).val ∧
       t.getMem 0x430a8 = BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val ∧
@@ -1576,16 +1577,17 @@ theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : Machin
     rw [sumInit_byte, otsPaddingSecond_byte, otsPaddingFirst_byte]
     exact SphincsMaskedPublicKeyDomain.words20_byte _ 0x42000 _
       (by omega) (by decide) words j
-  have digit := encoding_success_abstract_digit (4 : Fin 5)
+  have digit (chain : ChainIndex) := encoding_success_abstract_digit (4 : Fin 5)
     (initialEncodingState (4 : Fin 5) hash t)
     (bottomEncodingDigest hash parameter seed index) encoding bytes decoded
-    (⟨0, by decide⟩ : ChainIndex)
+    chain
   refine ⟨t, encodingSuccessState (4 : Fin 5)
     (initialEncodingState (4 : Fin 5) hash t),
     ⟨_, _, _, _, run⟩, ?_, ?_, ?_, layer, tree, selected, par, key, rfl⟩
   · simpa [fullRetryStates] using accepted
   · simpa [fullRetryStates] using endPc
-  · simpa using digit
+  · intro chain
+    simpa using digit chain
 
 
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_encoding_accepted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -6159,5 +6161,60 @@ theorem first_bottom_initial_loop_state (hash : Hash) (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_initial_loop_state' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_initial_loop_state
+
+def firstBottomDigits (encoding : Encoding) (n : Nat) : Digit :=
+  encoding ⟨n % 52, Nat.mod_lt _ (by decide)⟩
+
+theorem first_bottom_digits_fin (encoding : Encoding) (j : ChainIndex) :
+    firstBottomDigits encoding j.val = encoding j := by
+  have hj : j.val < 52 := by simpa [numChains] using j.isLt
+  simp [firstBottomDigits, Nat.mod_eq_of_lt hj]
+
+theorem forest_complete_first_bottom_loop_state (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (encoding : Encoding) (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index)
+    (decoded : TargetSum.decodeDigest
+      (bottomEncodingDigest hash parameter seed index) = some encoding) :
+    ∃ t u v, (∃ steps cycles calls blocks,
+      Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
+      Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
+      OrdinarySteps SphincsMaskedImages.sign u 55 v ∧
+      FirstBottomLoopState hash v parameter seed bottomLayer
+        (Concrete.treeIndexAt index bottomLayer)
+        (Concrete.leafIndexAt index bottomLayer)
+        (firstBottomDigits encoding) ⟨0, by decide⟩ := by
+  obtain ⟨t, u, forestRun, encodingRun, upc, allDigits, layer, tree,
+      selected, par, key, hu⟩ :=
+    forest_complete_first_bottom_encoding_accepted hash s parameter seed index
+      encoding pc ctx decoded
+  subst u
+  obtain ⟨entryLayer, entryTree, entrySelected, entryPar, entryKey⟩ :=
+    first_bottom_encoding_secret_inputs hash t parameter seed bottomLayer
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer) layer tree selected par key
+  have entryPc :
+      (encodingSuccessState (4 : Fin 5)
+        (initialEncodingState (4 : Fin 5) hash t)).pc = 0x3a8c := by
+    simpa [SphincsMaskedSignOtsParents.delta, SphincsMaskedSignOtsParents.offset,
+      SphincsMaskedSignOtsShift.chainOffset] using upc
+  have entryDigits : ∀ j : ChainIndex,
+      (encodingSuccessState (4 : Fin 5)
+        (initialEncodingState (4 : Fin 5) hash t)).getByte
+          (BitVec.ofNat 64 (0x44000 + j.val)) =
+            BitVec.ofNat 8 (firstBottomDigits encoding j.val).val := by
+    intro j
+    simpa [first_bottom_digits_fin] using allDigits j
+  obtain ⟨v, secretRun, loopState⟩ :=
+    first_bottom_initial_loop_state hash _ parameter seed bottomLayer
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer)
+      (firstBottomDigits encoding) entryPc entryLayer entryTree entrySelected
+      entryPar entryKey entryDigits
+  exact ⟨t, _, v, forestRun, encodingRun, secretRun, loopState⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_loop_state' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_first_bottom_loop_state
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
