@@ -6174,4 +6174,80 @@ theorem upper_loaded_handoff_premises (target : Fin 5) (hash : Hash)
 
 #print axioms upper_loaded_handoff_premises
 
+theorem upper_honest_layer_trace (target next : Fin 5) (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (tree : TreeIndex) (leaf : LeafIndex) (message : Digest)
+    (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (layerCell : state.getMem 0x43000 =
+      BitVec.ofNat 64 (SphincsVerifierXmssTransition.targetLayer target).val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (indexCell : state.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (query : hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk
+        (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter) =
+        some encoding)
+    (handoffLayer : SphincsVerifierXmssTransition.targetLayer target =
+      SphincsVerifierXmssTransition.previousLayer next) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      let pathEnd := SphincsVerifierXmssPathControl.pathState hash
+        (SphincsVerifierXmssTransition.targetLayer target)
+        (layerHeight (SphincsVerifierXmssTransition.targetLayer target)) final
+      let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+      Trace hash SphincsImages.verify state (61 + steps) (68 + cycles)
+        (1 + calls) (1 + blocks) final ∧
+      steps ≤ 507 + 728 * 52 + 856 ∧
+      cycles ≤ 507 + 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 ∧
+      OrdinarySteps SphincsImages.verify pathEnd 43 nextState ∧
+      (∀ address, address.toNat < 0x40000 →
+        nextState.getByte address = state.getByte address) := by
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let decoder := firstUpperPaddingState
+    (writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state))))
+  let ready := SphincsVerifierDecoderRelocation.setupState target
+    (SphincsVerifierDecoderRelocation.upperDecoderState target decoder)
+  have inputs := upper_loaded_handoff_premises target hash publicKey
+    inputMessage pk signature initial state loaded frame tree leaf message
+    encoding pc small layerCell treeCell leafCell indexCell query honest
+  obtain ⟨decoderPc, checksum, readyLayer, readyTree, readyLeaf,
+    readyIndex, decoded, prefixWitness, source, siblings⟩ := inputs
+  have prefixRun := upper_decoder_prefix_of_abstract target hash state pk
+    lay tree leaf message (signature.layers lay).counter encoding
+    pc small query honest
+  obtain ⟨final, steps, cycles, calls, blocks, run, stepsBound,
+    cyclesBound, callsBound, blocksBound, handoff, _continuation,
+    _root, lowFrame, _globalIndex, _futurePaths⟩ :=
+      upper_decoder_path_handoff target next hash decoder ready pk lay tree leaf
+        signature encoding (signature.layers lay).chainValues rfl handoffLayer
+        rfl decoderPc checksum readyLayer readyTree readyLeaf readyIndex
+        decoded prefixWitness source siblings
+  refine ⟨final, steps, cycles, calls, blocks, ?_, stepsBound,
+    cyclesBound, callsBound, blocksBound, handoff, ?_⟩
+  · exact prefixRun.1.trans run
+  · intro address low
+    exact (lowFrame address low).trans
+      (upper_decoder_start_low_byte_frame target hash state pc small
+        address low)
+
+#print axioms upper_honest_layer_trace
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
