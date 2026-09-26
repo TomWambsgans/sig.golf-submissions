@@ -147,3 +147,49 @@ theorem forgeAdvantage_le_native_bound_add_histories (dummy : OtsReferenceWords)
     (add_le_add le_rfl (monitoredSourceGame_exception_le_history dummy adversary budget hcost hbudget))
 
 end SphincsSecurity.Concrete.RetainedResidual
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem initialExceptionHistorySource_exception_of_budget (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
+    (budget : Nat) (hbudget : budget ≤ 2 ^ 128)
+    (result : Option (Forgery × Bool) × ExceptionHistoryState (gameInputs adversary))
+    (hresult : initialExceptionHistorySource key adversary encoding dummy exposed high budget result ≠ 0)
+    (hexception : MonitoredStrongException (result.1, result.2.1))
+    (hwithin : result.2.1.1.memory.external.hashCalls ≤ budget) :
+    result.2.2.1 = true ∨ result.2.2.2 = true := by
+  by_contra hflags
+  have hclean : result.2.2 = (false, false) := by
+    rcases hf : result.2.2 with ⟨cache, proposals⟩
+    cases cache <;> cases proposals <;> simp_all only [Bool.false_eq_true, or_self, not_false_eq_true, not_true_eq_false,
+      or_true, true_or]
+  obtain ⟨⟨value, hvalue, hwin⟩, hstop⟩ := hexception
+  have hlive : result.1 ≠ none := by rw [hvalue]; exact Option.some_ne_none _
+  have hlog : result.2.1.1.memory.log.length ≤ signatureLimit := by
+    simp only [sourceVerdict, Bool.and_eq_true, decide_eq_true_eq] at hwin
+    exact hwin.1.1
+  have hbound := hwithin
+  have halive := exceptionHistoryRun_unstopped key (gameInputs adversary)
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)
+    (referenceFamilyWords encoding.selections dummy)
+    (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
+    encoding.selections encoding.rows budget Finset.univ _ _
+    ⟨initialAllowed_nonempty _ exposed, initialState_rowsCovered _ _ exposed⟩
+    (sourceInputs_unlogged_subset_gameInputs adversary key) (fun _ => rfl)
+    (monitoredBankComplete_initial key (gameInputs adversary) (referenceFamilyWords encoding.selections dummy) Finset.univ exposed keygenHashCost false)
+    (show CacheSizeBound (initialMemory (referenceFamilyWords encoding.selections dummy) exposed) from by
+      change QueryCache.enncard (∅ : QueryCache HashSpec) ≤ (keygenHashCost : ENNReal)
+      rw [QueryCache.enncard_empty]
+      exact zero_le)
+    (by intro entry hentry; cases hentry) rfl hbudget result hresult hlive hbound hlog hclean
+  simp only [halive, Bool.false_eq_true] at hstop
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialExceptionHistorySource_exception_of_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialExceptionHistorySource_exception_of_budget
