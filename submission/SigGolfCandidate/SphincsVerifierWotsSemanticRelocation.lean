@@ -4047,6 +4047,52 @@ theorem upper_ready_decoded_digit (target : Fin 5) (state : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_ready_decoded_digit
 
+theorem upper_ready_digits_of_abstract (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (query : hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter lay tree leaf message counter) =
+        some encoding) :
+    let ready := upperPrehashState target state
+    let answer := hash (hashInput ready)
+    let decoder := firstUpperPaddingState (writeHash ready answer)
+    ∀ chain : ChainIndex,
+      (SphincsVerifierDecoderRelocation.setupState target
+        (SphincsVerifierDecoderRelocation.upperDecoderState target decoder)).getByte
+          (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (encoding chain).val := by
+  let ready := upperPrehashState target state
+  let answer := hash (hashInput ready)
+  let decoder := firstUpperPaddingState (writeHash ready answer)
+  obtain ⟨_run, _readyPc, _source, _bits, destination, _service⟩ :=
+    upper_prehash_block target state pc small
+  have decoded : TargetSum.decodeDigest (truncateHash answer) =
+      some encoding := by
+    change TargetSum.decodeDigest (truncateHash
+      (hash (hashInput (upperPrehashState target state)))) = some encoding
+    rw [query]
+    exact upper_decode_of_abstract hash pk lay tree leaf message counter
+      encoding honest
+  dsimp only
+  intro chain
+  calc
+    _ = SphincsVerifierWotsDecodeData.answerDigit chain decoder :=
+      upper_ready_decoded_digit target decoder chain
+    _ = upperAnswerDigit chain answer :=
+      upper_answer_digit_at_decoder ready answer destination chain
+    _ = BitVec.ofNat 8 (encoding chain).val :=
+      upperAnswerDigit_decoded chain answer encoding decoded
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_digits_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_ready_digits_of_abstract
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upperAnswerDigit_eq_encoding
