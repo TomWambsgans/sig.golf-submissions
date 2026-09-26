@@ -193,6 +193,47 @@ theorem prob_run_eq_counted {State Result : Type}
         simp [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
           Functor.map_map, probEvent_bind_eq_tsum, probEvent_map, Function.comp_def, exceeded]
 
+private theorem run'_query_bind_spmf {State Result : Type}
+    (implementation : QueryImpl spec (StateT State SPMF)) (query : spec.Domain)
+    (next : spec.Range query → OracleComp spec Result) (state : State) :
+    (simulateQ implementation (liftM (spec.query query) >>= next)).run' state =
+      ((implementation query).run state >>= fun result =>
+        (simulateQ implementation (next result.1)).run' result.2) := by
+  simp only [simulateQ_bind, simulateQ_query, OracleQuery.input_query,
+    OracleQuery.cont_query, id_map, StateT.run'_eq, StateT.run_bind, map_bind]
+
+/-- Exact weighted cutoff event for a stateful subprobability oracle. -/
+theorem prob_run_eq_counted_spmf {State Result : Type}
+    (charge : spec.Domain → Nat)
+    (implementation : QueryImpl spec (StateT State SPMF))
+    (program : OracleComp spec Result) (state : State) (budget : Nat)
+    (event : Result → Prop) :
+    Pr[fun value => ∃ x, value = some x ∧ event x |
+      (simulateQ implementation (run charge program budget)).run' state] =
+    Pr[fun result => event result.1 ∧ result.2 ≤ budget |
+      (simulateQ implementation (counted charge program)).run' state] := by
+  induction program using OracleComp.inductionOn generalizing state budget with
+  | pure value => simp [probEvent_pure]
+  | query_bind query next ih =>
+      rw [run_query_bind, counted_query_bind]
+      by_cases allowed : charge query ≤ budget
+      · rw [if_pos allowed, run'_query_bind_spmf, run'_query_bind_spmf]
+        simp only [probEvent_bind_eq_tsum]
+        apply tsum_congr
+        intro step
+        rw [ih step.1 step.2 (budget - charge query)]
+        congr 1
+        simp only [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
+          Functor.map_map, probEvent_map, Function.comp_def]
+        congr 1
+        funext result
+        apply propext
+        exact and_congr_right fun _ => by omega
+      · rw [if_neg allowed, run'_query_bind_spmf]
+        have exceeded (count : Nat) : ¬count + charge query ≤ budget := by omega
+        simp [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map,
+          Functor.map_map, probEvent_bind_eq_tsum, probEvent_map, Function.comp_def, exceeded]
+
 /-- Any completed capped execution has spent no more than its initial budget. -/
 theorem run_counted_support_le {State Result : Type}
     (charge : spec.Domain → Nat)
@@ -267,6 +308,10 @@ end SphincsSecurity.WeightedCutoff
 /-- info: 'SphincsSecurity.WeightedCutoff.prob_run_eq_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.WeightedCutoff.prob_run_eq_counted
+
+/-- info: 'SphincsSecurity.WeightedCutoff.prob_run_eq_counted_spmf' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.prob_run_eq_counted_spmf
 
 /-- info: 'SphincsSecurity.WeightedCutoff.run_counted_support_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
