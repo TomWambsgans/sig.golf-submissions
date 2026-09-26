@@ -2438,6 +2438,23 @@ theorem first_upper_parameter_copied_bytes (state : MachineState)
     (by decide) (by decide) (by decide) (by decide)
     (first_upper_parameter_copied_words state) i hi
 
+theorem first_upper_parameter_header_word (state : MachineState)
+    (index : Fin 5) :
+    (firstUpperParamState state).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x40000 + 4 * index.val)) := by
+  have frame := SphincsVerifierFtsPriorRoots.copyRoot_word_frame
+    (firstUpperParamPointerState state)
+    (BitVec.ofNat 64 (0x40000 + 4 * index.val)) (by
+      intro offset
+      rw [(firstUpperParamPointer_regs state).2]
+      fin_cases offset <;> fin_cases index <;> decide)
+  rw [show firstUpperParamState state =
+      SphincsVerifierCopy.copyRootState (firstUpperParamPointerState state) from rfl,
+    frame]
+  simp [firstUpperParamPointerState, firstUpperParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
+
 theorem first_upper_parameter_payload_word (state : MachineState)
     (index : Fin 5) :
     (firstUpperParamState state).getWord32
@@ -2518,6 +2535,14 @@ theorem first_upper_service_mem (state : MachineState) (read : Word) :
   simp [firstUpperServiceState, firstUpperServiceSchedule,
     SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
 
+theorem first_upper_service_header_word (state : MachineState)
+    (index : Fin 5) :
+    (firstUpperServiceState state).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x40000 + 4 * index.val)) := by
+  simp only [getWord32_eq]
+  rw [first_upper_service_mem]
+
 theorem first_upper_service_payload_word (state : MachineState)
     (index : Fin 5) :
     (firstUpperServiceState state).getWord32
@@ -2562,6 +2587,18 @@ theorem first_upper_prehash_parameter (state : MachineState)
     ((first_upper_counter_header_low_byte_frame state _ low).trans
       (witness.parameter i hi))
 
+theorem first_upper_prehash_header_word (state : MachineState)
+    (index : Fin 5) :
+    (firstUpperPrehashState state).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * index.val)) =
+      (firstUpperHeaderState (firstUpperCounterState state)).getWord32
+        (BitVec.ofNat 64 (0x40000 + 4 * index.val)) := by
+  rw [show firstUpperPrehashState state = firstUpperServiceState
+    (firstUpperParamState (firstUpperHeaderState (firstUpperCounterState state)))
+      from rfl,
+    first_upper_service_header_word,
+    first_upper_parameter_header_word]
+
 theorem first_upper_prehash_payload_word (state : MachineState)
     (index : Fin 5) :
     (firstUpperPrehashState state).getWord32
@@ -2574,6 +2611,17 @@ theorem first_upper_prehash_payload_word (state : MachineState)
     first_upper_parameter_payload_word,
     first_upper_header_payload_word,
     first_upper_counter_payload_word]
+
+theorem first_upper_prehash_header_byte (state : MachineState)
+    (i : Nat) (hi : i < 20) :
+    (firstUpperPrehashState state).getByte (BitVec.ofNat 64 (0x40000 + i)) =
+      (firstUpperHeaderState (firstUpperCounterState state)).getByte
+        (BitVec.ofNat 64 (0x40000 + i)) := by
+  apply SphincsVerifierFtsGenericBytes.transfer_words_to_bytes
+    (firstUpperPrehashState state)
+    (firstUpperHeaderState (firstUpperCounterState state))
+    0x40000 0x40000 (by decide) (by decide) (by decide) (by decide)
+    (first_upper_prehash_header_word state) i hi
 
 theorem first_upper_prehash_payload_byte (state : MachineState)
     (i : Nat) (hi : i < 20) :
@@ -3237,5 +3285,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_index_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_header_index_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_header_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_header_byte
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
