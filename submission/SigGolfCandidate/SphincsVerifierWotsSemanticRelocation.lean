@@ -501,6 +501,31 @@ theorem upper_chains_semantics (target : Fin 5) (hash : Hash)
   · intro address low
     simpa using lowFrame address low
 
+/-- A frame on low memory preserves the encoded public-key witness prefix. -/
+theorem witnessPrefix_frame (state final : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getMem address = state.getMem address) :
+    SphincsVerifierHashBytes.WitnessPrefix final pk := by
+  constructor
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22ca0 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22ca0 + i < 2 ^ 64)]
+      omega
+    rw [SphincsVerifierWotsSemanticAllChains.lowByteFrame state final
+      frame _ low]
+    exact hprefix.root i hi
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22cb4 + i < 2 ^ 64)]
+      omega
+    rw [SphincsVerifierWotsSemanticAllChains.lowByteFrame state final
+      frame _ low]
+    exact hprefix.parameter i hi
+
 /-- The upper-layer WOTS block recovers semantic endpoints at its actual PC. -/
 theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     (ready : MachineState) (pk : SphincsSecurity.PublicKey)
@@ -529,6 +554,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -543,7 +569,7 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
   have shiftedStart : shift (delta target) base = ready := by
     simp [base, shift, MachineState.setPC]
   obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
-    _counter, _pointer, layerFinal, treeFinal, leafFinal, endpoints, _lowFrame,
+    _counter, _pointer, layerFinal, treeFinal, leafFinal, endpoints, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_semantics target hash base pk layer tree leaf digits values
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
@@ -562,8 +588,13 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
           simpa [base] using hprefix.parameter i hi)
       (by intro chain; simpa [base] using decoded chain)
       (by intro chain j hj; simpa [base] using source chain j hj)
+  have lowFrameReady : ∀ address, address.toNat < 0x40000 →
+      final.getMem address = ready.getMem address := by
+    intro address low
+    simpa [base] using lowFrame address low
   refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc,
-    layerFinal, treeFinal, leafFinal, endpoints,
+    layerFinal, treeFinal, leafFinal,
+    witnessPrefix_frame ready final pk hprefix lowFrameReady, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩
   simpa only [shiftedStart] using run
 
@@ -757,6 +788,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      SphincsVerifierHashBytes.WitnessPrefix final pk ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -777,7 +809,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
         (values chain).extractLsb' (8 * j) 8 := by
     simpa only [readyEq] using upper_ready_source target state values source
   obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
-    done, layerFinal, treeFinal, leafFinal, endpoints,
+    done, layerFinal, treeFinal, leafFinal, finalPrefix, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_from_ready target hash ready pk layer tree leaf digits values
       (by simpa only [readyEq] using preparedPc)
@@ -785,7 +817,7 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       (by simpa only [readyEq] using preparedPointer)
       layerCell treeCell leafCell readyPrefix decoded readySource
   refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
-    ?_, done, layerFinal, treeFinal, leafFinal, endpoints,
+    ?_, done, layerFinal, treeFinal, leafFinal, finalPrefix, endpoints,
     by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
 
@@ -881,6 +913,104 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
     rw [shift_mem, loopFrame 0x43010 outside,
       rootCopySetup_position_zero]
 
+/-- The leaf payload destination is disjoint from the witness and context cells. -/
+theorem leaf_copy_dest_other (address : Word)
+    (outside : address.toNat < 0x40000 ∨ 0x43000 ≤ address.toNat)
+    (i : Nat) (hi : i < 130) :
+    address ≠ BitVec.ofNat 64 (0x40028 + 8 * i) := by
+  intro equal
+  have value := congrArg BitVec.toNat equal
+  have small : 0x40028 + 8 * i < 2 ^ 64 := by omega
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small] at value
+  omega
+
+/-- A completed leaf copy preserves the public-key prefix and XMSS coordinates. -/
+theorem leaf_copy_context_of_frame (state final : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (frame : ∀ address, address ≠ 0x43010 →
+      (∀ i, i < 130 → address ≠ BitVec.ofNat 64 (0x40028 + 8 * i)) →
+      final.getMem address = state.getMem address) :
+    final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+    final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+    final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+    SphincsVerifierHashBytes.WitnessPrefix final pk := by
+  have lowFrame : ∀ address, address.toNat < 0x40000 →
+      final.getMem address = state.getMem address := by
+    intro address low
+    apply frame address
+    · intro equal
+      have value := congrArg BitVec.toNat equal
+      have high : (0x43010 : Word).toNat = 0x43010 := by decide
+      rw [high] at value
+      omega
+    · intro i hi
+      exact leaf_copy_dest_other address (Or.inl low) i hi
+  refine ⟨(frame 0x43000 (by decide)
+      (fun i hi => leaf_copy_dest_other 0x43000 (Or.inr (by decide)) i hi)).trans
+      layerCell,
+    (frame 0x43008 (by decide)
+      (fun i hi => leaf_copy_dest_other 0x43008 (Or.inr (by decide)) i hi)).trans
+      treeCell,
+    (frame 0x43018 (by decide)
+      (fun i hi => leaf_copy_dest_other 0x43018 (Or.inr (by decide)) i hi)).trans
+      leafCell, ?_⟩
+  constructor
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22ca0 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22ca0 + i < 2 ^ 64)]
+      omega
+    rw [SphincsVerifierWotsSemanticAllChains.lowByteFrame state final
+      lowFrame _ low]
+    exact hprefix.root i hi
+  · intro i hi
+    have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+      simp only [BitVec.toNat_ofNat]
+      rw [Nat.mod_eq_of_lt (by omega : 0x22cb4 + i < 2 ^ 64)]
+      omega
+    rw [SphincsVerifierWotsSemanticAllChains.lowByteFrame state final
+      lowFrame _ low]
+    exact hprefix.parameter i hi
+
+/-- A relocated leaf copy prepares the exact abstract leaf-hash query. -/
+theorem upper_leaf_query (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (values : ChainIndex → Digest)
+    (pc : state.pc = 0x298c + delta target)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (endpoints : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8) :
+    ∃ (final : MachineState),
+      Trace hash SphincsImages.verify state 789 789 0 0 final ∧
+      final.pc = 0x29c8 + delta target ∧
+      hashInput (SphincsVerifierWotsLeafHashReady.leafHashReadyState final) =
+        SphincsBridge.toQuery
+          (SphincsVerifierWotsLeafQuery.leafInput pk.parameter layer tree leaf values) ∧
+      final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+      final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+      final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+      SphincsVerifierHashBytes.WitnessPrefix final pk := by
+  obtain ⟨final, run, done, payload, frame, positionZero⟩ :=
+    upper_rootCopy_payload target hash state values pc endpoints
+  obtain ⟨layerFinal, treeFinal, leafFinal, prefixFinal⟩ :=
+    leaf_copy_context_of_frame state final pk layer tree leaf
+      layerCell treeCell leafCell hprefix frame
+  have query := SphincsVerifierWotsLeafHeader.leafReady_fullQuery
+    final pk layer tree leaf values layerFinal positionZero
+      treeFinal leafFinal prefixFinal payload
+  exact ⟨final, run, done, query,
+    layerFinal, treeFinal, leafFinal, prefixFinal⟩
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -926,6 +1056,25 @@ theorem upper_rootCopy_payload (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms rootCopySetup_position_zero
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.witnessPrefix_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms witnessPrefix_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_copy_dest_other' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_copy_dest_other
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.leaf_copy_context_of_frame' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms leaf_copy_context_of_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_leaf_query' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_leaf_query
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_chains_semantics' depends on axioms: [propext,
  Classical.choice,
