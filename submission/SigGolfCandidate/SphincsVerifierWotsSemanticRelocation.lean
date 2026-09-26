@@ -3772,6 +3772,36 @@ theorem upper_decode_of_abstract (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_decode_of_abstract
 
+theorem upper_decoder_prefix_of_abstract (target : Fin 5) (hash : Hash)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter) (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (query : hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter lay tree leaf message counter) =
+        some encoding) :
+    let hashed := writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state)))
+    Trace hash SphincsImages.verify state 61 68 1 1
+      (firstUpperPaddingState hashed) ∧
+    (firstUpperPaddingState hashed).pc = upperPrefixPc target + 256 ∧
+    (firstUpperPaddingState hashed).getReg .x15 = 0 := by
+  have decoded : TargetSum.decodeDigest
+      (truncateHash (hash (hashInput (upperPrehashState target state)))) =
+        some encoding := by
+    rw [query]
+    exact upper_decode_of_abstract hash pk lay tree leaf message counter
+      encoding honest
+  exact upper_decoder_prefix target hash state pc small encoding decoded
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_prefix_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_prefix_of_abstract
+
 theorem firstUpperEncodingInput_eq (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (message : Digest) (counter : Counter) :
