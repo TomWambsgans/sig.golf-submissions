@@ -1056,6 +1056,7 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
           (evalWithAnswerFn (adaptOracle hash)
             (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
               (8 * i) 8) ∧
+      final.getMem 0x43048 = 1 ∧
       SegmentInterior hash run := by
   obtain ⟨final, run, done, exact, inside⟩ :=
     SigGolfCandidate.SphincsVerifierWotsLeafInterior.leaf_finish_trace
@@ -1069,11 +1070,13 @@ theorem leaf_finish_semantic (hash : Hash) (state : MachineState)
       SphincsVerifierWotsLeafQuery.leafInput] using
       SigGolfCandidate.SphincsMaskedChainDomain.eval_hash hash
         pk.parameter (.leaf layer tree leaf) (Concrete.leafPayload endpoints)
-  refine ⟨final, run, done, ?_, inside⟩
-  intro i hi
-  rw [exact, xmssInit_current_byte _ i hi,
-    SphincsVerifierWotsLeafResult.leafHashNext_byte_of_query
-      hash state _ query i hi, abstract]
+  refine ⟨final, run, done, ?_, ?_, inside⟩
+  · intro i hi
+    rw [exact, xmssInit_current_byte _ i hi,
+      SphincsVerifierWotsLeafResult.leafHashNext_byte_of_query
+        hash state _ query i hi, abstract]
+  · rw [exact]
+    exact SphincsVerifierXmssInit.xmssInit_level _
 
 /-- Rewriting schedule addresses does not change pure instruction execution. -/
 theorem runSchedule_schedule (offset : Word)
@@ -1127,7 +1130,8 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
         final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
           (evalWithAnswerFn (adaptOracle hash)
             (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
-              (8 * i) 8) := by
+              (8 * i) 8) ∧
+      final.getMem 0x43048 = 1 := by
   let base := shift (-delta target) state
   have basePc : base.pc = 0x29c8 := by
     change state.pc + -delta target = 0x29c8
@@ -1148,13 +1152,14 @@ theorem upper_leaf_finish_semantic (target : Fin 5) (hash : Hash)
               pk.parameter layer tree leaf endpoints) := by
       simpa only [restored] using query
     simpa only [leafHashReady_shift, hashInput_shift] using shifted
-  obtain ⟨finish, run, done, digest, inside⟩ :=
+  obtain ⟨finish, run, done, digest, level, inside⟩ :=
     leaf_finish_semantic hash base pk layer tree leaf endpoints basePc baseQuery
-  refine ⟨shift (delta target) finish, ?_, ?_, ?_⟩
+  refine ⟨shift (delta target) finish, ?_, ?_, ?_, ?_⟩
   · simpa only [restored] using trace_shift target hash run inside
   · rw [shift_pc, done]
   · intro i hi
     simpa using digest i hi
+  · simpa only [shift_mem] using level
 
 /-- From recovered WOTS endpoints to the XMSS starting root in an upper layer. -/
 theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
@@ -1176,15 +1181,16 @@ theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
         final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
           (evalWithAnswerFn (adaptOracle hash)
             (Concrete.leafHash pk.parameter layer tree leaf endpoints)).extractLsb'
-              (8 * i) 8) := by
+              (8 * i) 8) ∧
+      final.getMem 0x43048 = 1 := by
   obtain ⟨copied, copyRun, copiedPc, query,
     _layerFinal, _treeFinal, _leafFinal, _prefixFinal⟩ :=
     upper_leaf_query target hash state pk layer tree leaf endpoints
       pc layerCell treeCell leafCell hprefix values
-  obtain ⟨final, finishRun, done, digest⟩ :=
+  obtain ⟨final, finishRun, done, digest, level⟩ :=
     upper_leaf_finish_semantic target hash copied pk layer tree leaf endpoints
       copiedPc query
-  refine ⟨final, ?_, done, digest⟩
+  refine ⟨final, ?_, done, digest, level⟩
   simpa [Nat.add_assoc] using copyRun.trans finishRun
 
 /-- One upper-layer decoder, WOTS verifier, and leaf hash reach the XMSS path. -/
@@ -1222,6 +1228,7 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
               (fun chain => evalWithAnswerFn (adaptOracle hash)
                 (Concrete.recoverChain pk.parameter layer tree leaf chain
                   (digits chain) (values chain))))).extractLsb' (8 * i) 8) ∧
+      final.getMem 0x43048 = 1 ∧
       steps ≤ 507 + 728 * 52 + 856 ∧
       cycles ≤ 507 + 777 * 52 + 991 ∧
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
@@ -1236,12 +1243,12 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     evalWithAnswerFn (adaptOracle hash)
       (Concrete.recoverChain pk.parameter layer tree leaf chain
         (digits chain) (values chain))
-  obtain ⟨final, leafRun, done, digest⟩ :=
+  obtain ⟨final, leafRun, done, digest, level⟩ :=
     upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
       chainsPc layerFinal treeFinal leafFinal prefixFinal
       (by intro chain j hj; exact endpointBytes chain j hj)
   refine ⟨final, chainSteps + 856, chainCycles + 991,
-    chainCalls + 1, chainBlocks + 17, ?_, done, digest,
+    chainCalls + 1, chainBlocks + 17, ?_, done, digest, level,
     by omega, by omega, by omega, by omega⟩
   simpa [Nat.add_assoc] using chainRun.trans leafRun
 
