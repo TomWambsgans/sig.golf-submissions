@@ -500,3 +500,26 @@ theorem initialState_same_data (sizes : Sizes) (layout : Layout)
 #print axioms halt_stub
 #print axioms halt_terminal
 end SigGolfCandidate.BetaExpand
+
+namespace SigGolfCandidate
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+theorem OrdinarySteps.liftFetch {oldImage betaImage : Image}
+    {first final : MachineState} {steps : Nat}
+    (transfer : ∀ (state : MachineState) (instruction : Instruction),
+      fetch oldImage state = some instruction →
+      instruction ≠ .base .ECALL →
+      fetch betaImage state = some instruction)
+    (run : OrdinarySteps oldImage first steps final) :
+    OrdinarySteps betaImage first steps final := by
+  induction run with
+  | refl state => exact OrdinarySteps.refl state
+  | step state next final instruction steps fetched executed tail ih =>
+    have ordinary : instruction ≠ .base .ECALL := by
+      intro h
+      simp [h, ordinaryStep] at executed
+    exact OrdinarySteps.step state next final instruction steps
+      (transfer state instruction fetched ordinary) executed ih
+
+#print axioms OrdinarySteps.liftFetch
+end SigGolfCandidate
