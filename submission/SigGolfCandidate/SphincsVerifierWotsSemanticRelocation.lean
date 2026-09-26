@@ -3802,6 +3802,137 @@ theorem upper_decoder_prefix_of_abstract (target : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_decoder_prefix_of_abstract
 
+private def upperAnswerDigit (i : Fin 52) (answer : BitVec 256) : Byte :=
+  let offset := SphincsVerifierWotsDecode.digitBit i.val
+  let shift := offset % 8
+  let low := (answer.extractLsb' (8 * (offset / 8)) 8).zeroExtend 64
+  let word := if shift = 0 then low else if shift ≤ 5 then low >>> shift else
+    (low >>> shift) +
+      ((answer.extractLsb' (8 * (offset / 8 + 1)) 8).zeroExtend 64 <<<
+        (8 - shift))
+  (word &&& 7#64).truncate 8
+
+theorem upperAnswerDigit_eq_encoding (i : Fin 52) (answer : BitVec 256) :
+    upperAnswerDigit i answer =
+      BitVec.ofNat 8 (TargetSum.digestEncoding (truncateHash answer) i).val := by
+  fin_cases i <;>
+    apply BitVec.eq_of_toNat_eq <;>
+    simp [upperAnswerDigit, SphincsVerifierWotsDecode.digitBit,
+      TargetSum.digestEncoding, TargetSum.digitOffset,
+      TargetSum.digitsPerHalf, numChains, winternitzBits, truncateHash,
+      digestBits, hashOutputBits] <;>
+    simp only [show (7 : Nat) = 2 ^ 3 - 1 by decide,
+      Nat.and_two_pow_sub_one_eq_mod] <;>
+    omega
+
+theorem upperAnswerDigit_decoded (i : Fin 52) (answer : BitVec 256)
+    (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest (truncateHash answer) = some encoding) :
+    upperAnswerDigit i answer = BitVec.ofNat 8 (encoding i).val := by
+  have eq : TargetSum.digestEncoding (truncateHash answer) = encoding := by
+    unfold TargetSum.decodeDigest at decoded
+    split_ifs at decoded
+    exact Option.some.inj decoded
+  rw [← eq]
+  exact upperAnswerDigit_eq_encoding i answer
+
+theorem upper_answer_digit_written (state : MachineState)
+    (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000)
+    (i : Fin 52) :
+    SphincsVerifierWotsDecodeData.answerDigit i (writeHash state answer) =
+      upperAnswerDigit i answer := by
+  have lowBound : SphincsVerifierWotsDecode.digitBit i.val / 8 < 32 := by
+    fin_cases i <;> decide
+  have highBound : SphincsVerifierWotsDecode.digitBit i.val / 8 + 1 < 32 := by
+    fin_cases i <;> decide
+  have low := SphincsVerifierFtsResult.hashAnswer_byte state answer
+    destination (SphincsVerifierWotsDecode.digitBit i.val / 8) lowBound
+  have high := SphincsVerifierFtsResult.hashAnswer_byte state answer
+    destination (SphincsVerifierWotsDecode.digitBit i.val / 8 + 1) highBound
+  have high' :
+      (writeHash state answer).getByte (BitVec.ofNat 64
+        (0x42000 + SphincsVerifierWotsDecode.digitBit i.val / 8 + 1)) =
+      answer.extractLsb'
+        (8 * (SphincsVerifierWotsDecode.digitBit i.val / 8 + 1)) 8 := by
+    simpa only [Nat.add_assoc] using high
+  simp only [SphincsVerifierWotsDecodeData.answerDigit,
+    SphincsVerifierWotsDecodeData.answerWord, upperAnswerDigit]
+  rw [low, high']
+
+theorem firstUpperPaddingState_byte (state : MachineState) (address : Word) :
+    (firstUpperPaddingState state).getByte address = state.getByte address := by
+  simp [firstUpperPaddingState, firstUpperPaddingSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    MachineState.getByte]
+
+theorem upper_answer_digit_at_decoder (state : MachineState)
+    (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000)
+    (i : Fin 52) :
+    SphincsVerifierWotsDecodeData.answerDigit i
+      (firstUpperPaddingState (writeHash state answer)) =
+      upperAnswerDigit i answer := by
+  have same : SphincsVerifierWotsDecodeData.answerDigit i
+      (firstUpperPaddingState (writeHash state answer)) =
+      SphincsVerifierWotsDecodeData.answerDigit i
+        (writeHash state answer) := by
+    simp [SphincsVerifierWotsDecodeData.answerDigit,
+      SphincsVerifierWotsDecodeData.answerWord,
+      firstUpperPaddingState_byte]
+  exact same.trans (upper_answer_digit_written state answer destination i)
+
+private theorem and7_as_digit (value : Word) :
+    value &&& 7#64 =
+      BitVec.ofNat 64 ((value &&& 7#64).truncate 8).toNat := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_and, BitVec.toNat_ofNat,
+    BitVec.truncate, BitVec.toNat_setWidth]
+  have small : value.toNat &&& 7 < 8 := by
+    rw [show (7 : Nat) = 2 ^ 3 - 1 by decide,
+      Nat.and_two_pow_sub_one_eq_mod]
+    omega
+  simp only [show (7 : Nat) % 2 ^ 64 = 7 by decide]
+  omega
+
+theorem answerSum_as_sum (count : Nat) (state : MachineState) :
+    SphincsVerifierWotsDecodeData.answerSum count state =
+      ∑ i ∈ Finset.range count,
+        BitVec.ofNat 64
+          (SphincsVerifierWotsDecodeData.answerDigit
+            ⟨i % 52, Nat.mod_lt _ (by decide)⟩ state).toNat := by
+  induction count with
+  | zero => simp [SphincsVerifierWotsDecodeData.answerSum]
+  | succ count ih =>
+      rw [SphincsVerifierWotsDecodeData.answerSum,
+        Finset.sum_range_succ, ih]
+      congr 1
+      exact and7_as_digit _
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upperAnswerDigit_eq_encoding
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_decoded' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upperAnswerDigit_decoded
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_answer_digit_written' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_answer_digit_written
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.firstUpperPaddingState_byte' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms firstUpperPaddingState_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_answer_digit_at_decoder' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_answer_digit_at_decoder
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.answerSum_as_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms answerSum_as_sum
+
 theorem firstUpperEncodingInput_eq (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (message : Digest) (counter : Counter) :
