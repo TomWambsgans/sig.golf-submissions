@@ -1953,6 +1953,679 @@ theorem expected_certificateShadow_potential_le_initial_add_charge {α : Type}
               stopAfter input state hinv) le_rfl
         _ = _ := by rw [add_assoc]
 
+/-- The shadow bank itself is bounded by the adaptive potential charge. This
+bound does not assume that the actual execution stays within the budget. -/
+private theorem targetCreationMultiplier_le_macroCost (key : SecretKey)
+    (cache : QueryCache HashSpec)
+    (input : (OracleWorld + SigningSpec).Domain) :
+    targetCreationMultiplier key cache input ≤ signingMacroHashCost input := by
+  cases input with
+  | inl world =>
+      cases world with
+      | inl sample => simp [targetCreationMultiplier, freshWorldTargetHashCost,
+          signingMacroHashCost]
+      | inr hashInput =>
+          simp only [targetCreationMultiplier, signingMacroHashCost,
+            freshWorldTargetHashCost]
+          split_ifs <;> norm_num
+  | inr message =>
+      simp only [targetCreationMultiplier, signingMacroHashCost]
+      simpa only [mul_one] using
+        mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
+          (freshDigestSelectionProbability_le_one key message cache)
+
+private theorem certificateShadowUpdate_balance (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : CertificateShadowState) (length : Nat)
+    (record : ProposalExecutionRecord input)
+    (hbalance : state.2.2.spent = state.2.1.2 ∨ state.2.2.stopped = true) :
+    (certificateShadowUpdate key budget required stopAfter input state
+      length record).2.spent =
+        (certificateShadowUpdate key budget required stopAfter input state
+          length record).1.2 ∨
+    (certificateShadowUpdate key budget required stopAfter input state
+      length record).2.stopped = true := by
+  by_cases hcost : state.2.1.2 + record.trace.hashCalls ≤ budget
+  · by_cases hactive : CertificateMonitorActive key budget input (state.1, state.2.2)
+    · have heq : state.2.2.spent = state.2.1.2 := by
+        rcases hbalance with heq | hstop
+        · exact heq
+        · have hlive := hactive.1
+          rw [hstop] at hlive
+          exact Bool.noConfusion hlive
+      left
+      simp only [certificateShadowUpdate, if_pos hcost,
+        certificateMonitorUpdate, if_pos hactive, certificateCountedUpdate,
+        certificateCacheMonitorUpdate, certificateShadowActualProject]
+      omega
+    · right
+      simp only [certificateShadowUpdate, if_pos hcost,
+        certificateMonitorUpdate, if_neg hactive]
+  · right
+    simp only [certificateShadowUpdate, if_neg hcost]
+
+private theorem certificateShadowStepMass_le_remaining (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : CertificateShadowState) (length : Nat)
+    (record : ProposalExecutionRecord input)
+    (hbalance : state.2.2.spent = state.2.1.2 ∨ state.2.2.stopped = true)
+    (hrecord : record ∈ (originalProposalRecord key input state.1).support) :
+    certificateMonitorMass key budget input (state.1, state.2.2) +
+      ((budget - (certificateShadowUpdate key budget required stopAfter input state
+        length record).1.2 : Nat) : ENNReal) ≤
+      ((budget - state.2.1.2 : Nat) : ENNReal) := by
+  have hmin := signingMacroHashCost_le_record key input state.1 record hrecord
+  have hcost : (certificateShadowUpdate key budget required stopAfter input state
+      length record).1.2 = state.2.1.2 + record.trace.hashCalls := rfl
+  rw [hcost]
+  by_cases hactive : CertificateMonitorActive key budget input (state.1, state.2.2)
+  · have heq : state.2.2.spent = state.2.1.2 := by
+      rcases hbalance with heq | hstop
+      · exact heq
+      · have hlive := hactive.1
+        rw [hstop] at hlive
+        exact Bool.noConfusion hlive
+    have hspent : state.2.1.2 ≤ budget := by
+      rw [← heq]
+      exact hactive.2.1.2.2
+    have hmacro : signingMacroHashCost input ≤ budget - state.2.1.2 := by
+      rw [← heq]
+      exact hactive.2.2.2
+    have hnat : signingMacroHashCost input +
+        (budget - (state.2.1.2 + record.trace.hashCalls)) ≤
+        budget - state.2.1.2 := by omega
+    have hmass : certificateMonitorMass key budget input (state.1, state.2.2) ≤
+        (signingMacroHashCost input : ENNReal) := by
+      simpa only [certificateMonitorMass, if_pos hactive] using
+        targetCreationMultiplier_le_macroCost key state.1 input
+    calc
+      _ ≤ (signingMacroHashCost input : ENNReal) +
+          ((budget - (state.2.1.2 + record.trace.hashCalls) : Nat) : ENNReal) :=
+        add_le_add hmass le_rfl
+      _ ≤ ((budget - state.2.1.2 : Nat) : ENNReal) := by
+        exact_mod_cast hnat
+  · simp only [certificateMonitorMass, if_neg hactive, zero_add]
+    exact Nat.cast_le.mpr (by omega)
+
+noncomputable def expectedShadowMass {α : Type} (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α) :
+    CertificateShadowState → ENNReal :=
+  OracleComp.construct (fun _ _ => 0)
+    (fun input _ next state =>
+      certificateMonitorMass key budget input (state.1, state.2.2) +
+        ∑' result,
+          Pr[= result | (certificateShadowLengthImpl key budget required stopAfter
+            input).run state] * next result.1 result.2) computation
+
+@[simp] theorem expectedShadowMass_pure {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (value : α) (state : CertificateShadowState) :
+    expectedShadowMass key budget required stopAfter (pure value) state = 0 := rfl
+
+theorem expectedShadowMass_query_bind {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (next : (OracleWorld + SigningSpec).Range input →
+      OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) :
+    expectedShadowMass key budget required stopAfter
+      (OracleSpec.query input >>= next) state =
+    certificateMonitorMass key budget input (state.1, state.2.2) +
+      ∑' result,
+        Pr[= result | (certificateShadowLengthImpl key budget required stopAfter
+          input).run state] *
+          expectedShadowMass key budget required stopAfter (next result.1)
+            result.2 := rfl
+
+/-- The virtual charge cannot book more than the remaining global hash budget,
+even when the last signing macro overshoots it. -/
+theorem expectedShadowMass_le_remaining {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState)
+    (hbalance : state.2.2.spent = state.2.1.2 ∨ state.2.2.stopped = true) :
+    expectedShadowMass key budget required stopAfter computation state ≤
+      ((budget - state.2.1.2 : Nat) : ENNReal) := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value => simp only [expectedShadowMass_pure, zero_le]
+  | query_bind input next ih =>
+      rw [expectedShadowMass_query_bind]
+      let law := (certificateShadowLengthImpl key budget required stopAfter input).run
+        state
+      calc
+        _ ≤ certificateMonitorMass key budget input (state.1, state.2.2) +
+            ∑' result, Pr[= result | law] *
+              ((budget - result.2.2.1.2 : Nat) : ENNReal) := by
+          apply add_le_add le_rfl
+          apply ENNReal.tsum_le_tsum
+          intro result
+          by_cases hr : result ∈ law.support
+          · exact mul_le_mul' le_rfl
+              (ih result.1 result.2
+                (by
+                  obtain ⟨length, record, _, rfl⟩ :=
+                    certificateShadowLengthImpl_support key budget required
+                      stopAfter input state result hr
+                  exact certificateShadowUpdate_balance key budget required
+                    stopAfter input state length record hbalance))
+          · have hz : Pr[= result | law] = 0 := by
+              rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+              exact hr
+            dsimp only [law] at hz
+            simp only [hz, zero_mul]
+            exact zero_le
+        _ = ∑' result, Pr[= result | law] *
+            (certificateMonitorMass key budget input (state.1, state.2.2) +
+              ((budget - result.2.2.1.2 : Nat) : ENNReal)) := by
+          simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right,
+            PMF.probOutput_eq_apply, PMF.tsum_coe, one_mul]
+        _ ≤ ((budget - state.2.1.2 : Nat) : ENNReal) := by
+          calc
+            _ ≤ ∑' _result, Pr[= _result | law] *
+                ((budget - state.2.1.2 : Nat) : ENNReal) := by
+              apply ENNReal.tsum_le_tsum
+              intro result
+              by_cases hr : result ∈ law.support
+              · obtain ⟨length, record, hrecord, rfl⟩ :=
+                  certificateShadowLengthImpl_support key budget required
+                    stopAfter input state result hr
+                exact mul_le_mul' le_rfl
+                  (certificateShadowStepMass_le_remaining key budget required
+                    stopAfter input state length record hbalance hrecord)
+              · have hz : Pr[= result | law] = 0 := by
+                  rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+                  exact hr
+                simp only [hz, zero_mul, le_refl]
+            _ = _ := by
+              simp only [ENNReal.tsum_mul_right, PMF.probOutput_eq_apply,
+                PMF.tsum_coe, one_mul]
+
+/-- A uniform upper bound on the creation price converts virtual mass into
+the exact adaptive shadow charge, including a final overshooting macro. -/
+theorem expectedShadowCharge_le_price_mul_mass {α : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) (price : ENNReal)
+    (hprice : ∀ current : CertificateMonitorState,
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - current.2.spent) (signatureLimit - current.2.log.length)
+        required (certificateMonitorCoverState current) ≤ price) :
+    expectedShadowCharge key budget required stopAfter computation state ≤
+      price * expectedShadowMass key budget required stopAfter computation state := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value => simp only [expectedShadowCharge_pure, expectedShadowMass_pure,
+      mul_zero, le_refl]
+  | query_bind input next ih =>
+      rw [expectedShadowCharge_query_bind, expectedShadowMass_query_bind]
+      have hstep : certificateMonitorCharge key budget required input
+          (state.1, state.2.2) ≤
+          price * certificateMonitorMass key budget input
+            (state.1, state.2.2) := by
+        by_cases hactive : CertificateMonitorActive key budget input
+            (state.1, state.2.2)
+        · simp only [certificateMonitorCharge, certificateMonitorMass,
+            if_pos hactive]
+          calc
+            _ ≤ targetCreationMultiplier key state.1 input * price :=
+              mul_le_mul' le_rfl (hprice (state.1, state.2.2))
+            _ = _ := mul_comm _ _
+        · simp only [certificateMonitorCharge, certificateMonitorMass,
+            if_neg hactive, mul_zero, le_refl]
+      calc
+        _ ≤ price * certificateMonitorMass key budget input
+              (state.1, state.2.2) +
+            ∑' result,
+              Pr[= result | (certificateShadowLengthImpl key budget required
+                stopAfter input).run state] *
+                (price * expectedShadowMass key budget required stopAfter
+                  (next result.1) result.2) := by
+          apply add_le_add hstep
+          apply ENNReal.tsum_le_tsum
+          intro result
+          exact mul_le_mul' le_rfl (ih result.1 result.2)
+        _ = price * (certificateMonitorMass key budget input
+              (state.1, state.2.2) +
+            ∑' result,
+              Pr[= result | (certificateShadowLengthImpl key budget required
+                stopAfter input).run state] *
+                expectedShadowMass key budget required stopAfter
+                  (next result.1) result.2) := by
+          rw [mul_add]
+          congr 1
+          calc
+            _ = ∑' result, price *
+                (Pr[= result | (certificateShadowLengthImpl key budget required
+                  stopAfter input).run state] *
+                  expectedShadowMass key budget required stopAfter
+                    (next result.1) result.2) := by
+              apply tsum_congr
+              intro result
+              ac_rfl
+            _ = _ := by rw [ENNReal.tsum_mul_left]
+        _ = _ := rfl
+
+/-- The price bound only needs to hold on an invariant of the shadow run.
+This form can use the cache and proposal-prefix invariants of an actual game. -/
+theorem expectedShadowCharge_le_price_mul_mass_on_invariant {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) (price : ENNReal)
+    (invariant : CertificateShadowState → Prop)
+    (hstable : ∀ (input : (OracleWorld + SigningSpec).Domain)
+      (current : CertificateShadowState)
+      (result : (OracleWorld + SigningSpec).Range input × CertificateShadowState),
+      invariant current →
+      result ∈ ((certificateShadowLengthImpl key budget required stopAfter input).run
+        current).support → invariant result.2)
+    (hprice : ∀ current : CertificateShadowState,
+      invariant current →
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - current.2.2.spent)
+        (signatureLimit - current.2.2.log.length) required
+        (certificateMonitorCoverState (current.1, current.2.2)) ≤ price)
+    (hstate : invariant state) :
+    expectedShadowCharge key budget required stopAfter computation state ≤
+      price * expectedShadowMass key budget required stopAfter computation state := by
+  induction computation using OracleComp.inductionOn generalizing state with
+  | pure value => simp only [expectedShadowCharge_pure, expectedShadowMass_pure,
+      mul_zero, le_refl]
+  | query_bind input next ih =>
+      rw [expectedShadowCharge_query_bind, expectedShadowMass_query_bind]
+      have hstep : certificateMonitorCharge key budget required input
+          (state.1, state.2.2) ≤
+          price * certificateMonitorMass key budget input
+            (state.1, state.2.2) := by
+        by_cases hactive : CertificateMonitorActive key budget input
+            (state.1, state.2.2)
+        · simp only [certificateMonitorCharge, certificateMonitorMass,
+            if_pos hactive]
+          calc
+            _ ≤ targetCreationMultiplier key state.1 input * price :=
+              mul_le_mul' le_rfl (hprice state hstate)
+            _ = _ := mul_comm _ _
+        · simp only [certificateMonitorCharge, certificateMonitorMass,
+            if_neg hactive, mul_zero, le_refl]
+      calc
+        _ ≤ price * certificateMonitorMass key budget input
+              (state.1, state.2.2) +
+            ∑' result,
+              Pr[= result | (certificateShadowLengthImpl key budget required
+                stopAfter input).run state] *
+                (price * expectedShadowMass key budget required stopAfter
+                  (next result.1) result.2) := by
+          apply add_le_add hstep
+          apply ENNReal.tsum_le_tsum
+          intro result
+          by_cases hr : result ∈ ((certificateShadowLengthImpl key budget
+              required stopAfter input).run state).support
+          · exact mul_le_mul' le_rfl
+              (ih result.1 result.2
+                (hstable input state result hstate hr))
+          · have hz : Pr[= result | (certificateShadowLengthImpl key budget
+                required stopAfter input).run state] = 0 := by
+              rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+              exact hr
+            simp only [hz, zero_mul, le_refl]
+        _ = price * (certificateMonitorMass key budget input
+              (state.1, state.2.2) +
+            ∑' result,
+              Pr[= result | (certificateShadowLengthImpl key budget required
+                stopAfter input).run state] *
+                expectedShadowMass key budget required stopAfter
+                  (next result.1) result.2) := by
+          rw [mul_add]
+          congr 1
+          calc
+            _ = ∑' result, price *
+                (Pr[= result | (certificateShadowLengthImpl key budget required
+                  stopAfter input).run state] *
+                  expectedShadowMass key budget required stopAfter
+                    (next result.1) result.2) := by
+              apply tsum_congr
+              intro result
+              ac_rfl
+            _ = _ := by rw [ENNReal.tsum_mul_left]
+        _ = _ := rfl
+
+inductive CertificateShadowReachable (key : SecretKey) (budget : Nat)
+    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (initial : CertificateShadowState) : CertificateShadowState → Prop where
+  | initial : CertificateShadowReachable key budget required stopAfter initial initial
+  | step {current : CertificateShadowState}
+      (hcurrent : CertificateShadowReachable key budget required stopAfter
+        initial current)
+      (input : (OracleWorld + SigningSpec).Domain)
+      (result : (OracleWorld + SigningSpec).Range input × CertificateShadowState)
+      (hr : result ∈ ((certificateShadowLengthImpl key budget required stopAfter
+        input).run current).support) :
+      CertificateShadowReachable key budget required stopAfter initial result.2
+
+/-- A price ceiling is required only on states that the actual shadow
+interpreter can reach from this initial state. -/
+theorem expectedShadowCharge_le_price_mul_mass_reachable {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (initial : CertificateShadowState) (price : ENNReal)
+    (hprice : ∀ current : CertificateShadowState,
+      CertificateShadowReachable key budget required stopAfter initial current →
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - current.2.2.spent)
+        (signatureLimit - current.2.2.log.length) required
+        (certificateMonitorCoverState (current.1, current.2.2)) ≤ price) :
+    expectedShadowCharge key budget required stopAfter computation initial ≤
+      price * expectedShadowMass key budget required stopAfter computation initial := by
+  exact expectedShadowCharge_le_price_mul_mass_on_invariant key budget required
+    stopAfter computation initial price
+    (CertificateShadowReachable key budget required stopAfter initial)
+    (by
+      intro input current result hcurrent hr
+      exact CertificateShadowReachable.step hcurrent input result hr)
+    hprice CertificateShadowReachable.initial
+
+theorem expectedShadowCharge_le_remaining_mul_price_reachable {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (initial : CertificateShadowState) (price : ENNReal)
+    (hbalance : initial.2.2.spent = initial.2.1.2 ∨
+      initial.2.2.stopped = true)
+    (hprice : ∀ current : CertificateShadowState,
+      CertificateShadowReachable key budget required stopAfter initial current →
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - current.2.2.spent)
+        (signatureLimit - current.2.2.log.length) required
+        (certificateMonitorCoverState (current.1, current.2.2)) ≤ price) :
+    expectedShadowCharge key budget required stopAfter computation initial ≤
+      price * ((budget - initial.2.1.2 : Nat) : ENNReal) := by
+  exact (expectedShadowCharge_le_price_mul_mass_reachable key budget required
+    stopAfter computation initial price hprice).trans
+    (mul_le_mul' le_rfl
+      (expectedShadowMass_le_remaining key budget required stopAfter
+        computation initial hbalance))
+
+theorem expectedShadowCharge_le_remaining_mul_price {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState) (price : ENNReal)
+    (hbalance : state.2.2.spent = state.2.1.2 ∨ state.2.2.stopped = true)
+    (hprice : ∀ current : CertificateMonitorState,
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - current.2.spent) (signatureLimit - current.2.log.length)
+        required (certificateMonitorCoverState current) ≤ price) :
+    expectedShadowCharge key budget required stopAfter computation state ≤
+      price * ((budget - state.2.1.2 : Nat) : ENNReal) := by
+  exact (expectedShadowCharge_le_price_mul_mass key budget required stopAfter
+    computation state price hprice).trans
+    (mul_le_mul' le_rfl
+      (expectedShadowMass_le_remaining key budget required stopAfter
+        computation state hbalance))
+
+theorem expected_certificateShadow_bank_le_initial_add_charge {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateShadowState)
+    (hinv : state.2.2 = state.2.1.1.1 ∨ state.2.2.stopped = true) :
+    (∑' result,
+      Pr[= result | (simulateQ (certificateShadowLengthImpl key budget required
+        stopAfter) computation).run state] *
+      certificateBankCount result.2.2.2.bank) ≤
+    certificateMonitorPotential key budget required (state.1, state.2.2) +
+      expectedShadowCharge key budget required stopAfter computation state := by
+  apply le_trans ?_
+    (expected_certificateShadow_potential_le_initial_add_charge key budget
+      required stopAfter computation state hinv)
+  apply ENNReal.tsum_le_tsum
+  intro result
+  exact mul_le_mul' le_rfl
+    (certificateBankCount_le_bankedCacheWeight _ _ _ _ _)
+
+theorem expected_certificateShadow_bank_le_charge {α : Type}
+    (key : SecretKey) (budget spent : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (cache : QueryCache HashSpec) (stopped : Bool)
+    (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input →
+      cache input = none) :
+    let initial : CertificateShadowState :=
+      (cache, (((initialCertificateMonitor spent stopped, false), spent),
+        initialCertificateMonitor spent stopped))
+    (∑' result,
+      Pr[= result | (simulateQ (certificateShadowLengthImpl key budget required
+        stopAfter) computation).run initial] *
+      certificateBankCount result.2.2.2.bank) ≤
+    expectedShadowCharge key budget required stopAfter computation initial := by
+  dsimp only
+  have h := expected_certificateShadow_bank_le_initial_add_charge key budget
+    required stopAfter computation
+    (cache, (((initialCertificateMonitor spent stopped, false), spent),
+      initialCertificateMonitor spent stopped)) (Or.inl rfl)
+  rw [certificateMonitorPotential_initial key budget spent required cache stopped
+    hnone, zero_add] at h
+  exact h
+
+theorem simulateQ_certificateShadowProposalImpl_length {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateShadowState) :
+    Prod.map id Prod.snd <$>
+      (simulateQ (certificateShadowProposalImpl key budget required stopAfter)
+        computation).run state =
+    (simulateQ (certificateShadowLengthImpl key budget required stopAfter)
+      computation).run state.2 :=
+  simulateQ_originalProposalImpl_length _ _ _ _ _ _
+
+theorem expected_certificateShadowProposal_bank_le_charge {α : Type}
+    (key : SecretKey) (budget spent : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (cache : QueryCache HashSpec) (stopped : Bool)
+    (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input →
+      cache input = none) :
+    let initial : CertificateShadowState :=
+      (cache, (((initialCertificateMonitor spent stopped, false), spent),
+        initialCertificateMonitor spent stopped))
+    (∑' result,
+      Pr[= result | (simulateQ (certificateShadowProposalImpl key budget required
+        stopAfter) computation).run ([], initial)] *
+      certificateBankCount result.2.2.2.2.bank) ≤
+    expectedShadowCharge key budget required stopAfter computation initial := by
+  dsimp only
+  have hmap := simulateQ_certificateShadowProposalImpl_length key budget
+    required stopAfter computation
+    ([], (cache, (((initialCertificateMonitor spent stopped, false), spent),
+      initialCertificateMonitor spent stopped)))
+  have hcount := congrArg (fun law : PMF (α × CertificateShadowState) =>
+    ∑' result, Pr[= result | law] *
+      certificateBankCount result.2.2.2.bank) hmap
+  rw [tsum_probOutput_map_mul] at hcount
+  simp only [Prod.map] at hcount
+  rw [hcount]
+  exact expected_certificateShadow_bank_le_charge key budget spent required
+    stopAfter computation cache stopped hnone
+
+theorem expected_certificateShadowContext_bank_le_charge
+    (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (∑' result,
+      Pr[= result | certificateShadowContextGame adversary budget required
+        stopAfter stopped] * certificateBankCount result.2.2.2.2.2.bank) ≤
+    ∑' generated,
+      Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+        expectedShadowCharge generated.1.1.2 budget required
+          (stopAfter generated.1.1.2)
+          (FtsProbeSimulation.retainedGameRestComputation adversary
+            generated.1.1.1)
+          (generated.2, (((initialCertificateMonitor
+            generated.1.2.hashCalls stopped, false), generated.1.2.hashCalls),
+            initialCertificateMonitor generated.1.2.hashCalls stopped)) := by
+  rw [certificateShadowContextGame, tsum_probOutput_bind_mul]
+  dsimp only
+  simp only [bind_pure_comp, tsum_probOutput_map_mul]
+  apply ENNReal.tsum_le_tsum
+  intro generated
+  by_cases hg : generated ∈
+      (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _).support
+  · have hgenerated := hg
+    rw [probCompLift_support] at hgenerated
+    have hkeygen : (generated.1.1, generated.2) ∈
+        support ((simulateQ romImpl scheme.keygen).run ∅) := by
+      rw [← boundaryRun_forget 0 scheme.keygen ∅, support_map]
+      exact ⟨generated, hgenerated, rfl⟩
+    have hnone := keygen_cache_message_none (generated.1.1, generated.2)
+      hkeygen
+    exact mul_le_mul' le_rfl
+      (expected_certificateShadowProposal_bank_le_charge generated.1.1.2
+        budget generated.1.2.hashCalls required
+        (stopAfter generated.1.1.2)
+        (FtsProbeSimulation.retainedGameRestComputation adversary
+          generated.1.1.1) generated.2 stopped hnone)
+  · have hzero : Pr[= generated |
+        (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] = 0 := by
+      rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+      exact hg
+    simp only [hzero, zero_mul]
+    exact zero_le
+
+/-- On the Q-budget event, the counted game's bank is exactly the stopped
+shadow bank; dropping the event can only increase its expected count. -/
+theorem expected_certificateCounted_budget_bank_le_shadow
+    (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (∑' result,
+      Pr[= result | certificateCountedContextGame adversary budget required
+        stopAfter stopped] * CertificateCountedWeightedBank budget result) ≤
+    ∑' result,
+      Pr[= result | certificateShadowContextGame adversary budget required
+        stopAfter stopped] * certificateBankCount result.2.2.2.2.2.bank := by
+  rw [← certificateShadowContextGame_actual, tsum_probOutput_map_mul]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  by_cases hr : result ∈ (certificateShadowContextGame adversary budget required
+    stopAfter stopped).support
+  · apply mul_le_mul' le_rfl
+    by_cases hcost : result.actual.originalCost.2 ≤ budget
+    · have hgood := certificateShadowContextGame_good adversary budget required
+        stopAfter stopped result hr hcost
+      change result.2.2.2.2.1.2 ≤ budget at hcost
+      simp only [CertificateCountedWeightedBank,
+        CertificateShadowContextResult.actual,
+        CertificateCountedContextResult.originalCost,
+        certificateShadowActualProject, hcost, if_true, hgood]
+      exact le_rfl
+    · simp only [CertificateCountedWeightedBank, hcost, if_false]
+      exact zero_le
+  · have hz : Pr[= result | certificateShadowContextGame adversary budget required
+        stopAfter stopped] = 0 := by
+      rw [PMF.probOutput_eq_apply, PMF.apply_eq_zero_iff]
+      exact hr
+    simp only [hz, zero_mul]
+    exact zero_le
+
+/-- A budgeted full certificate pays either the adaptive shadow charge or the
+already isolated exceptional event. The charge still needs a numerical Q-bound. -/
+theorem originalCertificate_budget_le_shadow_charge_add_exception
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] ≤
+    (∑' generated,
+      Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+        expectedShadowCharge generated.1.1.2 q Finset.univ proposalPrefixStop
+          (FtsProbeSimulation.retainedGameRestComputation adversary
+            generated.1.1.1)
+          (generated.2, (((initialCertificateMonitor
+            generated.1.2.hashCalls false, false), generated.1.2.hashCalls),
+            initialCertificateMonitor generated.1.2.hashCalls false))) +
+      Pr[CertificateCountedBudgetExceptional q |
+        certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] := by
+  calc
+    _ ≤ (∑' result,
+        Pr[= result | certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] *
+          CertificateCountedWeightedBank q result) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      originalCertificateCountedSource_full_budget_le_count_add_exception
+        adversary q hbudget
+    _ ≤ (∑' result,
+        Pr[= result | certificateShadowContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] *
+          certificateBankCount result.2.2.2.2.2.bank) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      add_le_add
+        (expected_certificateCounted_budget_bank_le_shadow adversary q
+          Finset.univ (fun _ => proposalPrefixStop) false) le_rfl
+    _ ≤ _ :=
+      add_le_add
+        (expected_certificateShadowContext_bank_le_charge adversary q
+          Finset.univ (fun _ => proposalPrefixStop) false) le_rfl
+
+/-- The actual Q-budget full-certificate probability has a linear Q charge for
+any uniform upper bound on the per-call target creation price. -/
+theorem originalCertificate_budget_le_q_price_add_exception
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128)
+    (price : ENNReal)
+    (hprice : ∀ key : SecretKey, ∀ current : CertificateMonitorState,
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (q - current.2.spent) (signatureLimit - current.2.log.length)
+        Finset.univ (certificateMonitorCoverState current) ≤ price) :
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] ≤
+      price * (q : ENNReal) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] := by
+  calc
+    _ ≤ (∑' generated,
+        Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+          expectedShadowCharge generated.1.1.2 q Finset.univ proposalPrefixStop
+            (FtsProbeSimulation.retainedGameRestComputation adversary
+              generated.1.1.1)
+            (generated.2, (((initialCertificateMonitor
+              generated.1.2.hashCalls false, false), generated.1.2.hashCalls),
+              initialCertificateMonitor generated.1.2.hashCalls false))) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      originalCertificate_budget_le_shadow_charge_add_exception adversary q hbudget
+    _ ≤ price * (q : ENNReal) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] := by
+      apply add_le_add_left
+      calc
+        _ ≤ ∑' generated,
+            Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+              (price * (q : ENNReal)) := by
+          apply ENNReal.tsum_le_tsum
+          intro generated
+          apply mul_le_mul' le_rfl
+          have hbound := expectedShadowCharge_le_remaining_mul_price
+            generated.1.1.2 q Finset.univ proposalPrefixStop
+            (FtsProbeSimulation.retainedGameRestComputation adversary
+              generated.1.1.1)
+            (generated.2, (((initialCertificateMonitor
+              generated.1.2.hashCalls false, false), generated.1.2.hashCalls),
+              initialCertificateMonitor generated.1.2.hashCalls false))
+            price (Or.inl rfl) (hprice generated.1.1.2)
+          exact hbound.trans (mul_le_mul' le_rfl
+            (Nat.cast_le.mpr (Nat.sub_le q generated.1.2.hashCalls)))
+        _ = price * (q : ENNReal) := by
+          simp only [ENNReal.tsum_mul_right, PMF.probOutput_eq_apply,
+            PMF.tsum_coe, one_mul]
+
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.certificateContextGame_mass_le_spent' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2042,3 +2715,35 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.expected_certificateShadow_potential_le_initial_add_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.expected_certificateShadow_potential_le_initial_add_charge
+
+/-- info: 'SphincsSecurity.Concrete.expected_certificateShadowContext_bank_le_charge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_certificateShadowContext_bank_le_charge
+
+/-- info: 'SphincsSecurity.Concrete.expected_certificateCounted_budget_bank_le_shadow' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_certificateCounted_budget_bank_le_shadow
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificate_budget_le_shadow_charge_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificate_budget_le_shadow_charge_add_exception
+
+/-- info: 'SphincsSecurity.Concrete.expectedShadowMass_le_remaining' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expectedShadowMass_le_remaining
+
+/-- info: 'SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificate_budget_le_q_price_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificate_budget_le_q_price_add_exception
+
+/-- info: 'SphincsSecurity.Concrete.expectedShadowCharge_le_price_mul_mass_on_invariant' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expectedShadowCharge_le_price_mul_mass_on_invariant
+
+/-- info: 'SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price_reachable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price_reachable

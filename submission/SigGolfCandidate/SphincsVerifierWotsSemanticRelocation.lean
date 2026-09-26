@@ -1459,6 +1459,17 @@ theorem loaded_upper_path_witness_after_frame (target : Fin 5)
         20 * 52)) (upper_path_pointer_bound target) frame
     (loaded_upper_path_witness target publicKey message pk signature initial loaded)
 
+theorem upper_handoff_low_byte_frame (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoffState
+      target state).getByte address = state.getByte address := by
+  exact SphincsVerifierWotsSemanticAllChains.lowByteFrame state
+    (SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoffState
+      target state)
+    (fun read small =>
+      SigGolfCandidate.SphincsVerifierXmssTransitionMessage.handoff_low_mem
+        target state read small) address low
+
 theorem upper_path_node_pc (target : Fin 5) :
     SphincsVerifierXmssParity.nodePc
       (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) =
@@ -1715,6 +1726,10 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_path_witness_after_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms loaded_upper_path_witness_after_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_low_byte_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_low_byte_frame
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_pointer_bound' depends on axioms: [propext,
  Classical.choice,

@@ -166,6 +166,15 @@ theorem transition_current_mem (target : Fin 5) (s : MachineState)
       MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne] <;>
     split_ifs <;> bv_omega
 
+theorem transition_low_mem (target : Fin 5) (s : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (transitionState target s).getMem read = s.getMem read := by
+  fin_cases target <;>
+    simp [transitionState, transitionSchedule, runSchedule,
+      execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne] <;>
+    split_ifs <;> bv_omega
+
 theorem transition_current_byte (target : Fin 5) (s : MachineState)
     (i : Nat) (hi : i < 20) :
     (transitionState target s).getByte
@@ -411,6 +420,27 @@ theorem handoff_byte (target : Fin 5) (s : MachineState)
       s.getByte (BitVec.ofNat 64 (0x44a00 + i)) := by
   rw [handoffState, message_byte target (transitionState target s) i hi,
     transition_current_byte target s i hi]
+
+/-- The inter-layer handoff only writes control and root-copy scratch memory. -/
+theorem handoff_low_mem (target : Fin 5) (s : MachineState)
+    (read : Word) (low : read.toNat < 0x40000) :
+    (handoffState target s).getMem read = s.getMem read := by
+  have outside (offset : Fin 5) :
+      read ≠ alignToDword
+        ((pointerState target (transitionState target s)).getReg .x7 +
+          signExtend12 (4#12 * BitVec.ofNat 12 offset.val)) := by
+    have high : 0x40000 ≤
+        (alignToDword
+          ((pointerState target (transitionState target s)).getReg .x7 +
+            signExtend12 (4#12 * BitVec.ofNat 12 offset.val))).toNat := by
+      rw [pointer_destination]
+      fin_cases offset <;> decide
+    intro equal
+    have same := congrArg BitVec.toNat equal
+    omega
+  rw [handoffState, messageState,
+    copyRoot_mem_frame _ read outside,
+    pointer_mem, transition_low_mem target s read low]
 
 /-- info: 'SigGolfCandidate.SphincsVerifierXmssTransitionMessage.message_byte' depends on axioms: [propext,
  Classical.choice,
