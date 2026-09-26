@@ -3644,4 +3644,52 @@ theorem first_bottom_emit_copy_words_generic (s : MachineState) (chain : Fin 52)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_emit_copy_words_generic
 
+/-- If all 2²⁰ WOTS encodings fail their checksum, the last attempt reaches
+    the common reject block. Costs are symbolic in the loop count. -/
+theorem encoding_exhaustion_after_retries (location : Fin 5) (hash : Hash)
+    (s : MachineState) (pc : s.pc = 0x1b94 + delta location)
+    (counterZero : s.getMem 0x430b8 = 0)
+    (failed : ∀ j, j < 2 ^ 20 - 1 →
+      let st := fullRetryStates location hash s j
+      (otsPaddingFirst location st).getReg .x10 = 0 ∧
+      (otsPaddingSecond location (otsPaddingFirst location st)).getReg .x10 = 0 ∧
+      answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location st))) ≠ 194 ∧
+      st.getMem 0x430b8 + 1 ≠ (2 ^ 20 : Word))
+    (padding1 : (otsPaddingFirst location
+      (fullRetryStates location hash s (2 ^ 20 - 1))).getReg .x10 = 0)
+    (padding2 : (otsPaddingSecond location (otsPaddingFirst location
+      (fullRetryStates location hash s (2 ^ 20 - 1)))).getReg .x10 = 0)
+    (bad : answerSum 52 (sumInit (otsPaddingSecond location
+      (otsPaddingFirst location (fullRetryStates location hash s (2 ^ 20 - 1))))) ≠ 194) :
+    ∃ final, Trace hash SphincsMaskedImages.sign s
+        (594 * (2 ^ 20 - 1) + 524) (601 * (2 ^ 20 - 1) + 524)
+        (2 ^ 20 - 1) (2 ^ 20 - 1) final ∧ final.pc = 0x1004 := by
+  obtain ⟨prior, priorPc, priorCounter⟩ :=
+    retry_full_failed_attempts location hash s pc (2 ^ 20 - 1) failed
+  let current := fullRetryStates location hash s (2 ^ 20 - 1)
+  have atLimit : current.getMem 0x430b8 + 1 = (2 ^ 20 : Word) := by
+    rw [priorCounter, counterZero]
+    decide
+  let first := otsPaddingFirst location current
+  let second := otsPaddingSecond location first
+  have firstTrace := (otsPaddingFirst_block location current priorPc).trace (hash := hash)
+  have firstPc := otsPaddingFirst_good_pc location current padding1
+  have secondTrace := (otsPaddingSecond_block location first firstPc).trace (hash := hash)
+  have secondPc := otsPaddingSecond_good_pc location first padding2
+  have secondCounter : second.getMem 0x430b8 = current.getMem 0x430b8 := by
+    simp [second, first, otsPaddingSecond, otsPaddingSecondState,
+      otsPaddingSecondCode, otsPaddingFirst, otsPaddingFirstState,
+      otsPaddingFirstCode, runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+  have exhausted := signer_encoding_exhausted location second secondPc bad
+    (by rw [secondCounter]; exact atLimit)
+  refine ⟨_, ?_, exhausted.2⟩
+  have joined := prior.trans (firstTrace.trans
+    (secondTrace.trans (exhausted.1.trace (hash := hash))))
+  simpa only [current, first, second, Nat.add_assoc, Nat.reduceAdd, Nat.add_zero] using joined
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_exhaustion_after_retries' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_exhaustion_after_retries
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
