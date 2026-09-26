@@ -275,3 +275,163 @@ end SphincsSecurity.Concrete.FtsGuessHash
 /-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_program' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_program
+
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+attribute [local instance] Classical.propDecidable
+set_option maxHeartbeats 2000000
+
+noncomputable def referenceNearWitnessCostGame (dummy : OtsReferenceWords)
+    (adversary : Adversary) : SPMF (Bool × Nat) := do
+  let parameter ← 𝒮[sampleParameter]
+  let otsSecret ← 𝒮[sampleOtsSecrets]
+  let ftsSecret ← 𝒮[sampleFtsSecrets]
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let auxiliary ← 𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)]
+  let labels ← 𝒮[PMF.uniformOfFintype CanonicalGraphLabels]
+  let f := programmedHash parameter otsSecret ftsSecret labels
+    (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
+      (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+        labels auxiliary.rows auxiliary.seed))
+  let before ← 𝒮[referenceForgeryRest key f labels auxiliary.selections dummy adversary]
+  pure (decide (sourceNearWitness key f labels auxiliary.selections dummy before),
+    (completedReferenceContact key.parameter f
+      (referenceFamilyWords auxiliary.selections dummy)
+      (canonicalGraphFrontier key.otsSecret labels
+        (referenceFamilyWords auxiliary.selections dummy)) before).output.2.hashCalls)
+
+theorem referenceForgeryGame_near_guess_cost_law (dummy : OtsReferenceWords)
+    (adversary : Adversary) :
+    (fun sample : ReferenceForgerySample (canonicalGraphGameInputs adversary) =>
+      (decide (ReferenceForgerySample.nearGuess dummy sample),
+        (sample.context dummy).2.2.2.output.2.hashCalls)) <$>
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary =
+    referenceNearWitnessCostGame dummy adversary := by
+  have hsource := referenceForgeryGame_bind_auxiliary
+    (canonicalGraphGameInputs adversary)
+    (canonicalEncodingInputs_subset_gameInputs adversary)
+    (canonicalGraphInputs_subset_gameInputs adversary) dummy adversary
+    (fun key f labels selections before => pure
+      (decide (sourceNearWitness key f labels selections dummy before),
+        (completedReferenceContact key.parameter f
+          (referenceFamilyWords selections dummy)
+          (canonicalGraphFrontier key.otsSecret labels
+            (referenceFamilyWords selections dummy)) before).output.2.hashCalls))
+  simp only [evalSPMF_pure, bind_pure_comp] at hsource
+  exact hsource
+
+theorem referenceNearWitnessRestCost_initial_bound
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (parameter : PublicParameter)
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
+    (labels : CanonicalGraphLabels)
+    (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
+    (hauxiliary : auxiliary ∈
+      (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      𝒮[sampleFtsSecrets] >>= fun ftsSecret =>
+        𝒮[referenceNearWitnessRestCost
+          ⟨parameter, 0, otsSecret, ftsSecret⟩
+          (programmedHash parameter otsSecret ftsSecret labels
+            (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
+              (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
+                (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+                labels auxiliary.rows auxiliary.seed)))
+          labels auxiliary.selections dummy adversary]] ≤
+      ((2 ^ 160 - q : Nat) : ENNReal)⁻¹ *
+        ∑ slot ∈ Finset.range q,
+          forcedNearProbability dummy adversary slot parameter otsSecret labels auxiliary := by
+  have h := initial_original_near_witnesses_budget_event dummy adversary q
+    parameter otsSecret labels auxiliary hauxiliary
+  dsimp only at h
+  have hprior := congrArg (fun law : SPMF (Coordinate → Digest) =>
+    law >>= fun secrets =>
+      (fun result => (secrets, result)) <$> 𝒮[simulateQ
+        (fixedAnswers (originalAnswers dummy adversary parameter otsSecret
+          labels auxiliary) secrets)
+        (completedRun parameter (canonicalGraphRoot labels) labels adversary)])
+    FtsGuessSigning.sampleFtsSecrets_table
+  rw [bind_map_left] at hprior
+  rw [← hprior] at h
+  have hprogram (ftsSecret : Index → FtsTree → FtsLeaf → Digest) :=
+    referenceNearWitnessRestCost_program
+      ⟨parameter, 0, otsSecret, ftsSecret⟩
+      (canonicalGraphGameInputs adversary)
+      (canonicalEncodingInputs_subset_gameInputs adversary parameter)
+      labels auxiliary hauxiliary dummy adversary
+  simp only [hprogram, evalSPMF_map, probEvent_bind_eq_tsum, probEvent_map,
+    Function.comp_def, Equiv.symm_apply_apply, decide_eq_true_eq] at h ⊢
+  exact h
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_cost_law' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_cost_law
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_initial_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceNearWitnessRestCost_initial_bound
+namespace SphincsSecurity.Concrete.FtsGuessHash
+open _root_.OracleComp OracleSpec OtsContactTrace ENNReal UniformTableCompletion
+open FtsGuessSigning (Coordinate)
+attribute [local instance] Classical.propDecidable
+set_option maxHeartbeats 2000000
+
+theorem referenceForgeryGame_near_guess_budget_event
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat) :
+    Pr[fun sample => ReferenceForgerySample.nearGuess dummy sample ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+      ((2 ^ 160 - q : Nat) : ENNReal)⁻¹ *
+        ∑ slot ∈ Finset.range q,
+          Pr[fun hit => hit = true | forcedNearGame dummy adversary slot] := by
+  have hsource := referenceForgeryGame_near_guess_cost_law dummy adversary
+  have hprojected := congrArg
+    (fun law : SPMF (Bool × Nat) =>
+      Pr[fun result => result.1 = true ∧ result.2 ≤ q | law]) hsource
+  simp only [probEvent_map, Function.comp_def, decide_eq_true_eq] at hprojected
+  change Pr[fun sample => ReferenceForgerySample.nearGuess dummy sample ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] = _
+    at hprojected
+  rw [hprojected]
+  unfold referenceNearWitnessCostGame
+  simp_rw [forcedNearGame_probability, weighted_sum]
+  rw [probEvent_bind_eq_tsum]
+  apply ENNReal.tsum_le_tsum
+  intro parameter
+  apply mul_le_mul' le_rfl
+  rw [probEvent_bind_eq_tsum]
+  apply ENNReal.tsum_le_tsum
+  intro otsSecret
+  apply mul_le_mul' le_rfl
+  rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets]
+    𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)],
+    probEvent_bind_eq_tsum]
+  apply ENNReal.tsum_le_tsum
+  intro auxiliary
+  rcases Classical.em (𝒮[referenceAuxiliarySample (canonicalGraphGameInputs adversary)] auxiliary = 0) with hz | hz
+  · simp only [SPMF.probOutput_eq_apply, hz, zero_mul, le_refl]
+  apply mul_le_mul' le_rfl
+  rw [RetainedObservation.bind_comm 𝒮[sampleFtsSecrets]
+    𝒮[PMF.uniformOfFintype CanonicalGraphLabels],
+    probEvent_bind_eq_tsum]
+  apply ENNReal.tsum_le_tsum
+  intro labels
+  apply mul_le_mul' le_rfl
+  have h := referenceNearWitnessRestCost_initial_bound dummy adversary q
+    parameter otsSecret labels auxiliary (pmf_support_nonzero _ auxiliary hz)
+  simpa only [referenceNearWitnessRestCost, evalSPMF_map, evalSPMF_pure,
+    bind_pure_comp] using h
+
+end SphincsSecurity.Concrete.FtsGuessHash
+
+/-- info: 'SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.FtsGuessHash.referenceForgeryGame_near_guess_budget_event

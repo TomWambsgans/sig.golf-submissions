@@ -2371,6 +2371,49 @@ theorem upper_counter_pc (target : Fin 5) (state : MachineState)
       pc] at small ⊢
   all_goals simp [small]
 
+theorem upper_counter_mem_frame (target : Fin 5)
+    (state : MachineState) (read : Word)
+    (outside : read ≠ 0x40038) :
+    (upperCounterState target state).getMem read = state.getMem read := by
+  fin_cases target <;>
+    simp [upperCounterState, upperCounterSchedule,
+      upperCounterLui, upperCounterAddi, upperPrefixPc,
+      SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+      signExtend12, signExtend13, setWord32_eq, alignToDword,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+      MachineState.getMem_setPC, MachineState.getMem_setReg]
+  all_goals
+    intro equal
+    exact False.elim (outside equal)
+
+theorem upper_counter_stored (target : Fin 5)
+    (state : MachineState) :
+    (upperCounterState target state).getWord32 0x4003c =
+      state.getWord32 (upperCounterSource target) := by
+  fin_cases target <;>
+    simp [upperCounterState, upperCounterSchedule,
+      upperCounterLui, upperCounterAddi, upperPrefixPc,
+      upperCounterSource_num,
+      SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+      SphincsVerifierCopyMemory.getWord32_setWord32_same,
+      signExtend12, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+
+theorem upper_counter_payload_word (target : Fin 5)
+    (state : MachineState) (index : Fin 5) :
+    (upperCounterState target state).getWord32
+      (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * index.val)) := by
+  fin_cases target <;> fin_cases index <;>
+    simp [upperCounterState, upperCounterSchedule, upperCounterLui,
+      upperCounterAddi, upperPrefixPc,
+      SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+      MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne] <;>
+    (rw [SphincsVerifierCopyMemory.getWord32_setWord32_other
+      _ _ _ _ (by decide)];
+      split_ifs <;> simp [MachineState.getWord32,
+        MachineState.getMem_setPC, MachineState.getMem_setReg])
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_counter_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upper_counter_block
@@ -3844,6 +3887,197 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
         _ = (BitVec.ofNat 32 counter.toNat).extractLsb' (8*j) 8 := counterBytes j hj
         _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
           simpa [ieq] using (firstUpperEncodingInput_counter pk lay tree leaf message counter j hj).symm
+
+theorem upper_prehash_header_word (target : Fin 5)
+    (state : MachineState) (index : Fin 5) :
+    (upperPrehashState target state).getWord32
+      (BitVec.ofNat 64 (0x40000 + 4 * index.val)) =
+      (firstUpperHeaderState (upperCounterState target state)).getWord32
+        (BitVec.ofNat 64 (0x40000 + 4 * index.val)) := by
+  rw [show upperPrehashState target state = firstUpperServiceState
+    (firstUpperParamState (firstUpperHeaderState
+      (upperCounterState target state))) from rfl,
+    first_upper_service_header_word,
+    first_upper_parameter_header_word]
+
+theorem upper_prehash_payload_word (target : Fin 5)
+    (state : MachineState) (index : Fin 5) :
+    (upperPrehashState target state).getWord32
+      (BitVec.ofNat 64 (0x40028 + 4 * index.val)) =
+      state.getWord32 (BitVec.ofNat 64 (0x40028 + 4 * index.val)) := by
+  rw [show upperPrehashState target state = firstUpperServiceState
+    (firstUpperParamState (firstUpperHeaderState
+      (upperCounterState target state))) from rfl,
+    first_upper_service_payload_word,
+    first_upper_parameter_payload_word,
+    first_upper_header_payload_word,
+    upper_counter_payload_word]
+
+theorem upper_prehash_counter_word (target : Fin 5)
+    (state : MachineState) :
+    (upperPrehashState target state).getWord32 0x4003c =
+      state.getWord32 (upperCounterSource target) := by
+  rw [show upperPrehashState target state = firstUpperServiceState
+    (firstUpperParamState (firstUpperHeaderState
+      (upperCounterState target state))) from rfl,
+    first_upper_service_counter_word,
+    first_upper_parameter_counter_word,
+    first_upper_header_counter_word,
+    upper_counter_stored]
+
+theorem upper_prehash_header_byte (target : Fin 5)
+    (state : MachineState) (i : Nat) (hi : i < 20) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40000 + i)) =
+      (firstUpperHeaderState (upperCounterState target state)).getByte
+        (BitVec.ofNat 64 (0x40000 + i)) := by
+  apply SphincsVerifierFtsGenericBytes.transfer_words_to_bytes
+    (upperPrehashState target state)
+    (firstUpperHeaderState (upperCounterState target state))
+    0x40000 0x40000 (by decide) (by decide) (by decide) (by decide)
+    (upper_prehash_header_word target state) i hi
+
+theorem upper_prehash_payload_byte (target : Fin 5)
+    (state : MachineState) (i : Nat) (hi : i < 20) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40028 + i)) =
+      state.getByte (BitVec.ofNat 64 (0x40028 + i)) := by
+  apply SphincsVerifierFtsGenericBytes.transfer_words_to_bytes
+    (upperPrehashState target state) state 0x40028 0x40028
+    (by decide) (by decide) (by decide) (by decide)
+    (upper_prehash_payload_word target state) i hi
+
+theorem upper_prehash_parameter_byte (target : Fin 5)
+    (state : MachineState) (i : Nat) (hi : i < 20) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40014 + i)) =
+      (firstUpperHeaderState (upperCounterState target state)).getByte
+        (BitVec.ofNat 64 (0x22cb4 + i)) := by
+  have service : (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40014 + i)) =
+      (firstUpperParamState
+        (firstUpperHeaderState (upperCounterState target state))).getByte
+          (BitVec.ofNat 64 (0x40014 + i)) := by
+    simp [upperPrehashState, MachineState.getByte,
+      first_upper_service_mem]
+  exact service.trans (first_upper_parameter_copied_bytes _ i hi)
+
+theorem upper_counter_header_low_byte_frame (target : Fin 5)
+    (state : MachineState) (address : Word)
+    (low : address.toNat < 0x40000) :
+    (firstUpperHeaderState (upperCounterState target state)).getByte address =
+      state.getByte address := by
+  apply SphincsVerifierWotsSemanticAllChains.lowByteFrame state
+    (firstUpperHeaderState (upperCounterState target state)) ?_ address low
+  intro read small
+  rw [first_upper_header_mem_frame _ read (Or.inl small),
+    upper_counter_mem_frame]
+  intro equal
+  have value := congrArg BitVec.toNat equal
+  have high : (0x40038 : Word).toNat = 0x40038 := by decide
+  rw [high] at value
+  omega
+
+theorem upper_prehash_counter_bytes (target : Fin 5)
+    (state : MachineState) (counter : Counter)
+    (counterWord : state.getWord32 (upperCounterSource target) =
+      BitVec.ofNat 32 counter.toNat)
+    (i : Nat) (hi : i < 4) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x4003c + i)) =
+      (BitVec.ofNat 32 counter.toNat).extractLsb' (8*i) 8 := by
+  let byte : Fin 4 := ⟨i, hi⟩
+  have split := variableWord_byte (upperPrehashState target state) 0x4003c
+    (by decide) (by decide) (0 : Fin 5) byte
+  have word : (upperPrehashState target state).getWord32
+      (BitVec.ofNat 64 (0x4003c + 4 * (0 : Fin 5).val)) =
+      BitVec.ofNat 32 counter.toNat := by
+    calc
+      _ = state.getWord32 (upperCounterSource target) := by
+        simpa using upper_prehash_counter_word target state
+      _ = _ := counterWord
+  rw [word] at split
+  simpa [byte] using split
+
+theorem upper_prehash_header (target : Fin 5)
+    (state : MachineState)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (i : Nat) (hi : i < 20) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40000 + i)) =
+      ((fieldBytes (tweakFields 4 lay.val tree.val 0 leaf.val)).map
+        UInt8.toBitVec)[i]'(by simp [fieldBytes, tweakFields, bytesLE]; omega) := by
+  have controls :
+      (upperCounterState target state).getMem 0x43000 =
+        BitVec.ofNat 64 lay.val ∧
+      (upperCounterState target state).getMem 0x43010 = 0 ∧
+      (upperCounterState target state).getMem 0x43008 =
+        BitVec.ofNat 64 tree.val ∧
+      (upperCounterState target state).getMem 0x43018 =
+        BitVec.ofNat 64 leaf.val := by
+    rw [upper_counter_mem_frame _ _ _ (by decide), layerCell,
+      upper_counter_mem_frame _ _ _ (by decide), positionZero,
+      upper_counter_mem_frame _ _ _ (by decide), treeCell,
+      upper_counter_mem_frame _ _ _ (by decide), leafCell]
+    exact ⟨rfl, rfl, rfl, rfl⟩
+  exact (upper_prehash_header_byte target state i hi).trans
+    (first_upper_header_bytes (upperCounterState target state)
+      lay tree leaf controls.1 controls.2.1 controls.2.2.1
+      controls.2.2.2 ⟨i, hi⟩)
+
+theorem upper_prehash_parameter (target : Fin 5)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (witness : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (i : Nat) (hi : i < 20) :
+    (upperPrehashState target state).getByte
+      (BitVec.ofNat 64 (0x40014 + i)) =
+      pk.parameter.extractLsb' (8*i) 8 := by
+  have low : (BitVec.ofNat 64 (0x22cb4 + i)).toNat < 0x40000 := by
+    simp only [BitVec.toNat_ofNat]
+    omega
+  exact (upper_prehash_parameter_byte target state i hi).trans
+    ((upper_counter_header_low_byte_frame target state _ low).trans
+      (witness.parameter i hi))
+
+theorem upper_encoding_query (target : Fin 5)
+    (state : MachineState) (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (witness : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (payload : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+        message.extractLsb' (8*i) 8)
+    (counterWord : state.getWord32 (upperCounterSource target) =
+      BitVec.ofNat 32 counter.toNat) :
+    hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message counter) := by
+  obtain ⟨_run, _pc, source, bits, _destination, _service⟩ :=
+    upper_prehash_block target state pc small
+  apply first_upper_encoding_query_of_parts
+    (upperPrehashState target state) pk lay tree leaf message counter
+    source bits
+  · exact upper_prehash_header target state lay tree leaf
+      layerCell positionZero treeCell leafCell
+  · exact upper_prehash_parameter target state pk witness
+  · intro i hi
+    exact (upper_prehash_payload_byte target state i hi).trans
+      (payload i hi)
+  · exact upper_prehash_counter_bytes target state counter counterWord
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_encoding_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_encoding_query
 
 theorem loaded_first_upper_counter_word
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
