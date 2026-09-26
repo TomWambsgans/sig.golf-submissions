@@ -2737,4 +2737,150 @@ theorem first_bottom_chain_answer_copy_value (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_answer_copy_value
 
+/-- The signer increments the chain step and returns to the digit comparison. -/
+def firstBottomChainContinueCode : List (Word × Instr) := [
+  (0x3d90, .LUI .x28 0x43),
+  (0x3d94, .ADDI .x28 .x28 88),
+  (0x3d98, .LD .x6 .x28 0),
+  (0x3d9c, .ADDI .x6 .x6 1),
+  (0x3da0, .LUI .x28 0x43),
+  (0x3da4, .ADDI .x28 .x28 88),
+  (0x3da8, .SD .x28 .x6 0),
+  (0x3dac, .JAL .x0 (-376))]
+
+def firstBottomChainContinue (s : MachineState) : MachineState :=
+  runSchedule firstBottomChainContinueCode s
+
+theorem first_bottom_chain_continue_code :
+    ∀ e ∈ firstBottomChainContinueCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_chain_continue_checked (s : MachineState)
+    (pc : s.pc = 0x3d90) : Checked firstBottomChainContinueCode s := by
+  simp [firstBottomChainContinueCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    signExtend21, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_chain_continue_trace (s : MachineState)
+    (pc : s.pc = 0x3d90) :
+    OrdinarySteps SphincsMaskedImages.sign s 8 (firstBottomChainContinue s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomChainContinueCode
+    first_bottom_chain_continue_code s (first_bottom_chain_continue_checked s pc)
+  simpa [firstBottomChainContinue, firstBottomChainContinueCode] using run
+
+theorem first_bottom_chain_continue_controls (s : MachineState)
+    (pc : s.pc = 0x3d90) :
+    (firstBottomChainContinue s).pc = 0x3c34 ∧
+    (firstBottomChainContinue s).getMem 0x43058 = s.getMem 0x43058 + 1 := by
+  simp [firstBottomChainContinue, firstBottomChainContinueCode,
+    runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_eq, signExtend21, pc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_continue_controls' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_continue_controls
+
+/-- Compare the next chain step with the current message digit. -/
+def firstBottomChainCheckCode : List (Word × Instr) := [
+  (0x3c34, .LUI .x28 0x43),
+  (0x3c38, .ADDI .x28 .x28 0x58),
+  (0x3c3c, .LD .x6 .x28 0),
+  (0x3c40, .LUI .x28 0x43),
+  (0x3c44, .ADDI .x28 .x28 0xc8),
+  (0x3c48, .LD .x7 .x28 0),
+  (0x3c4c, .BEQ .x6 .x7 0x164)]
+
+def firstBottomChainCheck (s : MachineState) : MachineState :=
+  runSchedule firstBottomChainCheckCode s
+
+theorem first_bottom_chain_check_code :
+    ∀ e ∈ firstBottomChainCheckCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_chain_check_checked (s : MachineState)
+    (pc : s.pc = 0x3c34) : Checked firstBottomChainCheckCode s := by
+  simp [firstBottomChainCheckCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_chain_check_trace (s : MachineState)
+    (pc : s.pc = 0x3c34) :
+    OrdinarySteps SphincsMaskedImages.sign s 7 (firstBottomChainCheck s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomChainCheckCode
+    first_bottom_chain_check_code s (first_bottom_chain_check_checked s pc)
+  simpa [firstBottomChainCheck, firstBottomChainCheckCode] using run
+
+theorem first_bottom_chain_check_controls (s : MachineState)
+    (pc : s.pc = 0x3c34) :
+    (firstBottomChainCheck s).pc =
+      if s.getMem 0x43058 = s.getMem 0x430c8 then 0x3db0 else 0x3c50 := by
+  simp [firstBottomChainCheck, firstBottomChainCheckCode, runSchedule,
+    execInstrBr, signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_check_controls' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_check_controls
+
+theorem first_bottom_chain_continue_frame (s : MachineState) (a : Word)
+    (outside : a ≠ (0x43058#64)) :
+    (firstBottomChainContinue s).getMem a = s.getMem a := by
+  simp [firstBottomChainContinue, firstBottomChainContinueCode,
+    runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_ne, outside]
+
+theorem first_bottom_chain_check_frame (s : MachineState) (a : Word) :
+    (firstBottomChainCheck s).getMem a = s.getMem a := by
+  simp [firstBottomChainCheck, firstBottomChainCheckCode,
+    runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_continue_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_continue_frame
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_check_frame' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_check_frame
+
+/-- One complete nonzero WOTS chain step, including the next digit comparison. -/
+def firstBottomChainIteration (hash : Hash) (s : MachineState) : MachineState :=
+  firstBottomChainCheck
+    (firstBottomChainContinue
+      (firstBottomChainAnswerCopy (firstBottomChainHashAnswer hash s)))
+
+theorem first_bottom_chain_iteration_trace (hash : Hash) (s : MachineState)
+    (parameter value : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (step : ChainStep)
+    (pc : s.pc = 0x3c50)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter value
+      lay treeIdx leaf chain step) :
+    let t := firstBottomChainIteration hash s
+    Trace hash SphincsMaskedImages.sign s 95 102 1 1 t ∧
+    t.pc = if (firstBottomChainContinue
+      (firstBottomChainAnswerCopy (firstBottomChainHashAnswer hash s))).getMem
+      0x43058 =
+      (firstBottomChainContinue
+      (firstBottomChainAnswerCopy (firstBottomChainHashAnswer hash s))).getMem
+      0x430c8 then 0x3db0 else 0x3c50 := by
+  let a := firstBottomChainAnswerCopy (firstBottomChainHashAnswer hash s)
+  let b := firstBottomChainContinue a
+  have aProof := first_bottom_chain_answer_copy_value hash s parameter value
+    lay treeIdx leaf chain step pc ctx
+  have bProof := first_bottom_chain_continue_trace a aProof.2.1
+  have bPC := (first_bottom_chain_continue_controls a aProof.2.1).1
+  have cProof := first_bottom_chain_check_trace b bPC
+  refine ⟨?_, ?_⟩
+  · simpa only [firstBottomChainIteration, a, b, Nat.reduceAdd] using
+      (aProof.1.trans bProof.trace).trans cProof.trace
+  · simpa only [firstBottomChainIteration, a, b] using
+      first_bottom_chain_check_controls b bPC
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_iteration_trace
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
