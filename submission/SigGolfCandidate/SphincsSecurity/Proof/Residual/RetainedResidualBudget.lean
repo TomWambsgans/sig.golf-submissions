@@ -651,3 +651,173 @@ end SphincsSecurity.WeightedCutoff
 /-- info: 'SphincsSecurity.WeightedCutoff.residual_run_completeSigningWork' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.WeightedCutoff.residual_run_completeSigningWork
+
+namespace SphincsSecurity.WeightedCutoff
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+variable {Index : Type} {spec : OracleSpec Index}
+
+theorem run_bind_zero_prefix {First Result : Type} (charge : spec.Domain → Nat)
+    (first : OracleComp spec First) (next : First → OracleComp spec Result) (budget : Nat)
+    (hzero : AllQueriesSatisfy first (fun query => charge query = 0)) :
+    run charge (first >>= next) budget =
+      (do let answer ← first; run charge (next answer) budget) := by
+  induction first using OracleComp.inductionOn generalizing budget with
+  | pure value => rfl
+  | query_bind query rest ih =>
+      rw [allQueriesSatisfy_query_bind_iff] at hzero
+      rw [bind_assoc, run_query_bind, hzero.1]
+      simp only [Nat.zero_le, if_pos, Nat.sub_zero, bind_assoc]
+      congr 1
+      funext answer
+      exact ih answer budget (hzero.2 answer)
+end SphincsSecurity.WeightedCutoff
+
+namespace SphincsSecurity.WeightedCutoff
+open SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+
+theorem residual_run_completeSigningWork_bind (inputs : Finset HashInput)
+    (routing : InterleavedResidual.Routing) (work : PublicSigningRecord × Nat)
+    {Result : Type} (next : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) →
+      OracleComp (RetainedResidual.World inputs) Result) (budget : Nat) :
+    run (residualCharge inputs)
+      ((simulateQ (RetainedResidual.embed inputs routing)
+        (ResidualByteFrontend.jointCompleteSigningWork work)) >>= next) budget =
+    if work.2 ≤ budget then
+      (do
+        let answer ← simulateQ (RetainedResidual.embed inputs routing)
+          (ResidualByteFrontend.jointCompleteSigningWork work)
+        run (residualCharge inputs) (next answer) (budget - work.2))
+    else pure none := by
+  simp only [ResidualByteFrontend.jointCompleteSigningWork, simulateQ_bind, simulateQ_spec_query,
+    RetainedResidual.embed, bind_assoc]
+  rw [run_query_bind]
+  by_cases allowed : residualCharge inputs (.inl (.byte routing (.account work.2))) ≤ budget
+  · have hcost : work.2 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_pos allowed, if_pos hcost]
+    congr 1
+    funext _
+    have hzero := completeRecord_all_zero inputs routing work.1
+    simpa only [residualCharge] using run_bind_zero_prefix (residualCharge inputs)
+      (simulateQ (RetainedResidual.embed inputs routing)
+        (ResidualByteFrontend.jointCompleteSigningRecord work.1)) next (budget - work.2) hzero
+  · have hcost : ¬work.2 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_neg allowed, if_neg hcost]
+end SphincsSecurity.WeightedCutoff
+
+namespace SphincsSecurity.WeightedCutoff
+open SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+
+theorem residual_execute_all_zero (inputs : Finset HashInput)
+    (routing : InterleavedResidual.Routing)
+    (action : ResidualByteAction.Action inputs) :
+    AllQueriesSatisfy
+      (simulateQ (RetainedResidual.embed inputs routing)
+        (ResidualByteFrontend.execute action))
+      (fun query => residualCharge inputs query = 0) := by
+  cases action with
+  | known answer => exact allQueriesSatisfy_pure _ _
+  | read input =>
+      simp only [ResidualByteFrontend.execute, simulateQ_spec_query,
+        RetainedResidual.embed, allQueriesSatisfy_query_iff, residualCharge]
+  | probe input test =>
+      simp only [ResidualByteFrontend.execute, simulateQ_spec_query,
+        RetainedResidual.embed, allQueriesSatisfy_query_iff, residualCharge]
+
+theorem residual_checkedPost_all_zero (inputs : Finset HashInput)
+    (routing : InterleavedResidual.Routing) (reject : HashOutput → Prop)
+    (answer : HashOutput) :
+    AllQueriesSatisfy
+      (simulateQ (RetainedResidual.embed inputs routing)
+        (if reject answer then
+          liftM ((ResidualByteFrontend.World inputs).query (.inl .stop))
+        else pure answer))
+      (fun query => residualCharge inputs query = 0) := by
+  by_cases h : reject answer
+  · simp only [if_pos h, simulateQ_spec_query, RetainedResidual.embed,
+      allQueriesSatisfy_query_iff, residualCharge]
+  · simp only [if_neg h, simulateQ_pure, allQueriesSatisfy_pure]
+
+theorem residual_checkedTail_all_zero (inputs : Finset HashInput)
+    (routing : InterleavedResidual.Routing) (reject : HashOutput → Prop)
+    (action : ResidualByteAction.Action inputs) :
+    AllQueriesSatisfy
+      (simulateQ (RetainedResidual.embed inputs routing) (do
+        let answer ← ResidualByteFrontend.execute action
+        if reject answer then liftM ((ResidualByteFrontend.World inputs).query (.inl .stop))
+        else pure answer))
+      (fun query => residualCharge inputs query = 0) := by
+  simp only [simulateQ_bind]
+  apply allQueriesSatisfy_bind (residual_execute_all_zero inputs routing action)
+  intro answer
+  exact residual_checkedPost_all_zero inputs routing reject answer
+
+end SphincsSecurity.WeightedCutoff
+
+namespace SphincsSecurity.WeightedCutoff
+open SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+attribute [local instance] Classical.propDecidable
+
+theorem residual_run_checkedHashQuery_bind (inputs : Finset HashInput)
+    (routing : InterleavedResidual.Routing)
+    (reject : HashInput → HashOutput → Prop) (input : inputs)
+    {Result : Type} (next : HashOutput → OracleComp (RetainedResidual.World inputs) Result)
+    (budget : Nat) :
+    run (residualCharge inputs)
+      ((simulateQ (RetainedResidual.embed inputs routing)
+        (ResidualByteFrontend.checkedHashQuery reject input)) >>= next) budget =
+    if 1 ≤ budget then
+      (do
+        let answer ← simulateQ (RetainedResidual.embed inputs routing)
+          (ResidualByteFrontend.checkedHashQuery reject input)
+        run (residualCharge inputs) (next answer) (budget - 1))
+    else pure none := by
+  simp only [ResidualByteFrontend.checkedHashQuery, ResidualByteFrontend.hashQuery,
+    simulateQ_bind, simulateQ_spec_query, RetainedResidual.embed, bind_assoc]
+  rw [run_query_bind]
+  by_cases allowed : residualCharge inputs (.inl (.byte routing (.prepare input))) ≤ budget
+  · have h1 : 1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_pos allowed, if_pos h1]
+    congr 1
+    funext action
+    have hzero := residual_checkedTail_all_zero inputs routing (reject input.val) action
+    convert run_bind_zero_prefix (residualCharge inputs)
+      (simulateQ (RetainedResidual.embed inputs routing) (do
+        let answer ← ResidualByteFrontend.execute action
+        if reject input.val answer then liftM ((ResidualByteFrontend.World inputs).query (.inl .stop))
+        else pure answer)) next (budget - 1) hzero using 1
+    all_goals first | rfl | simp only [residualCharge, simulateQ_bind, bind_assoc,
+      ResidualByteFrontend.World]
+    congr 1
+  · have h1 : ¬1 ≤ budget := by simpa [residualCharge] using allowed
+    rw [if_neg allowed, if_neg h1]
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.run_bind_zero_prefix' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.run_bind_zero_prefix
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_completeSigningWork_bind' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_completeSigningWork_bind
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_execute_all_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_execute_all_zero
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_checkedPost_all_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_checkedPost_all_zero
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_checkedTail_all_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_checkedTail_all_zero
+
+/-- info: 'SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery_bind' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.residual_run_checkedHashQuery_bind
