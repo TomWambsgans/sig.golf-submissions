@@ -1,6 +1,7 @@
 import SigGolf.Statements
 import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
 import SigGolfCandidate.SphincsBridge
+import SigGolfCandidate.SphincsSecurity.Completeness.Assembly
 import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
 namespace SigGolfCandidate.SphincsAllMessagesBridge
@@ -601,6 +602,64 @@ theorem implementation_complete_of_abstract
                 (hsem · secretKey message)
     _ ≤ SigGolf.FAILURE := hbound secretKey
 
+/-- The concrete SPHINCS failure theorem supplies the abstract side of the implementation bridge. -/
+theorem concrete_complete_of_semantic
+    (submission : SigGolf.Submission)
+    (hsem : ∀ (hash : SigGolf.Hash) (secretKey : SigGolf.SecretKey)
+      (message : SigGolf.Message),
+      (evalWithAnswerFn hash (submission.honest secretKey message)).success = false →
+        evalWithAnswerFn (QueryImpl.ofFn (adaptOracle hash))
+          (SphincsSecurity.Completeness.honest secretKey message) = false) :
+    submission.Complete := by
+  apply implementation_complete_of_abstract submission
+    (fun secretKey message => SphincsSecurity.Completeness.honest secretKey message) hsem
+  intro secretKey
+  have hbound := SphincsSecurity.Completeness.complete_each_seed secretKey
+  have hmarginal (message : SigGolf.Message) :
+      Pr[= false |
+        (simulateQ
+          (randomOracle : QueryImpl SphincsSecurity.HashSpec
+            (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+          (SphincsSecurity.Completeness.honest secretKey message)).run' ∅] =
+      Pr[fun r => r.1 = false |
+        (simulateQ
+          (randomOracle : QueryImpl SphincsSecurity.HashSpec
+            (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+          (SphincsSecurity.Completeness.honest secretKey message)).run ∅] := by
+    rw [← probEvent_eq_eq_probOutput, StateT.run'_eq, probEvent_map]
+    rfl
+  calc
+    ∑ message : SigGolf.Message,
+      Pr[= false |
+        (simulateQ
+          (randomOracle : QueryImpl SphincsSecurity.HashSpec
+            (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+          (SphincsSecurity.Completeness.honest secretKey message)).run' ∅] =
+      ∑ message : SigGolf.Message,
+        Pr[fun r => r.1 = false |
+          (simulateQ
+            (randomOracle : QueryImpl SphincsSecurity.HashSpec
+              (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+            (SphincsSecurity.Completeness.honest secretKey message)).run ∅] := by
+              apply Finset.sum_congr rfl
+              intro message _
+              exact hmarginal message
+    _ ≤ SigGolf.FAILURE := by
+      have hsum :
+          (∑ message : SigGolf.Message,
+            Pr[fun r => r.1 = false |
+              (simulateQ
+                (randomOracle : QueryImpl SphincsSecurity.HashSpec
+                  (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp))
+                (SphincsSecurity.Completeness.honest secretKey message)).run ∅]) ≤
+          ((2 ^ 256 : Nat) : ENNReal)⁻¹ := by
+        rw [tsum_fintype] at hbound
+        convert hbound using 1
+        rfl
+      have hfail : (((2 ^ 256 : Nat) : ENNReal)⁻¹) = SigGolf.FAILURE := by
+        norm_num [SigGolf.FAILURE, one_div]
+      exact hsum.trans_eq hfail
+
 end SigGolfCandidate.SphincsBridge
 
 /-- info: 'SigGolfCandidate.OracleReindex.randomOracle_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -626,3 +685,7 @@ end SigGolfCandidate.SphincsBridge
 /-- info: 'SigGolfCandidate.SphincsBridge.implementation_complete_of_abstract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsBridge.implementation_complete_of_abstract
+
+/-- info: 'SigGolfCandidate.SphincsBridge.concrete_complete_of_semantic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.concrete_complete_of_semantic
