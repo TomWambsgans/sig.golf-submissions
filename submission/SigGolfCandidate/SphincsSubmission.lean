@@ -19,11 +19,11 @@ def submission : Submission where
     | .verify => SphincsImages.verify
 
 /-- Candidate value. No organizer certificate is claimed in this module. -/
-def cycleBound : Nat := 171399
+def cycleBound : Nat := 1000000
 
 theorem sizes_valid : sizes.Valid := by
   simp [Sizes.Valid, sizes, SphincsWire.signatureBytes_eq, MAX_WITNESS_BYTES]
-theorem score_eq : submission.score cycleBound = 1940922276 := by decide
+theorem score_eq : submission.score cycleBound = 11324000000 := by decide
 
 theorem keygen_byteSize : SphincsMaskedImages.keygen.byteSize = 3604 := by
   unfold Riscv.Image.byteSize

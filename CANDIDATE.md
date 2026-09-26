@@ -1,6 +1,6 @@
 # Compact SPHINCS candidate — work in progress
 
-This branch contains a proposed submission in `submission/`. It is **not ready for a PR**: `SigGolf.Challenge.certificate` has not been proved. The values in `claim.json` are targets, not certified results: S = W = 11,324 bytes, C = 171,399 cycles, and S × C = 1,940,922,276.
+This branch contains a proposed submission in `submission/`. It is **not ready for a PR**: `SigGolf.Challenge.certificate` has not been proved. The values in `claim.json` are targets, not certified results: S = W = 11,324 bytes, C = 1,000,000 cycles, and S × C = 11,324,000,000. The cycle target is deliberately loose while the certificate is completed.
 
 ## Proved
 
@@ -15,6 +15,6 @@ The submission passes the independent source-admission check. Lean axiom guards 
 ## Still required
 
 - Prove the signer's complete retry loop and WOTS signature-chain serialization, then full output refinement and cost distribution.
-- Prove upper-layer WOTS semantics and the aggregate digit-sensitive cycle bound, compose all layers and final comparison, and establish the 171,399-cycle bound.
+- Prove upper-layer WOTS semantics and a conservative aggregate cycle bound, compose all layers and final comparison, and establish the 1,000,000-cycle bound.
 - Prove universal sign/verify termination below the competition limit, end-to-end completeness, and security for the actual public, replaceable cache and both submission paths. In particular, connect the finite-table setup law and exact cache bytes to the full attacker game, refine the concrete sign image, and charge bad events to the game’s hash-call budget.
 - Assemble and build `SigGolf.Challenge.certificate`, run the independent verifier, then open a normal PR from the fork.
