@@ -3909,6 +3909,66 @@ theorem answerSum_as_sum (count : Nat) (state : MachineState) :
       congr 1
       exact and7_as_digit _
 
+theorem answerSum_52_eq_fin_sum (state : MachineState) :
+    SphincsVerifierWotsDecodeData.answerSum 52 state =
+      ∑ i : Fin 52,
+        BitVec.ofNat 64
+          (SphincsVerifierWotsDecodeData.answerDigit i state).toNat := by
+  rw [answerSum_as_sum, Finset.sum_fin_eq_sum_range]
+  apply Finset.sum_congr rfl
+  intro i hi
+  simp only [dif_pos (Finset.mem_range.mp hi)]
+  simp [Nat.mod_eq_of_lt (Finset.mem_range.mp hi)]
+
+private theorem bitvec_sum {α : Type} [DecidableEq α]
+    (s : Finset α) (f : α → Nat) :
+    (∑ i ∈ s, BitVec.ofNat 64 (f i)) =
+      BitVec.ofNat 64 (∑ i ∈ s, f i) := by
+  induction s using Finset.induction_on with
+  | empty => simp
+  | @insert a s ha ih => simp [ha, ih, BitVec.ofNat_add]
+
+theorem upper_answer_sum_decoded (state : MachineState)
+    (answer : BitVec 256)
+    (destination : state.getReg .x12 = 0x42000)
+    (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest (truncateHash answer) = some encoding) :
+    SphincsVerifierWotsDecodeData.answerSum 52
+      (firstUpperPaddingState (writeHash state answer)) = 194#64 := by
+  have valid : TargetSum.Valid encoding := by
+    unfold TargetSum.decodeDigest at decoded
+    split_ifs at decoded with h
+    · have eq := Option.some.inj decoded
+      simpa only [eq] using h.2.2.2.2
+  have term (i : Fin 52) :
+      SphincsVerifierWotsDecodeData.answerDigit i
+        (firstUpperPaddingState (writeHash state answer)) =
+      BitVec.ofNat 8 (encoding i).val :=
+    (upper_answer_digit_at_decoder state answer destination i).trans
+      (upperAnswerDigit_decoded i answer encoding decoded)
+  calc
+    _ = ∑ i : Fin 52,
+          BitVec.ofNat 64
+            (SphincsVerifierWotsDecodeData.answerDigit i
+              (firstUpperPaddingState (writeHash state answer))).toNat :=
+      answerSum_52_eq_fin_sum _
+    _ = ∑ i : Fin 52, BitVec.ofNat 64 (encoding i).val := by
+      apply Finset.sum_congr rfl
+      intro i hi
+      rw [term i]
+      have small : (encoding i).val < 2 ^ 8 :=
+        lt_trans (encoding i).isLt (by decide)
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt small]
+    _ = BitVec.ofNat 64 (TargetSum.sum encoding) := by
+      change (∑ i : ChainIndex, BitVec.ofNat 64 (encoding i).val) =
+        BitVec.ofNat 64 (∑ i : ChainIndex, (encoding i).val)
+      exact bitvec_sum (Finset.univ : Finset ChainIndex)
+        (fun i => (encoding i).val)
+    _ = 194#64 := by
+      change TargetSum.sum encoding = targetSum at valid
+      rw [valid]
+      decide
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upperAnswerDigit_eq_encoding
@@ -3932,6 +3992,14 @@ theorem answerSum_as_sum (count : Nat) (state : MachineState) :
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.answerSum_as_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms answerSum_as_sum
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.answerSum_52_eq_fin_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms answerSum_52_eq_fin_sum
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_answer_sum_decoded' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_answer_sum_decoded
 
 theorem firstUpperEncodingInput_eq (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
