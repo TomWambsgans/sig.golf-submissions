@@ -4093,6 +4093,7 @@ theorem upper_ready_digits_of_abstract (target : Fin 5) (hash : Hash)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_ready_digits_of_abstract
 
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upperAnswerDigit_eq_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms upperAnswerDigit_eq_encoding
@@ -4348,6 +4349,53 @@ theorem upper_counter_header_low_byte_frame (target : Fin 5)
   have high : (0x40038 : Word).toNat = 0x40038 := by decide
   rw [high] at value
   omega
+
+theorem upper_prehash_low_byte_frame (target : Fin 5) (state : MachineState)
+    (address : Word) (low : address.toNat < 0x40000) :
+    (upperPrehashState target state).getByte address = state.getByte address := by
+  let header := firstUpperHeaderState (upperCounterState target state)
+  let pointers := firstUpperParamPointerState header
+  let read := alignToDword address
+  have readLow : read.toNat < 0x40000 := by
+    have le : read.toNat ≤ address.toNat := by
+      unfold read alignToDword
+      rw [BitVec.toNat_and]
+      exact Nat.and_le_left
+    omega
+  have outside (offset : Fin 5) :
+      read ≠ alignToDword
+        (pointers.getReg .x7 +
+          signExtend12 (4#12 * BitVec.ofNat 12 offset.val)) := by
+    intro eq
+    have dst : pointers.getReg .x7 = 0x40014 :=
+      (firstUpperParamPointer_regs header).2
+    rw [dst] at eq
+    have high :
+        0x40000 ≤ (alignToDword
+          (0x40014 + signExtend12
+            (4#12 * BitVec.ofNat 12 offset.val))).toNat := by
+      fin_cases offset <;> decide
+    have same := congrArg BitVec.toNat eq
+    omega
+  have paramFrame : (firstUpperParamState header).getMem read =
+      header.getMem read := by
+    rw [firstUpperParamState,
+      SphincsVerifierCopyMemory.copyRoot_mem_frame pointers read outside,
+      first_upper_param_pointers_mem]
+  have serviceFrame : (upperPrehashState target state).getMem read =
+      header.getMem read := by
+    rw [upperPrehashState, first_upper_service_mem, paramFrame]
+  calc
+    _ = header.getByte address := by
+      simpa only [MachineState.getByte, read, header] using
+        congrArg (fun value : Word => extractByte value (byteOffset address))
+          serviceFrame
+    _ = state.getByte address :=
+      upper_counter_header_low_byte_frame target state address low
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_prehash_low_byte_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_prehash_low_byte_frame
 
 theorem upper_prehash_counter_bytes (target : Fin 5)
     (state : MachineState) (counter : Counter)
