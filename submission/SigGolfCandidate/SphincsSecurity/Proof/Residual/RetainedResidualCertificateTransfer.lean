@@ -522,3 +522,73 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_source_fault_add_win' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_source_fault_add_win
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem initialMonitoredSource_strong_budget_le_count_add_exception
+    (key : SecretKey) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary)
+    (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves)
+    (hroot : key.root = knownRoot (initialKnown
+      (referenceFamilyWords encoding.selections dummy) exposed))
+    (budget : Nat) (stopAfter : CertificateStopRule) (stopped : Bool) :
+    Pr[fun result => MonitoredStrongWin result ∧
+        result.2.1.memory.external.hashCalls ≤ budget |
+      initialMonitoredSource key adversary encoding dummy exposed high budget
+        Finset.univ stopAfter stopped] ≤
+    (∑' result, Pr[= result |
+      initialMonitoredSource key adversary encoding dummy exposed high budget
+        Finset.univ stopAfter stopped] *
+      (if result.2.1.memory.external.hashCalls ≤ budget then
+        certificateBankCount result.2.2.bank else 0)) +
+    Pr[fun result => MonitoredStrongException result ∧
+        result.2.1.memory.external.hashCalls ≤ budget |
+      initialMonitoredSource key adversary encoding dummy exposed high budget
+        Finset.univ stopAfter stopped] := by
+  let law := initialMonitoredSource key adversary encoding dummy exposed high budget
+    Finset.univ stopAfter stopped
+  have hcount : Pr[fun result => MonitoredStrongWin result ∧
+      result.2.1.memory.external.hashCalls ≤ budget ∧
+      result.2.2.stopped = false | law] ≤
+      ∑' result, Pr[= result | law] *
+        (if result.2.1.memory.external.hashCalls ≤ budget then
+          certificateBankCount result.2.2.bank else 0) := by
+    apply probEvent_le_tsum_probOutput_mul_cost_of_mem_support
+    rintro ⟨answer, after⟩ hsupport ⟨⟨⟨forgery, checked⟩, hanswer, hwin⟩, hbudget, halive⟩
+    simp only [sourceVerdict, Bool.and_eq_true, decide_eq_true_eq] at hwin
+    obtain ⟨⟨_, hnew⟩, rfl⟩ := hwin
+    dsimp only at hanswer halive hnew ⊢
+    subst answer
+    have hresult := probOutput_ne_zero_of_mem_support hsupport
+    rw [SPMF.probOutput_eq_apply] at hresult
+    simp only [hbudget, if_true]
+    exact initialMonitoredSource_strong_count key adversary encoding hencoding dummy
+      hdummy exposed high hroot budget stopAfter stopped forgery after hresult hnew halive
+  have hsplit : Pr[fun result => MonitoredStrongWin result ∧
+      result.2.1.memory.external.hashCalls ≤ budget | law] ≤
+      Pr[fun result => MonitoredStrongWin result ∧
+        result.2.1.memory.external.hashCalls ≤ budget ∧
+        result.2.2.stopped = false | law] +
+      Pr[fun result => MonitoredStrongException result ∧
+        result.2.1.memory.external.hashCalls ≤ budget | law] := by
+    apply le_trans ?_ (probEvent_or_le law _ _)
+    apply probEvent_mono
+    intro result _ ⟨hwin, hbudget⟩
+    cases hstop : result.2.2.stopped with
+    | false => exact Or.inl ⟨hwin, hbudget, rfl⟩
+    | true => exact Or.inr ⟨⟨hwin, hstop⟩, hbudget⟩
+  exact hsplit.trans (add_le_add hcount le_rfl)
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_strong_budget_le_count_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialMonitoredSource_strong_budget_le_count_add_exception
