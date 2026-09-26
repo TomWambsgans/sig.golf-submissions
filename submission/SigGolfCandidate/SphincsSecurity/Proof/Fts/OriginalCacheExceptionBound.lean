@@ -1916,6 +1916,55 @@ theorem certificateStoppedOuterRun_budget_event {Result : Type} (key : SecretKey
             rw [← PMF.monad_pure_eq_pure, probEvent_pure]
             simp [hzero_tail]
 
+
+theorem certificateUnboundedJointStep_cache (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (ghost : CertificateStoppedCacheState) (x : CertificateStoppedJointOutput input)
+    (hx : x ∈ (certificateUnboundedJointStep key budget required stopAfter input state ghost).support) :
+    x.2.2.2.1 = x.2.2.1.1 := by
+  cases input with
+  | inl world =>
+      exact (certificateUnboundedWorldJointStep_state_relation key budget required
+        stopAfter world state ghost x hx).1
+  | inr message =>
+      exact (certificateUnboundedSigningJointStep_state_relation key budget required
+        stopAfter message state ghost x hx).1
+
+theorem certificateUnboundedOuterRun_project {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    ∀ (state : CertificateJointState), state.2.1 = state.1.1 →
+      (certificateUnboundedOuterRun key budget required stopAfter computation state).map
+        (fun result => (result.1, result.2.1)) =
+      (simulateQ (certificateCountedLengthImpl key budget required stopAfter) computation).run state.1 := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state hcache
+      rw [certificateUnboundedOuterRun_pure, simulateQ_pure]
+      rw [PMF.pure_map]
+      rfl
+  | query_bind input next ih =>
+      intro state hcache
+      rw [certificateUnboundedOuterRun_query_bind, PMF.map_bind]
+      rw [simulateQ_query_bind, StateT.run_bind]
+      have hstep := certificateUnboundedJointStep_project key budget required
+        stopAfter input state.1 state.2 hcache
+      calc
+        _ = (certificateUnboundedJointStep key budget required stopAfter input state.1 state.2).bind
+            (fun a => (simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+              (next a.1.output)).run a.2.2.1) := by
+                apply PMF.bind_congr
+                intro a ha
+                exact ih a.1.output (a.2.2.1, a.2.2.2)
+                  (certificateUnboundedJointStep_cache key budget required
+                    stopAfter input state.1 state.2 a ((PMF.mem_support_iff _ _).2 ha))
+        _ = ((certificateUnboundedJointStep key budget required stopAfter input state.1 state.2).map
+            (fun a => (a.1.output, a.2.2.1))).bind
+            (fun a => (simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+              (next a.1)).run a.2) := by rw [PMF.bind_map]; rfl
+        _ = _ := by rw [hstep]; rfl
+
 end SphincsSecurity.Concrete
 
 /-- info: 'SphincsSecurity.Concrete.expectedBoundaryMessageCalls_le_hashQueryBound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -2097,3 +2146,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedOuterRun_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedOuterRun_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.certificateUnboundedOuterRun_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateUnboundedOuterRun_project
