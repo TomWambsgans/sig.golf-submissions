@@ -391,3 +391,63 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateTraceProgram_full_budget_original' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateTraceProgram_full_budget_original
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+
+theorem originalCertificateTraceSource_counted_projection
+    (adversary : Adversary)
+    (hkeygen : ∀ result ∈ support (boundaryRun 0 scheme.keygen ∅),
+      result.1.2.hashCalls = keygenHashCost) :
+    (fun result : OriginalCertificateTraceResult =>
+      (result.1, keygenHashCost + result.2.hashCalls)) <$>
+        originalCertificateTraceSource adversary =
+      originalCertificateCountedSource adversary := by
+  rw [originalCertificateCountedSource_eq_boundary]
+  simp only [originalCertificateTraceSource, originalCertificateBoundaryTraceSource,
+    map_bind, map_pure]
+  rw [← boundaryRun_forget 0 scheme.keygen ∅]
+  simp only [bind_map_left]
+  apply bind_congr_of_forall_mem_support
+  intro generated hg
+  rw [hkeygen generated hg]
+
+end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem referenceForgeryGame_full_budget_le_original_counted
+    (dummy : OtsReferenceWords) (adversary : Adversary) (q : Nat)
+    (hkeygen : ∀ result ∈ support (boundaryRun 0 scheme.keygen ∅),
+      result.1.2.hashCalls = keygenHashCost) :
+    Pr[fun sample => sample.fullCertificate dummy ∧
+      (sample.context dummy).2.2.2.output.2.hashCalls ≤ q |
+      referenceForgeryGame (canonicalGraphGameInputs adversary)
+        (canonicalEncodingInputs_subset_gameInputs adversary) dummy adversary] ≤
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] := by
+  have hproject := originalCertificateTraceSource_counted_projection adversary hkeygen
+  calc
+    _ ≤ Pr[fun record : CertificateTraceRecord => record.full ∧
+          keygenHashCost + record.2.2.hashCalls ≤ q |
+          (simulateQ romImpl (certificateTraceProgram adversary)).run' ∅] :=
+      referenceForgeryGame_full_budget_project dummy adversary q
+    _ ≤ Pr[fun result : OriginalCertificateTraceResult =>
+          OriginalFullCertificate result.1 ∧ keygenHashCost + result.2.hashCalls ≤ q |
+          originalCertificateTraceSource adversary] :=
+      certificateTraceProgram_full_budget_original adversary q
+    _ = _ := by
+      rw [← hproject, probEvent_map]
+      rfl
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificateTraceSource_counted_projection' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificateTraceSource_counted_projection
+
+/-- info: 'SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.referenceForgeryGame_full_budget_le_original_counted

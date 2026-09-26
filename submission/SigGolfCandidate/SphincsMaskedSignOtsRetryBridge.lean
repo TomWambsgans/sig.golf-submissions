@@ -3996,3 +3996,112 @@ theorem first_bottom_chain_digit_controls_any (s : MachineState) (i : Fin 52)
 #print axioms first_bottom_next_trace
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsSecurity SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem first_bottom_chain_digit_context_any (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩) :
+    SphincsMaskedSignOtsDomain.Chain.Context (firstBottomChainDigit s)
+      parameter initial lay treeIdx leaf chain ⟨0, by decide⟩ := by
+  rcases ctx with ⟨layer, tree, leafMem, chainMem, counter, par, value⟩
+  have zeroCounter := (first_bottom_chain_digit_controls_any s chain pc chainMem).2.1
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [first_bottom_chain_digit_mem_frame s (0x43000#64) (by decide) (by decide)]
+    exact layer
+  · rw [first_bottom_chain_digit_mem_frame s (0x43008#64) (by decide) (by decide)]
+    exact tree
+  · rw [first_bottom_chain_digit_mem_frame s (0x43018#64) (by decide) (by decide)]
+    exact leafMem
+  · rw [first_bottom_chain_digit_mem_frame s (0x43050#64) (by decide) (by decide)]
+    exact chainMem
+  · simpa using zeroCounter
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [first_bottom_chain_digit_mem_frame s
+      (alignToDword (BitVec.ofNat 64 (0x74 + 4 * i.val)))
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)]
+    exact par i
+  · intro i
+    rw [first_bottom_chain_digit_word_frame]
+    exact value i
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_context_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_context_any
+
+theorem first_bottom_chain_zero_any (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (digitZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) = 0) :
+    Trace hash SphincsMaskedImages.sign s 21 21 0 0 (firstBottomChainDigit s) ∧
+    (firstBottomChainDigit s).pc = 0x3db0 ∧
+    Words20 (firstBottomChainDigit s) 0x44b00
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0) := by
+  have chainMem := ctx.2.2.2.1
+  have controls := first_bottom_chain_digit_controls_any s chain pc chainMem
+  refine ⟨(first_bottom_chain_digit_trace_any s chain pc chainMem).trace,
+    ?_, ?_⟩
+  · rw [controls.2.2, digitZero]
+    decide
+  · rw [first_bottom_abstract_value_zero]
+    intro i
+    rw [first_bottom_chain_digit_word_frame]
+    exact ctx.2.2.2.2.2.2 i
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_zero_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_zero_any
+
+theorem first_bottom_chain_positive_any (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3bfc)
+    (ctx : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (digitValue : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      BitVec.ofNat 8 digit.val)
+    (positive : 0 < digit.val) :
+    Trace hash SphincsMaskedImages.sign s (21 + 95 * digit.val)
+      (21 + 102 * digit.val) digit.val digit.val
+      (firstBottomChainWalk hash digit.val (firstBottomChainDigit s)) ∧
+    (firstBottomChainWalk hash digit.val (firstBottomChainDigit s)).pc = 0x3db0 ∧
+    Words20 (firstBottomChainWalk hash digit.val (firstBottomChainDigit s))
+      0x44b00
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
+  have chainMem := ctx.2.2.2.1
+  have controls := first_bottom_chain_digit_controls_any s chain pc chainMem
+  have notZero : s.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) ≠ 0 := by
+    rw [digitValue]
+    have small : digit.val < 8 := by simpa [chainLength, winternitzBits] using digit.isLt
+    bv_omega
+  have entryPc : (firstBottomChainDigit s).pc = 0x3c50 := by
+    rw [controls.2.2, if_neg notZero]
+  have entryDigit : (firstBottomChainDigit s).getMem 0x430c8 =
+      BitVec.ofNat 64 digit.val := by
+    rw [controls.1, digitValue]
+    have small : digit.val < 8 := by simpa [chainLength, winternitzBits] using digit.isLt
+    bv_omega
+  have entryContext := first_bottom_chain_digit_context_any s parameter initial
+    lay treeIdx leaf chain pc ctx
+  have tail := first_bottom_chain_final hash (firstBottomChainDigit s)
+    parameter initial lay treeIdx leaf chain digit positive entryPc entryContext entryDigit
+  refine ⟨?_, tail.2.1, tail.2.2.2⟩
+  simpa only [Nat.zero_add] using
+    (first_bottom_chain_digit_trace_any s chain pc chainMem).trace.trans tail.1
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_positive_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_positive_any
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
