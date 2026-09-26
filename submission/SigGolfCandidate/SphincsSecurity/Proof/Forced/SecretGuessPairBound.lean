@@ -143,3 +143,30 @@ theorem lazyRun_two_guesses [Fintype Value] [Nonempty Value] {Result : Type} (en
   exact hbudget result (by simpa only [mem_support_iff, SPMF.probOutput_eq_apply] using hr)
 
 end SphincsSecurity.Concrete.SecretGuessObservation
+
+namespace SphincsSecurity.Concrete.SecretGuessObservation
+open _root_.OracleComp OracleSpec ENNReal
+variable {Coordinate Value Memory AuxIndex : Type} {auxSpec : OracleSpec AuxIndex}
+  [Fintype Coordinate] [DecidableEq Coordinate] [DecidableEq Value]
+
+/-- The two-guess potential needs a probe cap only on the event being bounded. -/
+theorem lazyRun_two_guesses_budget_event [Fintype Value] [Nonempty Value]
+    {Result : Type} (environment : Environment auxSpec Coordinate Value Memory)
+    (computation : OracleComp (World auxSpec Coordinate Value) Result)
+    (memory : Memory) (budget : Nat) :
+    Pr[fun result => 2 ≤ result.2.guesses.card ∧ result.2.probes ≤ budget |
+      lazyRun environment computation (initialState memory)] ≤
+      (budget.choose 2 : ENNReal) *
+        ((Fintype.card Value - budget : Nat) : ENNReal)⁻¹ ^ 2 := by
+  apply (probEvent_le_tsum_probOutput_mul_cost_of_mem_support _ _
+    (fun result => pairPotential (Fintype.card Value) budget result.2) ?_).trans
+      (lazyRun_pairPotential environment (Fintype.card Value) budget computation (initialState memory)
+        (initialState_invariant memory) (fun _ => Finset.univ_nonempty))
+  intro result hr htwo
+  exact pairPotential_two _ _ result.2 htwo.2 htwo.1
+
+end SphincsSecurity.Concrete.SecretGuessObservation
+
+/-- info: 'SphincsSecurity.Concrete.SecretGuessObservation.lazyRun_two_guesses_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.SecretGuessObservation.lazyRun_two_guesses_budget_event
