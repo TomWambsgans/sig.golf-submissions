@@ -258,3 +258,40 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_cache_budget_add_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedBudgetExceptional_le_cache_budget_add_prefix
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp ENNReal
+
+theorem originalCertificate_budget_le_q_rates_add_prefix
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] ≤
+      (q : ENNReal) * (fullCertificateTotalRate + certificateCacheExceptionRate) +
+        proposalPrefixExceptionBound := by
+  calc
+    _ ≤ (q : ENNReal) * fullCertificateTotalRate +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      originalCertificate_budget_le_q_total_rate_add_exception adversary q hbudget
+    _ ≤ (q : ENNReal) * fullCertificateTotalRate +
+        (Pr[fun result => result.project.2.2.2.2.2 = true ∧
+          result.originalCost.2 ≤ q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] +
+          proposalPrefixExceptionBound) :=
+      add_le_add le_rfl (certificateCountedBudgetExceptional_le_cache_budget_add_prefix
+        adversary q)
+    _ ≤ (q : ENNReal) * fullCertificateTotalRate +
+        ((q : ENNReal) * certificateCacheExceptionRate +
+          proposalPrefixExceptionBound) :=
+      add_le_add le_rfl (add_le_add
+        (certificateCountedContextGame_cache_hit_budget_le_rate adversary q
+          Finset.univ (fun _ => proposalPrefixStop) false) le_rfl)
+    _ = _ := by rw [mul_add, add_assoc]
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificate_budget_le_q_rates_add_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificate_budget_le_q_rates_add_prefix
