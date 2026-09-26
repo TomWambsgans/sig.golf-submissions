@@ -9145,3 +9145,167 @@ theorem signer_chain_walk_body (hash : Hash) (s : MachineState)
 
 #print axioms signer_chain_walk_body
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+open SphincsSecurity SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+private theorem secret_hash_code_straight :
+    ∀ e ∈ firstBottomSecretHashCode, PrepStraight e.2 := by decide
+
+private theorem secret_hash_code_address (j : Fin 40) :
+    (firstBottomSecretHashCode[j.val]'(by
+      simpa only [show firstBottomSecretHashCode.length = 40 from rfl]
+        using j.isLt)).1 = BitVec.ofNat 64 (0x3b20 + 4 * j.val) := by
+  fin_cases j <;> decide
+
+private theorem secret_hash_sites (j : Fin 40) :
+    ∃ i : Instr,
+      instructionAt SphincsMaskedImages.sign
+        (BitVec.ofNat 64 (0x3b20 + 4 * j.val)) = some (.base i) ∧
+      PrepStraight i := by
+  let e := firstBottomSecretHashCode[j.val]'(by
+    simpa only [show firstBottomSecretHashCode.length = 40 from rfl]
+      using j.isLt)
+  have member : e ∈ firstBottomSecretHashCode :=
+    List.getElem_mem (by
+      simpa only [show firstBottomSecretHashCode.length = 40 from rfl]
+        using j.isLt)
+  refine ⟨e.2, ?_, secret_hash_code_straight e member⟩
+  rw [← secret_hash_code_address j]
+  exact first_bottom_secret_hash_code e member
+
+theorem signer_secret_hash_prep_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    SignerBodyTrace hash s 40 40 0 0 (firstBottomSecretHashPrep s) := by
+  have old := first_bottom_secret_hash_prep s pc
+  apply SignerBodyTrace.ofOrdinaryStraight old 0x3b20 0x3bc0
+    (by decide) (by decide)
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · intro u v instr lower upper aligned fetched executed
+    exact straight_step_of_sites 0x3b20 40 (by decide) (by decide)
+      secret_hash_sites u v instr lower upper aligned fetched executed
+
+#print axioms signer_secret_hash_prep_body
+
+theorem signer_secret_hash_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    SignerBodyTrace hash s 41 56 1 2
+      (firstBottomSecretHashAnswer hash s) := by
+  let prep := firstBottomSecretHashPrep s
+  obtain ⟨prepPc, src, bits, dst, service⟩ :=
+    first_bottom_secret_hash_registers s pc
+  have fetched : fetch SphincsMaskedImages.sign prep = some (.base .ECALL) := by
+    rw [fetch_at, prepPc]
+    decide
+  have valid : hashArgumentsValid prep = true := by
+    dsimp [prep]
+    simp [hashArgumentsValid, src, bits, dst,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have length : (hashInput prep).1 = 576 := by
+    dsimp [prep]
+    simp [hashInput, bits]
+  have hashBody : SignerBodyTrace hash prep 1 16 1 2
+      (writeHash prep (hash (hashInput prep))) := by
+    have one := SignerBodyTrace.hash (hash := hash) prep
+      (writeHash prep (hash (hashInput prep))) 0 0 0 0
+      ⟨by rw [prepPc]; decide, by rw [prepPc]; decide,
+        by rw [prepPc]; decide⟩ fetched service valid
+      (SignerBodyTrace.refl (hash := hash) _)
+    simpa only [length, show compressions 576 = 2 from by decide,
+      Nat.reduceMul, Nat.reduceAdd] using one
+  have prepared := signer_secret_hash_prep_body hash s pc
+  simpa only [firstBottomSecretHashAnswer, prep, Nat.reduceAdd] using
+    prepared.trans hashBody
+
+#print axioms signer_secret_hash_body
+
+private theorem secret_answer_sites (j : Fin 14) :
+    instructionAt SphincsMaskedImages.sign
+      (BitVec.ofNat 64 (0x3bc4 + 4 * j.val)) =
+        some (.base (chainAnswerInstr j)) ∧
+      PrepStraight (chainAnswerInstr j) := by
+  fin_cases j <;> decide
+
+theorem signer_secret_answer_copy_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3bc4) :
+    SignerBodyTrace hash s 14 14 0 0 (firstBottomSecretAnswerCopy s) := by
+  have old := (first_bottom_secret_answer_copy s pc).1
+  apply SignerBodyTrace.ofOrdinaryStraight old 0x3bc4 0x3bfc
+    (by decide) (by decide)
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · intro u v instr lower upper aligned fetched executed
+    exact straight_step_of_sites 0x3bc4 14 (by decide) (by decide) (by
+      intro j
+      exact ⟨chainAnswerInstr j, (secret_answer_sites j).1,
+        (secret_answer_sites j).2⟩)
+      u v instr lower upper aligned fetched executed
+
+theorem signer_secret_initial_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3b20) :
+    SignerBodyTrace hash s 55 70 1 2
+      (firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)) := by
+  have hashRun := signer_secret_hash_body hash s pc
+  have nextPc := (first_bottom_secret_hash hash s pc).2
+  have copyRun := signer_secret_answer_copy_body hash
+    (firstBottomSecretHashAnswer hash s) nextPc
+  simpa only [Nat.reduceAdd] using hashRun.trans copyRun
+
+#print axioms signer_secret_answer_copy_body
+#print axioms signer_secret_initial_body
+
+private def emitInstr (j : Fin 15) : Instr :=
+  if j.val = 0 then .LUI .x6 0x45
+  else if j.val = 1 then .ADDI .x6 .x6 (-1280)
+  else if j.val = 2 then .LUI .x28 0x43
+  else if j.val = 3 then .ADDI .x28 .x28 0xa0
+  else if j.val = 4 then .LD .x7 .x28 0
+  else if (j.val - 5) % 2 = 0 then
+    .LWU .x13 .x6 (BitVec.ofNat 12 (4 * ((j.val - 5) / 2)))
+  else .SW .x7 .x13 (BitVec.ofNat 12 (4 * ((j.val - 5) / 2)))
+
+private theorem emit_sites (j : Fin 15) :
+    instructionAt SphincsMaskedImages.sign
+      (BitVec.ofNat 64 (0x3db0 + 4 * j.val)) =
+        some (.base (emitInstr j)) ∧
+      PrepStraight (emitInstr j) := by
+  fin_cases j <;> decide
+
+theorem signer_emit_body (hash : Hash) (s : MachineState)
+    (outputBase : Nat) (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (chain : Fin 52) (pc : s.pc = 0x3db0)
+    (pointer : s.getMem 0x430a0 =
+      BitVec.ofNat 64 (outputBase + 20 * chain.val)) :
+    SignerBodyTrace hash s 15 15 0 0 (firstBottomEmitCopy s) := by
+  have old := first_bottom_emit_copy_trace_base s outputBase baseAligned
+    baseBound chain pc pointer
+  apply SignerBodyTrace.ofOrdinaryStraight old 0x3db0 0x3dec
+    (by decide) (by decide)
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · intro u v instr lower upper aligned fetched executed
+    exact straight_step_of_sites 0x3db0 15 (by decide) (by decide) (by
+      intro j
+      exact ⟨emitInstr j, (emit_sites j).1, (emit_sites j).2⟩)
+      u v instr lower upper aligned fetched executed
+
+#print axioms signer_emit_body
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
