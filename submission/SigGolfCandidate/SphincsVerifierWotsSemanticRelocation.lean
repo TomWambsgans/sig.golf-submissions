@@ -2081,6 +2081,24 @@ theorem upper_handoff_control_cells (next : Fin 5)
   · rw [keepLeaf, keepIndex]
     exact SphincsVerifierXmssTransition.transition_index next state
 
+theorem upper_handoff_position_zero (next : Fin 5)
+    (state : MachineState) :
+    (SphincsVerifierXmssTransitionMessage.handoffState next state).getMem
+      0x43010 = 0 := by
+  let middle := SphincsVerifierXmssTransition.transitionState next state
+  let pointers := SphincsVerifierXmssTransitionMessage.pointerState next middle
+  have frame := SphincsVerifierCopyMemory.copyRoot_mem_frame pointers
+    0x43010 (by
+      intro offset
+      rw [SphincsVerifierXmssTransitionMessage.pointer_destination]
+      fin_cases offset <;> decide)
+  have pointerFrame :=
+    SphincsVerifierXmssTransitionMessage.pointer_mem next middle 0x43010
+  have position := SphincsVerifierXmssTransition.transition_level next state
+  simpa [SphincsVerifierXmssTransitionMessage.handoffState,
+    SphincsVerifierXmssTransitionMessage.messageState, pointers, middle]
+    using (frame.trans pointerFrame).trans position
+
 /- The first upper layer begins at 0x6d1c after its XMSS-root handoff.
    Its signed 20-bit encoding counter is stored at witness address 0x23dbc. -/
 private def firstUpperCounterSchedule : List (Word × Instr) := [
@@ -3289,5 +3307,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_header_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_prehash_header_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_handoff_position_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_handoff_position_zero
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
