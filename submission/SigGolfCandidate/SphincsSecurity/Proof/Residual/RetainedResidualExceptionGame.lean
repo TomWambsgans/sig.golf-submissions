@@ -258,3 +258,57 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_exception_budget_le_history' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_exception_budget_le_history
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem sourceGame_live_budget_le_rate_add_history
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[fun result => (∃ value, result.1 = some value ∧
+        sourceVerdict value result.2.memory.log = true) ∧
+        result.2.memory.external.hashCalls ≤ q |
+      sourceGame dummy adversary] ≤
+    (q : ENNReal) * fullCertificateTotalRate +
+      (Pr[fun result => result.2.2.1 = true ∧
+          result.2.1.1.memory.external.hashCalls ≤ q |
+        exceptionHistorySourceGame dummy adversary q] +
+       Pr[fun result => result.2.2.2 = true |
+        exceptionHistorySourceGame dummy adversary q]) := by
+  rw [← monitoredSourceGame_erasure dummy adversary q (fun _ _ _ _ => false), probEvent_map]
+  change Pr[fun result => MonitoredStrongWin result ∧
+      result.2.1.memory.external.hashCalls ≤ q |
+      monitoredSourceGame dummy adversary q (fun _ _ _ _ => false)] ≤ _
+  exact (monitoredSourceGame_strong_budget_le_rate_add_exception
+    dummy hdummy adversary q (fun _ _ _ _ => false) hbudget).trans
+    (add_le_add le_rfl
+      (monitoredSourceGame_exception_budget_le_history dummy adversary q hbudget))
+
+theorem originalGame_budget_le_fault_rate_add_history
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[fun result => result.1 = true ∧ result.2 ≤ q |
+      (simulateQ romImpl (countHashQueries (gameCore scheme adversary))).run' ∅] ≤
+    ENNReal.ofReal (2 * ((q : ℝ) / 2 ^ digestBits) -
+      ((q : ℝ) / 2 ^ digestBits) ^ 2) +
+    ((q : ENNReal) * fullCertificateTotalRate +
+      (Pr[fun result => result.2.2.1 = true ∧
+          result.2.1.1.memory.external.hashCalls ≤ q |
+        exceptionHistorySourceGame dummy adversary q] +
+       Pr[fun result => result.2.2.2 = true |
+        exceptionHistorySourceGame dummy adversary q])) := by
+  exact (originalGame_budget_le_source_fault_add_win dummy adversary q).trans
+    (add_le_add (sourceGame_fault_within_budget_le_all dummy adversary q hbudget)
+      (sourceGame_live_budget_le_rate_add_history dummy hdummy adversary q hbudget))
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_live_budget_le_rate_add_history' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_live_budget_le_rate_add_history
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_fault_rate_add_history' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.originalGame_budget_le_fault_rate_add_history

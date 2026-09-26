@@ -120,3 +120,83 @@ theorem forgeAdvantage_le_monitored_bound_add_exception (dummy : OtsReferenceWor
   exact h.trans (monitoredSourceGame_stop_add_strong_le dummy hdummy adversary budget stopAfter hcost hbudget)
 
 end SphincsSecurity.Concrete.RetainedResidual
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec ENNReal
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+
+private theorem probEvent_bind_le_const_add {A B : Type} (law : SPMF A)
+    (next : A → SPMF B) (event exception : B → Prop) (rate : ENNReal)
+    (h : ∀ value, law value ≠ 0 →
+      Pr[event | next value] ≤ rate + Pr[exception | next value]) :
+    Pr[event | law >>= next] ≤ rate + Pr[exception | law >>= next] := by
+  have hp := probEvent_bind_add_le_const_add law next event (fun _ => False)
+    exception rate (fun value hv => by simpa using h value hv)
+  simpa using hp
+
+theorem initialMonitoredPrior_strong_budget_le_rate_add_exception
+    (parameter : PublicParameter) (adversary : Adversary)
+    (encoding : ReferenceEncodingAuxiliary)
+    (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy))
+    (high : CanonicalGraphHighHalves) (q : Nat)
+    (stopAfter : CertificateStopRule) (hbudget : q ≤ 2 ^ 128) :
+    Pr[fun result => MonitoredStrongWin result ∧
+      result.2.1.memory.external.hashCalls ≤ q |
+      initialMonitoredPrior parameter adversary encoding dummy exposed high q stopAfter] ≤
+    (q : ENNReal) * fullCertificateTotalRate +
+    Pr[fun result => MonitoredStrongException result ∧
+      result.2.1.memory.external.hashCalls ≤ q |
+      initialMonitoredPrior parameter adversary encoding dummy exposed high q stopAfter] := by
+  unfold initialMonitoredPrior
+  apply probEvent_bind_le_const_add
+  intro labels _
+  let key : SecretKey := ⟨parameter, knownRoot (initialKnown
+    (referenceFamilyWords encoding.selections dummy) exposed),
+    coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+  have hcount := initialMonitoredSource_count_budget_le_rate key adversary
+    encoding dummy exposed high q stopAfter false hbudget
+  have hstrong := initialMonitoredSource_strong_budget_le_count_add_exception
+    key adversary encoding hencoding dummy hdummy exposed high rfl q
+      (proposalStop stopAfter) false
+  exact hstrong.trans (add_le_add hcount le_rfl)
+
+theorem monitoredSourceGame_strong_budget_le_rate_add_exception
+    (dummy : OtsReferenceWords)
+    (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
+    (adversary : Adversary) (q : Nat) (stopAfter : CertificateStopRule)
+    (hbudget : q ≤ 2 ^ 128) :
+    Pr[fun result => MonitoredStrongWin result ∧
+      result.2.1.memory.external.hashCalls ≤ q |
+      monitoredSourceGame dummy adversary q stopAfter] ≤
+    (q : ENNReal) * fullCertificateTotalRate +
+    Pr[fun result => MonitoredStrongException result ∧
+      result.2.1.memory.external.hashCalls ≤ q |
+      monitoredSourceGame dummy adversary q stopAfter] := by
+  unfold monitoredSourceGame
+  apply probEvent_bind_le_const_add
+  intro parameter _
+  apply probEvent_bind_le_const_add
+  intro encoding hencoding
+  have he : encoding ∈ referenceEncodingAuxiliarySample.support := by
+    apply (PMF.mem_support_iff _ _).mpr
+    simpa only [PMF.evalSPMF_eq, SPMF.liftM_apply] using hencoding
+  apply probEvent_bind_le_const_add
+  intro high _
+  apply probEvent_bind_le_const_add
+  intro exposed _
+  exact initialMonitoredPrior_strong_budget_le_rate_add_exception
+    parameter adversary encoding he dummy hdummy exposed high q stopAfter hbudget
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.initialMonitoredPrior_strong_budget_le_rate_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.initialMonitoredPrior_strong_budget_le_rate_add_exception
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_strong_budget_le_rate_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.monitoredSourceGame_strong_budget_le_rate_add_exception
