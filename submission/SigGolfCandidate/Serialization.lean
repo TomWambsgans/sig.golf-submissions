@@ -1,8 +1,49 @@
 import SigGolfCandidate.Memory
-import SigGolfCandidate.Hypertree.Reference
 
 namespace SigGolfCandidate.Serialization
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+
+def legacyPacked (data : List Byte) : Legacy.Query :=
+  ⟨8 * data.length, BitVec.ofNat (8 * data.length)
+    (data.zipIdx.foldl (fun acc entry => acc + entry.1.toNat * 2 ^ (8 * entry.2)) 0)⟩
+
+private theorem legacyPacked_sum (data : List Byte) :
+    data.zipIdx.foldl (fun acc entry => acc + entry.1.toNat * 2 ^ (8 * entry.2)) 0 =
+      Nat.ofDigits 256 (data.map BitVec.toNat) := by
+  rw [Nat.ofDigits_eq_sum_mapIdx, List.mapIdx_eq_zipIdx_map, List.zipIdx_map,
+    List.map_map, List.sum_eq_foldl, List.foldl_map]
+  congr 1
+  funext acc entry
+  simp only [Function.comp_def, Prod.map_fst, Prod.map_snd, id_eq]
+  rw [pow_mul]
+  rfl
+
+private theorem legacyDigits_bound (data : List Byte) :
+    Nat.ofDigits 256 (data.map BitVec.toNat) < 2 ^ (8 * data.length) := by
+  have h := Nat.ofDigits_lt_base_pow_length (b := 256) (by decide)
+    (l := data.map BitVec.toNat) (by
+      intro value hv
+      obtain ⟨byte, _, rfl⟩ := List.mem_map.mp hv
+      exact byte.isLt)
+  simpa [List.length_map, pow_mul] using h
+
+theorem legacyPacked_injective : Function.Injective legacyPacked := by
+  intro first second heq
+  have hlength : first.length = second.length := by
+    have h := congrArg Sigma.fst heq
+    change 8 * first.length = 8 * second.length at h
+    omega
+  have hvalue := congrArg (fun q : Legacy.Query => q.2.toNat) heq
+  change (first.zipIdx.foldl _ 0) % 2 ^ (8 * first.length) =
+    (second.zipIdx.foldl _ 0) % 2 ^ (8 * second.length) at hvalue
+  rw [legacyPacked_sum, legacyPacked_sum,
+    Nat.mod_eq_of_lt (legacyDigits_bound first),
+    Nat.mod_eq_of_lt (legacyDigits_bound second)] at hvalue
+  have hmap := Nat.ofDigits_inj_of_len_eq (by decide : 1 < 256)
+    (by simpa using hlength)
+    (by intro value hv; obtain ⟨byte, _, rfl⟩ := List.mem_map.mp hv; exact byte.isLt)
+    (by intro value hv; obtain ⟨byte, _, rfl⟩ := List.mem_map.mp hv; exact byte.isLt) hvalue
+  exact (List.map_injective_iff.mpr (fun _ _ h => BitVec.eq_of_toNat_eq h)) hmap
 
 /-- The VM's bit-by-bit hash encoding agrees with the fixed-size byte representation. -/
 theorem hashInput_of_bytes (s : MachineState) (base n : Nat) (value : Bytes n)
@@ -95,8 +136,8 @@ theorem hashInput_of_list (s : MachineState) (base : Nat) (data : List Byte)
     (source : s.getReg .x10 = BitVec.ofNat 64 base)
     (bits : (s.getReg .x11).toNat = 8 * data.length)
     (h : ∀ i, (hi : i < data.length) → s.getByte (BitVec.ofNat 64 (base + i)) = data[i]'hi) :
-    hashInput s = Hypertree.Reference.packed data := by
-  dsimp only [hashInput, Hypertree.Reference.packed]
+    hashInput s = legacyPacked data := by
+  dsimp only [hashInput, legacyPacked]
   rw [bits]
   apply congrArg (fun v : BitVec (8 * data.length) => (⟨8 * data.length, v⟩ : Query))
   apply congrArg (BitVec.ofNat (8 * data.length))
@@ -122,8 +163,8 @@ theorem query_eq (first second : Query) (length : first.1 = second.1)
 
 /-- Packing the organizer's byte encoding recovers the original value and width. -/
 theorem packed_bytes (n : Nat) (value : Bytes n) :
-    Hypertree.Reference.packed (bytes value) = ⟨8 * n, value⟩ := by
-  dsimp only [Hypertree.Reference.packed]
+    legacyPacked (bytes value) = ⟨8 * n, value⟩ := by
+  dsimp only [legacyPacked]
   rw [Memory.bytes_length]
   apply congrArg (fun v : BitVec (8 * n) => (⟨8 * n, v⟩ : Query))
   rw [zipIdx_eq_range, List.foldl_map, Memory.bytes_length]
@@ -139,5 +180,9 @@ theorem packed_bytes (n : Nat) (value : Bytes n) :
 /-- info: 'SigGolfCandidate.Serialization.hashInput_of_list' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms hashInput_of_list
+
+/-- info: 'SigGolfCandidate.Serialization.legacyPacked_injective' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms legacyPacked_injective
 
 end SigGolfCandidate.Serialization
