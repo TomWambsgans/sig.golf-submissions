@@ -1408,4 +1408,91 @@ theorem second_encoding_padding_of_decode (location : Fin 5) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms second_encoding_padding_of_decode
 
+private theorem answerSum_as_nat_sum (n : Nat) (s : MachineState) :
+    answerSum n s = BitVec.ofNat 64
+      (∑ j ∈ Finset.range n,
+        (answerWord ⟨j % 52, Nat.mod_lt _ (by decide)⟩ s &&& 7#64).toNat) := by
+  induction n with
+  | zero => simp [answerSum]
+  | succ n ih =>
+    simp only [answerSum, Finset.sum_range_succ, ih]
+    rw [BitVec.ofNat_add]
+    simp
+
+private theorem answer_digit_value_of_digest (s : MachineState) (digest : Digest)
+    (bytes : ∀ j : Fin 20,
+      s.getByte (BitVec.ofNat 64 (0x42000 + j.val)) =
+        digest.extractLsb' (8 * j.val) 8) (i : ChainIndex) :
+    (answerWord i s &&& 7#64).toNat =
+      (TargetSum.digestEncoding digest i).val := by
+  have h := congrArg BitVec.toNat (answerDigit_digestEncoding s digest bytes i)
+  have small : (answerWord i s &&& 7#64).toNat < 8 := by
+    simp only [BitVec.toNat_and]
+    exact Nat.lt_succ_of_le Nat.and_le_right
+  change (answerWord i s &&& 7#64).toNat % 256 =
+    (TargetSum.digestEncoding digest i).val % 256 at h
+  rw [Nat.mod_eq_of_lt (by omega : (answerWord i s &&& 7#64).toNat < 256)] at h
+  have digitSmall : (TargetSum.digestEncoding digest i).val < 256 := by
+    have bound : (TargetSum.digestEncoding digest i).val < 8 := by
+      simpa [SphincsSecurity.chainLength, SphincsSecurity.winternitzBits] using
+        (TargetSum.digestEncoding digest i).isLt
+    omega
+  rw [Nat.mod_eq_of_lt digitSmall] at h
+  exact h
+
+private theorem answerSum_of_valid_digest (s : MachineState) (digest : Digest)
+    (bytes : ∀ j : Fin 20,
+      s.getByte (BitVec.ofNat 64 (0x42000 + j.val)) =
+        digest.extractLsb' (8 * j.val) 8)
+    (valid : TargetSum.Valid (TargetSum.digestEncoding digest)) :
+    answerSum 52 s = 194 := by
+  rw [answerSum_as_nat_sum]
+  have hsum : (∑ j ∈ Finset.range 52,
+      (answerWord ⟨j % 52, Nat.mod_lt _ (by decide)⟩ s &&& 7#64).toNat) =
+      TargetSum.sum (TargetSum.digestEncoding digest) := by
+    rw [TargetSum.sum, ← Fin.sum_univ_eq_sum_range]
+    apply Finset.sum_congr rfl
+    intro j hj
+    have small : j.val < 52 := j.isLt
+    simpa [Nat.mod_eq_of_lt small] using
+      answer_digit_value_of_digest s digest bytes j
+  rw [hsum]
+  simp [TargetSum.Valid, targetSum] at valid
+  simp [valid]
+
+private theorem otsPaddingSecond_byte (location : Fin 5) (s : MachineState) (address : Word) :
+    (otsPaddingSecond location s).getByte address = s.getByte address := by
+  simp [otsPaddingSecond, otsPaddingSecondState, otsPaddingSecondCode,
+    runSchedule, execInstrBr, MachineState.getByte]
+
+private theorem sumInit_byte (s : MachineState) (address : Word) :
+    (sumInit s).getByte address = s.getByte address := by
+  simp [sumInit, execInstrBr, MachineState.getByte]
+
+/-- A decodable abstract WOTS HASH digest passes the concrete 52-digit checksum. -/
+theorem encoding_checksum_of_decode (location : Fin 5) (s : MachineState)
+    (digest : Digest) (encoding : Encoding)
+    (words : Words20 s 0x42000 digest)
+    (decoded : TargetSum.decodeDigest digest = some encoding) :
+    answerSum 52 (sumInit (otsPaddingSecond location (otsPaddingFirst location s))) = 194 := by
+  have bytes : ∀ j : Fin 20,
+      (sumInit (otsPaddingSecond location (otsPaddingFirst location s))).getByte
+        (BitVec.ofNat 64 (0x42000 + j.val)) =
+        digest.extractLsb' (8 * j.val) 8 := by
+    intro j
+    rw [sumInit_byte, otsPaddingSecond_byte, otsPaddingFirst_byte]
+    exact SphincsMaskedPublicKeyDomain.words20_byte s 0x42000 digest
+      (by omega) (by decide) words j
+  have valid : TargetSum.Valid (TargetSum.digestEncoding digest) := by
+    unfold TargetSum.decodeDigest at decoded
+    split at decoded
+    · rename_i h
+      exact h.2.2.2.2
+    · simp at decoded
+  exact answerSum_of_valid_digest _ _ bytes valid
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_checksum_of_decode' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_checksum_of_decode
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
