@@ -56,7 +56,7 @@ theorem messageReady_hashCost (state : MachineState)
   · simp [hashArgumentsValid, ready.source, ready.bits, ready.destination,
       accessValid, rangeValid, MEMORY_BYTES]
   · rw [messageReady_hashInput state pk message randomness ready]
-    simp [toQuery, Hypertree.Reference.packed,
+    simp [toQuery, Serialization.legacyPacked,
       messageInput_length, compressions]
 
 theorem hash_site (state : MachineState) (pc : state.pc = 0x12a0) :
