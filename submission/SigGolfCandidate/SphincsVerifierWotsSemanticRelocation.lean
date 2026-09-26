@@ -2139,6 +2139,17 @@ theorem first_upper_counter_pc (state : MachineState)
   rw [small']
   decide
 
+theorem first_upper_counter_mem_frame (state : MachineState) (read : Word)
+    (outside : read ≠ 0x40038) :
+    (firstUpperCounterState state).getMem read = state.getMem read := by
+  simp [firstUpperCounterState, firstUpperCounterSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, signExtend13, setWord32_eq, alignToDword,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setPC, MachineState.getMem_setReg]
+  intro equal
+  exact False.elim (outside equal)
+
 theorem first_upper_counter_stored (state : MachineState) :
     (firstUpperCounterState state).getWord32 0x4003c =
       state.getWord32 0x23dbc := by
@@ -2203,6 +2214,26 @@ theorem first_upper_header_pc (state : MachineState)
   simp [firstUpperHeaderState, firstUpperHeaderSchedule,
     SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
 
+theorem first_upper_header_mem_frame (state : MachineState) (read : Word)
+    (outside : read.toNat < 0x40000 ∨ 0x40018 ≤ read.toNat) :
+    (firstUpperHeaderState state).getMem read = state.getMem read := by
+  have ne (written : Word)
+      (lo : 0x40000 ≤ written.toNat) (hi : written.toNat < 0x40018) :
+      read ≠ written := by
+    intro h
+    have := congrArg BitVec.toNat h
+    rcases outside with a | b <;> omega
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, setWord32_eq, alignToDword,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setPC, MachineState.getMem_setReg,
+    MachineState.getMem_setMem_ne]
+  have n0 : read ≠ (262144#64) := ne _ (by decide) (by decide)
+  have n8 : read ≠ (262152#64) := ne _ (by decide) (by decide)
+  have n10 : read ≠ (262160#64) := ne _ (by decide) (by decide)
+  simp only [if_neg n10, if_neg n8, if_neg n0]
+
 theorem first_upper_header_counter_cell (state : MachineState) :
     (firstUpperHeaderState state).getMem 0x40038 = state.getMem 0x40038 := by
   simp [firstUpperHeaderState, firstUpperHeaderSchedule,
@@ -2233,6 +2264,11 @@ private theorem firstUpperParamPointers_code :
 
 private def firstUpperParamPointerState (state : MachineState) : MachineState :=
   SphincsMaskedKeygenPrefix.runSchedule firstUpperParamPointers state
+
+theorem first_upper_param_pointers_mem (state : MachineState) (read : Word) :
+    (firstUpperParamPointerState state).getMem read = state.getMem read := by
+  simp [firstUpperParamPointerState, firstUpperParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
 
 private theorem firstUpperParamPointers_checked (state : MachineState)
     (pc : state.pc = 0x6d94) :
@@ -2383,6 +2419,11 @@ theorem first_upper_service_ready (state : MachineState)
     signExtend12, MachineState.getReg_setReg_eq,
     MachineState.getReg_setReg_ne, pc]
 
+theorem first_upper_service_mem (state : MachineState) (read : Word) :
+    (firstUpperServiceState state).getMem read = state.getMem read := by
+  simp [firstUpperServiceState, firstUpperServiceSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr]
+
 theorem first_upper_service_counter_word (state : MachineState) :
     (firstUpperServiceState state).getWord32 0x4003c = state.getWord32 0x4003c := by
   simp [firstUpperServiceState, firstUpperServiceSchedule,
@@ -2391,6 +2432,20 @@ theorem first_upper_service_counter_word (state : MachineState) :
 private def firstUpperPrehashState (state : MachineState) : MachineState :=
   firstUpperServiceState (firstUpperParamState
     (firstUpperHeaderState (firstUpperCounterState state)))
+
+theorem first_upper_prehash_parameter_byte (state : MachineState)
+    (i : Nat) (hi : i < 20) :
+    (firstUpperPrehashState state).getByte (BitVec.ofNat 64 (0x40014 + i)) =
+      (firstUpperHeaderState (firstUpperCounterState state)).getByte
+        (BitVec.ofNat 64 (0x22cb4 + i)) := by
+  have service : (firstUpperPrehashState state).getByte
+      (BitVec.ofNat 64 (0x40014 + i)) =
+      (firstUpperParamState
+        (firstUpperHeaderState (firstUpperCounterState state))).getByte
+          (BitVec.ofNat 64 (0x40014 + i)) := by
+    simp [firstUpperPrehashState, MachineState.getByte,
+      first_upper_service_mem]
+  exact service.trans (first_upper_parameter_copied_bytes _ i hi)
 
 theorem first_upper_prehash_counter_word (state : MachineState) :
     (firstUpperPrehashState state).getWord32 0x4003c =
@@ -2993,5 +3048,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_parameter_copied_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_parameter_copied_bytes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_parameter_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_parameter_byte
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation

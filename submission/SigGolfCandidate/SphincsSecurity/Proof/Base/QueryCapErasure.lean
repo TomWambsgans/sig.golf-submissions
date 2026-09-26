@@ -75,6 +75,70 @@ theorem run_budget_event (impl : QueryImpl spec PMF)
   · simp [finish, hbudget]
   · simp [finish, hbudget]
 
+/-- Successful capped executions preserve both their result and their final
+    state, even when oracle queries change that state. -/
+def stoppedStateEvent {State : Type} (event : Result → State → Prop)
+    (output : Option (Result × Nat) × State) : Prop :=
+  match output.1 with
+  | none => False
+  | some (value, _) => event value output.2
+
+theorem run_budget_event_state {State : Type} (impl : QueryImpl spec (StateT State PMF))
+    (computation : OracleComp spec Result) (budget : Nat) (initial : State)
+    (event : Result → State → Prop) :
+    Pr[stoppedStateEvent event |
+      (simulateQ impl (run selected computation budget)).run initial] =
+    Pr[fun output => output.1.2 ≤ budget ∧ event output.1.1 output.2 |
+      (simulateQ impl (counted selected computation)).run initial] := by
+  classical
+  induction computation using OracleComp.inductionOn generalizing budget initial with
+  | pure value =>
+      simp [run_pure, counted_pure, simulateQ_pure, StateT.run_pure,
+        ← PMF.monad_pure_eq_pure, probEvent_pure, stoppedStateEvent]
+  | query_bind input next ih =>
+      rw [run_query_bind, counted_query_bind]
+      by_cases hselected : selected input
+      · rw [if_pos hselected]
+        cases budget with
+        | zero =>
+            simp [simulateQ_pure, StateT.run_pure,
+              simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+              ← PMF.monad_pure_eq_pure, ← PMF.monad_bind_eq_bind,
+              ← PMF.monad_map_eq_map, probEvent_bind_eq_tsum,
+              probEvent_pure, stoppedStateEvent, hselected, Function.comp_def]
+        | succ budget =>
+            simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+              ← PMF.monad_bind_eq_bind, ← PMF.monad_map_eq_map,
+              ← PMF.monad_pure_eq_pure, probEvent_bind_eq_tsum,
+              probEvent_pure, hselected, if_true,
+              Nat.succ_eq_add_one]
+            apply tsum_congr
+            intro middle
+            congr 1
+            simp only [simulateQ_pure, StateT.run_pure,
+              ← PMF.monad_pure_eq_pure, probEvent_pure,
+              mul_ite, mul_one, mul_zero]
+            rw [← probEvent_eq_tsum_ite]
+            simpa only [Nat.add_comm 1, Nat.add_le_add_iff_right] using
+              ih middle.1 budget middle.2
+      · simp only [if_neg hselected, simulateQ_bind, simulateQ_spec_query,
+          StateT.run_bind, ← PMF.monad_bind_eq_bind,
+          ← PMF.monad_map_eq_map, ← PMF.monad_pure_eq_pure,
+          probEvent_bind_eq_tsum, probEvent_pure,
+          hselected, if_false, Nat.zero_add]
+        apply tsum_congr
+        intro middle
+        congr 1
+        simp only [simulateQ_pure, StateT.run_pure,
+          ← PMF.monad_pure_eq_pure, probEvent_pure,
+          mul_ite, mul_one, mul_zero]
+        rw [← probEvent_eq_tsum_ite]
+        exact ih middle.1 budget middle.2
+
+/-- info: 'SphincsSecurity.QueryCap.run_budget_event_state' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms run_budget_event_state
+
 /-- info: 'SphincsSecurity.QueryCap.run_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms run_budget_event
