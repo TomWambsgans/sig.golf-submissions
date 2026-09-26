@@ -2397,4 +2397,185 @@ theorem first_bottom_secret_query (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_query
 
+/-- The first bottom-layer WOTS secret HASH is the abstract secret value,
+    copied to the live chain buffer with exact execution cost. -/
+theorem first_bottom_secret_initial_value (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (pc : s.pc = 0x3b20)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain) :
+    let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+    Trace hash SphincsMaskedImages.sign s 55 70 1 2 t ∧
+    t.pc = 0x3bfc ∧
+    Words20 t 0x44b00
+      (truncateHash (hash (toQuery
+        (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))) := by
+  have hashed := first_bottom_secret_hash hash s pc
+  have copied := first_bottom_secret_answer_copy
+    (firstBottomSecretHashAnswer hash s) hashed.2
+  have words := first_bottom_secret_answer_words hash s pc
+  rw [first_bottom_secret_query s parameter seed lay treeIdx leaf chain pc ctx] at words
+  refine ⟨?_, copied.2, words⟩
+  simpa only [Nat.reduceAdd] using hashed.1.trans copied.1.trace
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_initial_value' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_initial_value
+
+/-- First-chain digit lookup, digit/counter stores, and the zero-digit branch. -/
+def firstBottomChainDigitCode : List (Word × Instr) := [
+  (0x3bfc, .LUI .x6 0x44),
+  (0x3c00, .ADDI .x6 .x6 0),
+  (0x3c04, .LUI .x28 0x43),
+  (0x3c08, .ADDI .x28 .x28 0x50),
+  (0x3c0c, .LD .x7 .x28 0),
+  (0x3c10, .ADD .x6 .x6 .x7),
+  (0x3c14, .LBU .x10 .x6 0),
+  (0x3c18, .LUI .x28 0x43),
+  (0x3c1c, .ADDI .x28 .x28 0xc8),
+  (0x3c20, .SD .x28 .x10 0),
+  (0x3c24, .ADDI .x6 .x0 0),
+  (0x3c28, .LUI .x28 0x43),
+  (0x3c2c, .ADDI .x28 .x28 0x58),
+  (0x3c30, .SD .x28 .x6 0),
+  (0x3c34, .LUI .x28 0x43),
+  (0x3c38, .ADDI .x28 .x28 0x58),
+  (0x3c3c, .LD .x6 .x28 0),
+  (0x3c40, .LUI .x28 0x43),
+  (0x3c44, .ADDI .x28 .x28 0xc8),
+  (0x3c48, .LD .x7 .x28 0),
+  (0x3c4c, .BEQ .x6 .x7 0x164)]
+
+def firstBottomChainDigit (s : MachineState) : MachineState :=
+  runSchedule firstBottomChainDigitCode s
+
+theorem first_bottom_chain_digit_code :
+    ∀ e ∈ firstBottomChainDigitCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_chain_digit_checked (s : MachineState)
+    (pc : s.pc = 0x3bfc) (chain : s.getMem 0x43050 = 0) :
+    Checked firstBottomChainDigitCode s := by
+  have chainNat : (s.getMem 0x43050#64).toNat = 0 := by
+    simpa using congrArg BitVec.toNat chain
+  simp [firstBottomChainDigitCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setMem_eq, MachineState.getMem_setMem_ne, pc, chainNat]
+
+theorem first_bottom_chain_digit_trace (s : MachineState)
+    (pc : s.pc = 0x3bfc) (chain : s.getMem 0x43050 = 0) :
+    OrdinarySteps SphincsMaskedImages.sign s 21 (firstBottomChainDigit s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomChainDigitCode
+    first_bottom_chain_digit_code s (first_bottom_chain_digit_checked s pc chain)
+  simpa only [firstBottomChainDigit, firstBottomChainDigitCode, List.length_cons,
+    List.length_nil, Nat.reduceAdd] using run
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_trace' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_trace
+
+theorem first_bottom_chain_digit_controls (s : MachineState)
+    (pc : s.pc = 0x3bfc) (chain : s.getMem 0x43050 = 0) :
+    (firstBottomChainDigit s).getMem 0x430c8 =
+      (s.getByte 0x44000).zeroExtend 64 ∧
+    (firstBottomChainDigit s).getMem 0x43058 = 0 ∧
+    (firstBottomChainDigit s).pc =
+      if s.getByte 0x44000 = 0 then 0x3db0 else 0x3c50 := by
+  have chain' : s.getMem 0x43050#64 = 0#64 := by simpa using chain
+  simp [firstBottomChainDigit, firstBottomChainDigitCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, MachineState.getMem_setMem_eq,
+    MachineState.getMem_setMem_ne, pc, chain', signExtend13]
+  have zeroIff : (0#64 = BitVec.setWidth 64 (s.getByte 0x44000#64)) ↔
+      s.getByte 0x44000#64 = 0#8 := by bv_omega
+  simp [zeroIff]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_digit_controls' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_digit_controls
+
+/-- The signer reuses the certified chain-HASH preparation at this address. -/
+def firstBottomChainHashPrep (s : MachineState) : MachineState :=
+  shift (0x29e0#64) (SphincsMaskedChainStep.prepareState (s.setPC (0x1270#64)))
+
+def firstBottomChainHashAnswer (hash : Hash) (s : MachineState) : MachineState :=
+  let prep := firstBottomChainHashPrep s
+  writeHash prep (hash (hashInput prep))
+
+theorem first_bottom_chain_hash_code :
+    ∀ e ∈ SphincsMaskedChainStep.prepareSchedule,
+      instructionAt SphincsMaskedImages.sign (e.1 + (0x29e0#64)) = some (.base e.2) := by
+  decide
+
+theorem first_bottom_chain_hash_prepare (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    OrdinarySteps SphincsMaskedImages.sign s 65 (firstBottomChainHashPrep s) := by
+  have supported : ∀ e ∈ SphincsMaskedChainStep.prepareSchedule,
+      Supported e.2 := by decide
+  have block := block_shift SphincsMaskedImages.sign (0x29e0#64)
+    SphincsMaskedChainStep.prepareSchedule supported first_bottom_chain_hash_code
+    (s.setPC (0x1270#64)) (SphincsMaskedChainStep.prepare_checked _ rfl)
+  have entry : s.pc = (0x1270#64) + (0x29e0#64) := by simpa using pc
+  rw [SphincsMaskedSignOtsDomain.rebase_eq _ _ s entry] at block
+  have length : SphincsMaskedChainStep.prepareSchedule.length = 65 := rfl
+  simpa only [firstBottomChainHashPrep,
+    SphincsMaskedChainStep.prepareState, length] using block
+
+theorem first_bottom_chain_hash (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    Trace hash SphincsMaskedImages.sign s 66 73 1 1
+      (firstBottomChainHashAnswer hash s) ∧
+    (firstBottomChainHashAnswer hash s).pc = 0x3d58 := by
+  let prep := firstBottomChainHashPrep s
+  obtain ⟨src, bits, dst, service⟩ :=
+    SphincsMaskedChainStep.prepare_registers (s.setPC (0x1270#64))
+  have prepPc : prep.pc = 0x3d54 := by
+    have basePc : (SphincsMaskedChainStep.prepareState (s.setPC (0x1270#64))).pc =
+        0x1374 := SphincsMaskedChainStep.prepare_pc _ (by rfl)
+    change (SphincsMaskedChainStep.prepareState (s.setPC (0x1270#64))).pc +
+      (0x29e0 : Word) = 0x3d54
+    rw [basePc]
+    decide
+  have fetched : fetch SphincsMaskedImages.sign prep = some (.base .ECALL) := by
+    rw [fetch_at, prepPc]
+    decide
+  have valid : hashArgumentsValid prep = true := by
+    simp only [prep, firstBottomChainHashPrep, hashValid_shift]
+    simp [hashArgumentsValid, src, bits, dst,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have length : (hashInput prep).1 = 480 := by
+    simp only [prep, firstBottomChainHashPrep, hashInput_shift]
+    simp [hashInput, bits]
+  have hashed := Trace.hash (hash := hash) (image := SphincsMaskedImages.sign)
+    prep _ 0 0 0 0 fetched (by simpa [prep, firstBottomChainHashPrep] using service)
+    valid (Trace.refl _)
+  refine ⟨?_, ?_⟩
+  · simpa only [firstBottomChainHashAnswer, prep, length,
+      show compressions 480 = 1 from by decide, Nat.reduceMul, Nat.reduceAdd] using
+      (first_bottom_chain_hash_prepare s pc).trace (hash := hash) |>.trans hashed
+  · simp [firstBottomChainHashAnswer, prep, writeHash, prepPc]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_hash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_hash
+
+/-- A nonzero first digit executes exactly one relocated WOTS chain HASH. -/
+theorem first_bottom_chain_first_hash (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3bfc) (chain : s.getMem 0x43050 = 0)
+    (nonzero : s.getByte 0x44000 ≠ 0) :
+    Trace hash SphincsMaskedImages.sign s 87 94 1 1
+      (firstBottomChainHashAnswer hash (firstBottomChainDigit s)) ∧
+    (firstBottomChainHashAnswer hash (firstBottomChainDigit s)).pc = 0x3d58 := by
+  have branch : (firstBottomChainDigit s).pc = 0x3c50 := by
+    rw [(first_bottom_chain_digit_controls s pc chain).2.2, if_neg nonzero]
+  have digitTrace := first_bottom_chain_digit_trace s pc chain
+  have hashTrace := first_bottom_chain_hash hash (firstBottomChainDigit s) branch
+  exact ⟨by simpa only [Nat.reduceAdd] using digitTrace.trace.trans hashTrace.1,
+    hashTrace.2⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_first_hash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_first_hash
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
