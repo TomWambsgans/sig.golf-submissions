@@ -1,5 +1,7 @@
 import SigGolf.Statements
 import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
+import SigGolfCandidate.SphincsBridge
+import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
 namespace SigGolfCandidate.SphincsAllMessagesBridge
 open SigGolf OracleComp
@@ -391,3 +393,102 @@ end SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint
 /-- info: 'SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_complete_of_failure_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.SphincsAllMessagesBridge.QueryFootprint.submission_complete_of_failure_sum
+
+open OracleComp OracleSpec
+
+namespace SigGolfCandidate.OracleReindex
+
+variable {D E : Type} [DecidableEq D] [DecidableEq E]
+
+abbrev SpecD (D : Type) := D →ₒ BitVec 256
+
+noncomputable def pullCache (f : D → E)
+    (c : QueryCache (SpecD E)) : QueryCache (SpecD D) := fun d => c (f d)
+
+
+private theorem pullCache_cacheQuery (f : D → E) (hf : Function.Injective f)
+    (c : QueryCache (SpecD E)) (d : D) (u : BitVec 256) :
+    pullCache f (c.cacheQuery (f d) u) =
+      (pullCache f c).cacheQuery d u := by
+  funext d'
+  by_cases h : d' = d
+  · subst d'
+    simp [pullCache, QueryCache.cacheQuery]
+  · have hne : f d' ≠ f d := fun heq => h (hf heq)
+    simp [pullCache, QueryCache.cacheQuery, h, hne]
+
+
+/-- Each mapped query has the same output law and a projected cache update. -/
+private theorem randomOracle_pull (f : D → E) (hf : Function.Injective f)
+    (d : D) (c : QueryCache (SpecD E)) :
+    Prod.map id (pullCache f) <$>
+      ((randomOracle : QueryImpl (SpecD E) (StateT (QueryCache (SpecD E)) ProbComp)) (f d)).run c =
+    ((randomOracle : QueryImpl (SpecD D) (StateT (QueryCache (SpecD D)) ProbComp)) d).run
+      (pullCache f c) := by
+  classical
+  cases hc : c (f d) with
+  | none =>
+      have hc' : (pullCache f c) d = none := hc
+      rw [show (randomOracle : QueryImpl (SpecD E) _) =
+        (uniformSampleImpl : QueryImpl (SpecD E) ProbComp).withCaching from rfl]
+      rw [show (randomOracle : QueryImpl (SpecD D) _) =
+        (uniformSampleImpl : QueryImpl (SpecD D) ProbComp).withCaching from rfl]
+      rw [QueryImpl.withCaching_run_none _ hc,
+          QueryImpl.withCaching_run_none _ hc']
+      simp [uniformSampleImpl, pullCache_cacheQuery f hf c d]
+  | some u =>
+      have hc' : (pullCache f c) d = some u := hc
+      rw [show (randomOracle : QueryImpl (SpecD E) _) =
+        (uniformSampleImpl : QueryImpl (SpecD E) ProbComp).withCaching from rfl]
+      rw [show (randomOracle : QueryImpl (SpecD D) _) =
+        (uniformSampleImpl : QueryImpl (SpecD D) ProbComp).withCaching from rfl]
+      rw [QueryImpl.withCaching_run_some _ hc,
+          QueryImpl.withCaching_run_some _ hc']
+      simp
+
+
+/-- Injectively renaming query inputs preserves the lazy random-oracle output distribution. -/
+theorem randomOracle_reindex (f : D → E) (hf : Function.Injective f)
+    {α : Type} (p : OracleComp (SpecD D) α) :
+    (simulateQ (fun d =>
+      (randomOracle : QueryImpl (SpecD E)
+        (StateT (QueryCache (SpecD E)) ProbComp)) (f d)) p).run' ∅ =
+    (simulateQ (randomOracle : QueryImpl (SpecD D)
+      (StateT (QueryCache (SpecD D)) ProbComp)) p).run' ∅ := by
+  have h := run'_simulateQ_eq_of_query_map_eq
+    (fun d => (randomOracle : QueryImpl (SpecD E)
+      (StateT (QueryCache (SpecD E)) ProbComp)) (f d))
+    (randomOracle : QueryImpl (SpecD D)
+      (StateT (QueryCache (SpecD D)) ProbComp))
+    (pullCache f) (randomOracle_pull f hf) p (∅ : QueryCache (SpecD E))
+  have hempty : pullCache f (∅ : QueryCache (SpecD E)) =
+      (∅ : QueryCache (SpecD D)) := by
+    funext d
+    rfl
+  simpa only [hempty] using h
+
+end SigGolfCandidate.OracleReindex
+
+
+namespace SigGolfCandidate.SphincsBridge
+open OracleComp OracleSpec
+
+/-- The scheme’s byte-string oracle is the VM oracle restricted to its encoded queries. -/
+theorem randomOracle_toQuery {α : Type}
+    (p : OracleComp SphincsSecurity.HashSpec α) :
+    (simulateQ (fun input : SphincsSecurity.HashInput =>
+      (randomOracle : QueryImpl SigGolf.HashSpec
+        (StateT (QueryCache SigGolf.HashSpec) ProbComp)) (toQuery input)) p).run' ∅ =
+    (simulateQ (randomOracle : QueryImpl SphincsSecurity.HashSpec
+      (StateT (QueryCache SphincsSecurity.HashSpec) ProbComp)) p).run' ∅ := by
+  exact OracleReindex.randomOracle_reindex toQuery toQuery_injective p
+
+end SigGolfCandidate.SphincsBridge
+
+/-- info: 'SigGolfCandidate.OracleReindex.randomOracle_reindex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.OracleReindex.randomOracle_reindex
+
+/-- info: 'SigGolfCandidate.SphincsBridge.randomOracle_toQuery' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.SphincsBridge.randomOracle_toQuery
