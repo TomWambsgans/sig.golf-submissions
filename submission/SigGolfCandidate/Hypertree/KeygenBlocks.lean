@@ -84,7 +84,7 @@ theorem hash_pc (s : MachineState) (answer : BitVec 256) :
 /-- Resource accounting at a real HASH instruction, independent of the oracle answer. -/
 theorem hash_then (image : Image) (hash : Hash) (s : MachineState) (bytes : Nat)
     (code : instructionAt image s.pc = some (.base .ECALL))
-    (service : s.getReg .x5 = 1)
+    (service : s.getReg .x5 = 0)
     (src : s.getReg .x10 = 0x80000) (len : s.getReg .x11 = BitVec.ofNat 64 bytes)
     (dst : s.getReg .x12 = 0x80300) (bound : bytes % 8 = 0 ∧ bytes ≤ 768)
     (steps : Nat) (result : Execution)

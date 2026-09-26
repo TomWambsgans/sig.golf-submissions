@@ -76,7 +76,7 @@ theorem node_answer (hash : Hash) (s : MachineState)
 theorem hashes_node (image : Image) (hash : Hash) (s : MachineState)
     (level tree : Nat) (left right : Reference.Digest)
     (code : fetch image s = some (.base .ECALL))
-    (service : s.getReg .x5 = 1) (source : s.getReg .x10 = 0x80000)
+    (service : s.getReg .x5 = 0) (source : s.getReg .x10 = 0x80000)
     (bits : s.getReg .x11 = 64) (destination : s.getReg .x12 = 0x80300)
     (words : ∀ i : Fin 8, s.getMem (Signing.wordAddress 0x80000 i.val) = inputWord level tree left right i) :
     ∃ final, Trace hash image s 1 8 1 1 final ∧ final.pc = s.pc + 4 ∧

@@ -63,7 +63,7 @@ theorem answer_words (hash : Hash) (s : MachineState)
   fin_cases i <;> ext j hj <;> simp (disch := omega)
 
 theorem hash_trace (image : Image) (hash : Hash) (s : MachineState)
-    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 1)
+    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 0)
     (source : s.getReg .x10 = 0x80000) (bits : s.getReg .x11 = 48)
     (destination : s.getReg .x12 = 0x80300) :
     Trace hash image s 1 8 1 1 (writeHash s (hash (hashInput s))) := by
@@ -156,7 +156,7 @@ theorem secret_answer_words (hash : Hash) (s : MachineState)
   fin_cases i <;> ext j hj <;> simp (disch := omega)
 
 theorem secret_hash_trace (image : Image) (hash : Hash) (s : MachineState)
-    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 1)
+    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 0)
     (source : s.getReg .x10 = 0x80000) (bits : s.getReg .x11 = 64)
     (destination : s.getReg .x12 = 0x80300) :
     Trace hash image s 1 8 1 1 (writeHash s (hash (hashInput s))) := by

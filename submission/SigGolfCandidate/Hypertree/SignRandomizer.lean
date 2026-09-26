@@ -12,7 +12,7 @@ def randomizerHashState (s : MachineState) : MachineState :=
   let s := execInstrBr s (.ADDI .x11 .x0 96)
   let s := execInstrBr s (.LUI .x12 0x80)
   let s := execInstrBr s (.ADDI .x12 .x12 0x300)
-  execInstrBr s (.ADDI .x5 .x0 1)
+  execInstrBr s (.ADDI .x5 .x0 0)
 
 theorem randomizerHashState_block (s : MachineState) (pc : s.pc = 0x10b4) :
     OrdinarySteps sign s 6 (randomizerHashState s) := by
@@ -21,7 +21,7 @@ theorem randomizerHashState_block (s : MachineState) (pc : s.pc = 0x10b4) :
   let s3 := execInstrBr s2 (.ADDI .x11 .x0 96)
   let s4 := execInstrBr s3 (.LUI .x12 0x80)
   let s5 := execInstrBr s4 (.ADDI .x12 .x12 0x300)
-  let s6 := execInstrBr s5 (.ADDI .x5 .x0 1)
+  let s6 := execInstrBr s5 (.ADDI .x5 .x0 0)
   apply OrdinarySteps.step s s1 _ (.base (.LUI .x10 0x80)) 5
   · have hp : s.pc = 0x10b4 := by simp [execInstrBr, pc]
     simp only [fetch, hp]; decide
@@ -42,7 +42,7 @@ theorem randomizerHashState_block (s : MachineState) (pc : s.pc = 0x10b4) :
   · have hp : s4.pc = 0x10c4 := by simp [s1, s2, s3, s4, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 1)) 0
+  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 0)) 0
   · have hp : s5.pc = 0x10c8 := by simp [s1, s2, s3, s4, s5, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
@@ -85,7 +85,7 @@ theorem randomizerCopyState_block (s : MachineState) (pc : s.pc = 0x10d0) :
   exact OrdinarySteps.refl _
 
 theorem randomizerHashState_regs (s : MachineState) :
-    (randomizerHashState s).getReg .x5 = 1 ∧
+    (randomizerHashState s).getReg .x5 = 0 ∧
     (randomizerHashState s).getReg .x10 = 0x80000 ∧
     (randomizerHashState s).getReg .x11 = 96 ∧
     (randomizerHashState s).getReg .x12 = 0x80300 := by

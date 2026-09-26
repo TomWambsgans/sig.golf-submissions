@@ -21,10 +21,10 @@ theorem execute_calls (hash : Hash) (fuel : Nat) (image : Image) (state : Machin
     split
     · simp
     · split
-      · simp
+      · simp only [calls_query,calls_bind,calls_pure,evalWithAnswerFn_bind,eval_query,
+          evalWithAnswerFn_pure,Execution.charge,ih,Nat.zero_add,Nat.add_comm]
       · split
-        · simp only [calls_query,calls_bind,calls_pure,evalWithAnswerFn_bind,eval_query,
-            evalWithAnswerFn_pure,Execution.charge,ih,Nat.zero_add,Nat.add_comm]
+        · simp
         · simp
     · split
       · simp

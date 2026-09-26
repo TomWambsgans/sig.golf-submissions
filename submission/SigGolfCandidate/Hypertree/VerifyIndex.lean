@@ -12,7 +12,7 @@ theorem indexHashState_block (s : MachineState) (pc : s.pc = 0x10e0) :
   let s3 := execInstrBr s2 (.ADDI .x11 .x0 112)
   let s4 := execInstrBr s3 (.LUI .x12 0x80)
   let s5 := execInstrBr s4 (.ADDI .x12 .x12 0x300)
-  let s6 := execInstrBr s5 (.ADDI .x5 .x0 1)
+  let s6 := execInstrBr s5 (.ADDI .x5 .x0 0)
   apply OrdinarySteps.step s s1 _ (.base (.LUI .x10 0x80)) 5
   · have hp : s.pc = 0x10e0 := by simp [execInstrBr, pc]
     simp only [fetch, hp]; decide
@@ -33,7 +33,7 @@ theorem indexHashState_block (s : MachineState) (pc : s.pc = 0x10e0) :
   · have hp : s4.pc = 0x10f0 := by simp [s1, s2, s3, s4, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 1)) 0
+  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 0)) 0
   · have hp : s5.pc = 0x10f4 := by simp [s1, s2, s3, s4, s5, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl

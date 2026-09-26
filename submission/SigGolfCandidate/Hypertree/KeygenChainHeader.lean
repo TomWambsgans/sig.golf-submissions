@@ -57,7 +57,7 @@ def Code (image : Image) (p : Word) : Prop :=
   instructionAt image (p + 176) = some (.base (.ADDI .x11 .x0 48)) ∧
   instructionAt image (p + 180) = some (.base (.LUI .x12 128)) ∧
   instructionAt image (p + 184) = some (.base (.ADDI .x12 .x12 768)) ∧
-  instructionAt image (p + 188) = some (.base (.ADDI .x5 .x0 1))
+  instructionAt image (p + 188) = some (.base (.ADDI .x5 .x0 0))
 
 instance (image : Image) (p : Word) : Decidable (Code image p) :=
   inferInstanceAs (Decidable (_ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _ ∧ _))
@@ -110,7 +110,7 @@ def state (s : MachineState) : MachineState :=
   let s := execInstrBr s (.ADDI .x11 .x0 48)
   let s := execInstrBr s (.LUI .x12 128)
   let s := execInstrBr s (.ADDI .x12 .x12 768)
-  execInstrBr s (.ADDI .x5 .x0 1)
+  execInstrBr s (.ADDI .x5 .x0 0)
 
 theorem block (image : Image) (p : Word) (code : Code image p)
     (s : MachineState) (pc : s.pc = p) : OrdinarySteps image s 48 (state s) := by
@@ -162,7 +162,7 @@ theorem block (image : Image) (p : Word) (code : Code image p)
   let s45 := execInstrBr s44 (.ADDI .x11 .x0 48)
   let s46 := execInstrBr s45 (.LUI .x12 128)
   let s47 := execInstrBr s46 (.ADDI .x12 .x12 768)
-  let s48 := execInstrBr s47 (.ADDI .x5 .x0 1)
+  let s48 := execInstrBr s47 (.ADDI .x5 .x0 0)
   apply OrdinarySteps.step s s1 _ (.base (.ADDI .x10 .x0 2)) 47
   · have hp : s.pc = p + 0 := by simp [execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c0
@@ -362,7 +362,7 @@ theorem block (image : Image) (p : Word) (code : Code image p)
   · have hp : s46.pc = p + 184 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, s38, s39, s40, s41, s42, s43, s44, s45, s46, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c46
   · rfl
-  apply OrdinarySteps.step s47 s48 _ (.base (.ADDI .x5 .x0 1)) 0
+  apply OrdinarySteps.step s47 s48 _ (.base (.ADDI .x5 .x0 0)) 0
   · have hp : s47.pc = p + 188 := by simp [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, s32, s33, s34, s35, s36, s37, s38, s39, s40, s41, s42, s43, s44, s45, s46, s47, execInstrBr, pc, BitVec.add_assoc]
     simpa only [fetch_at, hp] using c47
   · rfl
@@ -372,7 +372,7 @@ theorem pc (s : MachineState) : (state s).pc = s.pc + 192 := by
   simp [state,execInstrBr,BitVec.add_assoc]
 
 theorem regs (s : MachineState) :
-    (state s).getReg .x5 = 1 ∧ (state s).getReg .x10 = 0x80000 ∧
+    (state s).getReg .x5 = 0 ∧ (state s).getReg .x10 = 0x80000 ∧
     (state s).getReg .x11 = 48 ∧ (state s).getReg .x12 = 0x80300 := by
   simp [state,execInstrBr,signExtend12,MachineState.getReg_setReg_eq,MachineState.getReg_setReg_ne]
 

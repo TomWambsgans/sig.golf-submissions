@@ -11,7 +11,7 @@ def indexHashState (s : MachineState) : MachineState :=
   let s := execInstrBr s (.ADDI .x11 .x0 112)
   let s := execInstrBr s (.LUI .x12 0x80)
   let s := execInstrBr s (.ADDI .x12 .x12 0x300)
-  execInstrBr s (.ADDI .x5 .x0 1)
+  execInstrBr s (.ADDI .x5 .x0 0)
 
 theorem indexHashState_block (s : MachineState) (pc : s.pc = 0x11b8) :
     OrdinarySteps sign s 6 (indexHashState s) := by
@@ -20,7 +20,7 @@ theorem indexHashState_block (s : MachineState) (pc : s.pc = 0x11b8) :
   let s3 := execInstrBr s2 (.ADDI .x11 .x0 112)
   let s4 := execInstrBr s3 (.LUI .x12 0x80)
   let s5 := execInstrBr s4 (.ADDI .x12 .x12 0x300)
-  let s6 := execInstrBr s5 (.ADDI .x5 .x0 1)
+  let s6 := execInstrBr s5 (.ADDI .x5 .x0 0)
   apply OrdinarySteps.step s s1 _ (.base (.LUI .x10 0x80)) 5
   · have hp : s.pc = 0x11b8 := by simp [execInstrBr, pc]
     simp only [fetch, hp]; decide
@@ -41,7 +41,7 @@ theorem indexHashState_block (s : MachineState) (pc : s.pc = 0x11b8) :
   · have hp : s4.pc = 0x11c8 := by simp [s1, s2, s3, s4, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
-  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 1)) 0
+  apply OrdinarySteps.step s5 s6 _ (.base (.ADDI .x5 .x0 0)) 0
   · have hp : s5.pc = 0x11cc := by simp [s1, s2, s3, s4, s5, execInstrBr, pc]
     simp only [fetch, hp]; decide
   · rfl
@@ -138,7 +138,7 @@ theorem indexStoreState_block (s : MachineState) (pc : s.pc = 0x1200) :
   exact OrdinarySteps.refl _
 
 theorem indexHashState_regs (s : MachineState) :
-    (indexHashState s).getReg .x5 = 1 ∧ (indexHashState s).getReg .x10 = 0x80000 ∧
+    (indexHashState s).getReg .x5 = 0 ∧ (indexHashState s).getReg .x10 = 0x80000 ∧
     (indexHashState s).getReg .x11 = 112 ∧ (indexHashState s).getReg .x12 = 0x80300 := by
   simp [indexHashState, execInstrBr, signExtend12,
     MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]

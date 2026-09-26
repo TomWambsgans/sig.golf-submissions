@@ -23,7 +23,7 @@ theorem prepare (image : Image) (p : Word) (code : PrefixCode image p)
       if i.val < 2 then left.extractLsb' (64 * i.val) 64
       else right.extractLsb' (64 * (i.val - 2)) 64) :
     ∃ final, OrdinarySteps image s 62 final ∧ final.pc = p + 176 ∧
-      final.getReg .x5 = 1 ∧ final.getReg .x10 = 0x80000 ∧
+      final.getReg .x5 = 0 ∧ final.getReg .x10 = 0x80000 ∧
       final.getReg .x11 = 64 ∧ final.getReg .x12 = 0x80300 ∧
       (∀ i : Fin 8, final.getMem (Signing.wordAddress 0x80000 i.val) =
         inputWord level tree left right i) ∧

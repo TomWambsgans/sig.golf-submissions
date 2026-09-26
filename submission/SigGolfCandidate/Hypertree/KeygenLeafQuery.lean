@@ -101,7 +101,7 @@ theorem answer_words (hash : Hash) (s : MachineState) (level tree : Nat)
   fin_cases i <;> ext j hj <;> simp (disch := omega)
 
 theorem hash_trace (image : Image) (hash : Hash) (s : MachineState)
-    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 1)
+    (code : fetch image s = some (.base .ECALL)) (service : s.getReg .x5 = 0)
     (source : s.getReg .x10 = 0x80000) (bits : s.getReg .x11 = 768)
     (destination : s.getReg .x12 = 0x80300) :
     Trace hash image s 1 96 1 12 (writeHash s (hash (hashInput s))) := by

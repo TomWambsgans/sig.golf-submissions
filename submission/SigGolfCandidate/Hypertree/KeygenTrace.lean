@@ -16,7 +16,7 @@ inductive Trace (hash : Hash) (image : Image) :
       Trace hash image state (steps + 1) (cycles + 1) calls blocks final
   | hash (state final : MachineState) (steps cycles calls blocks : Nat)
       (hf : fetch image state = some (.base .ECALL))
-      (hs : state.getReg .x5 = 1) (hv : hashArgumentsValid state = true)
+      (hs : state.getReg .x5 = 0) (hv : hashArgumentsValid state = true)
       (tail : Trace hash image (writeHash state (hash (hashInput state)))
         steps cycles calls blocks final) :
       Trace hash image state (steps + 1)

@@ -12,8 +12,8 @@ theorem executes (hash : Hash) (s : MachineState) (model : initialAbstract.Model
   have initial : state0.Models s := model
   obtain ⟨final, trace, hf⟩ := certifiedPrefix hash s initial
   have pc : final.pc = 0x1044 := hf.pc
-  have service : final.getReg .x5 = 0 := hf.regs .x5 0 (by decide)
-  have status : final.getReg .x10 = 1 := hf.regs .x10 1 (by decide)
+  have service : final.getReg .x5 = 1 := hf.regs .x5 1 (by decide)
+  have status : final.getReg .x10 = 0 := hf.regs .x10 0 (by decide)
   have code : fetch keygen final = some (.base .ECALL) := by
     simp only [fetch, pc, keygen]
     decide

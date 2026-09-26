@@ -34,7 +34,7 @@ theorem baseAt_some (image : Image) (a : AbstractState) (s : MachineState) (h : 
 def stepTransfer (image : Image) (a : AbstractState) : Option Summary := do
   let instruction ← baseAt image a.pc
   if instruction = .ECALL then
-    if a.getReg .x5 = some 1 then
+    if a.getReg .x5 = some 0 then
       let (next, blocks) ← hashTransfer a
       some ⟨next, 8 * blocks, 1, blocks⟩
     else none
@@ -53,7 +53,7 @@ theorem stepTransfer_sound {image : Image} {a : AbstractState} {result : Summary
     have hf := baseAt_some image a s h instruction hi
     by_cases he : instruction = .ECALL
     · subst instruction
-      by_cases hs : a.getReg .x5 = some 1
+      by_cases hs : a.getReg .x5 = some 0
       · cases ht : hashTransfer a with
         | none => simp [hi, hs, ht] at step
         | some pair =>
@@ -63,7 +63,7 @@ theorem stepTransfer_sound {image : Image} {a : AbstractState} {result : Summary
           obtain ⟨valid, cost, model⟩ := hashTransfer_sound h ht (hash (hashInput s))
           refine ⟨writeHash s (hash (hashInput s)), ?_, model⟩
           have trace := Trace.hash (hash := hash) s (writeHash s (hash (hashInput s)))
-            0 0 0 0 hf (h.regs .x5 1 hs) valid (Trace.refl _)
+            0 0 0 0 hf (h.regs .x5 0 hs) valid (Trace.refl _)
           simpa only [cost, Nat.zero_add] using trace
       · simp [hi] at step
         exact (hs step.1).elim

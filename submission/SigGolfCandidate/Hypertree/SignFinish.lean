@@ -11,8 +11,8 @@ def footerInstructions : List Instr := [
   .ADDI .x28 .x0 0x40, .LD .x7 .x28 0, .BNE .x6 .x7 40,
   .LUI .x28 0x80, .ADDI .x28 .x28 0x508, .LD .x6 .x28 0,
   .ADDI .x28 .x0 0x48, .LD .x7 .x28 0, .BNE .x6 .x7 16,
-  .ADDI .x5 .x0 0, .ADDI .x10 .x0 1, .ECALL,
-  .ADDI .x5 .x0 0, .ADDI .x10 .x0 0, .ECALL]
+  .ADDI .x5 .x0 1, .ADDI .x10 .x0 0, .ECALL,
+  .ADDI .x5 .x0 1, .ADDI .x10 .x0 1, .ECALL]
 
 /-- Each fetched instruction is checked against the organizer's decoder. -/
 def FooterCode (image : Image) (base : Word) : Prop :=
@@ -98,8 +98,8 @@ theorem comparison_mem (s : MachineState) (i : Fin 2) (a : Word) :
   simp [comparisonState, execInstrBr]
 
 def terminalState (s : MachineState) (accepted : Bool) : MachineState :=
-  execInstrBr (execInstrBr s (.ADDI .x5 .x0 0))
-    (.ADDI .x10 .x0 (if accepted then 1 else 0))
+  execInstrBr (execInstrBr s (.ADDI .x5 .x0 1))
+    (.ADDI .x10 .x0 (if accepted then 0 else 1))
 
 theorem terminal (hash : Hash) (image : Image) (base : Word) (code : FooterCode image base)
     (s : MachineState) (accepted : Bool)
@@ -108,32 +108,32 @@ theorem terminal (hash : Hash) (image : Image) (base : Word) (code : FooterCode 
       ⟨if accepted then .success else .failure, terminalState s accepted, 3, 0, 0⟩ := by
   cases accepted
   · have block : OrdinarySteps image s 2 (terminalState s false) := by
-      let s1 := execInstrBr s (.ADDI .x5 .x0 0)
-      apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 0)) 1
+      let s1 := execInstrBr s (.ADDI .x5 .x0 1)
+      apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 1)) 1
       · apply code _ 15; simpa using pc
       · rfl
-      apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 0)) 0
+      apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 1)) 0
       · apply code _ 16; simp [s1, execInstrBr, pc, BitVec.add_assoc]
       · rfl
       exact OrdinarySteps.refl _
     have hf : fetch image (terminalState s false) = some (.base .ECALL) := by
       apply code _ 17; simp [terminalState, execInstrBr, pc, BitVec.add_assoc]
-    have hs : (terminalState s false).getReg .x5 = 0 := rfl
-    have hv : (terminalState s false).getReg .x10 = 0 := rfl
+    have hs : (terminalState s false).getReg .x5 = 1 := rfl
+    have hv : (terminalState s false).getReg .x10 = 1 := rfl
     simpa [hv, Execution.charge] using block.then_executes (Executes.halt (hash := hash) _ hf hs)
   · have block : OrdinarySteps image s 2 (terminalState s true) := by
-      let s1 := execInstrBr s (.ADDI .x5 .x0 0)
-      apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 0)) 1
+      let s1 := execInstrBr s (.ADDI .x5 .x0 1)
+      apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 1)) 1
       · apply code _ 12; simpa using pc
       · rfl
-      apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 1)) 0
+      apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 0)) 0
       · apply code _ 13; simp [s1, execInstrBr, pc, BitVec.add_assoc]
       · rfl
       exact OrdinarySteps.refl _
     have hf : fetch image (terminalState s true) = some (.base .ECALL) := by
       apply code _ 14; simp [terminalState, execInstrBr, pc, BitVec.add_assoc]
-    have hs : (terminalState s true).getReg .x5 = 0 := rfl
-    have hv : (terminalState s true).getReg .x10 = 1 := rfl
+    have hs : (terminalState s true).getReg .x5 = 1 := rfl
+    have hv : (terminalState s true).getReg .x10 = 0 := rfl
     simpa [hv, Execution.charge] using block.then_executes (Executes.halt (hash := hash) _ hf hs)
 
 def comparisonNext (s : MachineState) (i : Fin 2) : MachineState :=
@@ -249,11 +249,11 @@ theorem sign_footer_executes (hash : Hash) (s : MachineState) (pc : s.pc = 0x12f
     ∃ final : MachineState,
       Executes hash sign s 3 ⟨.success, final, 3, 0, 0⟩ ∧ ∀ a, final.getMem a = s.getMem a := by
   have block : OrdinarySteps sign s 2 (terminalState s true) := by
-    let s1 := execInstrBr s (.ADDI .x5 .x0 0)
-    apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 0)) 1
+    let s1 := execInstrBr s (.ADDI .x5 .x0 1)
+    apply OrdinarySteps.step s s1 _ (.base (.ADDI .x5 .x0 1)) 1
     · simp only [fetch, pc]; decide
     · rfl
-    apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 1)) 0
+    apply OrdinarySteps.step s1 _ _ (.base (.ADDI .x10 .x0 0)) 0
     · have hp : s1.pc = 0x12fc := by simp [s1, execInstrBr, pc]
       simp only [fetch, hp]; decide
     · rfl
@@ -261,8 +261,8 @@ theorem sign_footer_executes (hash : Hash) (s : MachineState) (pc : s.pc = 0x12f
   have hf : fetch sign (terminalState s true) = some (.base .ECALL) := by
     have hp : (terminalState s true).pc = 0x1300 := by simp [terminalState, execInstrBr, pc]
     simp only [fetch, hp]; decide
-  have hs : (terminalState s true).getReg .x5 = 0 := rfl
-  have hv : (terminalState s true).getReg .x10 = 1 := rfl
+  have hs : (terminalState s true).getReg .x5 = 1 := rfl
+  have hv : (terminalState s true).getReg .x10 = 0 := rfl
   refine ⟨terminalState s true, ?_, terminal_mem s true⟩
   simpa [hv, Execution.charge] using block.then_executes (Executes.halt (hash := hash) _ hf hs)
 

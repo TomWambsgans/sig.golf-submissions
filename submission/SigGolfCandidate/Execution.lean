@@ -6,9 +6,9 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
 /-- A finite execution derivation for the organizer's exact raw-bytecode interpreter. -/
 inductive Executes (hash : Hash) (image : Image) : MachineState → Nat → Execution → Prop where
   | halt (state : MachineState) (hf : fetch image state = some (.base .ECALL))
-      (hs : state.getReg .x5 = 0) :
+      (hs : state.getReg .x5 = 1) :
       Executes hash image state 1
-        ⟨if state.getReg .x10 = 1 then .success else .failure, state, 1, 0, 0⟩
+        ⟨if state.getReg .x10 = 0 then .success else .failure, state, 1, 0, 0⟩
   | ordinary (state next : MachineState) (instruction : Instruction) (steps : Nat) (result : Execution)
       (hf : fetch image state = some instruction) (he : instruction ≠ .base .ECALL)
       (hs : ordinaryStep state instruction = some next)
@@ -16,7 +16,7 @@ inductive Executes (hash : Hash) (image : Image) : MachineState → Nat → Exec
       Executes hash image state (steps + 1) (result.charge 1 0 0)
   | hash (state : MachineState) (steps : Nat) (result : Execution)
       (hf : fetch image state = some (.base .ECALL))
-      (hs : state.getReg .x5 = 1) (hv : hashArgumentsValid state = true)
+      (hs : state.getReg .x5 = 0) (hv : hashArgumentsValid state = true)
       (tail : Executes hash image (writeHash state (hash (hashInput state))) steps result) :
       Executes hash image state (steps + 1)
         (result.charge (8 * compressions (hashInput state).1) 1 (compressions (hashInput state).1))

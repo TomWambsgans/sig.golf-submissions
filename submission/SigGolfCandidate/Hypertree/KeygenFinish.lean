@@ -81,17 +81,17 @@ theorem output_copied_mem (s : MachineState) (a : Word) :
 theorem halt_success (hash : Hash) (s : MachineState) (pc : s.pc = 0x103c) :
     Executes hash keygen s 3 ⟨.success, Expansion.finishState s, 3, 0, 0⟩ := by
   have block : OrdinarySteps keygen s 2 (Expansion.finishState s) := by
-    apply OrdinarySteps.step s (execInstrBr s (.ADDI .x5 .x0 0)) _ (.base (.ADDI .x5 .x0 0)) 1
+    apply OrdinarySteps.step s (execInstrBr s (.ADDI .x5 .x0 1)) _ (.base (.ADDI .x5 .x0 1)) 1
     · simp only [fetch, pc, keygen]; decide
     · rfl
-    apply OrdinarySteps.step _ (Expansion.finishState s) _ (.base (.ADDI .x10 .x0 1)) 0
+    apply OrdinarySteps.step _ (Expansion.finishState s) _ (.base (.ADDI .x10 .x0 0)) 0
     · simp only [fetch, execInstrBr, MachineState.setPC, pc, keygen]; decide
     · rfl
     exact OrdinarySteps.refl _
   have hf : fetch keygen (Expansion.finishState s) = some (.base .ECALL) := by
     simp only [fetch, Expansion.finishState, execInstrBr, MachineState.setPC, pc, keygen]; decide
-  have hs : (Expansion.finishState s).getReg .x5 = 0 := by rfl
-  have hv : (Expansion.finishState s).getReg .x10 = 1 := by rfl
+  have hs : (Expansion.finishState s).getReg .x5 = 1 := by rfl
+  have hv : (Expansion.finishState s).getReg .x10 = 0 := by rfl
   simpa [hv, Execution.charge] using block.then_executes (Executes.halt (hash := hash) _ hf hs)
 
 /-- The exact keygen footer always succeeds in 19 cycles and makes no oracle calls. -/
