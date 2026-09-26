@@ -207,6 +207,148 @@ theorem stoppedTracedSigningRun_budget_event (key : SecretKey) (message : Messag
   rw [counted_boundaryComputation_eq_trace]
   simp only [simulateQ_map, StateT.run_map, probEvent_map, Function.comp_def]
 
+/-- Forget the remaining budget after a stopped signing run. Only successful
+    outcomes are compared with uncapped executions; stopped failures may have
+    a different final cache. -/
+noncomputable def stoppedSigningProjected (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    PMF (Option (((Option Signature × Option FewTimeView) × SigningBoundaryTrace) ×
+      CertificateStoppedCacheState)) :=
+  (stoppedTracedSigningRun key message state).map fun result =>
+    result.1.map fun out => (out.1, result.2)
+
+theorem stoppedSigningProjected_some (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (x : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) ×
+      CertificateStoppedCacheState) :
+    stoppedSigningProjected key message state (some x) =
+      if x.1.2.hashCalls ≤ state.2.2 then
+        ((simulateQ (certificateStoppedRomImpl key)
+          (boundaryComputation key.parameter (signWithView key message))).run state) x
+      else 0 := by
+  classical
+  have h := stoppedTracedSigningRun_budget_event key message state
+    (fun output finalState => (output, finalState) = x)
+  rw [show Pr[QueryCap.stoppedStateEvent
+      (fun output finalState => (output, finalState) = x) |
+      stoppedTracedSigningRun key message state] =
+      Pr[fun result => result = some x | stoppedSigningProjected key message state] from by
+        rw [stoppedSigningProjected, ← PMF.monad_map_eq_map, probEvent_map]
+        congr 1
+        funext result
+        cases hresult : result.1 with
+        | none => simp [QueryCap.stoppedStateEvent, hresult]
+        | some out =>
+            rcases out with ⟨value, remaining⟩
+            simp [QueryCap.stoppedStateEvent, hresult]] at h
+  rw [probEvent_eq_eq_probOutput] at h
+  simp only [probOutput_def] at h
+  by_cases hb : x.1.2.hashCalls ≤ state.2.2
+  · have hpred : (fun output => output.1.2.hashCalls ≤ state.2.2 ∧
+        (output.1, output.2) = x) = (fun output => output = x) := by
+      funext output
+      apply propext
+      constructor
+      · exact fun hout => by simpa using hout.2
+      · intro hout
+        subst output
+        exact ⟨hb, rfl⟩
+    rw [hpred, probEvent_eq_eq_probOutput] at h
+    simpa [hb, probOutput_def] using h
+  · have hpred : (fun (output : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) ×
+        CertificateStoppedCacheState) => output.1.2.hashCalls ≤ state.2.2 ∧
+        (output.1, output.2) = x) = (fun _ => False) := by
+      funext output
+      apply propext
+      constructor
+      · intro hout
+        have heq : output = x := by simpa using hout.2
+        subst output
+        exact hb hout.1
+      · exact False.elim
+    rw [hpred] at h
+    simpa [hb, probEvent_eq_tsum_ite] using h
+
+/-- A downstream randomized kernel preserves the successful branch of a
+    stopped execution, without comparing its failure-state distribution. -/
+private theorem some_kernel_transfer {A B : Type} (p : PMF (Option A)) (q : PMF A)
+    (good : A → Prop) [DecidablePred good] (hp : ∀ a, p (some a) = if good a then q a else 0)
+    (k : A → PMF B) (event : B → Prop) :
+    Pr[fun r : Option B => r.elim False event |
+      p.bind (fun r => match r with
+        | none => PMF.pure none
+        | some a => (k a).map some)] =
+    Pr[fun r : Option B => r.elim False event |
+      q.bind (fun a => if good a then (k a).map some else PMF.pure none)] := by
+  classical
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum,
+    ← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  rw [tsum_option _ ENNReal.summable]
+  have hnone : Pr[fun r : Option B => r.elim False event |
+      (PMF.pure none : PMF (Option B))] = 0 := by
+    rw [← PMF.monad_pure_eq_pure, probEvent_pure]
+    simp
+  simp only [probOutput_def, hnone, mul_zero, zero_add]
+  apply tsum_congr
+  intro a
+  simp at *
+  rw [hp]
+  by_cases ha : good a
+  · simp [ha]
+  · simp [ha, hnone]
+
+noncomputable def signingRecordKernel (_key : SecretKey) (message : Message)
+    (x : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) ×
+      CertificateStoppedCacheState) :
+    PMF (ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) :=
+  (liftM (completeSelectedIndex x.1.1.2) : PMF Index).map fun index =>
+    (⟨x.1.1.1, x.2.1, x.1.2, x.1.1.2, index⟩, x.2)
+
+theorem enrichedStoppedSigningRecord_kernel (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState) :
+    enrichedStoppedSigningRecord key message state =
+      (stoppedSigningProjected key message state).bind fun result =>
+        match result with
+        | none => PMF.pure none
+        | some x => (signingRecordKernel key message x).map some := by
+  rw [stoppedSigningProjected, PMF.bind_map]
+  unfold enrichedStoppedSigningRecord signingRecordKernel
+  apply PMF.bind_congr
+  intro result _
+  cases hresult : result.1 with
+  | none => simp [hresult]
+  | some out =>
+      rcases out with ⟨value, remaining⟩
+      simp [hresult, PMF.map_comp]
+      rfl
+
+/-- The capped signer yields exactly the uncapped successful proposal-record
+    events whose actual signing trace fits the budget, including the selected
+    index sampled after signing. -/
+theorem enrichedStoppedSigningRecord_budget_event (key : SecretKey) (message : Message)
+    (state : CertificateStoppedCacheState)
+    (event : (ProposalExecutionRecord (.inr message) × CertificateStoppedCacheState) → Prop) :
+    Pr[fun result => result.elim False event |
+      enrichedStoppedSigningRecord key message state] =
+    Pr[fun result => result.elim False event |
+      ((simulateQ (certificateStoppedRomImpl key)
+        (boundaryComputation key.parameter (signWithView key message))).run state).bind
+        (fun x => if x.1.2.hashCalls ≤ state.2.2 then
+          (signingRecordKernel key message x).map some else PMF.pure none)] := by
+  rw [enrichedStoppedSigningRecord_kernel]
+  convert some_kernel_transfer
+    (stoppedSigningProjected key message state)
+    ((simulateQ (certificateStoppedRomImpl key)
+      (boundaryComputation key.parameter (signWithView key message))).run state)
+    (fun x => x.1.2.hashCalls ≤ state.2.2)
+    (stoppedSigningProjected_some key message state)
+    (signingRecordKernel key message) event using 1
+  all_goals
+    congr 1
+    congr 1
+    funext r
+    cases r <;> rfl
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -982,3 +1124,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.stoppedTracedSigningRun_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.stoppedTracedSigningRun_budget_event
+
+/-- info: 'SphincsSecurity.Concrete.stoppedSigningProjected_some' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.stoppedSigningProjected_some
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_kernel' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_kernel
+
+/-- info: 'SphincsSecurity.Concrete.enrichedStoppedSigningRecord_budget_event' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.enrichedStoppedSigningRecord_budget_event
