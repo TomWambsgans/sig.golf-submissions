@@ -370,6 +370,24 @@ theorem expectedBoundaryMessageCalls_le_hashQueryBound {Result : Type}
       · rw [probOutput_eq_zero_of_not_mem_support hr, zero_mul, zero_mul]
     _ = q := by rw [ENNReal.tsum_mul_right, tsum_probOutput_of_liftM_PMF, one_mul]
 
+/-- A stopped computation has a hard query bound even when its original
+    computation does not. -/
+theorem hashQueryBound_queryCap_run {Result : Type}
+    (computation : OracleComp OracleWorld Result) (cache : QueryCache HashSpec)
+    (q : Nat) :
+    HashQueryBound (QueryCap.run
+      (fun input : OracleWorld.Domain => input matches .inr _) computation q) cache q := by
+  intro result hr
+  have hsyntax : result ∈ support (countHashQueries (QueryCap.run
+      (fun input : OracleWorld.Domain => input matches .inr _) computation q)) :=
+    support_simulateQ_run'_subset romImpl _ cache hr
+  exact QueryCap.counted_le_of_queryBound
+    (fun input : OracleWorld.Domain => input matches .inr _)
+    (QueryCap.run (fun input : OracleWorld.Domain => input matches .inr _) computation q) q
+    (QueryCap.run_queryBound
+      (fun input : OracleWorld.Domain => input matches .inr _) computation q)
+    result hsyntax
+
 theorem certificateCacheLength_hit_le_hashQueryBound {Result : Type}
     (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
     (stopAfter : CertificateStopRule)
@@ -556,3 +574,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_stopped_after_prefix' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_stopped_after_prefix
+
+/-- info: 'SphincsSecurity.Concrete.hashQueryBound_queryCap_run' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.hashQueryBound_queryCap_run
