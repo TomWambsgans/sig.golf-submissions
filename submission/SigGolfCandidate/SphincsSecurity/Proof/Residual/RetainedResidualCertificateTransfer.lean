@@ -380,3 +380,61 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_budget_le_observed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.Context.frontierGame_budget_le_observed
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem observedInitialSource_budget_success (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hcanonical : canonicalEncodingInputs parameter ⊆ inputs)
+    (encoding : ReferenceEncodingAuxiliary) (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
+    (seed : inputs → HashOutput) (dummy : OtsReferenceWords)
+    (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
+    (labels : Labels)
+    (hlabels : UniformTableCompletion.complete (initialAllowed (referenceFamilyWords encoding.selections dummy) exposed) labels ≠ 0)
+    (adversary : Adversary) (budget : Nat)
+    (hinputs : ∀ key : SecretKey, sourceInputs key
+      (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩) ⊆ inputs) :
+    Pr[fun result => result.1 = true ∧ result.2.hashCalls ≤ budget |
+      referenceFamilyFrontierRest ⟨parameter, 0, coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+        (programmedHash parameter (coordinateOtsSecrets labels) (coordinateFtsSecrets labels) (coordinateGraphLabels labels high)
+          (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs hcanonical (coordinateGraphLabels labels high)
+            encoding.selections encoding.rows seed)))
+        (coordinateGraphLabels labels high) encoding.selections dummy adversary] ≤
+      Pr[fun result => StoppedOr (fun value log => sourceVerdict value log = true) (forgetState result) ∧
+        result.2.memory.external.hashCalls ≤ budget |
+        observedRun
+          (environment parameter inputs hcanonical (referenceFamilyWords encoding.selections dummy)
+            (coordinateGraphLabels (initialKnown (referenceFamilyWords encoding.selections dummy) exposed) high)
+            encoding.selections encoding.rows)
+          labels seed
+          (simulateQ (adversaryImpl inputs parameter (knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
+            (referenceFamilyWords encoding.selections dummy) encoding.selections)
+            (FtsProbeSimulation.unloggedRetainedRestComputation adversary
+              ⟨knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed), parameter⟩))
+          (initialState inputs (referenceFamilyWords encoding.selections dummy) exposed)] := by
+  let auxiliary : ReferenceAuxiliary inputs := ⟨encoding.selections, encoding.rows, seed⟩
+  have hauxiliary := referenceEncodingAuxiliary_support_seed inputs encoding hencoding seed
+  let context := initialContext parameter inputs hcanonical auxiliary hauxiliary dummy exposed high labels
+  have hroot : context.key.root = canonicalGraphRoot context.graph :=
+    initialKnown_root (referenceFamilyWords encoding.selections dummy) exposed labels hlabels high
+  have hcompatible : Compatible context (initialState inputs (referenceFamilyWords encoding.selections dummy) exposed).memory := by
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · simpa only [context, auxiliary, Context.words, Context.actual, initialContext, coordinateGraphLabels_value,
+        initialState, initialMemory] using initialKnown_agrees (referenceFamilyWords encoding.selections dummy) exposed labels hlabels
+    · exact initialKnown_graphReplies (referenceFamilyWords encoding.selections dummy) exposed labels hlabels high
+    · intro input answer hanswer; cases hanswer
+    · intro input answer hanswer; cases hanswer
+    · intro input answer hanswer; cases hanswer
+  have h := context.frontierGame_budget_le_observed adversary hroot (hinputs context.key)
+    (initialState inputs (referenceFamilyWords encoding.selections dummy) exposed) (initialState_rowsCovered _ _ exposed)
+    hcompatible rfl rfl budget
+  simpa only [context, auxiliary, Context.words, Context.actual, Context.oracle, Context.environment, initialContext,
+    coordinateGraphLabels_value, referenceFamilyFrontierRest, Function.comp_def] using h
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.observedInitialSource_budget_success' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.observedInitialSource_budget_success
