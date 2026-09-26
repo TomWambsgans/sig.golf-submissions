@@ -3217,6 +3217,37 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
         _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
           simpa [ieq] using (firstUpperEncodingInput_counter pk lay tree leaf message counter j hj).symm
 
+theorem first_upper_encoding_query (state : MachineState)
+    (pk : SphincsSecurity.PublicKey)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (message : Digest) (counter : Counter)
+    (pc : state.pc = 0x6d1c)
+    (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0)
+    (layerCell : state.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (positionZero : state.getMem 0x43010 = 0)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (witness : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (payload : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+        message.extractLsb' (8*i) 8)
+    (counterWord : state.getWord32 0x23dbc =
+      BitVec.ofNat 32 counter.toNat) :
+    hashInput (firstUpperPrehashState state) =
+      toQuery (firstUpperEncodingInput pk lay tree leaf message counter) := by
+  obtain ⟨_, _, source, bits, _, _⟩ := first_upper_prehash_block state pc small
+  apply first_upper_encoding_query_of_parts
+    (firstUpperPrehashState state) pk lay tree leaf message counter source bits
+  · intro i hi
+    exact first_upper_prehash_header state lay tree leaf
+      layerCell positionZero treeCell leafCell i hi
+  · intro i hi
+    exact first_upper_prehash_parameter state pk witness i hi
+  · intro i hi
+    exact (first_upper_prehash_payload_byte state i hi).trans (payload i hi)
+  · intro i hi
+    exact first_upper_prehash_counter_bytes state counter counterWord i hi
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query_of_parts' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_encoding_query_of_parts
@@ -3484,5 +3515,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_header' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_prehash_header
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_encoding_query
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
