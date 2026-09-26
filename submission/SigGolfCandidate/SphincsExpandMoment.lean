@@ -1,18 +1,30 @@
-import SigGolfCandidate.SphincsKeygenMoment
+import SigGolfCandidate.SphincsBeta64Images
 import SigGolfCandidate.SphincsExpansion
+import VCVio.EvalDist.Expectation
 
 namespace SigGolfCandidate.SphincsExpandMoment
 open SigGolf OracleComp OracleSpec OracleComp.EvalDist
+set_option maxRecDepth 16384
+set_option maxHeartbeats 0
 
-set_option maxRecDepth 4096
+theorem fixed_hash_of_support {α : Type} (program : OracleComp SigGolf.HashSpec α)
+    (value : α) (mem : value ∈ support (withRandomOracle program)) :
+    ∃ hash : SigGolf.Hash, evalWithAnswerFn hash program = value := by
+  rw [withRandomOracle, StateT.run'_eq] at mem
+  obtain ⟨result, hresult, eq⟩ := mem_support_map_peel Prod.fst _ mem
+  obtain ⟨hash, _, heval⟩ :=
+    (exists_agreesWithFn_evalWithAnswerFn_eq_iff_mem_support program ∅ value).mpr
+      ⟨result.2, by simpa only [eq] using hresult⟩
+  exact ⟨hash, heval⟩
 
-theorem honest_cost (hash : Hash) (secretKey : SecretKey) (message : Message) :
+theorem honest_cost (hash : SigGolf.Hash) (secretKey : SecretKey) (message : Message) :
     (evalWithAnswerFn hash
-      (SphincsSubmission.submission.honest secretKey message)).costs .expand = 0 := by
-  have zero (pk : PublicKey) (signature : Bytes SphincsSubmission.submission.sizes.signature) :
+      (Candidate64.submission.honest secretKey message)).costs .expand = 0 := by
+  have zero (pk : PublicKey) (signature : Bytes Candidate64.submission.sizes.signature) :
       (evalWithAnswerFn hash
-        (SphincsSubmission.submission.run .expand (message, pk, signature))).hashCompressions = 0 :=
-    (Sphincs.Expansion.run_bound hash (message, pk, signature)).2.2.2.2
+        (Candidate64.submission.run .expand (message, pk, signature))).hashCompressions = 0 :=
+    (SigGolfCandidate.Sphincs.Expansion.run_bound_generic
+      Candidate64.submission Candidate64.admissible (by rfl) hash (message, pk, signature)).2.2.2.2
   simp only [Submission.honest, evalWithAnswerFn_bind]
   split <;> simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
   · split <;> simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
@@ -21,30 +33,20 @@ theorem honest_cost (hash : Hash) (secretKey : SecretKey) (message : Message) :
     · simp [recordCost]
   · simp [recordCost]
 
-theorem runWith_termination (hash : Hash)
-    (input : Input SphincsSubmission.submission.sizes .expand) :
-    let result := SphincsSubmission.submission.runWith hash .expand input
-    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
-  have h := Sphincs.Expansion.run_bound hash input
-  dsimp at h ⊢
-  refine ⟨h.1, ?_⟩
-  rw [h.2.2.1]
-  decide
-
 theorem support_cost (secretKey : SecretKey) (result : HonestResult)
-    (mem : result ∈ support (SphincsSubmission.submission.honestWorkload secretKey)) :
+    (mem : result ∈ support (Candidate64.submission.honestWorkload secretKey)) :
     result.costs .expand = 0 := by
   unfold Submission.honestWorkload at mem
   rw [mem_support_bind_iff] at mem
   obtain ⟨message, _, hresult⟩ := mem
-  obtain ⟨hash, heval⟩ := SphincsKeygenMoment.fixed_hash_of_support
-    (SphincsSubmission.submission.honest secretKey message) result hresult
+  obtain ⟨hash, heval⟩ := fixed_hash_of_support
+    (Candidate64.submission.honest secretKey message) result hresult
   rw [← heval]
   exact honest_cost hash secretKey message
 
 theorem compression_bound (secretKey : SecretKey) :
     OracleComp.EvalDist.expectedValue
-      (SphincsSubmission.submission.honestWorkload secretKey)
+      (Candidate64.submission.honestWorkload secretKey)
       (fun result => ENNReal.ofReal (Real.rpow 2
         ((result.costs .expand : ℝ) / (Phase.expand.budget : ℝ)))) ≤ 2 := by
   apply expectedValue_le_of_support
@@ -52,87 +54,56 @@ theorem compression_bound (secretKey : SecretKey) :
   rw [support_cost secretKey result mem]
   norm_num
 
-/-- The two completed program analyses discharge their universal termination cases. -/
-theorem keygen_expand_terminate (hash : Hash) (phase : Phase)
-    (hphase : phase = .keygen ∨ phase = .expand)
-    (input : Input SphincsSubmission.submission.sizes phase) :
-    let result := SphincsSubmission.submission.runWith hash phase input
+theorem runWith_termination (hash : SigGolf.Hash)
+    (input : Input Candidate64.submission.sizes .expand) :
+    let result := Candidate64.submission.runWith hash .expand input
     result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
-  rcases hphase with rfl | rfl
-  · exact SphincsKeygenCost.runWith_termination hash input
-  · exact runWith_termination hash input
+  exact SigGolfCandidate.Sphincs.Expansion.expand_terminates_generic
+    Candidate64.submission Candidate64.admissible (by rfl) hash input
 
-/-- The two completed compression-budget cases can be reused in the final certificate. -/
-theorem keygen_expand_compression_bound (secretKey : SecretKey) (phase : Phase)
-    (hphase : phase = .keygen ∨ phase = .expand) :
-    OracleComp.EvalDist.expectedValue
-      (SphincsSubmission.submission.honestWorkload secretKey)
-      (fun result => ENNReal.ofReal (Real.rpow 2
-        ((result.costs phase : ℝ) / (phase.budget : ℝ)))) ≤ 2 := by
-  rcases hphase with rfl | rfl
-  · exact SphincsKeygenMoment.compression_bound secretKey
-  · exact compression_bound secretKey
-
-/-- Only the signer budget remains once its workload moment is established. -/
-theorem compressionBounds_of_sign
+theorem compressionBounds_of_keygen_sign
+    (hkeygen : ∀ secretKey : SecretKey,
+      OracleComp.EvalDist.expectedValue
+        (Candidate64.submission.honestWorkload secretKey)
+        (fun result => ENNReal.ofReal (Real.rpow 2
+          ((result.costs .keygen : ℝ) / (Phase.keygen.budget : ℝ)))) ≤ 2)
     (hsign : ∀ secretKey : SecretKey,
       OracleComp.EvalDist.expectedValue
-        (SphincsSubmission.submission.honestWorkload secretKey)
+        (Candidate64.submission.honestWorkload secretKey)
         (fun result => ENNReal.ofReal (Real.rpow 2
           ((result.costs .sign : ℝ) / (Phase.sign.budget : ℝ)))) ≤ 2) :
-    SphincsSubmission.submission.CompressionBounds := by
+    Candidate64.submission.CompressionBounds := by
   intro secretKey phase hphase
   cases phase with
-  | keygen => exact SphincsKeygenMoment.compression_bound secretKey
+  | keygen => exact hkeygen secretKey
   | sign => exact hsign secretKey
   | expand => exact compression_bound secretKey
   | verify => simp [Phase.budgeted] at hphase
 
-/-- Only signer and verifier control remain for universal termination. -/
-theorem terminates_of_sign_verify
-    (hsign : ∀ hash : Hash,
-      ∀ input : Input SphincsSubmission.submission.sizes .sign,
-      let result := SphincsSubmission.submission.runWith hash .sign input
+theorem terminates_of_keygen_sign_verify
+    (hkeygen : ∀ hash : SigGolf.Hash,
+      ∀ input : Input Candidate64.submission.sizes .keygen,
+      let result := Candidate64.submission.runWith hash .keygen input
       result.finished = true ∧ result.cycles < CYCLE_LIMIT)
-    (hverify : ∀ hash : Hash,
-      ∀ input : Input SphincsSubmission.submission.sizes .verify,
-      let result := SphincsSubmission.submission.runWith hash .verify input
+    (hsign : ∀ hash : SigGolf.Hash,
+      ∀ input : Input Candidate64.submission.sizes .sign,
+      let result := Candidate64.submission.runWith hash .sign input
+      result.finished = true ∧ result.cycles < CYCLE_LIMIT)
+    (hverify : ∀ hash : SigGolf.Hash,
+      ∀ input : Input Candidate64.submission.sizes .verify,
+      let result := Candidate64.submission.runWith hash .verify input
       result.finished = true ∧ result.cycles < CYCLE_LIMIT) :
-    SphincsSubmission.submission.Terminates := by
+    Candidate64.submission.Terminates := by
   intro hash phase input
   cases phase with
-  | keygen => exact SphincsKeygenCost.runWith_termination hash input
+  | keygen => exact hkeygen hash input
   | sign => exact hsign hash input
   | expand => exact runWith_termination hash input
   | verify => exact hverify hash input
 
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.honest_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms honest_cost
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.runWith_termination' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
 #print axioms runWith_termination
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.support_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms support_cost
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.compression_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
+#print axioms compressionBounds_of_keygen_sign
+#print axioms terminates_of_keygen_sign_verify
+
 #print axioms compression_bound
-
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_expand_terminate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms keygen_expand_terminate
-
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_expand_compression_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms keygen_expand_compression_bound
-
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.compressionBounds_of_sign' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms compressionBounds_of_sign
-
-/-- info: 'SigGolfCandidate.SphincsExpandMoment.terminates_of_sign_verify' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms terminates_of_sign_verify
-
 end SigGolfCandidate.SphincsExpandMoment
