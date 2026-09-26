@@ -565,11 +565,16 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       Trace hash SphincsImages.verify ready steps cycles calls blocks final ∧
       final.pc = 0x298c + delta target ∧
+      final.getMem 0x43028 = BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52) ∧
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = ready.getMem 0x43020 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      (∀ address, address.toNat < 0x40000 →
+        final.getMem address = ready.getMem address) ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -584,7 +589,8 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
   have shiftedStart : shift (delta target) base = ready := by
     simp [base, shift, MachineState.setPC]
   obtain ⟨final, steps, cycles, calls, blocks, run, finalPc,
-    _counter, _pointer, layerFinal, treeFinal, leafFinal, bitFinal, endpoints, lowFrame,
+    _counter, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    endpoints, lowFrame,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_semantics target hash base pk layer tree leaf digits values
       (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target)
@@ -607,9 +613,10 @@ theorem upper_chains_from_ready (target : Fin 5) (hash : Hash)
       final.getMem address = ready.getMem address := by
     intro address low
     simpa [base] using lowFrame address low
-  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc,
+  refine ⟨final, steps, cycles, calls, blocks, ?_, finalPc, pointerFinal,
     layerFinal, treeFinal, leafFinal, by simpa [base] using bitFinal,
-    witnessPrefix_frame ready final pk hprefix lowFrameReady, endpoints,
+    witnessPrefix_frame ready final pk hprefix lowFrameReady, lowFrameReady,
+    endpoints,
     stepBound, cycleBound, callBound, blockBound⟩
   simpa only [shiftedStart] using run
 
@@ -800,11 +807,16 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
       final.pc = 0x298c + delta target ∧
+      final.getMem 0x43028 = BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52) ∧
       final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
       final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       final.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
       final.getMem 0x43020 = ready.getMem 0x43020 ∧
       SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      (∀ address, address.toNat < 0x40000 →
+        final.getMem address = ready.getMem address) ∧
       (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
         final.getByte (BitVec.ofNat 64 (0x44300 + 20 * chain.val + j)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -825,7 +837,8 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
         (values chain).extractLsb' (8 * j) 8 := by
     simpa only [readyEq] using upper_ready_source target state values source
   obtain ⟨final, steps, cycles, calls, blocks, wotsRun,
-    done, layerFinal, treeFinal, leafFinal, bitFinal, finalPrefix, endpoints,
+    done, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    finalPrefix, lowFrame, endpoints,
     stepBound, cycleBound, callBound, blockBound⟩ :=
     upper_chains_from_ready target hash ready pk layer tree leaf digits values
       (by simpa only [readyEq] using preparedPc)
@@ -833,7 +846,8 @@ theorem upper_decoder_chains_semantics (target : Fin 5) (hash : Hash)
       (by simpa only [readyEq] using preparedPointer)
       layerCell treeCell leafCell readyPrefix decoded readySource
   refine ⟨final, 507 + steps, 507 + cycles, calls, blocks,
-    ?_, done, layerFinal, treeFinal, leafFinal, bitFinal, finalPrefix, endpoints,
+    ?_, done, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    finalPrefix, lowFrame, endpoints,
     by omega, by omega, callBound, blockBound⟩
   simpa [Nat.add_assoc] using preRun.trans wotsRun
 
@@ -1313,6 +1327,50 @@ theorem upper_leaf_from_endpoints (target : Fin 5) (hash : Hash)
       · exact Or.inr ⟨high.1, high.2.1⟩
     exact (finishFrame read simple).trans (copyFrame read retained)
 
+/-- An authentication path stays valid when the verifier leaves low memory intact. -/
+theorem pathWitness_of_low_frame (initial final : MachineState)
+    (signature : SphincsSecurity.Signature) (lay : Layer)
+    (pointer : Word)
+    (bound : pointer.toNat + 20 * layerHeight lay ≤ 0x40000)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getMem address = initial.getMem address)
+    (witness : SphincsVerifierXmssPathControl.PathWitness
+      initial signature lay pointer) :
+    SphincsVerifierXmssPathControl.PathWitness
+      final signature lay pointer := by
+  constructor
+  intro level hlevel i hi
+  let address : Word := BitVec.ofNat 64 (pointer.toNat + 20 * level + i)
+  have small : pointer.toNat + 20 * level + i < 0x40000 := by omega
+  have low : address.toNat < 0x40000 := by
+    simp only [address, BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega : pointer.toNat + 20 * level + i < 2 ^ 64)]
+    exact small
+  rw [SphincsVerifierWotsSemanticAllChains.lowByteFrame initial final
+    frame address low]
+  exact witness.bytes level hlevel i hi
+
+theorem upper_path_pointer_bound (target : Fin 5) :
+    (BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * 52)).toNat +
+      20 * layerHeight
+        (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) ≤
+      0x40000 := by
+  fin_cases target <;> decide
+
+theorem upper_path_pointer_aligned (target : Fin 5) :
+    (BitVec.ofNat 64
+      (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+        20 * 52)).toNat % 4 = 0 := by
+  fin_cases target <;> decide
+
+theorem upper_path_node_pc (target : Fin 5) :
+    SphincsVerifierXmssParity.nodePc
+      (SigGolfCandidate.SphincsVerifierXmssTransition.targetLayer target) =
+        0x2ad4 + delta target := by
+  fin_cases target <;> decide
+
 /-- One upper-layer decoder, WOTS verifier, and leaf hash reach the XMSS path. -/
 theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     (state ready : MachineState) (pk : SphincsSecurity.PublicKey)
@@ -1341,6 +1399,11 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     ∃ (final : MachineState) (steps cycles calls blocks : Nat),
       Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
       final.pc = 0x2ad4 + delta target ∧
+      final.getMem 0x43028 = BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52) ∧
+      final.getMem 0x43000 = BitVec.ofNat 64 layer.val ∧
+      final.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
       (∀ i, (hi : i < 20) →
         final.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
           (evalWithAnswerFn (adaptOracle hash)
@@ -1350,12 +1413,15 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
                   (digits chain) (values chain))))).extractLsb' (8 * i) 8) ∧
       final.getMem 0x43048 = 1 ∧
       final.getMem 0x43070 = ready.getMem 0x43020 ∧
+      SphincsVerifierHashBytes.WitnessPrefix final pk ∧
+      (∀ address, address.toNat < 0x40000 →
+        final.getMem address = ready.getMem address) ∧
       steps ≤ 507 + 728 * 52 + 856 ∧
       cycles ≤ 507 + 777 * 52 + 991 ∧
       calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 := by
   obtain ⟨chains, chainSteps, chainCycles, chainCalls, chainBlocks,
-    chainRun, chainsPc, layerFinal, treeFinal, leafFinal, bitFinal,
-    prefixFinal, endpointBytes, stepBound, cycleBound,
+    chainRun, chainsPc, pointerFinal, layerFinal, treeFinal, leafFinal, bitFinal,
+    prefixFinal, lowFrame, endpointBytes, stepBound, cycleBound,
     callBound, blockBound⟩ :=
     upper_decoder_chains_semantics target hash state ready pk layer tree leaf
       digits values readyEq pc checksum layerCell treeCell leafCell decoded
@@ -1364,21 +1430,144 @@ theorem upper_decoder_leaf_digest (target : Fin 5) (hash : Hash)
     evalWithAnswerFn (adaptOracle hash)
       (Concrete.recoverChain pk.parameter layer tree leaf chain
         (digits chain) (values chain))
-  obtain ⟨final, leafRun, done, digest, level, bitDone, _frame⟩ :=
+  obtain ⟨final, leafRun, done, digest, level, bitDone, leafFrame⟩ :=
     upper_leaf_from_endpoints target hash chains pk layer tree leaf recovered
       chainsPc layerFinal treeFinal leafFinal prefixFinal
       (by intro chain j hj; exact endpointBytes chain j hj)
   refine ⟨final, chainSteps + 856, chainCycles + 991,
-    chainCalls + 1, chainBlocks + 17, ?_, done, digest, level,
-    bitDone.trans bitFinal,
+    chainCalls + 1, chainBlocks + 17, ?_, done, ?_, ?_, ?_, digest, level,
+    bitDone.trans bitFinal, ?_, ?_,
     by omega, by omega, by omega, by omega⟩
-  simpa [Nat.add_assoc] using chainRun.trans leafRun
+  · simpa [Nat.add_assoc] using chainRun.trans leafRun
+  · exact (leafFrame 0x43028 (Or.inr ⟨by decide, by decide, by decide⟩)).trans
+      pointerFinal
+  · exact (leafFrame 0x43000 (Or.inr ⟨by decide, by decide, by decide⟩)).trans
+      layerFinal
+  · exact (leafFrame 0x43008 (Or.inr ⟨by decide, by decide, by decide⟩)).trans
+      treeFinal
+  · exact witnessPrefix_frame chains final pk prefixFinal
+      (fun address low => leafFrame address (Or.inl low))
+  · intro address low
+    exact (leafFrame address (Or.inl low)).trans (lowFrame address low)
+
+/-- The recovered WOTS leaf and its authentication path reach the abstract XMSS root. -/
+theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
+    (state ready : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (signature : SphincsSecurity.Signature)
+    (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (layerEq : layer = SphincsVerifierXmssTransition.targetLayer target)
+    (readyEq : ready =
+      SigGolfCandidate.SphincsVerifierDecoderRelocation.setupState target
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.upperDecoderState
+          target state))
+    (pc : state.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SigGolfCandidate.SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (checksum : state.getReg .x15 +
+      SigGolfCandidate.SphincsVerifierWotsDecodeData.answerSum 52 state = 194)
+    (layerCell : ready.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : ready.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (indexCell : ready.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (digits chain).val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8)
+    (siblings : SphincsVerifierXmssPathControl.PathWitness ready signature layer
+      (BitVec.ofNat 64
+        (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * 52))) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
+      steps ≤ 507 + 728 * 52 + 856 ∧
+      cycles ≤ 507 + 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 ∧
+      let doneState := SphincsVerifierXmssPathControl.pathState hash layer
+        (layerHeight layer) final
+      doneState.pc = SphincsVerifierXmssNext.branchPc layer + 4 ∧
+      (∀ i, (hi : i < 20) →
+        doneState.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+          (Concrete.foldValue (adaptOracle hash) pk.parameter layer tree leaf
+            (Concrete.signaturePath signature layer)
+            (evalWithAnswerFn (adaptOracle hash)
+              (Concrete.leafHash pk.parameter layer tree leaf
+                (fun chain => evalWithAnswerFn (adaptOracle hash)
+                  (Concrete.recoverChain pk.parameter layer tree leaf chain
+                    (digits chain) (values chain)))))
+            (layerHeight layer)).extractLsb' (8 * i) 8) ∧
+      SphincsVerifierXmssPathControl.pathCycles hash layer
+        (layerHeight layer) final ≤ 141 * layerHeight layer := by
+  let pointer : Word := BitVec.ofNat 64
+    (SigGolfCandidate.SphincsVerifierDecoderRelocation.sourceBase target +
+      20 * 52)
+  let first : Digest := evalWithAnswerFn (adaptOracle hash)
+    (Concrete.leafHash pk.parameter layer tree leaf
+      (fun chain => evalWithAnswerFn (adaptOracle hash)
+        (Concrete.recoverChain pk.parameter layer tree leaf chain
+          (digits chain) (values chain))))
+  obtain ⟨final, steps, cycles, calls, blocks, run, done, pointerCell,
+    layerFinal, treeFinal, current, level, bit, prefixFinal, lowFrame,
+    stepBound, cycleBound, callBound, blockBound⟩ :=
+    upper_decoder_leaf_digest target hash state ready pk layer tree leaf
+      digits values readyEq pc checksum layerCell treeCell leafCell decoded
+      hprefix source
+  have bound : pointer.toNat + 20 * layerHeight layer ≤ 0x40000 := by
+    rw [layerEq]
+    exact upper_path_pointer_bound target
+  have aligned : pointer.toNat % 4 = 0 := upper_path_pointer_aligned target
+  have finalPc : final.pc = SphincsVerifierXmssParity.nodePc layer := by
+    rw [layerEq, upper_path_node_pc]
+    exact done
+  have finalSiblings : SphincsVerifierXmssPathControl.PathWitness
+      final signature layer pointer :=
+    pathWitness_of_low_frame ready final signature layer pointer bound
+      lowFrame siblings
+  have path := SphincsVerifierXmssPathComplete.complete_path
+    hash layer final pk tree leaf signature first pointer finalPc
+    pointerCell bound aligned layerFinal treeFinal level
+    (bit.trans indexCell) prefixFinal current finalSiblings
+  exact ⟨final, steps, cycles, calls, blocks, run,
+    stepBound, cycleBound, callBound, blockBound, path⟩
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_ready_low_byte_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.pathWitness_of_low_frame' depends on axioms: [propext,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms pathWitness_of_low_frame
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_pointer_bound' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_path_pointer_bound
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_pointer_aligned' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_path_pointer_aligned
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_path_node_pc' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_path_node_pc
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_path_digest' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_decoder_path_digest
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_source' depends on axioms: [propext,
  Classical.choice,
