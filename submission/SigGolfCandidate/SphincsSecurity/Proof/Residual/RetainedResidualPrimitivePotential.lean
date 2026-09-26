@@ -1791,3 +1791,134 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_signingProgram_jointPotential
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+set_option maxHeartbeats 1000000
+
+theorem lazyRun_stopped_externalProgram {Result : Type}
+    (parameter : PublicParameter) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (computation : OracleComp OracleWorld Result) (state : State inputs) (remaining : Nat) :
+    lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (externalProgram inputs parameter words selections computation) remaining) state =
+    lazyRun (environment parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (simulateQ (embed inputs state.memory.routing)
+          (simulateQ (ResidualByteFrontend.checkedTranslate inputs
+            (PublicEncodingMatch.Match parameter (knownEncodingMessage state.memory.routing.known) words selections))
+            computation)) remaining) state := by
+  rw [externalProgram]
+  rw [WeightedCutoff.run_bind_zero_prefix (WeightedCutoff.residualCharge inputs)
+    (currentRouting inputs) _ remaining (currentRouting_all_zero inputs)]
+  exact lazyRun_routing_bind parameter inputs hencoding words publicReplies selections rows _ state
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_externalProgram' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_externalProgram
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec CanonicalProbeRouting
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+attribute [local irreducible] hashInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+set_option maxHeartbeats 1000000
+
+theorem lazyRun_stopped_request_jointPotential
+    (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (hinputs : requestInputs key input ⊆ inputs)
+    (state : State inputs) (budget remaining : Nat)
+    (hselect : ∀ position, FirstSuccessTable.select decodeEncodingOutput
+      (fun counter => rows (position, counter)) = selections position)
+    (ha : ∀ coordinate, (state.candidates coordinate).Nonempty)
+    (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
+    (hcandidates : ResidualByteFrontend.HiddenCandidateBound words state.memory.routing.disclosed (project state))
+    (hclean : ResidualByteFrontend.ReplyClean
+      (PublicEncodingMatch.Match key.parameter (knownEncodingMessage state.memory.routing.known) words selections)
+      state.memory.external.cache)
+    (hresources : ProbeMessageBound state.memory)
+    (hremaining : state.memory.external.hashCalls + remaining = budget)
+    (hbudget : 2 * budget ≤ 2 ^ digestBits) :
+    (∑' result, Pr[= result | lazyRun
+      (environment key.parameter inputs hencoding words publicReplies selections rows)
+      (WeightedCutoff.run (WeightedCutoff.residualCharge inputs)
+        (adversaryImpl inputs key.parameter key.root words selections input) remaining) state] *
+        stoppedPrimitiveResultPotential inputs budget result) ≤
+      primitiveLivePotential budget state.memory := by
+  cases input with
+  | inl input =>
+      change hashInputs (liftM (OracleWorld.query input)) ⊆ inputs at hinputs
+      rw [show adversaryImpl inputs key.parameter key.root words selections (.inl input) =
+        externalProgram inputs key.parameter words selections (liftM (OracleWorld.query input)) from rfl,
+        lazyRun_stopped_externalProgram]
+      exact lazyByteRun_stopped_publicWorld_jointPotential key.parameter inputs hencoding words
+        publicReplies selections rows state.memory.routing (liftM (OracleWorld.query input))
+        hinputs state budget remaining hselect ha hcovered hcandidates hclean hresources hremaining hbudget
+  | inr message =>
+      change hashInputs (signWithView key message) ⊆ inputs at hinputs
+      exact lazyRun_stopped_signingProgram_jointPotential key inputs hencoding words
+        publicReplies selections rows message hinputs state budget remaining hselect ha
+        hcovered hcandidates hclean hresources hremaining hbudget
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_request_jointPotential' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.lazyRun_stopped_request_jointPotential
+
+namespace SphincsSecurity.WeightedCutoff
+open _root_.OracleComp OracleSpec
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 2048
+variable {Index : Type} {spec : OracleSpec Index}
+
+theorem run_bind_counted {First Result : Type} (charge : spec.Domain → Nat)
+    (first : OracleComp spec First) (next : First → OracleComp spec Result)
+    (budget : Nat) :
+    run charge (first >>= next) budget = (do
+      let paid ← counted charge (run charge first budget)
+      match paid.1 with
+      | none => pure none
+      | some answer => run charge (next answer) (budget - paid.2)) := by
+  induction first using OracleComp.inductionOn generalizing budget with
+  | pure value => simp only [pure_bind, run_pure, counted_pure, pure_bind, Nat.sub_zero]
+  | query_bind query rest ih =>
+      rw [bind_assoc, run_query_bind, run_query_bind]
+      by_cases hallowed : charge query ≤ budget
+      · rw [if_pos hallowed, if_pos hallowed]
+        rw [counted_query_bind]
+        simp only [bind_assoc, pure_bind]
+        congr 1
+        funext answer
+        rw [ih answer (budget - charge query)]
+        congr 1
+        funext paid
+        rcases paid with ⟨option, cost⟩
+        cases option with
+        | none => rfl
+        | some value =>
+            dsimp
+            congr 1
+            omega
+      · rw [if_neg hallowed, if_neg hallowed]
+        simp only [counted_pure, pure_bind]
+end SphincsSecurity.WeightedCutoff
+
+/-- info: 'SphincsSecurity.WeightedCutoff.run_bind_counted' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.WeightedCutoff.run_bind_counted
