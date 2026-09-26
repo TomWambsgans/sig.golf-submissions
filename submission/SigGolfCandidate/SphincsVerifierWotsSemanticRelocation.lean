@@ -4079,6 +4079,208 @@ theorem upper_encoding_query (target : Fin 5)
 #guard_msgs (whitespace := lax) in
 #print axioms upper_encoding_query
 
+private theorem wire_counter_of_split_local
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (lay : Layer)
+    (offset : Nat) (before after : List Byte)
+    (split : SphincsWireEncoding.encodeBytes pk signature =
+      before ++ ((SphincsWire.layerEncoding signature lay).map UInt8.toBitVec) ++
+        after)
+    (beforeLength : before.length = offset)
+    (i : Nat) (hi : i < SphincsWire.counterBytes) :
+    (SphincsWireEncoding.wire pk signature).extractLsb'
+      (8 * (offset + i)) 8 =
+      (BitVec.ofNat 32 (signature.layers lay).counter.toNat).extractLsb'
+        (8*i) 8 := by
+  have inner : i <
+      ((SphincsWire.layerEncoding signature lay).map UInt8.toBitVec).length := by
+    rw [List.length_map, SphincsWire.layerEncoding_length]
+    have positive : SphincsWire.counterBytes ≤ SphincsWire.layerBytes lay := by
+      fin_cases lay <;> decide
+    omega
+  have full : offset + i < SphincsWire.signatureBytes := by
+    rw [← SphincsWireEncoding.encodeBytes_length pk signature, split]
+    simp only [List.length_append, List.length_map, beforeLength]
+    simp only [List.length_map] at inner
+    omega
+  rw [SphincsWireEncoding.wire_byte pk signature (offset + i) full]
+  simp only [split, List.append_assoc]
+  rw [List.getElem_append_right (by rw [beforeLength]; omega)]
+  simp only [beforeLength, Nat.add_sub_cancel_left]
+  rw [List.getElem_append_left inner]
+  exact SphincsWireEncoding.layerEncoding_counterByte signature lay i hi
+
+private def upperWireBase (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) : List UInt8 :=
+  bytesLE SphincsWire.digestBytes pk.root ++
+    bytesLE SphincsWire.digestBytes pk.parameter ++
+    bytesLE SphincsWire.digestBytes signature.randomness ++
+    SphincsWire.concatFields (ftsTrees - 1) (SphincsWire.ftsOpening signature)
+
+private def upperWireBefore (target : Fin 5)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) : List Byte :=
+  (upperWireBase pk signature ++
+    (if target.val ≥ 1 then SphincsWire.layerEncoding signature topLayer else []) ++
+    (if target.val ≥ 2 then SphincsWire.layerEncoding signature middleLayer else []) ++
+    (if target.val ≥ 3 then SphincsWire.layerEncoding signature middle2Layer else []) ++
+    (if target.val ≥ 4 then SphincsWire.layerEncoding signature middle3Layer else [])).map
+      UInt8.toBitVec
+
+private def upperWireAfter (target : Fin 5)
+    (signature : SphincsSecurity.Signature) : List Byte :=
+  ((if target.val < 1 then SphincsWire.layerEncoding signature middleLayer else []) ++
+    (if target.val < 2 then SphincsWire.layerEncoding signature middle2Layer else []) ++
+    (if target.val < 3 then SphincsWire.layerEncoding signature middle3Layer else []) ++
+    (if target.val < 4 then SphincsWire.layerEncoding signature middle4Layer else []) ++
+    SphincsWire.layerEncoding signature bottomLayer).map UInt8.toBitVec
+
+private theorem upperWire_split (target : Fin 5)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) :
+    SphincsWireEncoding.encodeBytes pk signature =
+      upperWireBefore target pk signature ++
+        (SphincsWire.layerEncoding signature
+          (SphincsVerifierXmssTransition.targetLayer target)).map
+            UInt8.toBitVec ++
+        upperWireAfter target signature := by
+  fin_cases target <;>
+    simp [upperWireBefore, upperWireAfter, upperWireBase,
+      SphincsWireEncoding.encodeBytes, SphincsWire.encodeSignature,
+      SphincsVerifierXmssTransition.targetLayer,
+      topLayer, middleLayer, middle2Layer, middle3Layer, middle4Layer,
+      List.map_append, List.append_assoc]
+
+private theorem upperWireBefore_length (target : Fin 5)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) :
+    (upperWireBefore target pk signature).length =
+      SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) := by
+  have ftsLength :
+      (SphincsWire.concatFields (ftsTrees - 1)
+        (SphincsWire.ftsOpening signature)).length =
+          (ftsTrees - 1) * SphincsWire.ftsOpeningBytes :=
+    SphincsWire.concatFields_length _ _ _
+      (SphincsWire.ftsOpening_length signature)
+  fin_cases target <;>
+    simp [upperWireBefore, upperWireBase,
+      SphincsWireEncoding.layerOffset,
+      SphincsVerifierXmssTransition.targetLayer,
+      SphincsWire.topOffset, SphincsWire.middleOffset,
+      SphincsWire.middle2Offset, SphincsWire.middle3Offset,
+      SphincsWire.middle4Offset,
+      SphincsWire.layerEncoding_length,
+      List.length_map, List.length_append,
+      bytesLE, ftsLength,
+      SphincsWire.ftsOffset, SphincsWire.randomizerOffset,
+      SphincsWire.parameterOffset, SphincsWire.rootOffset]
+  all_goals omega
+
+theorem upper_wire_counter (target : Fin 5)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (i : Nat) (hi : i < SphincsWire.counterBytes) :
+    (SphincsWireEncoding.wire pk signature).extractLsb'
+      (8 * (SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) + i)) 8 =
+      (BitVec.ofNat 32
+        (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat).extractLsb'
+          (8*i) 8 := by
+  exact wire_counter_of_split_local pk signature
+    (SphincsVerifierXmssTransition.targetLayer target)
+    (SphincsWireEncoding.layerOffset
+      (SphincsVerifierXmssTransition.targetLayer target))
+    (upperWireBefore target pk signature)
+    (upperWireAfter target signature)
+    (upperWire_split target pk signature)
+    (upperWireBefore_length target pk signature) i hi
+
+theorem loaded_upper_counter_byte (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some state)
+    (i : Nat) (hi : i < SphincsWire.counterBytes) :
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) + i)) =
+      (BitVec.ofNat 32
+        (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat).extractLsb'
+          (8*i) 8 := by
+  have full : SphincsWireEncoding.layerOffset
+      (SphincsVerifierXmssTransition.targetLayer target) + i <
+      SphincsWire.signatureBytes := by
+    have fits : SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) +
+        SphincsWire.counterBytes ≤ SphincsWire.signatureBytes := by
+      fin_cases target <;> decide
+    omega
+  rw [show 0x22ca0 + SphincsWireEncoding.layerOffset
+      (SphincsVerifierXmssTransition.targetLayer target) + i =
+      0x22ca0 + (SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) + i) by omega]
+  rw [SphincsVerifierLoader.loaded_witness publicKey message
+    (SphincsWireEncoding.wire pk signature) state loaded _ full]
+  exact upper_wire_counter target pk signature i hi
+
+theorem loaded_upper_counter_word (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some state) :
+    state.getWord32 (upperCounterSource target) =
+      BitVec.ofNat 32
+        (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat := by
+  apply BitVec.eq_of_getLsbD_eq_iff.mpr
+  intro bit hbit
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  let base := 0x22ca0 + SphincsWireEncoding.layerOffset
+    (SphincsVerifierXmssTransition.targetLayer target)
+  have split := variableWord_byte state base
+    (by dsimp [base]; fin_cases target <;> decide)
+    (by dsimp [base]; fin_cases target <;> decide)
+    (0 : Fin 5) byte
+  have value := loaded_upper_counter_byte target publicKey message pk
+    signature state loaded byte.val
+      (by simpa only [SphincsWire.counterBytes] using byte.isLt)
+  have address : base + 4 * (0 : Fin 5).val + byte.val =
+      0x22ca0 + SphincsWireEncoding.layerOffset
+        (SphincsVerifierXmssTransition.targetLayer target) + byte.val := by
+    simp [base]
+  rw [address] at split
+  have bytes :
+      (state.getWord32 (upperCounterSource target)).extractLsb' (8 * byte.val) 8 =
+      (BitVec.ofNat 32
+        (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat).extractLsb'
+          (8 * byte.val) 8 := by
+    have word : BitVec.ofNat 64 (base + 4 * (0 : Fin 5).val) =
+        upperCounterSource target := by
+      simp [base, upperCounterSource]
+    rw [word] at split
+    exact split.symm.trans value
+  have bitEq := congrArg
+    (fun value : BitVec 8 => value.getLsbD (bit % 8)) bytes
+  have offset : 8 * byte.val + bit % 8 = bit := by
+    dsimp [byte]
+    omega
+  simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
+    decide_true, Bool.true_and, offset] using bitEq
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_wire_counter' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_wire_counter
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_counter_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_upper_counter_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_upper_counter_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_upper_counter_word
+
 theorem loaded_first_upper_counter_word
     (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
     (pk : SphincsSecurity.PublicKey)
