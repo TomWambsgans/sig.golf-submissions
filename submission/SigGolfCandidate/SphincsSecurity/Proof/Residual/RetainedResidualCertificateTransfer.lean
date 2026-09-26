@@ -189,3 +189,74 @@ end SphincsSecurity.Concrete.RetainedResidual
 /-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le
+
+namespace SphincsSecurity.Concrete.RetainedResidual
+open _root_.OracleComp OracleSpec
+open AdaptiveResidualLabels hiding World State Environment
+attribute [local instance] Classical.propDecidable
+set_option backward.isDefEq.respectTransparency false
+
+theorem sourceGame_fault_budget_eq_zero_of_lt (dummy : OtsReferenceWords)
+    (adversary : Adversary) (budget : Nat) (hsmall : budget < keygenHashCost) :
+    Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget |
+      sourceGame dummy adversary] = 0 := by
+  apply le_antisymm ?_ bot_le
+  unfold sourceGame
+  apply probEvent_bind_le_constant
+  intro parameter _
+  apply probEvent_bind_le_constant
+  intro encoding _
+  apply probEvent_bind_le_constant
+  intro high _
+  apply probEvent_bind_le_constant
+  intro exposed _
+  let words := referenceFamilyWords encoding.selections dummy
+  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), default, default⟩
+  let state := initialState (gameInputs adversary) words exposed
+  let program := simulateQ
+    (adversaryImpl (gameInputs adversary) parameter key.root words encoding.selections)
+    (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, parameter⟩)
+  let law := lazyRun (environment parameter (gameInputs adversary)
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary parameter)
+    words (coordinateGraphLabels (initialKnown words exposed) high) encoding.selections encoding.rows)
+    program state
+  change Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget | law] ≤ 0
+  rw [probEvent_eq_tsum_ite]
+  apply le_of_eq
+  apply ENNReal.tsum_eq_zero.mpr
+  intro result
+  by_cases hr : Pr[= result | law] = 0
+  · simp [hr]
+  have hmono := lazyRun_source_hashCalls_mono (gameInputs adversary) words
+    (coordinateGraphLabels (initialKnown words exposed) high) encoding.selections encoding.rows key
+    (canonicalEncodingInputs_subset_retainedGameInputs adversary parameter)
+    (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, parameter⟩)
+    (sourceInputs_unlogged_subset_gameInputs adversary key) state
+    (initialAllowed_nonempty words exposed) (initialState_rowsCovered _ _ exposed) result
+    (by simpa only [law, program, key, SPMF.probOutput_eq_apply] using hr)
+  have hcost : keygenHashCost ≤ result.2.memory.external.hashCalls := by
+    simpa only [state, initialState, initialMemory] using hmono
+  have hnot : ¬(result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget) := by omega
+  simp [hnot]
+
+
+theorem sourceGame_fault_within_budget_le_all (dummy : OtsReferenceWords)
+    (adversary : Adversary) (budget : Nat) (hbudget : budget ≤ 2 ^ 128) :
+    Pr[fun result => result.1 = none ∧ result.2.memory.external.hashCalls ≤ budget |
+      sourceGame dummy adversary] ≤
+    ENNReal.ofReal (2 * ((budget : ℝ) / 2 ^ digestBits) -
+      ((budget : ℝ) / 2 ^ digestBits) ^ 2) := by
+  by_cases hminimum : keygenHashCost ≤ budget
+  · exact sourceGame_fault_within_budget_le dummy adversary budget hminimum hbudget
+  · rw [sourceGame_fault_budget_eq_zero_of_lt dummy adversary budget (by omega)]
+    exact zero_le
+
+end SphincsSecurity.Concrete.RetainedResidual
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_budget_eq_zero_of_lt' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_budget_eq_zero_of_lt
+
+/-- info: 'SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le_all' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.RetainedResidual.sourceGame_fault_within_budget_le_all
