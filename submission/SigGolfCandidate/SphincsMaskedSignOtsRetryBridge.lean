@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsMaskedSignOtsPathValue
+import SigGolfCandidate.SphincsMaskedSignForestSemantics
 
 namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
@@ -972,5 +973,363 @@ theorem subtree_root_path_encoding_entry (location : Fin 5) (hash : Hash)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.subtree_root_path_encoding_entry' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms subtree_root_path_encoding_entry
+
+def forestToOtsCode : List (Word × Instr) := [
+  (0x2764, .ADDI .x6 .x0 0x005#12),
+  (0x2768, .LUI .x28 0x00043#20),
+  (0x276c, .ADDI .x28 .x28 0x000#12),
+  (0x2770, .SD .x28 .x6 0x000#12),
+  (0x2774, .LUI .x28 0x00043#20),
+  (0x2778, .ADDI .x28 .x28 0x078#12),
+  (0x277c, .LD .x6 .x28 0x000#12),
+  (0x2780, .SRLI .x6 .x6 0x04#6),
+  (0x2784, .LUI .x28 0x00043#20),
+  (0x2788, .ADDI .x28 .x28 0x008#12),
+  (0x278c, .SD .x28 .x6 0x000#12),
+  (0x2790, .LUI .x28 0x00043#20),
+  (0x2794, .ADDI .x28 .x28 0x078#12),
+  (0x2798, .LD .x6 .x28 0x000#12),
+  (0x279c, .SRLI .x6 .x6 0x00#6),
+  (0x27a0, .ANDI .x6 .x6 0x00f#12),
+  (0x27a4, .LUI .x28 0x00043#20),
+  (0x27a8, .ADDI .x28 .x28 0x020#12),
+  (0x27ac, .SD .x28 .x6 0x000#12),
+  (0x27b0, .LUI .x28 0x00043#20),
+  (0x27b4, .ADDI .x28 .x28 0x020#12),
+  (0x27b8, .LD .x6 .x28 0x000#12),
+  (0x27bc, .LUI .x28 0x00043#20),
+  (0x27c0, .ADDI .x28 .x28 0x0a8#12),
+  (0x27c4, .SD .x28 .x6 0x000#12),
+  (0x27c8, .ADDI .x6 .x0 0x000#12),
+  (0x27cc, .LUI .x28 0x00043#20),
+  (0x27d0, .ADDI .x28 .x28 0x020#12),
+  (0x27d4, .SD .x28 .x6 0x000#12)]
+
+def forestToOtsState (s : MachineState) : MachineState := runSchedule forestToOtsCode s
+
+private def code0 := forestToOtsCode.take 5
+private def code1 := (forestToOtsCode.drop 5).take 5
+private def code2 := (forestToOtsCode.drop 10).take 5
+private def code3 := (forestToOtsCode.drop 15).take 5
+private def code4 := (forestToOtsCode.drop 20).take 5
+private def code5 := forestToOtsCode.drop 25
+
+private theorem image0 : DecodedBlock SphincsMaskedImages.sign 1497 code0 := by rfl
+private theorem image1 : DecodedBlock SphincsMaskedImages.sign 1502 code1 := by rfl
+private theorem image2 : DecodedBlock SphincsMaskedImages.sign 1507 code2 := by rfl
+private theorem image3 : DecodedBlock SphincsMaskedImages.sign 1512 code3 := by rfl
+private theorem image4 : DecodedBlock SphincsMaskedImages.sign 1517 code4 := by rfl
+private theorem image5 : DecodedBlock SphincsMaskedImages.sign 1522 code5 := by rfl
+
+private theorem encoded0 : ∀ e ∈ code0,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1497 _ 0 image0 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+private theorem encoded1 : ∀ e ∈ code1,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1502 _ 0 image1 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+private theorem encoded2 : ∀ e ∈ code2,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1507 _ 0 image2 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+private theorem encoded3 : ∀ e ∈ code3,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1512 _ 0 image3 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+private theorem encoded4 : ∀ e ∈ code4,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1517 _ 0 image4 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+private theorem encoded5 : ∀ e ∈ code5,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have h := encoded_of_block _ 1522 _ 0 image5 (by decide)
+    (by intro i; fin_cases i <;> decide)
+  intro e he
+  simpa [add_zero] using h e he
+
+theorem forestToOts_encoded : ∀ e ∈ forestToOtsCode,
+    instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by
+  have split : forestToOtsCode =
+      code0 ++ code1 ++ code2 ++ code3 ++ code4 ++ code5 := by rfl
+  intro e he
+  rw [split] at he
+  simp only [List.mem_append] at he
+  rcases he with (((((h0 | h1) | h2) | h3) | h4) | h5)
+  · exact encoded0 e h0
+  · exact encoded1 e h1
+  · exact encoded2 e h2
+  · exact encoded3 e h3
+  · exact encoded4 e h4
+  · exact encoded5 e h5
+
+theorem forestToOts_supported : ∀ e ∈ forestToOtsCode, Supported e.2 := by decide
+
+theorem forestToOts_checked (s : MachineState) (pc : s.pc = 0x2764) :
+    Checked forestToOtsCode s := by
+  simp [forestToOtsCode, Checked, execInstrBr, ordinaryStep, memoryArgumentsValid,
+    accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+private theorem shift_zero (s : MachineState) : shift 0 s = s := by
+  cases s
+  simp [shift, MachineState.setPC]
+
+theorem forestToOts_block (s : MachineState) (pc : s.pc = 0x2764) :
+    OrdinarySteps SphincsMaskedImages.sign s 29 (forestToOtsState s) := by
+  have block := block_shift SphincsMaskedImages.sign 0 forestToOtsCode
+    forestToOts_supported
+    (by intro e he; simpa [add_zero] using forestToOts_encoded e he)
+    s (forestToOts_checked s pc)
+  have length : forestToOtsCode.length = 29 := by decide
+  simpa only [shift_zero, forestToOtsState, length] using block
+
+theorem forestToOts_layer (s : MachineState) :
+    (forestToOtsState s).getMem 0x43000 = 5 := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem forestToOts_tree (s : MachineState) :
+    (forestToOtsState s).getMem 0x43008 = s.getMem 0x43078 >>> 4 := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem forestToOts_selected (s : MachineState) :
+    (forestToOtsState s).getMem 0x430a8 = s.getMem 0x43078 &&& 15 := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem forestToOts_counter (s : MachineState) :
+    (forestToOtsState s).getMem 0x43020 = 0 := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+theorem forestToOts_frame (s : MachineState) (a : Word)
+    (h0 : a ≠ 0x43000#64) (h1 : a ≠ 0x43008#64)
+    (h2 : a ≠ 0x43020#64) (h3 : a ≠ 0x430a8#64) :
+    (forestToOtsState s).getMem a = s.getMem a := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    h0, h1, h2, h3]
+
+private theorem bottom_tree_val (index : Index) :
+    (Concrete.treeIndexAt index bottomLayer).val = index.val / 16 := by
+  have h : totalHeight - heightAbove bottomLayer = 4 := by decide
+  simp [Concrete.treeIndexAt, h]
+
+private theorem bottom_leaf_val (index : Index) :
+    (Concrete.leafIndexAt index bottomLayer).val = index.val % 16 := by
+  have h : heightBelow bottomLayer = 0 := by decide
+  have h4 : layerHeight bottomLayer = 4 := by decide
+  simp [Concrete.leafIndexAt, h, h4]
+
+private theorem indexSmall (index : Index) : index.val < 2^64 := by
+  have h := index.isLt
+  norm_num [totalHeight] at h ⊢
+  omega
+
+theorem forestToOts_tree_index (s : MachineState) (index : Index)
+    (hi : s.getMem 0x43078 = BitVec.ofNat 64 index.val) :
+    (forestToOtsState s).getMem 0x43008 =
+      BitVec.ofNat 64 (Concrete.treeIndexAt index bottomLayer).val := by
+  rw [forestToOts_tree, hi, bottom_tree_val]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow,
+    BitVec.toNat_ofNat]
+  rw [Nat.mod_eq_of_lt (indexSmall index)]
+  rw [Nat.mod_eq_of_lt (by have hsmall := indexSmall index; omega)]
+
+theorem forestToOts_leaf_index (s : MachineState) (index : Index)
+    (hi : s.getMem 0x43078 = BitVec.ofNat 64 index.val) :
+    (forestToOtsState s).getMem 0x430a8 =
+      BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val := by
+  rw [forestToOts_selected, hi, bottom_leaf_val]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_and, BitVec.toNat_ofNat]
+  change index.val % 2^64 &&& 15 = index.val % 16 % 2^64
+  have hsmall := indexSmall index
+  have hmod : index.val % 16 < 2^64 := by
+    have h := Nat.mod_lt index.val (by decide : 0 < 16)
+    omega
+  have hand : index.val &&& 15 = index.val % 16 := by
+    simpa using (Nat.and_two_pow_sub_one_eq_mod index.val 4)
+  rw [Nat.mod_eq_of_lt hsmall, hand, Nat.mod_eq_of_lt hmod]
+
+theorem forestToOts_pc (s : MachineState) (pc : s.pc = 0x2764) :
+    (forestToOtsState s).pc = 0x27d8 := by
+  simp [forestToOtsState, forestToOtsCode, runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+theorem forestToOts_context (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (message : Digest)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index)
+    (msg : Words20 s 0x44a00 message) :
+    SphincsMaskedSignOtsParents.KeyContext (forestToOtsState s) parameter seed
+      bottomLayer (Concrete.treeIndexAt index bottomLayer) ∧
+    (forestToOtsState s).getMem 0x43020 = 0 ∧
+    (forestToOtsState s).getMem 0x430a8 =
+      BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val ∧
+    Words20 (forestToOtsState s) 0x44a00 message := by
+  obtain ⟨par,key,idx⟩ := ctx
+  refine ⟨⟨?_,?_,?_,?_⟩,forestToOts_counter s,forestToOts_leaf_index s index idx,?_⟩
+  · change (forestToOtsState s).getMem 0x43000 = (5#64)
+    exact forestToOts_layer s
+  · exact forestToOts_tree_index s index idx
+  · intro i
+    have saved := par i
+    simp only [MachineState.getWord32] at saved ⊢
+    rw [forestToOts_frame s _ (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact saved
+  · intro i
+    have saved := key i
+    simp only [MachineState.getWord32] at saved ⊢
+    rw [forestToOts_frame s _ (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact saved
+  · intro i
+    have saved := msg i
+    simp only [MachineState.getWord32] at saved ⊢
+    rw [forestToOts_frame s _ (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide) (by fin_cases i <;> decide)
+      (by fin_cases i <;> decide)]
+    exact saved
+
+
+/-- The forest digest reaches the first bottom-layer subtree entry. -/
+theorem forest_complete_to_bottom_entry (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s
+      (1915509+29) (2142908+29) 18433 30729 t ∧
+      t.pc = 0x27d8 ∧
+      SphincsMaskedSignOtsParents.KeyContext t parameter seed bottomLayer
+        (Concrete.treeIndexAt index bottomLayer) ∧
+      t.getMem 0x43020 = 0 ∧
+      t.getMem 0x430a8 =
+        BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val ∧
+      Words20 t 0x44a00
+        (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+          (Seeded.ftsKey parameter index seed)) := by
+  obtain ⟨mid, first, midPc, midCtx, _, message⟩ :=
+    SphincsMaskedSignForestSemantics.forest_complete hash s parameter seed index pc ctx
+  have next := forestToOts_block mid midPc
+  have fields := forestToOts_context mid parameter seed index _ midCtx message
+  refine ⟨forestToOtsState mid, ?_, forestToOts_pc mid midPc,
+    fields.1, fields.2.1, fields.2.2.1, fields.2.2.2⟩
+  exact first.trans next.trace
+
+/-- The actual forest completion reaches a certified bottom-layer encoding entry. -/
+theorem forest_complete_to_bottom_encoding_entry (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index) :
+    ∃ t, Trace hash SphincsMaskedImages.sign s
+      ((1915509+29)+
+        (41220*SphincsMaskedSignOtsTree.Finish.width (4 : Fin 5)+33+
+          39*Levels.height (4 : Fin 5)+
+          124*Levels.totalNodes (4 : Fin 5) (Levels.height (4 : Fin 5))+
+          (24+70*Levels.height (4 : Fin 5))))
+      ((2142908+29)+
+        (44683*SphincsMaskedSignOtsTree.Finish.width (4 : Fin 5)+33+
+          39*Levels.height (4 : Fin 5)+
+          139*Levels.totalNodes (4 : Fin 5) (Levels.height (4 : Fin 5))+
+          (24+70*Levels.height (4 : Fin 5))))
+      (18433 + (417*SphincsMaskedSignOtsTree.Finish.width (4 : Fin 5)+
+        Levels.totalNodes (4 : Fin 5) (Levels.height (4 : Fin 5))))
+      (30729 + (485*SphincsMaskedSignOtsTree.Finish.width (4 : Fin 5)+
+        2*Levels.totalNodes (4 : Fin 5) (Levels.height (4 : Fin 5)))) t ∧
+      t.pc = 0x1a50+delta (4 : Fin 5) ∧
+      t.getMem 0x43000 = BitVec.ofNat 64 bottomLayer.val ∧
+      t.getMem 0x43008 = BitVec.ofNat 64 (Concrete.treeIndexAt index bottomLayer).val ∧
+      t.getMem 0x430a8 = BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val ∧
+      Words20 t 0x74 parameter ∧
+      Words20 t 0x44a00
+        (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+          (Seeded.ftsKey parameter index seed)) := by
+  obtain ⟨mid, first, midPc, midCtx, midCounter, midSelected, midMsg⟩ :=
+    forest_complete_to_bottom_entry hash s parameter seed index pc ctx
+  have pc' : mid.pc = 0x111c + chainDelta (4 : Fin 5) := by
+    simpa [chainDelta] using midPc
+  have layerEq : signerLayer (4 : Fin 5) = bottomLayer := by
+    apply Fin.ext
+    decide
+  have ctx' : SphincsMaskedSignOtsParents.KeyContext mid parameter seed
+      (signerLayer (4 : Fin 5)) (Concrete.treeIndexAt index bottomLayer) := by
+    rw [layerEq]
+    exact midCtx
+  have leafBound : (Concrete.leafIndexAt index bottomLayer).val <
+      Levels.width (4 : Fin 5) 0 := by
+    rw [bottom_leaf_val]
+    change index.val % 16 < 16
+    exact Nat.mod_lt _ (by decide)
+  obtain ⟨t, second, done, lay, tree, selected, par, msg⟩ :=
+    subtree_root_path_encoding_entry (4 : Fin 5) hash mid parameter seed
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer) _ pc' midCounter ctx' midSelected
+      leafBound midMsg
+  refine ⟨t, ?_, done, ?_, tree, selected, par, msg⟩
+  · exact first.trans second
+  · rw [← layerEq]
+    exact lay
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forestToOts_block' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forestToOts_block
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_to_bottom_encoding_entry' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_to_bottom_encoding_entry
+
+/-- The forest key becomes the exact first bottom-layer WOTS encoding HASH digest. -/
+theorem forest_complete_first_bottom_encoding_digest (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index) :
+    ∃ t, (∃ steps cycles calls blocks,
+      Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
+      Trace hash SphincsMaskedImages.sign t 81 88 1 1
+        (initialEncodingState (4 : Fin 5) hash t) ∧
+      Words20 (initialEncodingState (4 : Fin 5) hash t) 0x42000
+        (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+          (Concrete.tweakableHash parameter
+            (.encoding bottomLayer (Concrete.treeIndexAt index bottomLayer)
+              (Concrete.leafIndexAt index bottomLayer))
+            (bytesLE 20 (evalWithAnswerFn (spec := SphincsSecurity.HashSpec)
+              (adaptOracle hash) (Seeded.ftsKey parameter index seed)) ++
+              bytesLE 4 (BitVec.ofNat 32 (0 : Counter).toNat)) :
+            OracleComp SphincsSecurity.HashSpec Digest)) := by
+  obtain ⟨t, run, done, layer, tree, selected, par, msg⟩ :=
+    forest_complete_to_bottom_encoding_entry hash s parameter seed index pc ctx
+  have first := (initial_encoding_hash_exact (4 : Fin 5) hash t done).1
+  have digest := initial_encoding_digest_words_from_entry (4 : Fin 5) hash t
+    parameter bottomLayer (Concrete.treeIndexAt index bottomLayer)
+    (Concrete.leafIndexAt index bottomLayer)
+    (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+      (Seeded.ftsKey parameter index seed)) layer tree selected par msg
+  exact ⟨t, ⟨_, _, _, _, run⟩, first, digest⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_encoding_digest' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_first_bottom_encoding_digest
 
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
