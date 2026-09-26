@@ -73,6 +73,39 @@ theorem keygen_expand_compression_bound (secretKey : SecretKey) (phase : Phase)
   · exact SphincsKeygenMoment.compression_bound secretKey
   · exact compression_bound secretKey
 
+/-- Only the signer budget remains once its workload moment is established. -/
+theorem compressionBounds_of_sign
+    (hsign : ∀ secretKey : SecretKey,
+      OracleComp.EvalDist.expectedValue
+        (SphincsSubmission.submission.honestWorkload secretKey)
+        (fun result => ENNReal.ofReal (Real.rpow 2
+          ((result.costs .sign : ℝ) / (Phase.sign.budget : ℝ)))) ≤ 2) :
+    SphincsSubmission.submission.CompressionBounds := by
+  intro secretKey phase hphase
+  cases phase with
+  | keygen => exact SphincsKeygenMoment.compression_bound secretKey
+  | sign => exact hsign secretKey
+  | expand => exact compression_bound secretKey
+  | verify => simp [Phase.budgeted] at hphase
+
+/-- Only signer and verifier control remain for universal termination. -/
+theorem terminates_of_sign_verify
+    (hsign : ∀ hash : Hash,
+      ∀ input : Input SphincsSubmission.submission.sizes .sign,
+      let result := SphincsSubmission.submission.runWith hash .sign input
+      result.finished = true ∧ result.cycles < CYCLE_LIMIT)
+    (hverify : ∀ hash : Hash,
+      ∀ input : Input SphincsSubmission.submission.sizes .verify,
+      let result := SphincsSubmission.submission.runWith hash .verify input
+      result.finished = true ∧ result.cycles < CYCLE_LIMIT) :
+    SphincsSubmission.submission.Terminates := by
+  intro hash phase input
+  cases phase with
+  | keygen => exact SphincsKeygenCost.runWith_termination hash input
+  | sign => exact hsign hash input
+  | expand => exact runWith_termination hash input
+  | verify => exact hverify hash input
+
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.honest_cost' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms honest_cost
@@ -93,5 +126,13 @@ theorem keygen_expand_compression_bound (secretKey : SecretKey) (phase : Phase)
 /-- info: 'SigGolfCandidate.SphincsExpandMoment.keygen_expand_compression_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms keygen_expand_compression_bound
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.compressionBounds_of_sign' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms compressionBounds_of_sign
+
+/-- info: 'SigGolfCandidate.SphincsExpandMoment.terminates_of_sign_verify' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms terminates_of_sign_verify
 
 end SigGolfCandidate.SphincsExpandMoment
