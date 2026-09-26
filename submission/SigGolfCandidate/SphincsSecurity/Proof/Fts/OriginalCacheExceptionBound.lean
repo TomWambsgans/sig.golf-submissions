@@ -2964,3 +2964,122 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_rate
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+theorem certificateCountedLengthImpl_spent_mono {Result : Type} (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) Result)
+    (state : CertificateCountedState) (output : Result × CertificateCountedState)
+    (houtput : output ∈ ((simulateQ (certificateCountedLengthImpl key budget required stopAfter)
+      computation).run state).support) :
+    state.2.2 ≤ output.2.2.2 := by
+  let ghost : CertificateStoppedCacheState := (state.1, (false, 0))
+  have hproject := certificateUnboundedOuterRun_project key budget required stopAfter
+    computation (state, ghost) rfl
+  rw [← hproject, PMF.mem_support_map_iff] at houtput
+  obtain ⟨source, hsource, heq⟩ := houtput
+  cases heq
+  exact certificateUnboundedOuterRun_spent_mono key budget required stopAfter
+    computation (state, ghost) source hsource
+
+end SphincsSecurity.Concrete
+
+namespace SphincsSecurity.Concrete
+open _root_.OracleComp OracleSpec ENNReal
+
+noncomputable def keygenCountedLengthGame {Result : Type} (_q budget : Nat)
+    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (stopped : Bool)
+    (rest : CertificateKeygenBoundaryResult →
+      OracleComp (OracleWorld + SigningSpec) Result) :
+    PMF (Result × CertificateCountedState) :=
+  (liftM (boundaryRun 0 scheme.keygen ∅) : PMF CertificateKeygenBoundaryResult).bind
+    fun generated =>
+      (simulateQ (certificateCountedLengthImpl generated.1.1.2 budget required
+        (stopAfter generated.1.1.2)) (rest generated)).run
+        (certificateInitialCountedState generated stopped)
+
+theorem keygenCountedLengthGame_hit_budget_le_rate {Result : Type}
+    (q budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (rest : CertificateKeygenBoundaryResult →
+      OracleComp (OracleWorld + SigningSpec) Result) :
+    Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+      keygenCountedLengthGame q budget required stopAfter stopped rest] ≤
+      (q : ENNReal) * certificateCacheExceptionRate := by
+  unfold keygenCountedLengthGame
+  rw [← PMF.monad_bind_eq_bind, probEvent_bind_eq_tsum]
+  calc
+    _ ≤ ∑' generated,
+        Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+          ((q - generated.1.2.hashCalls : ENNReal) * certificateCacheExceptionRate) := by
+      apply ENNReal.tsum_le_tsum
+      intro generated
+      by_cases hg : generated ∈
+          (liftM (boundaryRun 0 scheme.keygen ∅) : PMF CertificateKeygenBoundaryResult).support
+      · apply mul_le_mul' le_rfl
+        have hb : generated ∈ support (boundaryRun 0 scheme.keygen ∅) :=
+          (probCompLift_support _ ▸ hg)
+        have hrun : (generated.1.1, generated.2) ∈
+            support ((simulateQ romImpl scheme.keygen).run ∅) := by
+          rw [← boundaryRun_forget 0 scheme.keygen ∅, support_map]
+          exact ⟨generated, hb, rfl⟩
+        let state := certificateInitialCountedState generated stopped
+        let ghost : CertificateStoppedCacheState :=
+          (generated.2, (false, q - generated.1.2.hashCalls))
+        have hfinite : Finite ghost.1 :=
+          finite_cache_of_mem_support scheme.keygen ∅ generated.1.1 generated.2 hrun finite_empty
+        have hclean := certificateStoppedKeygen_cache_clean generated hb
+        have hzero : stoppedCacheHistoryWeight generated.1.1.2 ghost = 0 := by
+          rw [stoppedCacheHistoryWeight]
+          simp only [ghost, Bool.false_eq_true, if_false]
+          exact certificateCacheExceptionWeight_initial generated.1.1.2 generated.2
+            (keygen_cache_message_none (generated.1.1, generated.2) hrun)
+        by_cases hspent : generated.1.2.hashCalls ≤ q
+        · exact certificateCountedLengthImpl_hit_budget_le_rate
+            generated.1.1.2 budget required (stopAfter generated.1.1.2)
+            (rest generated) (state, ghost) q rfl hspent rfl
+            (by simp [state, certificateInitialCountedState])
+            (by intro hbad; exact False.elim (hclean hbad))
+            hfinite hzero
+        · have hnone : Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+              (simulateQ (certificateCountedLengthImpl generated.1.1.2 budget required
+                (stopAfter generated.1.1.2)) (rest generated)).run state] = 0 := by
+            rw [← SPMF.probEvent_liftM]
+            apply probEvent_eq_zero
+            intro result hr hevent
+            have hr' : result ∈ ((simulateQ (certificateCountedLengthImpl
+                generated.1.1.2 budget required (stopAfter generated.1.1.2))
+                (rest generated)).run state).support := by
+              simpa only [SPMF.support_eq_support, SPMF.support_liftM] using hr
+            have hmono := certificateCountedLengthImpl_spent_mono generated.1.1.2
+              budget required (stopAfter generated.1.1.2) (rest generated) state result hr'
+            simp only [state, certificateInitialCountedState] at hmono
+            omega
+          rw [hnone]
+          exact zero_le
+      · have hz : (liftM (boundaryRun 0 scheme.keygen ∅) : PMF CertificateKeygenBoundaryResult) generated = 0 := by
+          simpa only [PMF.mem_support_iff, not_not] using hg
+        rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
+    _ ≤ ∑' generated,
+        Pr[= generated | (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)] *
+          ((q : ENNReal) * certificateCacheExceptionRate) := by
+      apply ENNReal.tsum_le_tsum
+      intro generated
+      apply mul_le_mul' le_rfl
+      rw [← ENNReal.natCast_sub]
+      exact mul_le_mul' (Nat.cast_le.mpr (Nat.sub_le _ _)) le_rfl
+    _ = _ := by
+      rw [ENNReal.tsum_mul_right, tsum_probOutput_of_liftM_PMF, one_mul]
+
+end SphincsSecurity.Concrete
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_spent_mono' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_spent_mono
+
+/-- info: 'SphincsSecurity.Concrete.keygenCountedLengthGame_hit_budget_le_rate' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.keygenCountedLengthGame_hit_budget_le_rate
