@@ -3091,4 +3091,254 @@ theorem first_bottom_chain_next_context (hash : Hash) (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_chain_next_context
 
+theorem abstract_chain_step (hash : Hash) (parameter value : BitVec 160)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (n : Nat) (hn : n < chainLength - 1) :
+    evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+      (Concrete.chainWalk parameter lay treeIdx leaf chain 0 (n + 1) value :
+        OracleComp SphincsSecurity.HashSpec Digest) =
+    truncateHash (hash (toQuery (tweakableHashInput parameter
+      (.chain lay treeIdx leaf chain ⟨n, hn⟩)
+      (bytesLE 20 (evalWithAnswerFn (spec := SphincsSecurity.HashSpec)
+        (adaptOracle hash)
+        (Concrete.chainWalk parameter lay treeIdx leaf chain 0 n value :
+          OracleComp SphincsSecurity.HashSpec Digest)))))) := by
+  simp only [Concrete.chainWalk]
+  rw [evalWithAnswerFn_bind]
+  have h : 0 + n < chainLength - 1 := by omega
+  have choose : (if h : 0 + n < chainLength - 1 then
+      (Concrete.tweakableHash parameter (.chain lay treeIdx leaf chain ⟨0 + n,h⟩)
+        (bytesLE 20 (evalWithAnswerFn (spec := SphincsSecurity.HashSpec)
+          (adaptOracle hash)
+          (Concrete.chainWalk parameter lay treeIdx leaf chain 0 n value :
+            OracleComp SphincsSecurity.HashSpec Digest))) :
+          OracleComp SphincsSecurity.HashSpec Digest)
+      else pure 0) =
+    Concrete.tweakableHash parameter (.chain lay treeIdx leaf chain ⟨0 + n,h⟩)
+      (bytesLE 20 (evalWithAnswerFn (spec := SphincsSecurity.HashSpec)
+        (adaptOracle hash)
+        (Concrete.chainWalk parameter lay treeIdx leaf chain 0 n value :
+          OracleComp SphincsSecurity.HashSpec Digest))) := dif_pos h
+  erw [choose, eval_hash]
+  have stepEq : (⟨0 + n,h⟩ : ChainStep) = ⟨n,hn⟩ := Fin.ext (Nat.zero_add n)
+  rw [stepEq]
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.abstract_chain_step' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms abstract_chain_step
+
+
+def firstBottomAbstractValue (hash : Hash) (parameter initial : BitVec 160)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (n : Nat) : BitVec 160 :=
+  evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+    (Concrete.chainWalk parameter lay treeIdx leaf chain 0 n initial :
+      OracleComp SphincsSecurity.HashSpec Digest)
+
+def firstBottomChainWalk (hash : Hash) : Nat → MachineState → MachineState
+  | 0, s => s
+  | n + 1, s => firstBottomChainIteration hash (firstBottomChainWalk hash n s)
+
+theorem first_bottom_abstract_value_zero (hash : Hash) (parameter initial : BitVec 160)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex) :
+    firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain 0 = initial := by
+  change evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
+    (pure initial : OracleComp SphincsSecurity.HashSpec Digest) = initial
+  exact evalWithAnswerFn_pure (adaptOracle hash) initial
+
+theorem first_bottom_abstract_value_succ (hash : Hash) (parameter initial : BitVec 160)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
+    (n : Nat) (hn : n < chainLength - 1) :
+    firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain (n + 1) =
+    truncateHash (hash (toQuery (tweakableHashInput parameter
+      (.chain lay treeIdx leaf chain ⟨n,hn⟩)
+      (bytesLE 20 (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n))))) := by
+  simpa [firstBottomAbstractValue, SphincsSecurity.Digest,
+    SphincsSecurity.digestBits] using
+      abstract_chain_step hash parameter initial lay treeIdx leaf chain n hn
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_abstract_value_succ' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_abstract_value_succ
+
+
+theorem first_bottom_chain_nonfinal (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3c50)
+    (ctx0 : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val)
+    (n : Nat) (hn : n < digit.val) :
+    Trace hash SphincsMaskedImages.sign s (95 * n) (102 * n) n n
+      (firstBottomChainWalk hash n s) ∧
+    (firstBottomChainWalk hash n s).getMem 0x430c8 =
+      BitVec.ofNat 64 digit.val ∧
+    (firstBottomChainWalk hash n s).pc = 0x3c50 ∧
+    ∃ step : ChainStep, step.val = n ∧
+      SphincsMaskedSignOtsDomain.Chain.Context (firstBottomChainWalk hash n s)
+        parameter (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n)
+        lay treeIdx leaf chain step := by
+  revert hn
+  induction n with
+  | zero =>
+    intro hn
+    refine ⟨?_, ?_, ?_, ⟨⟨0, by decide⟩, rfl, ?_⟩⟩
+    · simpa [firstBottomChainWalk] using
+        (Trace.refl (hash := hash) (image := SphincsMaskedImages.sign) s)
+    · simpa [firstBottomChainWalk] using loaded
+    · simpa [firstBottomChainWalk] using pc
+    · simpa [firstBottomChainWalk, first_bottom_abstract_value_zero] using ctx0
+  | succ n ih =>
+    intro hn
+    have prevBound : n < digit.val := by omega
+    obtain ⟨traceN, digitN, pcN, step, stepVal, ctxN⟩ := ih prevBound
+    have nBound : n < chainLength - 1 := by
+      have := digit.isLt
+      omega
+    have nextBound : step.val + 1 < chainLength - 1 := by
+      rw [stepVal]
+      have := digit.isLt
+      omega
+    have notDone : (firstBottomChainWalk hash n s).getMem 0x430c8 ≠
+        BitVec.ofNat 64 (step.val + 1) := by
+      rw [digitN, stepVal]
+      intro eq
+      have natEq := congrArg BitVec.toNat eq
+      have digitBound : digit.val < 8 := by
+        simpa [chainLength, winternitzBits] using digit.isLt
+      have digitSmall : digit.val < 2 ^ 64 := by omega
+      have nextSmall : n + 1 < 2 ^ 64 := by omega
+      simp [Nat.mod_eq_of_lt digitSmall, Nat.mod_eq_of_lt nextSmall] at natEq
+      omega
+    have traceStep := first_bottom_chain_iteration_trace hash
+      (firstBottomChainWalk hash n s) parameter
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n)
+      lay treeIdx leaf chain step pcN ctxN
+    have digitFrame :
+        (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).getMem
+          0x430c8#64 = (firstBottomChainWalk hash n s).getMem 0x430c8#64 :=
+      first_bottom_chain_iteration_frame hash (firstBottomChainWalk hash n s)
+        pcN _ (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide)
+    have contextNext := first_bottom_chain_next_context hash
+      (firstBottomChainWalk hash n s) parameter
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n)
+      lay treeIdx leaf chain step nextBound pcN ctxN notDone
+    have stepEq : step = ⟨n, nBound⟩ := Fin.ext stepVal
+    have valueEq :
+        truncateHash (hash (toQuery (tweakableHashInput parameter
+          (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n))))) =
+        firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain (n + 1) := by
+      rw [stepEq]
+      exact (first_bottom_abstract_value_succ hash parameter initial lay
+        treeIdx leaf chain n nBound).symm
+    refine ⟨?_, ?_, ?_, ⟨⟨step.val + 1, nextBound⟩, ?_, ?_⟩⟩
+    · simpa [firstBottomChainWalk, Nat.mul_succ, Nat.add_assoc] using
+        traceN.trans traceStep.1
+    · simpa [firstBottomChainWalk] using digitFrame.trans digitN
+    · simpa [firstBottomChainWalk] using contextNext.2
+    · simpa [stepVal]
+    · simpa [firstBottomChainWalk, valueEq] using contextNext.1
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_nonfinal' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_nonfinal
+
+
+theorem first_bottom_chain_iteration_trace_any (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    Trace hash SphincsMaskedImages.sign s 95 102 1 1
+      (firstBottomChainIteration hash s) := by
+  let answer := firstBottomChainHashAnswer hash s
+  let copied := firstBottomChainAnswerCopy answer
+  let advanced := firstBottomChainContinue copied
+  have hashStep := first_bottom_chain_hash hash s pc
+  have copyStep := first_bottom_chain_answer_copy answer hashStep.2
+  have continueStep := first_bottom_chain_continue_trace copied copyStep.2
+  have advancedPc := (first_bottom_chain_continue_controls copied copyStep.2).1
+  have checkStep := first_bottom_chain_check_trace advanced advancedPc
+  simpa only [firstBottomChainIteration, answer, copied, advanced, Nat.reduceAdd] using
+    ((hashStep.1.trans copyStep.1.trace).trans continueStep.trace).trans checkStep.trace
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_iteration_trace_any' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_iteration_trace_any
+
+
+theorem first_bottom_chain_final (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (positive : 0 < digit.val)
+    (pc : s.pc = 0x3c50)
+    (ctx0 : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val) :
+    Trace hash SphincsMaskedImages.sign s (95 * digit.val)
+      (102 * digit.val) digit.val digit.val
+      (firstBottomChainWalk hash digit.val s) ∧
+    (firstBottomChainWalk hash digit.val s).pc = 0x3db0 ∧
+    (firstBottomChainWalk hash digit.val s).getMem 0x43058 =
+      BitVec.ofNat 64 digit.val ∧
+    Words20 (firstBottomChainWalk hash digit.val s) 0x44b00
+      (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain digit.val) := by
+  obtain ⟨n, digitEq⟩ : ∃ n, digit.val = n + 1 := by
+    cases h : digit.val with
+    | zero => omega
+    | succ n => exact ⟨n, rfl⟩
+  have hn : n < digit.val := by omega
+  obtain ⟨traceN, digitN, pcN, step, stepVal, ctxN⟩ :=
+    first_bottom_chain_nonfinal hash s parameter initial lay treeIdx leaf chain
+      digit pc ctx0 loaded n hn
+  have nBound : n < chainLength - 1 := by
+    have digitBound : digit.val < 8 := by
+      simpa [chainLength, winternitzBits] using digit.isLt
+    omega
+  have stepEq : step = ⟨n, nBound⟩ := Fin.ext stepVal
+  have stepTrace := first_bottom_chain_iteration_trace hash
+    (firstBottomChainWalk hash n s) parameter
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n)
+    lay treeIdx leaf chain step pcN ctxN
+  have control := first_bottom_chain_iteration_controls hash
+    (firstBottomChainWalk hash n s) pcN
+  have value := first_bottom_chain_iteration_value hash
+    (firstBottomChainWalk hash n s) parameter
+    (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n)
+    lay treeIdx leaf chain step pcN ctxN
+  have counterN : (firstBottomChainWalk hash n s).getMem 0x43058 =
+      BitVec.ofNat 64 step.val := by
+    simpa using ctxN.2.2.2.2.1
+  have equal : (firstBottomChainWalk hash n s).getMem 0x43058 + 1 =
+      (firstBottomChainWalk hash n s).getMem 0x430c8 := by
+    rw [counterN, digitN, stepVal, digitEq]
+    simp [← BitVec.ofNat_add]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simpa [digitEq, firstBottomChainWalk, Nat.mul_succ, Nat.add_assoc] using
+      traceN.trans stepTrace.1
+  · rw [digitEq]
+    change (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).pc = _
+    rw [control.2, if_pos equal]
+  · rw [digitEq]
+    change (firstBottomChainIteration hash (firstBottomChainWalk hash n s)).getMem
+      0x43058 = _
+    rw [control.1, counterN, stepVal]
+    simp [← BitVec.ofNat_add]
+  · rw [digitEq]
+    change Words20 (firstBottomChainIteration hash (firstBottomChainWalk hash n s))
+      0x44b00 (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain (n + 1))
+    have valueEq :
+        truncateHash (hash (toQuery (tweakableHashInput parameter
+          (.chain lay treeIdx leaf chain step)
+          (bytesLE 20 (firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain n))))) =
+        firstBottomAbstractValue hash parameter initial lay treeIdx leaf chain (n + 1) := by
+      rw [stepEq]
+      exact (first_bottom_abstract_value_succ hash parameter initial lay
+        treeIdx leaf chain n nBound).symm
+    simpa only [valueEq] using value
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_chain_final' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_chain_final
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
