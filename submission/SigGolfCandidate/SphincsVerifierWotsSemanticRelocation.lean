@@ -2248,6 +2248,45 @@ theorem first_upper_header_mem_frame (state : MachineState) (read : Word)
   have n10 : read ≠ (262160#64) := ne _ (by decide) (by decide)
   simp only [if_neg n10, if_neg n8, if_neg n0]
 
+theorem first_upper_header_tag_word (state : MachineState) :
+    (firstUpperHeaderState state).getWord32 0x40000 =
+      ((1025#64) + (state.getMem 0x43000 <<< 16)).truncate 32 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getWord32, MachineState.getMem_setPC,
+    MachineState.getMem_setReg, setWord32_eq,
+    MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+
+theorem first_upper_header_position_word (state : MachineState) :
+    (firstUpperHeaderState state).getWord32 0x40004 =
+      (state.getMem 0x43010).truncate 32 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getWord32, MachineState.getMem_setPC,
+    MachineState.getMem_setReg, setWord32_eq,
+    MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+
+theorem first_upper_header_tree_word (state : MachineState) :
+    (firstUpperHeaderState state).getMem 0x40008 = state.getMem 0x43008 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getMem_setPC,
+    MachineState.getMem_setReg, setWord32_eq,
+    MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+
+theorem first_upper_header_index_word (state : MachineState) :
+    (firstUpperHeaderState state).getWord32 0x40010 =
+      (state.getMem 0x43018).truncate 32 := by
+  simp [firstUpperHeaderState, firstUpperHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.getWord32, MachineState.getMem_setPC,
+    MachineState.getMem_setReg, setWord32_eq,
+    MachineState.getMem_setMem_ne, alignToDword, byteOffset]
+
 theorem first_upper_header_payload_word (state : MachineState)
     (index : Fin 5) :
     (firstUpperHeaderState state).getWord32
@@ -3182,5 +3221,21 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_counter_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_prehash_counter_bytes
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_tag_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_header_tag_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_position_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_header_position_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_tree_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_header_tree_word
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_header_index_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_header_index_word
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation

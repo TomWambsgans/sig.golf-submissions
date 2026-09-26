@@ -19,6 +19,35 @@ private theorem probOutput_probCompLift {Result : Type} (computation : ProbComp 
 noncomputable def romPmfImpl : QueryImpl OracleWorld (StateT (QueryCache HashSpec) PMF) :=
   fun input => StateT.mk fun cache => (liftM ((romImpl input).run cache) : PMF _)
 
+/-- Lazy-oracle state for a query-level stopped cache-exception monitor. The
+    third component is the remaining hash-query budget. -/
+abbrev CertificateStoppedCacheState := QueryCache HashSpec × (Bool × Nat)
+
+noncomputable def certificateStoppedRomImpl (key : SecretKey) :
+    QueryImpl OracleWorld (StateT CertificateStoppedCacheState PMF) :=
+  fun input => StateT.mk fun state =>
+    ((romPmfImpl input).run state.1).map fun result =>
+      (result.1, (result.2,
+        (state.2.1 || decide (CertificateCacheExceptional key state.1) ||
+          decide (CertificateCacheExceptional key result.2),
+          state.2.2 - if input matches .inr _ then 1 else 0)))
+
+theorem certificateStoppedRomImpl_cache_project (key : SecretKey)
+    (input : OracleWorld.Domain) (state : CertificateStoppedCacheState) :
+    Prod.map id Prod.fst <$> (certificateStoppedRomImpl key input).run state =
+      (romPmfImpl input).run state.1 := by
+  change PMF.map _ _ = _
+  simp only [certificateStoppedRomImpl, StateT.run_mk, PMF.map_comp]
+  have hfun :
+      (Prod.map id Prod.fst ∘ fun result : OracleWorld.Range input × QueryCache HashSpec =>
+        (result.1, (result.2,
+          (state.2.1 || decide (CertificateCacheExceptional key state.1) ||
+            decide (CertificateCacheExceptional key result.2),
+            state.2.2 - if input matches .inr _ then 1 else 0)))) = id := by
+    funext result
+    rfl
+  rw [hfun, PMF.map_id]
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -578,3 +607,7 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.hashQueryBound_queryCap_run' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.hashQueryBound_queryCap_run
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_cache_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_cache_project
