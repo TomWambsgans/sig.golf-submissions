@@ -1725,6 +1725,125 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
     stepBound, cycleBound, callBound, blockBound, continuation,
     path.1, path.2.1, path.2.2, endFrame⟩
 
+/-- A verified upper layer and the following 43 ordinary instructions form one
+composable prefix. The resulting message is the XMSS root, while every later
+authentication path remains available in the same low-memory input buffer. -/
+theorem upper_decoder_path_handoff (target next : Fin 5) (hash : Hash)
+    (state ready : MachineState) (pk : SphincsSecurity.PublicKey)
+    (layer : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (signature : SphincsSecurity.Signature)
+    (digits : ChainIndex → Fin 8) (values : ChainIndex → Digest)
+    (layerEq : layer = SphincsVerifierXmssTransition.targetLayer target)
+    (handoffLayer : layer = SphincsVerifierXmssTransition.previousLayer next)
+    (readyEq : ready =
+      SphincsVerifierDecoderRelocation.setupState target
+        (SphincsVerifierDecoderRelocation.upperDecoderState target state))
+    (pc : state.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SphincsVerifierWotsRelocationTrace.wordOffset target))
+    (checksum : state.getReg .x15 +
+      SphincsVerifierWotsDecodeData.answerSum 52 state = 194)
+    (layerCell : ready.getMem 0x43000 = BitVec.ofNat 64 layer.val)
+    (treeCell : ready.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (indexCell : ready.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (digits chain).val)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix state pk)
+    (source : ∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      state.getByte (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        (values chain).extractLsb' (8 * j) 8)
+    (siblings : SphincsVerifierXmssPathControl.PathWitness state signature layer
+      (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase target + 20 * 52))) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      let pathEnd := SphincsVerifierXmssPathControl.pathState hash layer
+        (layerHeight layer) final
+      let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+      Trace hash SphincsImages.verify state steps cycles calls blocks final ∧
+      steps ≤ 507 + 728 * 52 + 856 ∧
+      cycles ≤ 507 + 777 * 52 + 991 ∧
+      calls ≤ 7 * 52 + 1 ∧ blocks ≤ 7 * 52 + 17 ∧
+      OrdinarySteps SphincsImages.verify pathEnd 43 nextState ∧
+      (∀ (tailSteps : Nat) (result : Execution),
+        Executes hash SphincsImages.verify nextState tailSteps result →
+          Executes hash SphincsImages.verify state
+            (steps + ((tailSteps + 43) +
+              SphincsVerifierXmssPathControl.pathInstructions hash layer
+                (layerHeight layer) final))
+            ((result.charge 43 0 0).charge
+              (cycles + SphincsVerifierXmssPathControl.pathCycles hash layer
+                (layerHeight layer) final)
+              (calls + layerHeight layer)
+              (blocks + 2 * layerHeight layer))) ∧
+      (∀ i, (hi : i < 20) →
+        nextState.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+          (Concrete.foldValue (adaptOracle hash) pk.parameter layer tree leaf
+            (Concrete.signaturePath signature layer)
+            (evalWithAnswerFn (adaptOracle hash)
+              (Concrete.leafHash pk.parameter layer tree leaf
+                (fun chain => evalWithAnswerFn (adaptOracle hash)
+                  (Concrete.recoverChain pk.parameter layer tree leaf chain
+                    (digits chain) (values chain)))))
+            (layerHeight layer)).extractLsb' (8 * i) 8) ∧
+      (∀ address, address.toNat < 0x40000 →
+        nextState.getByte address = state.getByte address) ∧
+      (∀ future : Fin 5,
+        SphincsVerifierXmssPathControl.PathWitness state signature
+          (SphincsVerifierXmssTransition.targetLayer future)
+          (BitVec.ofNat 64
+            (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52)) →
+        SphincsVerifierXmssPathControl.PathWitness nextState signature
+          (SphincsVerifierXmssTransition.targetLayer future)
+          (BitVec.ofNat 64
+            (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52))) := by
+  obtain ⟨final, steps, cycles, calls, blocks, run,
+    stepBound, cycleBound, callBound, blockBound, continuation,
+    donePc, rootBytes, _pathCycleBound, pathFrame⟩ :=
+    upper_decoder_path_digest target hash state ready pk layer tree leaf
+      signature digits values layerEq readyEq pc checksum layerCell treeCell
+      leafCell indexCell decoded hprefix source siblings
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash layer
+    (layerHeight layer) final
+  let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+  have handoffPc : pathEnd.pc =
+      SphincsVerifierXmssTransition.transitionPc next := by
+    rw [donePc, handoffLayer]
+    rfl
+  have handoff : OrdinarySteps SphincsImages.verify pathEnd 43 nextState :=
+    SphincsVerifierXmssTransitionMessage.handoff_block next pathEnd handoffPc
+  have lowFrame (address : Word) (low : address.toNat < 0x40000) :
+      nextState.getByte address = state.getByte address :=
+    (upper_handoff_low_byte_frame next pathEnd address low).trans
+      (pathFrame address low)
+  refine ⟨final, steps, cycles, calls, blocks, run,
+    stepBound, cycleBound, callBound, blockBound, handoff, ?_, ?_, lowFrame, ?_⟩
+  · intro tailSteps result tail
+    have afterHandoff : Executes hash SphincsImages.verify pathEnd
+        (tailSteps + 43) (result.charge 43 0 0) :=
+      handoff.then_executes tail
+    exact continuation (tailSteps + 43) (result.charge 43 0 0)
+      afterHandoff
+  · intro i hi
+    exact (SphincsVerifierXmssTransitionMessage.handoff_byte next pathEnd i hi).trans
+      (rootBytes i hi)
+  · intro future futureWitness
+    have pathWitness := pathWitness_of_low_byte_frame state pathEnd signature
+      (SphincsVerifierXmssTransition.targetLayer future)
+      (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52))
+      (upper_path_pointer_bound future) pathFrame futureWitness
+    exact upper_handoff_path_witness next future pathEnd signature
+      (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase future + 20 * 52))
+      (upper_path_pointer_bound future) pathWitness
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_decoder_path_handoff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms upper_decoder_path_handoff
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/

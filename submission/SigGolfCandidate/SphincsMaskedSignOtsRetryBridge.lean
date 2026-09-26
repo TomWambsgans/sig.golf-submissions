@@ -282,6 +282,25 @@ def encodingSuccessState (location : Fin 5) (s : MachineState) : MachineState :=
   let second := otsPaddingSecond location (otsPaddingFirst location s)
   sumTest (signerDecoderRun 52 (sumInit second))
 
+private theorem sumTest_byte (s : MachineState) (address : Word) :
+    (sumTest s).getByte address = s.getByte address := by
+  simp [MachineState.getByte, sumTest, execInstrBr]
+
+/-- Every accepted encoding leaves its 52 decoded digits in the cells read by
+    WOTS chain signing. -/
+theorem encoding_success_digit (location : Fin 5) (s : MachineState)
+    (chain : Fin 52) :
+    (encodingSuccessState location s).getByte
+      (BitVec.ofNat 64 (0x44000 + chain.val)) =
+      answerDigit chain
+        (sumInit (otsPaddingSecond location (otsPaddingFirst location s))) := by
+  rw [encodingSuccessState, sumTest_byte]
+  exact signer_run_digit 52 _ (by decide) chain chain.isLt
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.encoding_success_digit' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms encoding_success_digit
+
 /-- The successful post-HASH encoding path checks both padding bytes, emits all
     52 WOTS digits, and exits the checksum branch with no further HASH calls. -/
 theorem encoding_success_after_hash (location : Fin 5) (hash : Hash) (s : MachineState)

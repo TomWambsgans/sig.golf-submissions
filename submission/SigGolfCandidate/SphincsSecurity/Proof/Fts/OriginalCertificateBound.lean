@@ -1974,6 +1974,281 @@ private theorem targetCreationMultiplier_le_macroCost (key : SecretKey)
         mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
           (freshDigestSelectionProbability_le_one key message cache)
 
+/-- A final signing macro may exceed the true hash budget, but its booked
+creation mass still fits: activation reserves the macro's minimum cost. -/
+theorem certificateMonitorUpdate_creationMass_le_budget (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain)
+    (state : CertificateMonitorState) (length : Nat)
+    (record : ProposalExecutionRecord input)
+    (hspent : state.2.creationMass ≤ (state.2.spent : ENNReal))
+    (hbudget : state.2.creationMass ≤ (budget : ENNReal)) :
+    (certificateMonitorUpdate key budget required stopAfter input state
+      length record).creationMass ≤ (budget : ENNReal) := by
+  by_cases hactive : CertificateMonitorActive key budget input state
+  · have hremaining : signingMacroHashCost input ≤ budget - state.2.spent :=
+      hactive.2.2.2
+    have hspentBudget : state.2.spent ≤ budget := hactive.2.1.2.2
+    have hnat : state.2.spent + signingMacroHashCost input ≤ budget := by omega
+    calc
+      _ = state.2.creationMass + targetCreationMultiplier key state.1 input := by
+        simp only [certificateMonitorUpdate, if_pos hactive]
+      _ ≤ (state.2.spent : ENNReal) +
+          (signingMacroHashCost input : ENNReal) :=
+        add_le_add hspent (targetCreationMultiplier_le_macroCost key state.1 input)
+      _ = ((state.2.spent + signingMacroHashCost input : Nat) : ENNReal) := by
+        rw [Nat.cast_add]
+      _ ≤ (budget : ENNReal) := Nat.cast_le.mpr hnat
+  · simpa only [certificateMonitorUpdate, if_neg hactive] using hbudget
+
+/-- The monitor's creation mass never exceeds its nominal budget, on any
+adaptive transcript, even when the final recorded hash count overshoots. -/
+theorem certificateLength_run_creationMass_le_budget {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : CertificateMonitorState)
+    (hspent : state.2.creationMass ≤ (state.2.spent : ENNReal))
+    (hbudget : state.2.creationMass ≤ (budget : ENNReal))
+    (result : α × CertificateMonitorState)
+    (hr : result ∈ ((simulateQ (certificateLengthImpl key budget required
+      stopAfter) computation).run state).support) :
+    result.2.2.creationMass ≤ (budget : ENNReal) := by
+  induction computation using OracleComp.inductionOn generalizing state result with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, PMF.monad_pure_eq_pure,
+        PMF.mem_support_pure_iff] at hr
+      subst result
+      exact hbudget
+  | query_bind input next ih =>
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, hr⟩ := hr
+      obtain ⟨length, record, hrecord, rfl⟩ :=
+        certificateLengthImpl_support key budget required stopAfter input state
+          middle hmiddle
+      have hnextSpent := certificateMonitorUpdate_mass_le_spent key budget
+        required stopAfter input state length record hspent hrecord
+      have hnextBudget := certificateMonitorUpdate_creationMass_le_budget key
+        budget required stopAfter input state length record hspent hbudget
+      exact ih record.output (record.cache,
+        certificateMonitorUpdate key budget required stopAfter input state
+          length record) hnextSpent hnextBudget result hr
+
+theorem certificateProposal_run_creationMass_le_budget {α : Type}
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (state : List Index × CertificateMonitorState)
+    (hspent : state.2.2.creationMass ≤ (state.2.2.spent : ENNReal))
+    (hbudget : state.2.2.creationMass ≤ (budget : ENNReal))
+    (result : α × (List Index × CertificateMonitorState))
+    (hr : result ∈ ((simulateQ (certificateProposalImpl key budget required
+      stopAfter) computation).run state).support) :
+    result.2.2.2.creationMass ≤ (budget : ENNReal) := by
+  have hprojection := simulateQ_certificateProposalImpl_length key budget
+    required stopAfter computation state
+  have hm := (PMF.mem_support_map_iff (Prod.map id Prod.snd) _ _).mpr
+    ⟨result, hr, rfl⟩
+  rw [← PMF.monad_map_eq_map, hprojection] at hm
+  exact certificateLength_run_creationMass_le_budget key budget required
+    stopAfter computation state.2 hspent hbudget _ hm
+
+theorem certificateGame_creationMass_le_budget (adversary : Adversary)
+    (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (result : CertificateGameResult)
+    (hr : result ∈ (certificateGame adversary budget required stopAfter
+      stopped).support) :
+    result.2.2.2.creationMass ≤ (budget : ENNReal) := by
+  rw [certificateGame, PMF.monad_bind_eq_bind,
+    PMF.mem_support_bind_iff] at hr
+  obtain ⟨generated, _, hresult⟩ := hr
+  exact certificateProposal_run_creationMass_le_budget
+    generated.1.1.2 budget required (stopAfter generated.1.1.2)
+    (FtsProbeSimulation.retainedGameRestComputation adversary
+      generated.1.1.1)
+    ([], generated.2, initialCertificateMonitor generated.1.2.hashCalls
+      stopped) (by simp only [initialCertificateMonitor, zero_le])
+    (by simp only [initialCertificateMonitor, zero_le]) result hresult
+
+/-- The independent terminal proposal word still amortizes creation mass
+without any support-wide hash-call cutoff. -/
+theorem expected_certificateTerminalGame_mass_payoff_le_unconditionally
+    (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (total : Nat) (payoff : List Index → ENNReal) :
+    (∑' result,
+      Pr[= result | certificateTerminalGame adversary q required stopAfter
+        stopped total] *
+        (result.1.2.2.2.creationMass * payoff result.2)) ≤
+      (q : ENNReal) *
+        ∑' word, Pr[= word | independentProposalWord
+          (PMF.uniformOfFintype Index) total] * payoff word := by
+  have hword := congrArg
+    (fun law : PMF (List Index) =>
+      ∑' word, Pr[= word | law] * payoff word)
+    (certificateTerminalGame_word adversary q required stopAfter stopped total)
+  rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul] at hword
+  calc
+    _ ≤ ∑' result, (q : ENNReal) *
+        (Pr[= result | certificateTerminalGame adversary q required stopAfter
+          stopped total] * payoff result.2) := by
+      apply ENNReal.tsum_le_tsum
+      intro result
+      by_cases hzero : Pr[= result | certificateTerminalGame adversary q
+          required stopAfter stopped total] = 0
+      · rw [hzero, zero_mul, zero_mul, mul_zero]
+      · have hr : result ∈ (certificateTerminalGame adversary q required
+            stopAfter stopped total).support := by
+          simpa only [PMF.mem_support_iff, PMF.probOutput_eq_apply] using hzero
+        have hm := (PMF.mem_support_map_iff Prod.fst _ _).mpr
+          ⟨result, hr, rfl⟩
+        rw [certificateTerminalGame_game] at hm
+        have hmass := certificateGame_creationMass_le_budget adversary q
+          required stopAfter stopped result.1 hm
+        calc
+          _ ≤ Pr[= result | certificateTerminalGame adversary q required
+                stopAfter stopped total] *
+              ((q : ENNReal) * payoff result.2) :=
+            mul_le_mul' le_rfl (mul_le_mul' hmass le_rfl)
+          _ = _ := by ring
+    _ = _ := by rw [ENNReal.tsum_mul_left, hword]
+
+theorem expected_certificateTerminalGame_count_le_q_average_price
+    (adversary : Adversary) (q total : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (hbudget : q ≤ 2 ^ 128) :
+    (∑' result,
+      Pr[= result | certificateTerminalGame adversary q required
+        (fun key input state length record =>
+          proposalPrefixStop input state length record ||
+            stopAfter key input state length record)
+        (decide (total < fixedProposalLength)) total] *
+          certificateBankCount result.1.2.2.2.bank) ≤
+      (q : ENNReal) *
+        ∑' word, Pr[= word | independentProposalWord
+          (PMF.uniformOfFintype Index) total] *
+            terminalCertificatePrice required word := by
+  exact (expected_certificateTerminalGame_count_le_mass_price adversary q
+    total required stopAfter hbudget).trans
+    (expected_certificateTerminalGame_mass_payoff_le_unconditionally adversary
+      q required
+      (fun key input state length record =>
+        proposalPrefixStop input state length record ||
+          stopAfter key input state length record)
+      (decide (total < fixedProposalLength)) total
+      (terminalCertificatePrice required))
+
+theorem expected_certificateCounted_budget_bank_le_game_bank
+    (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+    (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (∑' result,
+      Pr[= result | certificateCountedContextGame adversary q required
+        stopAfter stopped] * CertificateCountedWeightedBank q result) ≤
+      ∑' result,
+        Pr[= result | certificateGame adversary q required stopAfter
+          stopped] * certificateBankCount result.2.2.2.bank := by
+  rw [← certificateCountedContextGame_game, tsum_probOutput_map_mul]
+  apply ENNReal.tsum_le_tsum
+  intro result
+  apply mul_le_mul' le_rfl
+  by_cases hcost : result.originalCost.2 ≤ q
+  · simp only [CertificateCountedWeightedBank, hcost, if_true]
+    exact le_rfl
+  · simp only [CertificateCountedWeightedBank, hcost, if_false]
+    exact zero_le
+
+theorem expected_certificateGame_bank_le_q_terminal_average
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    (∑' result,
+      Pr[= result | certificateGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false] *
+          certificateBankCount result.2.2.2.bank) ≤
+      (q : ENNReal) *
+        ∑' word, Pr[= word | independentProposalWord
+          (PMF.uniformOfFintype Index) fixedProposalLength] *
+            terminalCertificatePrice Finset.univ word := by
+  rw [← expected_certificateTerminalGame_project adversary q Finset.univ
+    (fun _ => proposalPrefixStop) false fixedProposalLength
+    (fun result => certificateBankCount result.2.2.2.bank)]
+  simpa only [Bool.or_false, Nat.lt_irrefl, decide_false] using
+    (expected_certificateTerminalGame_count_le_q_average_price adversary q
+      fixedProposalLength Finset.univ
+      (fun _ _ _ _ _ => false) hbudget)
+
+theorem uniformWordAverage_full_price_le_total_rate :
+    uniformWordAverage fixedProposalLength
+      (terminalCertificatePrice Finset.univ) ≤
+        fullCertificateTotalRate := by
+  let baseline : ENNReal := (2 ^ 144 : ENNReal)⁻¹
+  calc
+    _ ≤ uniformWordAverage fixedProposalLength
+        (fun word => baseline +
+          (terminalCertificatePrice Finset.univ word - baseline)) := by
+      apply uniformWordAverage_mono
+      intro word
+      exact le_add_tsub
+    _ = baseline + uniformWordAverage fixedProposalLength
+        (fun word => terminalCertificatePrice Finset.univ word - baseline) := by
+      rw [uniformWordAverage_add, uniformWordAverage_const]
+    _ ≤ baseline + fullCertificateExcessRate :=
+      add_le_add le_rfl uniformWordAverage_full_price_excess_le
+    _ = fullCertificateTotalRate := by
+      rw [fullCertificateTotalRate_def]
+
+theorem expected_certificateGame_bank_le_q_total_rate
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    (∑' result,
+      Pr[= result | certificateGame adversary q Finset.univ
+        (fun _ => proposalPrefixStop) false] *
+          certificateBankCount result.2.2.2.bank) ≤
+      (q : ENNReal) * fullCertificateTotalRate := by
+  calc
+    _ ≤ (q : ENNReal) *
+        ∑' word, Pr[= word | independentProposalWord
+          (PMF.uniformOfFintype Index) fixedProposalLength] *
+            terminalCertificatePrice Finset.univ word :=
+      expected_certificateGame_bank_le_q_terminal_average adversary q hbudget
+    _ = (q : ENNReal) * uniformWordAverage fixedProposalLength
+          (terminalCertificatePrice Finset.univ) := by
+      rw [uniformWordAverage_eq_independent]
+    _ ≤ (q : ENNReal) * fullCertificateTotalRate :=
+      mul_le_mul' le_rfl uniformWordAverage_full_price_le_total_rate
+
+theorem originalCertificate_budget_le_q_total_rate_add_exception
+    (adversary : Adversary) (q : Nat) (hbudget : q ≤ 2 ^ 128) :
+    Pr[OriginalBudgetedFullCertificate q |
+      originalCertificateCountedSource adversary] ≤
+      (q : ENNReal) * fullCertificateTotalRate +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] := by
+  calc
+    _ ≤ (∑' result,
+        Pr[= result | certificateCountedContextGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] *
+          CertificateCountedWeightedBank q result) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      originalCertificateCountedSource_full_budget_le_count_add_exception
+        adversary q hbudget
+    _ ≤ (∑' result,
+        Pr[= result | certificateGame adversary q Finset.univ
+          (fun _ => proposalPrefixStop) false] *
+          certificateBankCount result.2.2.2.bank) +
+        Pr[CertificateCountedBudgetExceptional q |
+          certificateCountedContextGame adversary q Finset.univ
+            (fun _ => proposalPrefixStop) false] :=
+      add_le_add
+        (expected_certificateCounted_budget_bank_le_game_bank adversary q
+          Finset.univ (fun _ => proposalPrefixStop) false) le_rfl
+    _ ≤ _ :=
+      add_le_add
+        (expected_certificateGame_bank_le_q_total_rate adversary q hbudget)
+        le_rfl
+
 private theorem certificateShadowUpdate_balance (key : SecretKey)
     (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain)
@@ -2347,6 +2622,151 @@ theorem expectedShadowCharge_le_remaining_mul_price_reachable {α : Type}
     (mul_le_mul' le_rfl
       (expectedShadowMass_le_remaining key budget required stopAfter
         computation initial hbalance))
+
+/-- The per-call price already contains the moment of the observed signing
+log. Future-query and future-signature terms can only increase it. -/
+theorem targetCreationPrice_ge_observed_signing_moment
+    (key : SecretKey) (budget signatures : Nat)
+    (required : Finset FtsTree) (state : CoverLogState) :
+    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ *
+      (Fintype.card Index : ENNReal)⁻¹) *
+        targetIndexMoments key state.1 state.2 0 required.card *
+          targetCertificateScale required ≤
+      targetCreationPrice key nearUniformDigestReuseWeight budget signatures
+        required state := by
+  unfold targetCreationPrice reuseRawEnvelope observedRawIndexShapeVector
+    liftTargetIndexVector
+  exact mul_le_mul' (mul_le_mul' le_rfl
+    (le_targetShapeEnvelope (Fintype.card Index : ENNReal)⁻¹
+      nearUniformDigestReuseWeight
+      (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ *
+        (Fintype.card Index : ENNReal)⁻¹)
+      budget signatures (liftTargetIndexVector
+        (targetIndexMoments key state.1 state.2)) ∅ required)) le_rfl
+
+private theorem index_term_le_sum (f : Index → ENNReal) (index : Index) :
+    f index ≤ ∑ i : Index, f i := by
+  exact Finset.single_le_sum (fun _ _ => zero_le) (Finset.mem_univ index)
+
+theorem targetIndexMoments_ge_repeated_index
+    (key : SecretKey) (state : CoverLogState) (index : Index)
+    (degree count : Nat)
+    (hcount : count ≤
+      (signingSlotsAtIndex (observedOptionalSigningViews
+        (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root
+          state.2) index).card) :
+    (count : ENNReal) ^ degree ≤
+      targetIndexMoments key state.1 state.2 0 degree := by
+  have hterm : ((signingSlotsAtIndex (observedOptionalSigningViews
+      (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2)
+      index).card : ENNReal) ^ degree ≤
+      targetIndexMoments key state.1 state.2 0 degree := by
+    calc
+      _ = cachedIndexMultiplicity key.parameter state.1 index ^ 0 *
+          ((signingSlotsAtIndex (observedOptionalSigningViews
+            (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root
+              state.2) index).card : ENNReal) ^ degree := by
+          rw [pow_zero, one_mul]
+      _ ≤ targetIndexMoments key state.1 state.2 0 degree := by
+          exact index_term_le_sum
+            (fun index => cachedIndexMultiplicity key.parameter state.1 index ^ 0 *
+              ((signingSlotsAtIndex (observedOptionalSigningViews
+                (FtsProbeSimulation.messageAnswers key.parameter state.1)
+                  key.root state.2) index).card : ENNReal) ^ degree) index
+  exact (by gcongr : (count : ENNReal) ^ degree ≤
+    ((signingSlotsAtIndex (observedOptionalSigningViews
+      (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2)
+      index).card : ENNReal) ^ degree).trans hterm
+
+theorem targetCreationPrice_ge_repeated_index
+    (key : SecretKey) (budget signatures : Nat)
+    (required : Finset FtsTree) (state : CoverLogState)
+    (index : Index) (count : Nat)
+    (hcount : count ≤
+      (signingSlotsAtIndex (observedOptionalSigningViews
+        (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root
+          state.2) index).card) :
+    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ *
+      (Fintype.card Index : ENNReal)⁻¹) *
+        (count : ENNReal) ^ required.card *
+          targetCertificateScale required ≤
+      targetCreationPrice key nearUniformDigestReuseWeight budget signatures
+        required state := by
+  exact (mul_le_mul' (mul_le_mul' le_rfl
+    (targetIndexMoments_ge_repeated_index key state index required.card count
+      hcount)) le_rfl).trans
+    (targetCreationPrice_ge_observed_signing_moment key budget signatures
+      required state)
+
+private theorem repeated32_price_constant :
+    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ *
+      (Fintype.card Index : ENNReal)⁻¹) *
+        (32 : ENNReal) ^ (Finset.univ : Finset FtsTree).card *
+          targetCertificateScale Finset.univ =
+      ((2 ^ 114 : Nat) : ENNReal)⁻¹ := by
+  norm_num [targetCertificateScale, ftsTreeHeight, totalHeight, ftsTrees,
+    Index, FtsTree, FtsLeaf]
+  have hnn :
+    (256 : NNReal)⁻¹ * (17179869184 : NNReal)⁻¹ *
+      1329227995784915872903807060280344576 *
+        (6277101735386680763835789423207666416102355444464034512896 : NNReal)⁻¹ =
+      (20769187434139310514121985316880384 : NNReal)⁻¹ := by norm_num
+  have he := congrArg (fun x : NNReal => (x : ENNReal)) hnn
+  simpa [ENNReal.coe_mul, ENNReal.coe_inv] using he
+
+/-- Thirty-two openings at one index already make the pointwise creation
+price exceed the desired 127-bit per-call rate. -/
+theorem targetCreationPrice_gt_127_of_repeated32
+    (key : SecretKey) (budget signatures : Nat)
+    (state : CoverLogState) (index : Index)
+    (hcount : 32 ≤
+      (signingSlotsAtIndex (observedOptionalSigningViews
+        (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root
+          state.2) index).card) :
+    ((2 ^ 127 : Nat) : ENNReal)⁻¹ <
+      targetCreationPrice key nearUniformDigestReuseWeight budget signatures
+        Finset.univ state := by
+  have hlower := targetCreationPrice_ge_repeated_index key budget signatures
+    Finset.univ state index 32 hcount
+  have hlower' : ((2 ^ 114 : Nat) : ENNReal)⁻¹ ≤
+      targetCreationPrice key nearUniformDigestReuseWeight budget signatures
+        Finset.univ state := by
+    calc
+      _ = (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ *
+          (Fintype.card Index : ENNReal)⁻¹) *
+            (32 : ENNReal) ^ (Finset.univ : Finset FtsTree).card *
+              targetCertificateScale Finset.univ :=
+        repeated32_price_constant.symm
+      _ ≤ _ := by simpa only [Nat.cast_ofNat] using hlower
+  exact (by norm_num : ((2 ^ 127 : Nat) : ENNReal)⁻¹ <
+    ((2 ^ 114 : Nat) : ENNReal)⁻¹).trans_le hlower'
+
+theorem no_uniform_127_price_on_reachable_repeated32
+    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (stopAfter : CertificateStopRule) (initial current : CertificateShadowState)
+    (index : Index)
+    (hreach : CertificateShadowReachable key budget required stopAfter
+      initial current)
+    (hrequired : required = Finset.univ)
+    (hcount : 32 ≤
+      (signingSlotsAtIndex (observedOptionalSigningViews
+        (FtsProbeSimulation.messageAnswers key.parameter current.1)
+          key.root current.2.2.log) index).card) :
+    ¬ ∀ state : CertificateShadowState,
+      CertificateShadowReachable key budget required stopAfter initial state →
+      targetCreationPrice key nearUniformDigestReuseWeight
+        (budget - state.2.2.spent)
+        (signatureLimit - state.2.2.log.length) required
+        (certificateMonitorCoverState (state.1, state.2.2)) ≤
+          ((2 ^ 127 : Nat) : ENNReal)⁻¹ := by
+  intro hprice
+  have hbound := hprice current hreach
+  subst required
+  have htooHigh := targetCreationPrice_gt_127_of_repeated32 key
+    (budget - current.2.2.spent)
+    (signatureLimit - current.2.2.log.length)
+    (current.1, current.2.2.log) index hcount
+  exact (not_lt_of_ge hbound) htooHigh
 
 theorem expectedShadowCharge_le_remaining_mul_price {α : Type}
     (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
@@ -2747,3 +3167,31 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price_reachable' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.expectedShadowCharge_le_remaining_mul_price_reachable
+
+/-- info: 'SphincsSecurity.Concrete.targetCreationPrice_ge_observed_signing_moment' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.targetCreationPrice_ge_observed_signing_moment
+
+/-- info: 'SphincsSecurity.Concrete.targetCreationPrice_gt_127_of_repeated32' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.targetCreationPrice_gt_127_of_repeated32
+
+/-- info: 'SphincsSecurity.Concrete.no_uniform_127_price_on_reachable_repeated32' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.no_uniform_127_price_on_reachable_repeated32
+
+/-- info: 'SphincsSecurity.Concrete.certificateMonitorUpdate_creationMass_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateMonitorUpdate_creationMass_le_budget
+
+/-- info: 'SphincsSecurity.Concrete.certificateGame_creationMass_le_budget' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateGame_creationMass_le_budget
+
+/-- info: 'SphincsSecurity.Concrete.expected_certificateTerminalGame_mass_payoff_le_unconditionally' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.expected_certificateTerminalGame_mass_payoff_le_unconditionally
+
+/-- info: 'SphincsSecurity.Concrete.originalCertificate_budget_le_q_total_rate_add_exception' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.originalCertificate_budget_le_q_total_rate_add_exception
