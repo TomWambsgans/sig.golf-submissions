@@ -1257,6 +1257,32 @@ private theorem wire_counter_of_split (pk : SphincsSecurity.PublicKey)
   rw [List.getElem_append_left inner]
   exact layerEncoding_counterByte signature lay i hi
 
+theorem wire_topCounter (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (i : Nat) (hi : i < counterBytes) :
+    (wire pk signature).extractLsb' (8 * (topOffset + i)) 8 =
+      (BitVec.ofNat 32 (signature.layers topLayer).counter.toNat).extractLsb' (8*i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec
+  let after : List Byte :=
+    (layerEncoding signature middleLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc]
+  have beforeLength : before.length = topOffset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp [prefixBytes, bytesLE, topOffset, ftsOffset,
+      randomizerOffset, parameterOffset, rootOffset, ftsOpeningBytes,
+      ftsTrees, digestBytes]
+  exact wire_counter_of_split pk signature topLayer topOffset
+    before after split beforeLength i hi
+
 theorem wire_middleCounter (pk : SphincsSecurity.PublicKey)
     (signature : Signature) (i : Nat) (hi : i < counterBytes) :
     (wire pk signature).extractLsb' (8 * (middleOffset + i)) 8 =
@@ -1284,6 +1310,30 @@ theorem wire_middleCounter (pk : SphincsSecurity.PublicKey)
       layerHeight, maxLayerHeight]
   exact wire_counter_of_split pk signature middleLayer middleOffset
     before after split beforeLength i hi
+
+theorem loaded_honest_topCounter (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (i : Nat) (hi : i < counterBytes) :
+    state.getByte (BitVec.ofNat 64 (0x22ca0 + topOffset + i)) =
+      (BitVec.ofNat 32 (signature.layers topLayer).counter.toNat).extractLsb'
+        (8*i) 8 := by
+  have full : topOffset + i < SphincsWire.signatureBytes := by
+    have layerFits : topOffset + layerBytes topLayer ≤
+      SphincsWire.signatureBytes := by decide
+    have counterFits : counterBytes ≤ layerBytes topLayer := by decide
+    omega
+  have addressEq : 0x22ca0 + topOffset + i =
+      0x22ca0 + (topOffset + i) := by omega
+  rw [addressEq, SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded _ full]
+  exact wire_topCounter inner signature i hi
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_topCounter' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_honest_topCounter
 
 theorem loaded_honest_middleCounter (publicKey : SigGolf.PublicKey)
     (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)

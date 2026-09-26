@@ -3217,6 +3217,41 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
         _ = ((firstUpperEncodingInput pk lay tree leaf message counter).map UInt8.toBitVec)[i]'hi := by
           simpa [ieq] using (firstUpperEncodingInput_counter pk lay tree leaf message counter j hj).symm
 
+theorem loaded_first_upper_counter_word
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some state) :
+    state.getWord32 0x23dbc =
+      BitVec.ofNat 32 (signature.layers topLayer).counter.toNat := by
+  apply BitVec.eq_of_getLsbD_eq_iff.mpr
+  intro bit hbit
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  have split := variableWord_byte state 0x23dbc
+    (by decide) (by decide) (0 : Fin 5) byte
+  have value := SphincsWireEncoding.loaded_honest_topCounter
+    publicKey message pk signature state loaded byte.val (by simpa only [SphincsWire.counterBytes] using byte.isLt)
+  have address : 0x22ca0 + SphincsWire.topOffset + byte.val =
+      0x23dbc + byte.val := by
+    have base : 0x22ca0 + SphincsWire.topOffset = 0x23dbc := by decide
+    omega
+  rw [address] at value
+  have bytes : (state.getWord32 0x23dbc).extractLsb' (8 * byte.val) 8 =
+      (BitVec.ofNat 32 (signature.layers topLayer).counter.toNat).extractLsb'
+        (8 * byte.val) 8 := by
+    have word : (state.getWord32
+        (BitVec.ofNat 64 (0x23dbc + 4 * (0 : Fin 5).val))) =
+        state.getWord32 0x23dbc := by rfl
+    rw [word] at split
+    simpa [byte] using split.symm.trans value
+  have bitEq := congrArg (fun value : BitVec 8 => value.getLsbD (bit % 8)) bytes
+  have offset : 8 * byte.val + bit % 8 = bit := by
+    dsimp [byte]
+    omega
+  simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
+    decide_true, Bool.true_and, offset] using bitEq
+
 theorem first_upper_encoding_query (state : MachineState)
     (pk : SphincsSecurity.PublicKey)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
@@ -3519,5 +3554,9 @@ theorem first_upper_encoding_query (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_encoding_query' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_encoding_query
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.loaded_first_upper_counter_word' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms loaded_first_upper_counter_word
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
