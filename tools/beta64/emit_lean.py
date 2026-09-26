@@ -47,6 +47,6 @@ for name in ('keygen','sign','expand','verify'):
  print(p,len(words),len(sites))
 
 combined_path=T/'SphincsBeta64Images.lean'
-combined_path.write_text('import SigGolf.Statements\nset_option linter.unusedSimpArgs false\n'+
+combined_path.write_text('import SigGolf.Statements\nimport RiscvZkvm.Rv64.Logic.MemRegion\nset_option linter.unusedSimpArgs false\n'+
                          '\n'.join(combined)+'\n')
 print(combined_path)
