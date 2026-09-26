@@ -1534,6 +1534,36 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
   exact ⟨final, steps, cycles, calls, blocks, run,
     stepBound, cycleBound, callBound, blockBound, path⟩
 
+/-- The exact prefix trace and XMSS path form one charged verifier execution. -/
+theorem upper_prefix_path_executes (hash : Hash) (layer : Layer)
+    (start leaf : MachineState) (pointer : Word)
+    (prefixSteps prefixCycles prefixCalls prefixBlocks : Nat)
+    (preTrace : Trace hash SphincsImages.verify start
+      prefixSteps prefixCycles prefixCalls prefixBlocks leaf)
+    (pc : leaf.pc = SphincsVerifierXmssParity.nodePc layer)
+    (pointerValue : leaf.getMem 0x43028 = pointer)
+    (pointerBound : pointer.toNat + 20 * layerHeight layer ≤ 0x40000)
+    (pointerAligned : pointer.toNat % 4 = 0)
+    (levelCell : leaf.getMem 0x43048 = 1)
+    (tailSteps : Nat) (result : Execution)
+    (tail : Executes hash SphincsImages.verify
+      (SphincsVerifierXmssPathControl.pathState hash layer
+        (layerHeight layer) leaf) tailSteps result) :
+    Executes hash SphincsImages.verify start
+      (prefixSteps +
+        (tailSteps + SphincsVerifierXmssPathControl.pathInstructions hash layer
+          (layerHeight layer) leaf))
+      (result.charge
+        (prefixCycles + SphincsVerifierXmssPathControl.pathCycles hash layer
+          (layerHeight layer) leaf)
+        (prefixCalls + layerHeight layer)
+        (prefixBlocks + 2 * layerHeight layer)) := by
+  have path := SphincsVerifierXmssPathComplete.complete_path_executes
+    hash layer leaf pointer pc pointerValue pointerBound pointerAligned
+      levelCell tailSteps result tail
+  simpa [Execution.charge, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm]
+    using preTrace.then_executes path
+
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_low_byte_frame' depends on axioms: [propext,
  Classical.choice,
  Quot.sound] -/
@@ -1568,6 +1598,12 @@ theorem upper_decoder_path_digest (target : Fin 5) (hash : Hash)
  Quot.sound] -/
 #guard_msgs in
 #print axioms upper_decoder_path_digest
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_prefix_path_executes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound] -/
+#guard_msgs in
+#print axioms upper_prefix_path_executes
 
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.upper_ready_source' depends on axioms: [propext,
  Classical.choice,
