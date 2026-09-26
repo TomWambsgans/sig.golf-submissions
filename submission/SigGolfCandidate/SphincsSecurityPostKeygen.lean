@@ -862,6 +862,103 @@ theorem coupled_two_bad_events_le
           add_le_add le_rfl (probEvent_or_le _ _ _)
     _ = _ := by rw [← hreference, probEvent_map, add_assoc]; rfl
 
+/-- Transfer a win within the actual work budget when the reference wins on good
+traces and makes no more hash calls. Only bad traces reached within the actual
+budget are charged. This is the interface needed for padded cache checks,
+which may add real hash calls absent from the reference game. -/
+theorem coupled_two_bad_budget_event_le
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool × Bool))
+    (actual reference : SPMF SigGolf.AttackResult) (Q : Nat)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hwin : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false →
+        z.1.won = true → z.2.1.won = true)
+    (hcost : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false →
+        z.2.1.hashCalls ≤ z.1.hashCalls) :
+    Pr[fun r => r.won = true ∧ r.hashCalls ≤ Q | actual] ≤
+      Pr[fun r => r.won = true ∧ r.hashCalls ≤ Q | reference] +
+      Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.1 = true | joint] +
+      Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.2 = true | joint] := by
+  have hstep :
+      Pr[fun z => z.1.won = true ∧ z.1.hashCalls ≤ Q | joint] ≤
+      Pr[fun z =>
+        (z.2.1.won = true ∧ z.2.1.hashCalls ≤ Q) ∨
+        (z.1.hashCalls ≤ Q ∧ z.2.2.1 = true) ∨
+        (z.1.hashCalls ≤ Q ∧ z.2.2.2 = true) | joint] := by
+    apply probEvent_mono
+    intro z hz hevent
+    rcases hevent with ⟨hwon, hbudget⟩
+    cases hm : z.2.2.1 with
+    | true => exact Or.inr (Or.inl ⟨hbudget, rfl⟩)
+    | false =>
+        cases hs : z.2.2.2 with
+        | true => exact Or.inr (Or.inr ⟨hbudget, rfl⟩)
+        | false => exact Or.inl ⟨hwin z hz hm hs hwon,
+            (hcost z hz hm hs).trans hbudget⟩
+  calc
+    Pr[fun r => r.won = true ∧ r.hashCalls ≤ Q | actual] =
+        Pr[fun z => z.1.won = true ∧ z.1.hashCalls ≤ Q | joint] := by
+      rw [← hactual, probEvent_map]
+      rfl
+    _ ≤ _ := hstep
+    _ ≤ Pr[fun z => z.2.1.won = true ∧ z.2.1.hashCalls ≤ Q | joint] +
+        Pr[fun z => (z.1.hashCalls ≤ Q ∧ z.2.2.1 = true) ∨
+          (z.1.hashCalls ≤ Q ∧ z.2.2.2 = true) | joint] :=
+      probEvent_or_le _ _ _
+    _ ≤ Pr[fun z => z.2.1.won = true ∧ z.2.1.hashCalls ≤ Q | joint] +
+        (Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.1 = true | joint] +
+          Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.2 = true | joint]) :=
+      add_le_add le_rfl (probEvent_or_le _ _ _)
+    _ = _ := by rw [← hreference, probEvent_map, add_assoc]; rfl
+
+/-- A budgeted 128-bit reference rate plus the 160-bit cache and
+256-bit seed losses fits the organizer's 127-bit rate. No hard query cap is
+assumed here; the three hypotheses are event-bounded estimates. -/
+theorem coupled_two_bad_budget_security127
+    (joint : SPMF (SigGolf.AttackResult × SigGolf.AttackResult × Bool × Bool))
+    (actual reference : SPMF SigGolf.AttackResult) (Q : Nat)
+    (hactual : (fun z => z.1) <$> joint = actual)
+    (hreference : (fun z => z.2.1) <$> joint = reference)
+    (hwin : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false →
+        z.1.won = true → z.2.1.won = true)
+    (hcost : ∀ z ∈ support joint,
+      z.2.2.1 = false → z.2.2.2 = false →
+        z.2.1.hashCalls ≤ z.1.hashCalls)
+    (href : Pr[fun r => r.won = true ∧ r.hashCalls ≤ Q | reference] ≤
+      (Q : ENNReal) / 2 ^ 128 + (Q : ENNReal) / 2 ^ 256)
+    (hmac : Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.1 = true | joint] ≤
+      (Q : ENNReal) / 2 ^ 160)
+    (hseed : Pr[fun z => z.1.hashCalls ≤ Q ∧ z.2.2.2 = true | joint] ≤
+      (Q : ENNReal) / 2 ^ 256) :
+    Pr[fun r => r.won = true ∧ r.hashCalls ≤ Q | actual] ≤
+      (Q : ENNReal) / 2 ^ 127 := by
+  have hrate : (Q : ENNReal) / 2 ^ 128 +
+      (Q : ENNReal) / 2 ^ 256 +
+      (Q : ENNReal) / 2 ^ 160 +
+      (Q : ENNReal) / 2 ^ 256 ≤
+        (Q : ENNReal) / 2 ^ 127 := by
+    simp only [div_eq_mul_inv]
+    rw [← mul_add, ← mul_add, ← mul_add]
+    gcongr
+    have hnn : ((2 ^ 128 : NNReal)⁻¹ +
+      (2 ^ 256 : NNReal)⁻¹ + (2 ^ 160 : NNReal)⁻¹ +
+      (2 ^ 256 : NNReal)⁻¹) ≤
+      (2 ^ 127 : NNReal)⁻¹ := by
+      apply NNReal.coe_le_coe.mpr
+      norm_num [div_le_div_iff₀]
+    have henn := ENNReal.coe_le_coe.mpr hnn
+    have hcast (n : Nat) : (↑((2 ^ n : NNReal)⁻¹) : ENNReal) =
+        (2 ^ n : ENNReal)⁻¹ := by
+      rw [ENNReal.coe_inv (by positivity), ENNReal.coe_pow]
+      norm_num
+    simpa only [ENNReal.coe_add, hcast] using henn
+  exact (coupled_two_bad_budget_event_le joint actual reference Q
+    hactual hreference hwin hcost).trans
+    ((add_le_add (add_le_add href hmac) hseed).trans hrate)
+
 /-- Given a full-result coupling and separately charged MAC and seed-hit
 traces, the certified deterministic reference bound yields the required
 127-bit organizer event bound. The hypotheses name precisely the interfaces
