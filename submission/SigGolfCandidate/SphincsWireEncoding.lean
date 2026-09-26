@@ -316,6 +316,7 @@ theorem wire_topPath (pk : SphincsSecurity.PublicKey)
   have jBound : j < layerBytes topLayer := by
     dsimp [j, layerBytes]
     have hlevel := level.isLt
+    have height : layerHeight topLayer = 11 := by decide
     have hi20 : i < 20 := by simpa [digestBytes] using hi
     simp only [counterBytes, numChains, digestBytes] at *
     omega
@@ -355,6 +356,34 @@ theorem wire_topPath (pk : SphincsSecurity.PublicKey)
   rw [List.getElem_append_left (by
     simpa only [List.length_map, layerEncoding_length] using jBound)]
   simpa only [j] using layerEncoding_pathByte signature topLayer level i hi
+
+/-- The verifier loader places the top XMSS path at its actual memory address. -/
+theorem loaded_honest_topPath (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (level : Fin (layerHeight topLayer)) (i : Nat) (hi : i < digestBytes) :
+    state.getByte (BitVec.ofNat 64
+      (0x22ca0 + topOffset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i)) =
+      ((signature.layers topLayer).path level).extractLsb' (8 * i) 8 := by
+  have full : topOffset + counterBytes + numChains * digestBytes +
+      level.val * digestBytes + i < SphincsWire.signatureBytes := by
+    have hlevel := level.isLt
+    have height : layerHeight topLayer = 11 := by decide
+    have hi20 : i < 20 := by simpa [digestBytes] using hi
+    have topStart : topOffset = 4380 := by decide
+    have size := SphincsWire.signatureBytes_eq
+    simp only [counterBytes, numChains, digestBytes] at *
+    omega
+  have addressEq : 0x22ca0 + topOffset + counterBytes +
+      numChains * digestBytes + level.val * digestBytes + i =
+      0x22ca0 + (topOffset + counterBytes + numChains * digestBytes +
+        level.val * digestBytes + i) := by omega
+  rw [addressEq, SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded _ full]
+  exact wire_topPath inner signature level i hi
 
 /-- Every byte of every FORS opening occupies its declared wire slot. -/
 theorem wire_ftsOpeningByte (pk : SphincsSecurity.PublicKey)
@@ -591,5 +620,9 @@ theorem loaded_honest_message_query (publicKey : SigGolf.PublicKey)
 /-- info: 'SigGolfCandidate.SphincsWireEncoding.wire_topPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms wire_topPath
+
+/-- info: 'SigGolfCandidate.SphincsWireEncoding.loaded_honest_topPath' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms loaded_honest_topPath
 
 end SigGolfCandidate.SphincsWireEncoding
