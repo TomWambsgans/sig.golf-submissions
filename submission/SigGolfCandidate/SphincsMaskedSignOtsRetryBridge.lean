@@ -8837,3 +8837,311 @@ theorem SignerBodyTrace.shifted {hash : Hash} {s t : MachineState}
 #print axioms signer_check_body
 #print axioms SignerBodyTrace.shifted
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+theorem SignerBodyTrace.ofOrdinaryStraight {hash : Hash} {s t : MachineState}
+    {count : Nat} (block : OrdinarySteps SphincsMaskedImages.sign s count t)
+    (low high : Nat) (lowBody : 0x3b20 ≤ low) (highBody : high ≤ 0x3dec)
+    (entry : low ≤ s.pc.toNat) (endBound : s.pc.toNat + 4 * count ≤ high)
+    (aligned : s.pc.toNat % 4 = 0)
+    (stepCert : ∀ (u v : MachineState) (instr : Instruction),
+      low ≤ u.pc.toNat → u.pc.toNat < high → u.pc.toNat % 4 = 0 →
+      fetch SphincsMaskedImages.sign u = some instr →
+      ordinaryStep u instr = some v →
+      ∃ i : Instr, instr = .base i ∧ signerSupported i ∧
+        v.pc.toNat = u.pc.toNat + 4) :
+    SignerBodyTrace hash s count count 0 0 t := by
+  induction block with
+  | refl state => exact SignerBodyTrace.refl state
+  | step state next final instruction steps fetched executed tail ih =>
+      have beforeHigh : state.pc.toNat < high := by omega
+      obtain ⟨i, rfl, supported, nextPc⟩ :=
+        stepCert state next instruction entry beforeHigh aligned fetched executed
+      have nextAlign : next.pc.toNat % 4 = 0 := by omega
+      have tailRun := ih (by omega) (by omega) nextAlign
+      exact SignerBodyTrace.ordinary state next final i steps steps 0 0
+        ⟨by omega, by omega, aligned⟩ fetched supported executed tailRun
+
+
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+open SphincsSecurity SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+private def PrepStraight : Instr → Prop
+  | .LUI .. | .ADDI .. | .LD .. | .SLLI .. | .ADD ..
+  | .SD .. | .LWU .. | .SW .. => True
+  | _ => False
+
+private instance (i : Instr) : Decidable (PrepStraight i) := by
+  cases i <;> simp [PrepStraight] <;> infer_instance
+
+private theorem prep_straight_code :
+    ∀ e ∈ SphincsMaskedChainStep.prepareSchedule, PrepStraight e.2 := by decide
+
+private theorem prep_straight_supported (i : Instr) (ok : PrepStraight i) :
+    signerSupported i := by
+  cases i <;> simp_all [PrepStraight, signerSupported,
+    SphincsMaskedSignOtsShift.Supported]
+
+private theorem prep_straight_pc (s : MachineState) (i : Instr)
+    (ok : PrepStraight i) :
+    (execInstrBr s i).pc = s.pc + 4 := by
+  cases i <;> simp_all [PrepStraight, execInstrBr]
+
+private theorem prep_straight_result (u v : MachineState) (i : Instr)
+    (ok : PrepStraight i)
+    (executed : ordinaryStep u (.base i) = some v) :
+    v = execInstrBr u i := by
+  cases i <;> simp_all [PrepStraight, ordinaryStep, memoryArgumentsValid]
+  all_goals split_ifs at executed <;> simp_all
+
+private theorem prep_site (j : Fin 65) :
+    (SphincsMaskedChainStep.prepareSchedule[j.val]'(by
+      simpa only [show SphincsMaskedChainStep.prepareSchedule.length = 65 from rfl]
+        using j.isLt)).1 = BitVec.ofNat 64 (0x1270 + 4 * j.val) := by
+  fin_cases j <;> decide
+
+private theorem prep_straight_step (u v : MachineState) (instr : Instruction)
+    (lower : 0x3c50 ≤ u.pc.toNat) (upper : u.pc.toNat < 0x3d54)
+    (aligned : u.pc.toNat % 4 = 0)
+    (fetched : fetch SphincsMaskedImages.sign u = some instr)
+    (executed : ordinaryStep u instr = some v) :
+    ∃ i : Instr, instr = .base i ∧ signerSupported i ∧
+      v.pc.toNat = u.pc.toNat + 4 := by
+  let j : Fin 65 := ⟨(u.pc.toNat - 0x3c50) / 4, by omega⟩
+  let e := SphincsMaskedChainStep.prepareSchedule[j.val]'(by
+    simpa only [show SphincsMaskedChainStep.prepareSchedule.length = 65 from rfl]
+      using j.isLt)
+  have member : e ∈ SphincsMaskedChainStep.prepareSchedule :=
+    List.getElem_mem (by simpa only [show SphincsMaskedChainStep.prepareSchedule.length = 65 from rfl]
+      using j.isLt)
+  have here : u.pc = e.1 + (0x29e0#64) := by
+    have site := prep_site j
+    have index : 0x3c50 + 4 * j.val = u.pc.toNat := by
+      dsimp [j]
+      omega
+    have siteSmall : 0x1270 + 4 * j.val < 2 ^ 64 := by
+      have := j.isLt
+      omega
+    have sumSmall : 0x1270 + 4 * j.val + 0x29e0 < 2 ^ 64 := by
+      have := j.isLt
+      omega
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_add_of_lt (by
+      rw [site, BitVec.toNat_ofNat]
+      simp only [Nat.mod_eq_of_lt siteSmall]
+      change 0x1270 + 4 * j.val + 0x29e0 < 2 ^ 64
+      exact sumSmall)]
+    rw [site, BitVec.toNat_ofNat, Nat.mod_eq_of_lt siteSmall]
+    have deltaNat : (0x29e0#64).toNat = 0x29e0 := rfl
+    rw [deltaNat]
+    omega
+  have expected : fetch SphincsMaskedImages.sign u = some (.base e.2) := by
+    rw [fetch_at, here]
+    exact first_bottom_chain_hash_code e member
+  have instrEq : instr = .base e.2 := by
+    rw [expected] at fetched
+    exact Option.some.inj fetched.symm
+  subst instr
+  have straight := prep_straight_code e member
+  have support := prep_straight_supported e.2 straight
+  have actual : v = execInstrBr u e.2 :=
+    prep_straight_result u v e.2 straight executed
+  refine ⟨e.2, rfl, support, ?_⟩
+  have fourNat : (4 : Word).toNat = 4 := by decide
+  have small : u.pc.toNat + (4 : Word).toNat < 2 ^ 64 := by
+    rw [fourNat]
+    omega
+  rw [actual, prep_straight_pc u e.2 straight,
+    BitVec.toNat_add_of_lt small, fourNat]
+
+#print axioms prep_straight_step
+
+theorem signer_chain_hash_prep_body_straight (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    SignerBodyTrace hash s 65 65 0 0 (firstBottomChainHashPrep s) := by
+  have run := first_bottom_chain_hash_prepare s pc
+  apply SignerBodyTrace.ofOrdinaryStraight run 0x3c50 0x3d54
+    (by decide) (by decide)
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · exact prep_straight_step
+
+#print axioms signer_chain_hash_prep_body_straight
+
+theorem signer_chain_hash_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    SignerBodyTrace hash s 66 73 1 1
+      (firstBottomChainHashAnswer hash s) := by
+  let prep := firstBottomChainHashPrep s
+  obtain ⟨src, bits, dst, service⟩ :=
+    SphincsMaskedChainStep.prepare_registers (s.setPC (0x1270#64))
+  have prepPc : prep.pc = 0x3d54 := by
+    have basePc : (SphincsMaskedChainStep.prepareState (s.setPC (0x1270#64))).pc =
+        0x1374 := SphincsMaskedChainStep.prepare_pc _ (by rfl)
+    change (SphincsMaskedChainStep.prepareState (s.setPC (0x1270#64))).pc +
+      (0x29e0 : Word) = 0x3d54
+    rw [basePc]
+    decide
+  have fetched : fetch SphincsMaskedImages.sign prep = some (.base .ECALL) := by
+    rw [fetch_at, prepPc]
+    decide
+  have valid : hashArgumentsValid prep = true := by
+    simp only [prep, firstBottomChainHashPrep,
+      SphincsMaskedSignOtsShift.hashValid_shift]
+    simp [hashArgumentsValid, src, bits, dst,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have length : (hashInput prep).1 = 480 := by
+    simp only [prep, firstBottomChainHashPrep,
+      SphincsMaskedSignOtsShift.hashInput_shift]
+    simp [hashInput, bits]
+  have hashBody : SignerBodyTrace hash prep 1 8 1 1
+      (writeHash prep (hash (hashInput prep))) := by
+    have one := SignerBodyTrace.hash (hash := hash) prep
+      (writeHash prep (hash (hashInput prep))) 0 0 0 0
+      ⟨by rw [prepPc]; decide, by rw [prepPc]; decide,
+        by rw [prepPc]; decide⟩ fetched
+      (by simpa [prep, firstBottomChainHashPrep] using service)
+      valid (SignerBodyTrace.refl (hash := hash) _)
+    simpa only [length, show compressions 480 = 1 from by decide,
+      Nat.reduceMul, Nat.reduceAdd] using one
+  have prepared := signer_chain_hash_prep_body_straight hash s pc
+  simpa only [firstBottomChainHashAnswer, prep, Nat.reduceAdd] using
+    prepared.trans hashBody
+
+#print axioms signer_chain_hash_body
+
+private theorem straight_step_of_sites (start count : Nat)
+    (startAligned : start % 4 = 0)
+    (small : start + 4 * count + 4 < 2 ^ 64)
+    (sites : ∀ j : Fin count,
+      ∃ i : Instr,
+        instructionAt SphincsMaskedImages.sign
+          (BitVec.ofNat 64 (start + 4 * j.val)) = some (.base i) ∧
+        PrepStraight i)
+    (u v : MachineState) (instr : Instruction)
+    (lower : start ≤ u.pc.toNat)
+    (upper : u.pc.toNat < start + 4 * count)
+    (aligned : u.pc.toNat % 4 = 0)
+    (fetched : fetch SphincsMaskedImages.sign u = some instr)
+    (executed : ordinaryStep u instr = some v) :
+    ∃ i : Instr, instr = .base i ∧ signerSupported i ∧
+      v.pc.toNat = u.pc.toNat + 4 := by
+  let j : Fin count := ⟨(u.pc.toNat - start) / 4, by omega⟩
+  obtain ⟨i, site, straight⟩ := sites j
+  have pcEq : u.pc = BitVec.ofNat 64 (start + 4 * j.val) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by have := j.isLt; omega)]
+    dsimp [j]
+    omega
+  have expected : fetch SphincsMaskedImages.sign u = some (.base i) := by
+    rw [fetch_at, pcEq]
+    exact site
+  have instrEq : instr = .base i := by
+    rw [expected] at fetched
+    exact Option.some.inj fetched.symm
+  subst instr
+  have actual : v = execInstrBr u i :=
+    prep_straight_result u v i straight executed
+  have fourNat : (4 : Word).toNat = 4 := by decide
+  have smallStep : u.pc.toNat + (4 : Word).toNat < 2 ^ 64 := by
+    rw [fourNat]
+    omega
+  refine ⟨i, rfl, prep_straight_supported i straight, ?_⟩
+  rw [actual, prep_straight_pc u i straight,
+    BitVec.toNat_add_of_lt smallStep, fourNat]
+
+private def chainAnswerInstr (j : Fin 14) : Instr :=
+  if j.val = 0 then .LUI .x6 0x42
+  else if j.val = 1 then .ADDI .x6 .x6 0
+  else if j.val = 2 then .LUI .x7 0x45
+  else if j.val = 3 then .ADDI .x7 .x7 (-1280)
+  else if (j.val - 4) % 2 = 0 then
+    .LWU .x13 .x6 (BitVec.ofNat 12 (4 * ((j.val - 4) / 2)))
+  else .SW .x7 .x13 (BitVec.ofNat 12 (4 * ((j.val - 4) / 2)))
+
+private theorem chain_answer_sites (j : Fin 14) :
+    instructionAt SphincsMaskedImages.sign
+      (BitVec.ofNat 64 (0x3d58 + 4 * j.val)) =
+        some (.base (chainAnswerInstr j)) ∧
+      PrepStraight (chainAnswerInstr j) := by
+  fin_cases j <;> decide
+
+theorem signer_chain_answer_copy_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3d58) :
+    SignerBodyTrace hash s 14 14 0 0 (firstBottomChainAnswerCopy s) := by
+  have old := (first_bottom_chain_answer_copy s pc).1
+  apply SignerBodyTrace.ofOrdinaryStraight old 0x3d58 0x3d90
+    (by decide) (by decide)
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · rw [pc]
+    decide
+  · intro u v instr lower upper aligned fetched executed
+    apply straight_step_of_sites 0x3d58 14 (by decide) (by decide) (by
+      intro j
+      exact ⟨chainAnswerInstr j, (chain_answer_sites j).1,
+        (chain_answer_sites j).2⟩)
+      u v instr lower upper aligned fetched executed
+
+#print axioms signer_chain_answer_copy_body
+
+theorem signer_chain_iteration_body (hash : Hash) (s : MachineState)
+    (pc : s.pc = 0x3c50) :
+    SignerBodyTrace hash s 95 102 1 1
+      (firstBottomChainIteration hash s) := by
+  let h := firstBottomChainHashAnswer hash s
+  let c := firstBottomChainAnswerCopy h
+  let k := firstBottomChainContinue c
+  have hashRun := signer_chain_hash_body hash s pc
+  have hashPc := (first_bottom_chain_hash hash s pc).2
+  have copyRun := signer_chain_answer_copy_body hash h hashPc
+  have copyPc := (first_bottom_chain_answer_copy h hashPc).2
+  have continueRun := signer_continue_body hash c copyPc
+  have continuePc := (first_bottom_chain_continue_controls c copyPc).1
+  have checkRun := signer_check_body hash k continuePc
+  have joined := ((hashRun.trans copyRun).trans continueRun).trans checkRun
+  simpa only [firstBottomChainIteration, h, c, k, Nat.reduceAdd] using joined
+
+#print axioms signer_chain_iteration_body
+
+theorem signer_chain_walk_body (hash : Hash) (s : MachineState)
+    (parameter initial : BitVec 160) (lay : Layer) (treeIdx : TreeIndex)
+    (leaf : LeafIndex) (chain : ChainIndex) (digit : Digit)
+    (pc : s.pc = 0x3c50)
+    (ctx0 : SphincsMaskedSignOtsDomain.Chain.Context s parameter initial
+      lay treeIdx leaf chain ⟨0, by decide⟩)
+    (loaded : s.getMem 0x430c8 = BitVec.ofNat 64 digit.val)
+    (n : Nat) (bound : n ≤ digit.val) :
+    SignerBodyTrace hash s (95 * n) (102 * n) n n
+      (firstBottomChainWalk hash n s) := by
+  induction n with
+  | zero => simpa only [Nat.mul_zero, firstBottomChainWalk] using
+      SignerBodyTrace.refl (hash := hash) s
+  | succ k ih =>
+      have kBound : k < digit.val := by omega
+      have loopPc :=
+        (first_bottom_chain_nonfinal hash s parameter initial lay treeIdx leaf
+          chain digit pc ctx0 loaded k kBound).2.2.1
+      have segment := signer_chain_iteration_body hash
+        (firstBottomChainWalk hash k s) loopPc
+      have joined := (ih (by omega)).trans segment
+      convert joined using 1 <;>
+        simp only [firstBottomChainWalk, Nat.mul_succ] <;> omega
+
+#print axioms signer_chain_walk_body
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
