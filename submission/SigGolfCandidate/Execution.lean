@@ -3,6 +3,37 @@ import SigGolfCandidate.Memory
 namespace SigGolfCandidate
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
 
+/-- Historical interpreter used by the old-PC trace proofs. -/
+def compressions (bits : Nat) : Nat := max 1 ((bits + 511) / 512)
+
+def hashArgumentsValid (state : MachineState) : Bool :=
+  let source := state.getReg .x10
+  let bits := (state.getReg .x11).toNat
+  let destination := state.getReg .x12
+  decide (source.toNat % 8 = 0) && rangeValid source ((bits + 7) / 8) &&
+    accessValid destination 8 && rangeValid destination 32
+
+def execute : Nat → Image → MachineState → OracleComp HashSpec Execution
+  | 0, _, state => pure ⟨.unfinished, state, 0, 0, 0⟩
+  | fuel + 1, image, state =>
+    match fetch image state with
+    | none => pure ⟨.failure, state, 0, 0, 0⟩
+    | some (.base .ECALL) =>
+      if state.getReg .x5 = 0 then
+        pure ⟨if state.getReg .x10 = 1 then .success else .failure, state, 1, 0, 0⟩
+      else if state.getReg .x5 = 1 && hashArgumentsValid state then do
+        let input := hashInput state
+        let answer ← HashSpec.query input
+        let result ← execute fuel image (writeHash state answer)
+        return result.charge (8 * compressions input.1) 1 (compressions input.1)
+      else pure ⟨.failure, state, 1, 0, 0⟩
+    | some instruction =>
+      match ordinaryStep state instruction with
+      | none => pure ⟨.failure, state, 1, 0, 0⟩
+      | some next => (fun result => result.charge 1 0 0) <$>
+          execute fuel image next
+
+
 /-- A finite execution derivation for the organizer's exact raw-bytecode interpreter. -/
 inductive Executes (hash : Hash) (image : Image) : MachineState → Nat → Execution → Prop where
   | halt (state : MachineState) (hf : fetch image state = some (.base .ECALL))
@@ -243,7 +274,7 @@ private theorem fetch_xori (s : MachineState) (pc : s.pc = 0x1044) :
   simp [fetch, translated, pc]
   exact decode_xori
 
-private theorem halt_terminal (hash : Hash) (s : MachineState)
+private theorem halt_terminal (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x1048) (selector : s.getReg .x5 = 1) :
     let result := evalWithAnswerFn hash (SigGolf.Riscv.execute 1 translated s)
     result.exit = (if s.getReg .x10 = 0 then .success else .failure) ∧
@@ -293,7 +324,7 @@ private theorem verdict_mem (s : MachineState) (address : Word) :
   simp [verdictState, selectorState, jumpState, execInstrBr,
     MachineState.getMem_setReg, MachineState.getMem_setPC]
 
-private theorem four_result (hash : Hash) (s : MachineState)
+private theorem four_result (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x103c) :
     evalWithAnswerFn hash (SigGolf.Riscv.execute 4 translated s) =
       (evalWithAnswerFn hash (SigGolf.Riscv.execute 1 translated (verdictState s))).charge 3 0 0 := by
@@ -307,7 +338,7 @@ private theorem four_result (hash : Hash) (s : MachineState)
 private theorem xor_one_zero_iff (value : BitVec 64) :
     value ^^^ 1 = 0 ↔ value = 1 := by bv_decide
 
-private theorem halt_stub (hash : Hash) (s : MachineState)
+private theorem halt_stub (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x103c) :
     let result := evalWithAnswerFn hash (SigGolf.Riscv.execute 4 translated s)
     result.exit = (if s.getReg .x10 = 1 then .success else .failure) ∧
@@ -320,7 +351,7 @@ private theorem halt_stub (hash : Hash) (s : MachineState)
   simp only [Execution.charge, verdict_register] at hexit hcycles ⊢
   simp [hexit, hcycles, hcalls, hblocks, hmem, verdict_mem]
 
-private theorem terminal_fuel (fuel : Nat) (hash : Hash) (s : MachineState)
+private theorem terminal_fuel (fuel : Nat) (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x1048) (selector : s.getReg .x5 = 1) :
     let result := evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 1) translated s)
     result.exit = (if s.getReg .x10 = 0 then .success else .failure) ∧
@@ -349,7 +380,7 @@ private theorem third_step_fuel (fuel : Nat) (s : MachineState) (pc : s.pc = 0x1
   rw [show fuel + 2 = Nat.succ (fuel + 1) by omega, SigGolf.Riscv.execute]
   simp [fetch_xori s pc, ordinaryStep, memoryArgumentsValid, instructionCycles]
 
-private theorem four_result_fuel (fuel : Nat) (hash : Hash) (s : MachineState)
+private theorem four_result_fuel (fuel : Nat) (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x103c) :
     evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 4) translated s) =
       (evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 1) translated (verdictState s))).charge 3 0 0 := by
@@ -360,7 +391,7 @@ private theorem four_result_fuel (fuel : Nat) (hash : Hash) (s : MachineState)
   simp [verdictState, evalWithAnswerFn_map, Execution.charge]
   omega
 
-theorem halt_stub_fuel (fuel : Nat) (hash : Hash) (s : MachineState)
+theorem halt_stub_fuel (fuel : Nat) (hash : SigGolf.Hash) (s : MachineState)
     (pc : s.pc = 0x103c) :
     let result := evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 4) translated s)
     result.exit = (if s.getReg .x10 = 1 then .success else .failure) ∧
@@ -398,102 +429,6 @@ def OutcomeMatches (oldResult newResult : Execution) : Prop :=
   newResult.hashCompressions = oldResult.hashCompressions ∧
   ∀ address, newResult.state.getMem address = oldResult.state.getMem address
 
-private theorem trace_transport (oldImage : Image) (hash : Hash)
-    (ordinary_fetch : ∀ (state : MachineState) (instruction : Instruction),
-      fetch oldImage state = some instruction → instruction ≠ .base .ECALL →
-      fetch translated state = some instruction)
-    (halt_pc : ∀ (state : MachineState),
-      fetch oldImage state = some (.base .ECALL) → state.pc = 0x103c)
-    (ordinary_cost : ∀ (state : MachineState) (instruction : Instruction),
-      fetch oldImage state = some instruction → instruction ≠ .base .ECALL →
-      instructionCycles instruction = 1)
-    {state : MachineState} {steps : Nat} {result : Execution}
-    (trace : Executes hash oldImage state steps result)
-    (zero : result.hashCalls = 0) :
-    OutcomeMatches result
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute (steps + 3) translated state)) := by
-  induction trace with
-  | halt state hf hs =>
-      have h := halt_stub hash state (halt_pc state hf)
-      dsimp only at h ⊢
-      rcases h with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
-      exact ⟨hexit, by omega, hcalls, hblocks, hmem⟩
-  | ordinary state next instruction steps tailResult hf he hs tail ih =>
-      have tailZero : tailResult.hashCalls = 0 := by
-        simpa [Execution.charge] using zero
-      have ih := ih tailZero
-      have nextStep :
-          evalWithAnswerFn hash (SigGolf.Riscv.execute (steps + 1 + 3) translated state) =
-            (evalWithAnswerFn hash (SigGolf.Riscv.execute (steps + 3) translated next)).charge 1 0 0 := by
-        rw [show steps + 1 + 3 = Nat.succ (steps + 3) by omega, SigGolf.Riscv.execute]
-        simp [ordinary_fetch state instruction hf he, hs, ordinary_cost state instruction hf he,
-          evalWithAnswerFn_map]
-      rw [nextStep]
-      rcases ih with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
-      exact ⟨hexit, by simp [Execution.charge] at *; omega,
-        by simpa [Execution.charge] using hcalls,
-        by simpa [Execution.charge] using hblocks,
-        hmem⟩
-  | hash state steps tailResult hf hs hv tail ih =>
-      simp [Execution.charge] at zero
-
-private theorem trace_transport_extra (extra : Nat) (oldImage : Image) (hash : Hash)
-    (ordinary_fetch : ∀ (state : MachineState) (instruction : Instruction),
-      fetch oldImage state = some instruction → instruction ≠ .base .ECALL →
-      fetch translated state = some instruction)
-    (halt_pc : ∀ (state : MachineState),
-      fetch oldImage state = some (.base .ECALL) → state.pc = 0x103c)
-    (ordinary_cost : ∀ (state : MachineState) (instruction : Instruction),
-      fetch oldImage state = some instruction → instruction ≠ .base .ECALL →
-      instructionCycles instruction = 1)
-    {state : MachineState} {steps : Nat} {result : Execution}
-    (trace : Executes hash oldImage state steps result)
-    (zero : result.hashCalls = 0) :
-    OutcomeMatches result
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute (extra + steps + 3) translated state)) := by
-  induction trace with
-  | halt state hf hs =>
-      have h := halt_stub_fuel extra hash state (halt_pc state hf)
-      dsimp only at h ⊢
-      rcases h with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
-      exact ⟨hexit, by omega, hcalls, hblocks, hmem⟩
-  | ordinary state next instruction steps tailResult hf he hs tail ih =>
-      have tailZero : tailResult.hashCalls = 0 := by
-        simpa [Execution.charge] using zero
-      have ih := ih tailZero
-      have nextStep :
-          evalWithAnswerFn hash (SigGolf.Riscv.execute (extra + steps + 1 + 3) translated state) =
-            (evalWithAnswerFn hash (SigGolf.Riscv.execute (extra + steps + 3) translated next)).charge 1 0 0 := by
-        rw [show extra + steps + 1 + 3 = Nat.succ (extra + steps + 3) by omega, SigGolf.Riscv.execute]
-        simp [ordinary_fetch state instruction hf he, hs, ordinary_cost state instruction hf he,
-          evalWithAnswerFn_map]
-      rw [show extra + (steps + 1) + 3 = extra + steps + 1 + 3 by omega, nextStep]
-      rcases ih with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
-      exact ⟨hexit, by simp [Execution.charge] at *; omega,
-        by simpa [Execution.charge] using hcalls,
-        by simpa [Execution.charge] using hblocks,
-        hmem⟩
-  | hash state steps tailResult hf hs hv tail ih =>
-      simp [Execution.charge] at zero
-
-theorem old_expand_trace_transport (hash : Hash)
-    {state : MachineState} {steps : Nat} {result : Execution}
-    (trace : Executes hash oldExpand state steps result)
-    (zero : result.hashCalls = 0) :
-    OutcomeMatches result
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute (steps + 3) translated state)) :=
-  trace_transport oldExpand hash ordinary_fetch_old halt_pc_old ordinary_cost_old trace zero
-
-theorem old_expand_trace_transport_extra (extra : Nat) (hash : Hash)
-    {state : MachineState} {steps : Nat} {result : Execution}
-    (trace : Executes hash oldExpand state steps result)
-    (zero : result.hashCalls = 0) :
-    OutcomeMatches result
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute (extra + steps + 3) translated state)) :=
-  trace_transport_extra extra oldExpand hash ordinary_fetch_old halt_pc_old ordinary_cost_old trace zero
-
-#print axioms old_expand_trace_transport_extra
-
 theorem old_expand_trace_pure_extra (extra : Nat) (hash : Hash)
     {state : MachineState} {steps : Nat} {result : Execution}
     (trace : Executes hash oldExpand state steps result)
@@ -524,6 +459,18 @@ theorem old_expand_trace_pure_extra (extra : Nat) (hash : Hash)
   | hash state steps tailResult hf hs hv tail ih =>
       simp [Execution.charge] at zero
 
+theorem old_expand_trace_transport_extra (extra : Nat) (oldHash : Hash)
+    (betaHash : SigGolf.Hash) {state : MachineState} {steps : Nat}
+    {result : Execution} (trace : Executes oldHash oldExpand state steps result)
+    (zero : result.hashCalls = 0) :
+    OutcomeMatches result
+      (evalWithAnswerFn betaHash (SigGolf.Riscv.execute (extra + steps + 3) translated state)) := by
+  obtain ⟨betaResult, betaRun, matched⟩ :=
+    old_expand_trace_pure_extra extra oldHash trace zero
+  simpa [betaRun] using matched
+
+#print axioms old_expand_trace_transport_extra
+
 #print axioms old_expand_trace_pure_extra
 
 theorem readBuffer_mem_eq (first second : MachineState) (address n : Nat)
@@ -550,106 +497,6 @@ theorem initialState_same_data (sizes : Sizes) (layout : Layout)
 
 #print axioms initialState_same_data
 #print axioms readOutput_mem_eq
-#print axioms old_expand_trace_transport
 #print axioms halt_stub
 #print axioms halt_terminal
 end SigGolfCandidate.BetaExpand
-
-namespace SigGolfCandidate.BetaTransport
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
-
-def Match (steps : Nat) (oldResult newResult : Execution) : Prop :=
-  newResult.exit = oldResult.exit ∧
-  newResult.hashCalls = oldResult.hashCalls ∧
-  newResult.hashCompressions = oldResult.hashCompressions ∧
-  (∀ address, newResult.state.getMem address = oldResult.state.getMem address) ∧
-  newResult.cycles ≤ oldResult.cycles + 6 * oldResult.hashCalls + 3 * steps + 3
-
-private theorem ordinary_cost (instruction : Instruction) :
-    SigGolf.Riscv.instructionCycles instruction ≤ 4 := by
-  cases instruction with
-  | base base => cases base <;> simp [SigGolf.Riscv.instructionCycles]
-  | word op rd rs1 rs2 => cases op <;> simp [SigGolf.Riscv.instructionCycles]
-  | sraiw rd rs shift => simp [SigGolf.Riscv.instructionCycles]
-
-private theorem ordinary_eval (hash : Hash) (image : Image) (state next : MachineState)
-    (instruction : Instruction) (fuel : Nat)
-    (fetched : fetch image state = some instruction)
-    (notHash : instruction ≠ .base .ECALL)
-    (stepped : ordinaryStep state instruction = some next) :
-    evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 1) image state) =
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute fuel image next)).charge
-        (SigGolf.Riscv.instructionCycles instruction) 0 0 := by
-  cases instruction with
-  | base baseInstruction =>
-    cases baseInstruction <;> simp_all [SigGolf.Riscv.execute]
-  | word op rd rs1 rs2 =>
-    simp [SigGolf.Riscv.execute, fetched, stepped]
-  | sraiw rd rs shift =>
-    simp [SigGolf.Riscv.execute, fetched, stepped]
-
-theorem trace_bound (oldImage betaImage : Image) (hash : Hash)
-    (ordinary_fetch : ∀ (state : MachineState) (instruction : Instruction),
-      fetch oldImage state = some instruction → instruction ≠ .base .ECALL →
-      fetch betaImage state = some instruction)
-    (halt_macro : ∀ (state : MachineState) (extra : Nat),
-      fetch oldImage state = some (.base .ECALL) → state.getReg .x5 = 0 →
-      Match 1 (⟨if state.getReg .x10 = 1 then .success else .failure,
-        state, 1, 0, 0⟩ : Execution)
-        (evalWithAnswerFn hash (SigGolf.Riscv.execute (extra + 4) betaImage state)))
-    (hash_macro : ∀ (state : MachineState) (fuel : Nat),
-      fetch oldImage state = some (.base .ECALL) → state.getReg .x5 = 1 →
-      hashArgumentsValid state = true →
-      evalWithAnswerFn hash (SigGolf.Riscv.execute (fuel + 7) betaImage state) =
-        (evalWithAnswerFn hash (SigGolf.Riscv.execute fuel betaImage
-          (writeHash state (hash (hashInput state))))).charge
-          (6 + 8 * compressions (hashInput state).1) 1
-          (compressions (hashInput state).1))
-    {state : MachineState} {steps : Nat} {result : Execution}
-    (trace : Executes hash oldImage state steps result) (extra : Nat) :
-    Match steps result
-      (evalWithAnswerFn hash (SigGolf.Riscv.execute
-        (extra + steps + 6 * result.hashCalls + 3) betaImage state)) := by
-  induction trace generalizing extra with
-  | halt state hf hs =>
-    simpa using halt_macro state extra hf hs
-  | ordinary state next instruction steps tailResult hf he hs tail ih =>
-    have ih' := ih extra
-    have fuelEq :
-        extra + (steps + 1) + 6 * (tailResult.charge 1 0 0).hashCalls + 3 =
-          (extra + steps + 6 * tailResult.hashCalls + 3) + 1 := by
-      simp [Execution.charge]
-      omega
-    rw [fuelEq, ordinary_eval hash betaImage state next instruction
-      (extra + steps + 6 * tailResult.hashCalls + 3)
-      (ordinary_fetch state instruction hf he) he hs]
-    rcases ih' with ⟨exitEq, callEq, blockEq, memEq, cycleBound⟩
-    refine ⟨exitEq, ?_, ?_, memEq, ?_⟩
-    · simpa [Execution.charge] using callEq
-    · simpa [Execution.charge] using blockEq
-    · simp only [Execution.charge] at cycleBound ⊢
-      have cost := ordinary_cost instruction
-      omega
-  | hash state steps tailResult hf hs hv tail ih =>
-    have ih' := ih extra
-    have fuelEq :
-        extra + (steps + 1) + 6 *
-          (tailResult.charge (8 * compressions (hashInput state).1) 1
-            (compressions (hashInput state).1)).hashCalls + 3 =
-          (extra + steps + 6 * tailResult.hashCalls + 3) + 7 := by
-      simp [Execution.charge]
-      omega
-    rw [fuelEq, hash_macro state
-      (extra + steps + 6 * tailResult.hashCalls + 3) hf hs hv]
-    rcases ih' with ⟨exitEq, callEq, blockEq, memEq, cycleBound⟩
-    refine ⟨exitEq, ?_, ?_, memEq, ?_⟩
-    · simpa [Execution.charge] using callEq
-    · simpa [Execution.charge] using blockEq
-    · simp only [Execution.charge] at cycleBound ⊢
-      omega
-
-/-- info: 'SigGolfCandidate.BetaTransport.trace_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms trace_bound
-
-end SigGolfCandidate.BetaTransport

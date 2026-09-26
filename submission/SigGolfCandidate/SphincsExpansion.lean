@@ -1,5 +1,5 @@
 import SigGolfCandidate.Execution
-import SigGolfCandidate.SphincsSubmission
+import SigGolfCandidate.SphincsImages
 
 namespace SigGolfCandidate.Sphincs
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
@@ -276,43 +276,86 @@ theorem executes (hash : Hash) (s : MachineState) (pc : s.pc = 0x1000) :
 private theorem exact_old_image : expand = BetaExpand.oldExpand := by rfl
 
 /-- The original 8,500-step proof transports to the translated beta image at full observation fuel. -/
-theorem beta_expand_executes_full (hash : Hash) (s : MachineState) (pc : s.pc = 0x1000) :
+theorem beta_expand_executes_full (oldHash : Hash) (betaHash : SigGolf.Hash) (s : MachineState) (pc : s.pc = 0x1000) :
     ∃ oldFinal,
       BetaExpand.OutcomeMatches ⟨.success, oldFinal, 8500, 0, 0⟩
-        (evalWithAnswerFn hash (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated s)) := by
-  obtain ⟨oldFinal, trace⟩ := executes hash s pc
+        (evalWithAnswerFn betaHash (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated s)) := by
+  obtain ⟨oldFinal, trace⟩ := executes oldHash s pc
   rw [exact_old_image] at trace
   have transported := BetaExpand.old_expand_trace_transport_extra
-    (CYCLE_LIMIT - 8503) hash trace rfl
+    (CYCLE_LIMIT - 8503) oldHash betaHash trace rfl
   have fuel : CYCLE_LIMIT - 8503 + 8500 + 3 = CYCLE_LIMIT := by decide
   exact ⟨oldFinal, by simpa only [fuel] using transported⟩
 
-theorem run_bound (hash : Hash)
-    (input : Input SphincsSubmission.submission.sizes .expand) :
-    let result := SphincsSubmission.submission.runWith hash .expand input
+
+
+/-- Any admitted submission using this exact expansion image has a fixed, HASH-free expansion cost. -/
+theorem run_bound_generic (submission : Submission) (admitted : submission.Admissible)
+    (image : submission.image .expand = BetaExpand.translated)
+    (betaHash : SigGolf.Hash)
+    (input : Input submission.sizes .expand) :
+    let result := submission.runWith betaHash .expand input
     result.finished = true ∧ result.value.isSome = true ∧ result.cycles = 8503 ∧
       result.hashCalls = 0 ∧ result.hashCompressions = 0 := by
-  obtain ⟨state, loaded, pc⟩ := initialState_exists
-    SphincsSubmission.submission SphincsSubmission.admissible .expand input
-  obtain ⟨oldFinal, matchResult⟩ := beta_expand_executes_full hash state pc
+  obtain ⟨state, loaded, pc⟩ := initialState_exists submission admitted .expand input
+  obtain ⟨oldFinal, matchResult⟩ := beta_expand_executes_full (fun _ => 0) betaHash state pc
   rcases matchResult with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
-  let execution := evalWithAnswerFn hash
+  let execution := evalWithAnswerFn betaHash
     (SigGolf.Riscv.execute CYCLE_LIMIT BetaExpand.translated state)
   have hexecution : execution.exit = .success ∧ execution.cycles = 8503 ∧
       execution.hashCalls = 0 ∧ execution.hashCompressions = 0 := by
     dsimp [execution] at hexit hcycles hcalls hblocks ⊢
     exact ⟨hexit, by omega, hcalls, hblocks⟩
   rcases hexecution with ⟨hexit, hcycles, hcalls, hblocks⟩
-  have run : SphincsSubmission.submission.runWith hash .expand input =
-      ⟨some (readOutput SphincsSubmission.submission.sizes
-          SphincsSubmission.submission.layout .expand execution.state),
+  have run : submission.runWith betaHash .expand input =
+      ⟨some (readOutput submission.sizes submission.layout .expand execution.state),
         true, execution.cycles, execution.hashCalls, execution.hashCompressions⟩ := by
     unfold Submission.runWith
     rw [Submission.run, loaded]
-    simp [evalWithAnswerFn_map, SphincsSubmission.submission, execution, hexit]
+    simp [evalWithAnswerFn_map, image, execution, hexit]
   simp [run, hcycles, hcalls, hblocks]
 
-#print axioms run_bound
+/-- The beta expansion returns exactly the buffer produced by the proved legacy copy loop. -/
+theorem run_value_generic (submission : Submission) (admitted : submission.Admissible)
+    (image : submission.image .expand = BetaExpand.translated)
+    (betaHash : SigGolf.Hash) (input : Input submission.sizes .expand) :
+    ∃ initial final,
+      initialState submission .expand input = some initial ∧
+      Executes (fun _ => 0) BetaExpand.oldExpand initial 8500
+        ⟨.success, final, 8500, 0, 0⟩ ∧
+      submission.runWith betaHash .expand input =
+        ⟨some (readOutput submission.sizes submission.layout .expand final),
+          true, 8503, 0, 0⟩ := by
+  obtain ⟨state, loaded, pc⟩ := initialState_exists submission admitted .expand input
+  obtain ⟨final, trace⟩ := executes (fun _ => 0) state pc
+  rw [exact_old_image] at trace
+  obtain ⟨betaResult, betaRun, matched⟩ :=
+    BetaExpand.old_expand_trace_pure_extra (CYCLE_LIMIT - 8503) (fun _ => 0) trace rfl
+  have fuel : CYCLE_LIMIT - 8503 + 8500 + 3 = CYCLE_LIMIT := by decide
+  rw [fuel] at betaRun
+  rcases matched with ⟨hexit, hcycles, hcalls, hblocks, hmem⟩
+  refine ⟨state, final, loaded, trace, ?_⟩
+  have outputEq := BetaExpand.readOutput_mem_eq submission.sizes submission.layout
+    .expand betaResult.state final hmem
+  unfold Submission.runWith
+  rw [Submission.run, loaded]
+  simp [image, betaRun, hexit, hcycles, hcalls, hblocks, outputEq]
+
+theorem expand_terminates_generic (submission : Submission)
+    (admitted : submission.Admissible)
+    (image : submission.image .expand = BetaExpand.translated)
+    (betaHash : SigGolf.Hash) (input : Input submission.sizes .expand) :
+    let result := submission.runWith betaHash .expand input
+    result.finished = true ∧ result.cycles < CYCLE_LIMIT := by
+  have result := run_bound_generic submission admitted image betaHash input
+  dsimp at result ⊢
+  exact ⟨result.1, by rw [result.2.2.1]; decide⟩
+
+#print axioms expand_terminates_generic
+
+#print axioms run_value_generic
+
+#print axioms run_bound_generic
 
 end Expansion
 end SigGolfCandidate.Sphincs
