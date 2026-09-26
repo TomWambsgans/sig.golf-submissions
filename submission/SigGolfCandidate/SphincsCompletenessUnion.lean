@@ -1,3 +1,4 @@
+import SigGolfCandidate.SphincsSecurity.Completeness.Assembly
 import SigGolf.Statements
 import SigGolfCandidate.SphincsSecurity.Scheme
 import SigGolfCandidate.SphincsAlignedQuery
@@ -825,3 +826,60 @@ end SigGolfCandidate.AbstractQueryFootprint
 /-- info: 'SigGolfCandidate.AbstractQueryFootprint.complete_of_abstract_failure_sum' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SigGolfCandidate.AbstractQueryFootprint.complete_of_abstract_failure_sum
+
+namespace SigGolfCandidate
+open OracleComp OracleSpec ENNReal
+/-- The abstract failure event is the same under the shared-oracle sampler. -/
+theorem abstract_honest_prob_eq (seed : SigGolf.SecretKey) (message : SigGolf.Message) :
+      Pr[= false | AbstractQueryFootprint.withRandomOracle
+        (SphincsSecurity.Completeness.honest seed message)] =
+      Pr[fun r => r.1 = false |
+        (simulateQ (randomOracle : QueryImpl SphincsSecurity.HashSpec _)
+          (SphincsSecurity.Completeness.honest seed message)).run ∅] := by
+  rw [← probEvent_eq_eq_probOutput]
+  unfold AbstractQueryFootprint.withRandomOracle
+  rw [StateT.run'_eq, probEvent_map]
+  rfl
+/-- The abstract all-message failure bound matches the beta constant. -/
+theorem abstract_honest_failure_sum (seed : SigGolf.SecretKey) :
+    ∑ message : SigGolf.Message,
+      Pr[= false | AbstractQueryFootprint.withRandomOracle
+        (SphincsSecurity.Completeness.honest seed message)] ≤ SigGolf.FAILURE := by
+  have h := SphincsSecurity.Completeness.complete_each_seed seed
+  rw [tsum_fintype] at h
+  have h2 :
+      (∑ message : SigGolf.Message,
+        Pr[= false | AbstractQueryFootprint.withRandomOracle
+          (SphincsSecurity.Completeness.honest seed message)]) ≤
+        ((↑(2 ^ 256 : Nat) : ENNReal))⁻¹ := by
+    calc
+      _ = ∑ message : SigGolf.Message,
+          Pr[fun r => r.1 = false |
+            (simulateQ (randomOracle : QueryImpl SphincsSecurity.HashSpec _)
+              (SphincsSecurity.Completeness.honest seed message)).run ∅] := by
+            apply Finset.sum_congr rfl
+            intro message _
+            exact abstract_honest_prob_eq seed message
+      _ ≤ _ := by exact h
+  exact h2.trans (by norm_num [SigGolf.FAILURE, Nat.cast_pow])
+end SigGolfCandidate
+
+namespace SigGolfCandidate
+open OracleComp OracleSpec
+
+/-- Completeness reduces to a pathwise failure implication for the concrete programs. -/
+theorem complete_of_honest_refinement (submission : SigGolf.Submission)
+    (hsem : ∀ (hash : QueryImpl AbstractQueryFootprint.HashSpec Id)
+      (secretKey : SigGolf.SecretKey) (message : SigGolf.Message),
+      (evalWithAnswerFn hash
+        (AbstractQueryFootprint.liftBeta (submission.honest secretKey message))).success = false →
+        evalWithAnswerFn hash (SphincsSecurity.Completeness.honest secretKey message) = false) :
+    submission.Complete :=
+  AbstractQueryFootprint.complete_of_abstract_failure_sum
+    submission SphincsSecurity.Completeness.honest hsem
+    abstract_honest_failure_sum
+end SigGolfCandidate
+
+/-- info: 'SigGolfCandidate.complete_of_honest_refinement' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SigGolfCandidate.complete_of_honest_refinement
