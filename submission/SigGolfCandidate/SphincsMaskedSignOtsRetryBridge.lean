@@ -924,7 +924,8 @@ theorem subtree_root_path_encoding_entry (location : Fin 5) (hash : Hash)
       t.getMem 0x43000 = BitVec.ofNat 64 (signerLayer location).val ∧
       t.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
       t.getMem 0x430a8 = BitVec.ofNat 64 selected.val ∧
-      Words20 t 0x74 parameter ∧ Words20 t 0x44a00 message := by
+      Words20 t 0x74 parameter ∧ Words20 t 0x44a00 message ∧
+      SphincsMaskedSecretDomain.Words32 t seed := by
   obtain ⟨mid, rootRun, midPc, midCtx, _, cache, retained⟩ :=
     subtree_root location hash s parameter seed treeIdx pc counter ctx
   have midSelected : mid.getMem 0x430a8 = BitVec.ofNat 64 selected.val := by
@@ -954,7 +955,7 @@ theorem subtree_root_path_encoding_entry (location : Fin 5) (hash : Hash)
         mid.getWord32 (BitVec.ofNat 64 (0x44a00+4*i.val)) := by
     simp only [MachineState.getWord32]
     rw [high _ (by fin_cases i <;> decide)]
-  refine ⟨t, ?_, done, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨t, ?_, done, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact rootRun.trans pathRun.trace
   · exact (header _ (by simp [OtsPathRetained, controlWrites])).trans midCtx.1
   · exact (header _ (by simp [OtsPathRetained, controlWrites])).trans midCtx.2.1
@@ -965,6 +966,10 @@ theorem subtree_root_path_encoding_entry (location : Fin 5) (hash : Hash)
   · intro i
     rw [wordHigh i]
     exact midMessage i
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [low _ (by fin_cases i <;> decide)]
+    exact midCtx.2.2.2 i
 
 
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.paths_execution_data_low_frame' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -1266,7 +1271,8 @@ theorem forest_complete_to_bottom_encoding_entry (hash : Hash) (s : MachineState
       Words20 t 0x74 parameter ∧
       Words20 t 0x44a00
         (evalWithAnswerFn (spec := SphincsSecurity.HashSpec) (adaptOracle hash)
-          (Seeded.ftsKey parameter index seed)) := by
+          (Seeded.ftsKey parameter index seed)) ∧
+      SphincsMaskedSecretDomain.Words32 t seed := by
   obtain ⟨mid, first, midPc, midCtx, midCounter, midSelected, midMsg⟩ :=
     forest_complete_to_bottom_entry hash s parameter seed index pc ctx
   have pc' : mid.pc = 0x111c + chainDelta (4 : Fin 5) := by
@@ -1283,12 +1289,12 @@ theorem forest_complete_to_bottom_encoding_entry (hash : Hash) (s : MachineState
     rw [bottom_leaf_val]
     change index.val % 16 < 16
     exact Nat.mod_lt _ (by decide)
-  obtain ⟨t, second, done, lay, tree, selected, par, msg⟩ :=
+  obtain ⟨t, second, done, lay, tree, selected, par, msg, key⟩ :=
     subtree_root_path_encoding_entry (4 : Fin 5) hash mid parameter seed
       (Concrete.treeIndexAt index bottomLayer)
       (Concrete.leafIndexAt index bottomLayer) _ pc' midCounter ctx' midSelected
       leafBound midMsg
-  refine ⟨t, ?_, done, ?_, tree, selected, par, msg⟩
+  refine ⟨t, ?_, done, ?_, tree, selected, par, msg, key⟩
   · exact first.trans second
   · rw [← layerEq]
     exact lay
@@ -1319,7 +1325,7 @@ theorem forest_complete_first_bottom_encoding_digest (hash : Hash) (s : MachineS
               (adaptOracle hash) (Seeded.ftsKey parameter index seed)) ++
               bytesLE 4 (BitVec.ofNat 32 (0 : Counter).toNat)) :
             OracleComp SphincsSecurity.HashSpec Digest)) := by
-  obtain ⟨t, run, done, layer, tree, selected, par, msg⟩ :=
+  obtain ⟨t, run, done, layer, tree, selected, par, msg, _⟩ :=
     forest_complete_to_bottom_encoding_entry hash s parameter seed index pc ctx
   have first := (initial_encoding_hash_exact (4 : Fin 5) hash t done).1
   have digest := initial_encoding_digest_words_from_entry (4 : Fin 5) hash t
@@ -1518,8 +1524,15 @@ theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : Machin
       Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
       u.pc = 0x23cc + delta (4 : Fin 5) ∧
       u.getByte (BitVec.ofNat 64 0x44000) =
-        BitVec.ofNat 8 (encoding (⟨0, by decide⟩ : ChainIndex)).val := by
-  obtain ⟨t, run, done, layer, tree, selected, par, msg⟩ :=
+        BitVec.ofNat 8 (encoding (⟨0, by decide⟩ : ChainIndex)).val ∧
+      t.getMem 0x43000 = BitVec.ofNat 64 bottomLayer.val ∧
+      t.getMem 0x43008 = BitVec.ofNat 64 (Concrete.treeIndexAt index bottomLayer).val ∧
+      t.getMem 0x430a8 = BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val ∧
+      Words20 t 0x74 parameter ∧
+      SphincsMaskedSecretDomain.Words32 t seed ∧
+      u = encodingSuccessState (4 : Fin 5)
+        (initialEncodingState (4 : Fin 5) hash t) := by
+  obtain ⟨t, run, done, layer, tree, selected, par, msg, key⟩ :=
     forest_complete_to_bottom_encoding_entry hash s parameter seed index pc ctx
   have words : Words20 (initialEncodingState (4 : Fin 5) hash t) 0x42000
       (bottomEncodingDigest hash parameter seed index) := by
@@ -1568,7 +1581,7 @@ theorem forest_complete_first_bottom_encoding_accepted (hash : Hash) (s : Machin
     (⟨0, by decide⟩ : ChainIndex)
   refine ⟨t, encodingSuccessState (4 : Fin 5)
     (initialEncodingState (4 : Fin 5) hash t),
-    ⟨_, _, _, _, run⟩, ?_, ?_, ?_⟩
+    ⟨_, _, _, _, run⟩, ?_, ?_, ?_, layer, tree, selected, par, key, rfl⟩
   · simpa [fullRetryStates] using accepted
   · simpa [fullRetryStates] using endPc
   · simpa using digit
@@ -2089,6 +2102,187 @@ theorem first_bottom_secret_context_from_encoding (s : MachineState)
 /-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_context_from_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_context_from_encoding
+
+/-- The digit decoder writes only its output area, leaving the signer context intact. -/
+private theorem signer_decoder_low_mem (i : Fin 52) (s : MachineState)
+    (a : Word) (low : a.toNat < 0x44000) :
+    (signerDecoderState i s).getMem a = s.getMem a := by
+  have distinct : a ≠ alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) := by
+    intro h
+    have ih := i.isLt
+    have ha : ((BitVec.ofNat 64 0x44000).toNat % 8 = 0) := by decide
+    have hover : (BitVec.ofNat 64 0x44000).toNat + i.val < 2 ^ 64 := by
+      simpa using (show 0x44000 + i.val < 2 ^ 64 by omega)
+    have aligned : alignToDword (BitVec.ofNat 64 (0x44000 + i.val)) =
+        BitVec.ofNat 64 (0x44000 + 8 * (i.val / 8)) := by
+      simpa only [BitVec.ofNat_add] using
+        (alignToDword_add_ofNat_of_aligned ha hover)
+    rw [aligned] at h
+    have hh := congrArg BitVec.toNat h
+    simp only [BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (by omega : 0x44000 + 8 * (i.val / 8) < 2 ^ 64)] at hh
+    omega
+  have suffix (u : MachineState) :
+      (decoderSuffixState i u).getMem a = u.getMem a := by
+    have addr : (0x44000#64) + signExtend12 (BitVec.ofNat 12 i.val) =
+        BitVec.ofNat 64 (0x44000 + i.val) := by
+      fin_cases i <;> simp [signExtend12, ← BitVec.ofNat_add]
+    have zero : signExtend12 (0#12) = (0 : Word) := by decide
+    simp [decoderSuffixState, execInstrBr, MachineState.setByte,
+      MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne, zero]
+    rw [addr]
+    simp [distinct]
+  have middle (u : MachineState) :
+      (signerDecoderMiddleState i u).getMem a = u.getMem a := by
+    simp [signerDecoderMiddleState, execInstrBr]
+  have prefixFrame : (decoderPrefixState i s).getMem a = s.getMem a := by
+    simp [decoderPrefixState, execInstrBr]
+  exact (suffix _).trans ((middle _).trans prefixFrame)
+
+private theorem signer_decoder_run_low_mem (count : Nat) (s : MachineState)
+    (a : Word) (low : a.toNat < 0x44000) :
+    (signerDecoderRun count s).getMem a = s.getMem a := by
+  induction count with
+  | zero => rfl
+  | succ count ih =>
+      exact (signer_decoder_low_mem _ _ a low).trans ih
+
+private theorem encoding_success_low_mem (location : Fin 5) (s : MachineState)
+    (a : Word) (low : a.toNat < 0x44000) :
+    (encodingSuccessState location s).getMem a = s.getMem a := by
+  change (sumTest (signerDecoderRun 52
+    (sumInit (otsPaddingSecond location (otsPaddingFirst location s))))).getMem a = _
+  rw [show (sumTest (signerDecoderRun 52
+    (sumInit (otsPaddingSecond location (otsPaddingFirst location s))))).getMem a =
+    (signerDecoderRun 52
+      (sumInit (otsPaddingSecond location (otsPaddingFirst location s)))).getMem a by
+        simp [sumTest, execInstrBr]]
+  rw [signer_decoder_run_low_mem _ _ a low]
+  simp [sumInit, otsPaddingSecond, otsPaddingSecondState, otsPaddingSecondCode,
+    otsPaddingFirst, otsPaddingFirstState, otsPaddingFirstCode,
+    runSchedule, execInstrBr]
+
+private theorem initial_encoding_frame (location : Fin 5) (hash : Hash)
+    (s : MachineState) (a : Word)
+    (prelude : a ∉ otsPreludeWrites) (prep : a ∉ otsHashPrepWrites)
+    (h0 : a ≠ 0x42000) (h8 : a ≠ 0x42008)
+    (h16 : a ≠ 0x42010) (h24 : a ≠ 0x42018) :
+    (initialEncodingState location hash s).getMem a = s.getMem a := by
+  unfold initialEncodingState
+  rw [SphincsVerifierFtsLevelInit.writeHash_mem_frame _ _
+    (otsHashPrep_registers location _).2.2.1 a h0 h8 h16 h24]
+  rw [otsHashPrep_frame location _ a prep]
+  exact otsPrelude_frame location s a prelude
+
+private theorem initial_encoding_low_mem (location : Fin 5) (hash : Hash)
+    (s : MachineState) (a : Word) (low : a.toNat < 0x40000) :
+    (initialEncodingState location hash s).getMem a = s.getMem a := by
+  apply initial_encoding_frame location hash s a
+  all_goals
+    try simp only [otsPreludeWrites, otsHashPrepWrites, List.mem_cons,
+      List.not_mem_nil, not_or, not_false_eq_true, and_true]
+    repeat' constructor
+    all_goals
+      intro eq
+      rw [eq] at low
+      norm_num [BitVec.toNat_ofNat] at low
+      all_goals exact (show ¬ _ from by decide) low
+
+/-- The successful bottom encoding preserves the forest inputs needed for
+    the first secret-chain query. -/
+theorem first_bottom_encoding_secret_inputs (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x430a8 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed) :
+    let u := encodingSuccessState (4 : Fin 5)
+      (initialEncodingState (4 : Fin 5) hash s)
+    u.getMem 0x43000 = BitVec.ofNat 64 lay.val ∧
+    u.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val ∧
+    u.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+    Words20 u 0x74 parameter ∧
+    SphincsMaskedSecretDomain.Words32 u seed := by
+  let u := encodingSuccessState (4 : Fin 5)
+    (initialEncodingState (4 : Fin 5) hash s)
+  have acceptedFrame (a : Word) (ha : a.toNat < 0x44000) :
+      u.getMem a = (initialEncodingState (4 : Fin 5) hash s).getMem a :=
+    encoding_success_low_mem _ _ a ha
+  have lowFrame (a : Word) (ha : a.toNat < 0x40000) :
+      u.getMem a = s.getMem a :=
+    (acceptedFrame a (by omega)).trans (initial_encoding_low_mem _ _ s a ha)
+  have selectedInitial :
+      (initialEncodingState (4 : Fin 5) hash s).getMem 0x43020 =
+        BitVec.ofNat 64 leaf.val := by
+    unfold initialEncodingState
+    rw [SphincsVerifierFtsLevelInit.writeHash_mem_frame _ _
+      (otsHashPrep_registers (4 : Fin 5) _).2.2.1 0x43020
+      (by decide) (by decide) (by decide) (by decide)]
+    rw [otsHashPrep_frame (4 : Fin 5) _ 0x43020 (by decide)]
+    exact (otsPrelude_controls (4 : Fin 5) s leaf.val selected).1
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · rw [acceptedFrame _ (by decide)]
+    exact (initial_encoding_frame _ hash s _ (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide)).trans layer
+  · rw [acceptedFrame _ (by decide)]
+    exact (initial_encoding_frame _ hash s _ (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide)).trans tree
+  · exact (acceptedFrame _ (by decide)).trans selectedInitial
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [lowFrame _ (by fin_cases i <;> decide)]
+    exact par i
+  · intro i
+    simp only [MachineState.getWord32]
+    rw [lowFrame _ (by fin_cases i <;> decide)]
+    exact key i
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_encoding_secret_inputs' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_encoding_secret_inputs
+
+/-- A valid first forest encoding reaches the first bottom-layer signer secret
+    context with its public parameter and seed preserved. -/
+theorem forest_complete_first_bottom_secret_context (hash : Hash) (s : MachineState)
+    (parameter : PublicParameter) (seed : MasterSeed) (index : Index)
+    (encoding : Encoding) (pc : s.pc = 0x1cc8)
+    (ctx : SphincsMaskedSignForestSemantics.Context s parameter seed index)
+    (decoded : TargetSum.decodeDigest
+      (bottomEncodingDigest hash parameter seed index) = some encoding) :
+    ∃ t u v, (∃ steps cycles calls blocks,
+      Trace hash SphincsMaskedImages.sign s steps cycles calls blocks t) ∧
+      Trace hash SphincsMaskedImages.sign t 590 597 1 1 u ∧
+      OrdinarySteps SphincsMaskedImages.sign u 55 v ∧
+      v.pc = 0x3b20 ∧
+      FirstBottomSecretContext v parameter seed bottomLayer
+        (Concrete.treeIndexAt index bottomLayer)
+        (Concrete.leafIndexAt index bottomLayer) ⟨0, by decide⟩ := by
+  obtain ⟨t, u, run, accepted, upc, _, layer, tree, selected, par, key, hu⟩ :=
+    forest_complete_first_bottom_encoding_accepted hash s parameter seed index
+      encoding pc ctx decoded
+  subst u
+  obtain ⟨entryLayer, entryTree, entrySelected, entryPar, entryKey⟩ :=
+    first_bottom_encoding_secret_inputs hash t parameter seed bottomLayer
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer) layer tree selected par key
+  have entryPc :
+      (encodingSuccessState (4 : Fin 5)
+        (initialEncodingState (4 : Fin 5) hash t)).pc = 0x3a8c := by
+    simpa [delta, SphincsMaskedSignOtsParents.offset,
+      SphincsMaskedSignOtsShift.chainOffset] using upc
+  obtain ⟨v, step, vpc, vctx⟩ :=
+    first_bottom_secret_context_from_encoding _ parameter seed bottomLayer
+      (Concrete.treeIndexAt index bottomLayer)
+      (Concrete.leafIndexAt index bottomLayer) entryPc entryLayer entryTree
+      entrySelected entryPar entryKey
+  exact ⟨t, _, v, run, accepted, step, vpc, vctx⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.forest_complete_first_bottom_secret_context' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms forest_complete_first_bottom_secret_context
 
 def firstBottomSecretKeygenView (s : MachineState) : MachineState :=
   (s.setMem 0x43020 (s.getMem 0x43018)).setMem 0x43050 (s.getMem 0x43010)
