@@ -48,6 +48,53 @@ theorem certificateStoppedRomImpl_cache_project (key : SecretKey)
     rfl
   rw [hfun, PMF.map_id]
 
+theorem certificateStoppedRomImpl_run_cache_project {Result : Type}
+    (key : SecretKey) (computation : OracleComp OracleWorld Result)
+    (state : CertificateStoppedCacheState) :
+    Prod.map id Prod.fst <$>
+      (simulateQ (certificateStoppedRomImpl key) computation).run state =
+    (simulateQ romPmfImpl computation).run state.1 :=
+  map_run_simulateQ_eq_of_query_map_eq _ _ Prod.fst
+    (certificateStoppedRomImpl_cache_project key) computation state
+
+theorem certificateStoppedRomImpl_hit_step (key : SecretKey)
+    (input : OracleWorld.Domain) (state : CertificateStoppedCacheState)
+    (result : OracleWorld.Range input × CertificateStoppedCacheState)
+    (hr : result ∈ ((certificateStoppedRomImpl key input).run state).support) :
+    (state.2.1 = true → result.2.2.1 = true) ∧
+      (CertificateCacheExceptional key result.2.1 → result.2.2.1 = true) := by
+  simp only [certificateStoppedRomImpl, StateT.run_mk, PMF.mem_support_map_iff] at hr
+  obtain ⟨source, _, rfl⟩ := hr
+  constructor
+  · intro hhit
+    simp [hhit]
+  · intro hbad
+    simp [hbad]
+
+theorem certificateStoppedRomImpl_hit_run {Result : Type} (key : SecretKey)
+    (computation : OracleComp OracleWorld Result) :
+    ∀ (state : CertificateStoppedCacheState)
+      (result : Result × CertificateStoppedCacheState),
+      (CertificateCacheExceptional key state.1 → state.2.1 = true) →
+      result ∈ ((simulateQ (certificateStoppedRomImpl key) computation).run state).support →
+      (state.2.1 = true → result.2.2.1 = true) ∧
+        (CertificateCacheExceptional key result.2.1 → result.2.2.1 = true) := by
+  induction computation using OracleComp.inductionOn with
+  | pure value =>
+      intro state result hcover hr
+      simp only [simulateQ_pure, StateT.run_pure,
+        PMF.monad_pure_eq_pure, PMF.mem_support_pure_iff] at hr
+      subst result
+      exact ⟨id, hcover⟩
+  | query_bind input next ih =>
+      intro state result hcover hr
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind,
+        PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hr
+      obtain ⟨middle, hmiddle, htail⟩ := hr
+      have hstep := certificateStoppedRomImpl_hit_step key input state middle hmiddle
+      have hnext := ih middle.1 middle.2 result hstep.2 htail
+      exact ⟨fun hhit => hnext.1 (hstep.1 hhit), hnext.2⟩
+
 theorem originalProposalRecord_budget_event (key : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain) (cache : QueryCache HashSpec)
     (spent q : Nat) (event : QueryCache HashSpec → Prop) :
@@ -167,6 +214,63 @@ theorem certificateCountedLengthImpl_hit_budget_stopped_event (key : SecretKey)
     (by intro length record; rfl)
   exact hstep.trans (originalProposalRecord_budget_stopped_event key input state.1
     state.2.2 q hspent hit)
+
+theorem certificateCountedLengthImpl_hit_budget_le_stopped_monitor (key : SecretKey)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCountedState)
+    (q : Nat) (hspent : state.2.2 ≤ q) :
+    Pr[fun result => result.2.2.1.2 = true ∧ result.2.2.2 ≤ q |
+      (certificateCountedLengthImpl key budget required stopAfter input).run state] ≤
+    Pr[QueryCap.stoppedStateEvent (fun _ finalState => finalState.2.1 = true) |
+      (simulateQ (certificateStoppedRomImpl key) (QueryCap.run
+        (fun query : OracleWorld.Domain => query matches .inr _)
+        (expandedAdversaryImpl key input) (q - state.2.2))).run
+        (state.1, ((state.2.1.2 || decide (CertificateCacheExceptional key state.1)),
+          q - state.2.2))] := by
+  let selected : OracleWorld.Domain → Prop :=
+    fun query => query matches .inr _
+  let computation := QueryCap.run selected (expandedAdversaryImpl key input) (q - state.2.2)
+  let initial : CertificateStoppedCacheState :=
+    (state.1, (state.2.1.2 || decide (CertificateCacheExceptional key state.1),
+      q - state.2.2))
+  have hprojection := certificateStoppedRomImpl_run_cache_project key computation initial
+  have hprob := congrArg (fun law : PMF _ => Pr[QueryCap.stoppedStateEvent
+      (fun _ finalCache =>
+        (state.2.1.2 || decide (CertificateCacheExceptional key state.1) ||
+          decide (CertificateCacheExceptional key finalCache)) = true) | law]) hprojection
+  rw [PMF.monad_map_eq_map] at hprob
+  rw [← PMF.monad_map_eq_map, probEvent_map] at hprob
+  calc
+    _ = Pr[QueryCap.stoppedStateEvent (fun _ finalCache =>
+          (state.2.1.2 || decide (CertificateCacheExceptional key state.1) ||
+            decide (CertificateCacheExceptional key finalCache)) = true) |
+          (simulateQ romPmfImpl computation).run state.1] := by
+        simpa only [selected, computation] using
+          certificateCountedLengthImpl_hit_budget_stopped_event key budget required
+            stopAfter input state q hspent
+    _ = Pr[fun result => QueryCap.stoppedStateEvent (fun _ finalCache =>
+          (state.2.1.2 || decide (CertificateCacheExceptional key state.1) ||
+            decide (CertificateCacheExceptional key finalCache)) = true)
+          (result.1, result.2.1) |
+          (simulateQ (certificateStoppedRomImpl key) computation).run initial] := hprob.symm
+    _ ≤ Pr[QueryCap.stoppedStateEvent (fun _ finalState => finalState.2.1 = true) |
+          (simulateQ (certificateStoppedRomImpl key) computation).run initial] := by
+        rw [← SPMF.probEvent_liftM, ← SPMF.probEvent_liftM]
+        apply probEvent_mono
+        intro result hr hhit
+        have hcover : CertificateCacheExceptional key initial.1 → initial.2.1 = true := by
+          intro hbad
+          simp [initial, hbad]
+        have hinvariant := certificateStoppedRomImpl_hit_run key computation initial result
+          hcover (by simpa only [SPMF.support_eq_support, SPMF.support_liftM] using hr)
+        cases hoption : result.1 with
+        | none => simp [QueryCap.stoppedStateEvent, hoption] at hhit
+        | some outcome =>
+            simp only [QueryCap.stoppedStateEvent, hoption] at hhit ⊢
+            rcases (Bool.or_eq_true _ _).mp hhit with hbefore | hfinal
+            · exact hinvariant.1 (by simpa only [initial] using hbefore)
+            · exact hinvariant.2 (of_decide_eq_true hfinal)
+    _ = _ := rfl
 
 /-- The stopped bridge remains valid after an arbitrary adaptive prefix. An
     already exhausted prefix contributes zero to the within-budget event. -/
@@ -611,3 +715,15 @@ end SphincsSecurity.Concrete
 /-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_cache_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_cache_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_run_cache_project' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_run_cache_project
+
+/-- info: 'SphincsSecurity.Concrete.certificateStoppedRomImpl_hit_run' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateStoppedRomImpl_hit_run
+
+/-- info: 'SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_stopped_monitor' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms SphincsSecurity.Concrete.certificateCountedLengthImpl_hit_budget_le_stopped_monitor
