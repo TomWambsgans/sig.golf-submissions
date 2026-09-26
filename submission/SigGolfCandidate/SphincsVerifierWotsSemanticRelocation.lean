@@ -6064,4 +6064,114 @@ theorem upper_ready_control_cell (target : Fin 5) (hash : Hash)
 
 #print axioms upper_ready_control_cell
 
+
+theorem upper_loaded_handoff_premises (target : Fin 5) (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (tree : TreeIndex) (leaf : LeafIndex) (message : Digest)
+    (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc target)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource target)) >>> 20 = 0)
+    (layerCell : state.getMem 0x43000 =
+      BitVec.ofNat 64 (SphincsVerifierXmssTransition.targetLayer target).val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (indexCell : state.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (query : hashInput (upperPrehashState target state) =
+      toQuery (firstUpperEncodingInput pk
+        (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter) =
+        some encoding) :
+    let decoder := firstUpperPaddingState
+      (writeHash (upperPrehashState target state)
+        (hash (hashInput (upperPrehashState target state))))
+    let ready := SphincsVerifierDecoderRelocation.setupState target
+      (SphincsVerifierDecoderRelocation.upperDecoderState target decoder)
+    decoder.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SphincsVerifierWotsRelocationTrace.wordOffset target) ∧
+    decoder.getReg .x15 +
+      SphincsVerifierWotsDecodeData.answerSum 52 decoder = 194 ∧
+    ready.getMem 0x43000 =
+      BitVec.ofNat 64 (SphincsVerifierXmssTransition.targetLayer target).val ∧
+    ready.getMem 0x43008 = BitVec.ofNat 64 tree.val ∧
+    ready.getMem 0x43018 = BitVec.ofNat 64 leaf.val ∧
+    ready.getMem 0x43020 = BitVec.ofNat 64 leaf.val ∧
+    (∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (encoding chain).val) ∧
+    SphincsVerifierHashBytes.WitnessPrefix decoder pk ∧
+    (∀ (chain : ChainIndex) (j : Nat), (hj : j < 20) →
+      decoder.getByte (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase target +
+          20 * chain.val + j)) =
+        ((signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).chainValues
+            chain).extractLsb' (8 * j) 8) ∧
+    SphincsVerifierXmssPathControl.PathWitness decoder signature
+      (SphincsVerifierXmssTransition.targetLayer target)
+      (BitVec.ofNat 64
+        (SphincsVerifierDecoderRelocation.sourceBase target + 20 * 52)) := by
+  let decoder := firstUpperPaddingState
+    (writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state))))
+  let ready := SphincsVerifierDecoderRelocation.setupState target
+    (SphincsVerifierDecoderRelocation.upperDecoderState target decoder)
+  have prefixRun := upper_decoder_prefix_of_abstract target hash state pk
+    (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+    (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter
+    encoding pc small query honest
+  have decoderPc : decoder.pc = BitVec.ofNat 64
+      (0x1f20 + 4 * SphincsVerifierWotsRelocationTrace.wordOffset target) := by
+    have pc' : decoder.pc = upperPrefixPc target + 256 := prefixRun.2.1
+    rw [pc']
+    fin_cases target <;> decide
+  have checksum : decoder.getReg .x15 +
+      SphincsVerifierWotsDecodeData.answerSum 52 decoder = 194 :=
+    upper_decoder_checksum_of_abstract target hash state pk
+      (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+      (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter
+      encoding pc small query honest
+  have cell (read : Word) (lo : 0x43000 ≤ read.toNat)
+      (hi : read.toNat < 0x44000) (notCounter : read ≠ 0x43050)
+      (notPointer : read ≠ 0x43028) :
+      ready.getMem read = state.getMem read :=
+    upper_ready_control_cell target hash state pc small read lo hi
+      notCounter notPointer
+  have frameDecoder := upper_decoder_start_after_loaded_frame target hash
+    initial state pc small frame
+  have decoded : ∀ chain : ChainIndex,
+      ready.getByte (BitVec.ofNat 64 (0x44000 + chain.val)) =
+        BitVec.ofNat 8 (encoding chain).val :=
+    upper_ready_digits_of_abstract target hash state pk
+      (SphincsVerifierXmssTransition.targetLayer target) tree leaf message
+      (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter
+      encoding pc small query honest
+  refine ⟨decoderPc, checksum, ?_, ?_, ?_, ?_, decoded, ?_, ?_, ?_⟩
+  · exact (cell 0x43000 (by decide) (by decide) (by decide) (by decide)).trans layerCell
+  · exact (cell 0x43008 (by decide) (by decide) (by decide) (by decide)).trans treeCell
+  · exact (cell 0x43018 (by decide) (by decide) (by decide) (by decide)).trans leafCell
+  · exact (cell 0x43020 (by decide) (by decide) (by decide) (by decide)).trans indexCell
+  · exact loaded_upper_prefix_after_frame publicKey inputMessage pk signature
+      initial decoder loaded frameDecoder
+  · intro chain j hj
+    exact loaded_upper_chain_source_after_frame target publicKey inputMessage
+      pk signature initial decoder loaded frameDecoder chain j hj
+  · exact loaded_upper_path_witness_after_frame target publicKey inputMessage
+      pk signature initial decoder loaded frameDecoder
+
+#print axioms upper_loaded_handoff_premises
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
