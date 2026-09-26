@@ -2556,6 +2556,26 @@ theorem first_upper_prehash_counter_word (state : MachineState) :
     first_upper_header_counter_word,
     first_upper_counter_stored]
 
+theorem first_upper_prehash_counter_bytes (state : MachineState)
+    (counter : Counter)
+    (counterWord : state.getWord32 0x23dbc =
+      BitVec.ofNat 32 counter.toNat)
+    (i : Nat) (hi : i < 4) :
+    (firstUpperPrehashState state).getByte (BitVec.ofNat 64 (0x4003c + i)) =
+      (BitVec.ofNat 32 counter.toNat).extractLsb' (8*i) 8 := by
+  let byte : Fin 4 := ⟨i, hi⟩
+  have split := variableWord_byte (firstUpperPrehashState state) 0x4003c
+    (by decide) (by decide) (0 : Fin 5) byte
+  have word : (firstUpperPrehashState state).getWord32
+      (BitVec.ofNat 64 (0x4003c + 4 * (0 : Fin 5).val)) =
+      BitVec.ofNat 32 counter.toNat := by
+    calc
+      _ = state.getWord32 0x23dbc := by
+        simpa using first_upper_prehash_counter_word state
+      _ = _ := counterWord
+  rw [word] at split
+  simpa [byte] using split
+
 theorem first_upper_prehash_block (state : MachineState)
     (pc : state.pc = 0x6d1c)
     (small : BitVec.setWidth 64 (state.getWord32 0x23dbc) >>> 20 = 0) :
@@ -3158,5 +3178,9 @@ theorem first_upper_encoding_query_of_parts (state : MachineState)
 /-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_payload_byte' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms first_upper_prehash_payload_byte
+
+/-- info: 'SigGolfCandidate.SphincsVerifierWotsSemanticRelocation.first_upper_prehash_counter_bytes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_upper_prehash_counter_bytes
 
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
