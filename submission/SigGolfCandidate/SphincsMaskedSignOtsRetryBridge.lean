@@ -1604,4 +1604,101 @@ theorem first_bottom_secret_copy (s : MachineState)
 #guard_msgs (whitespace := lax) in
 #print axioms first_bottom_secret_copy
 
+/-- The straight-line setup after the accepted bottom WOTS encoding. -/
+def firstBottomSecretPreludeCode : List (Word × Instr) := [
+  (0x3a8c, .LUI .x6 0x43),
+  (0x3a90, .ADDI .x6 .x6 0xb8),
+  (0x3a94, .LWU .x10 .x6 0),
+  (0x3a98, .LUI .x7 0x23),
+  (0x3a9c, .ADDI .x7 .x7 (-1992)),
+  (0x3aa0, .SW .x7 .x10 0),
+  (0x3aa4, .ADDI .x6 .x0 0),
+  (0x3aa8, .LUI .x28 0x43),
+  (0x3aac, .ADDI .x28 .x28 0x50),
+  (0x3ab0, .SD .x28 .x6 0),
+  (0x3ab4, .LUI .x6 0x23),
+  (0x3ab8, .ADDI .x6 .x6 (-1988)),
+  (0x3abc, .LUI .x28 0x43),
+  (0x3ac0, .ADDI .x28 .x28 0xa0),
+  (0x3ac4, .SD .x28 .x6 0),
+  (0x3ac8, .LUI .x28 0x43),
+  (0x3acc, .ADDI .x28 .x28 0x50),
+  (0x3ad0, .LD .x6 .x28 0),
+  (0x3ad4, .LUI .x28 0x43),
+  (0x3ad8, .ADDI .x28 .x28 0x10),
+  (0x3adc, .SD .x28 .x6 0),
+  (0x3ae0, .LUI .x28 0x43),
+  (0x3ae4, .ADDI .x28 .x28 0x20),
+  (0x3ae8, .LD .x6 .x28 0),
+  (0x3aec, .LUI .x28 0x43),
+  (0x3af0, .ADDI .x28 .x28 0x18),
+  (0x3af4, .SD .x28 .x6 0),
+  (0x3af8, .ADDI .x6 .x0 0x20),
+  (0x3afc, .LUI .x7 0x40),
+  (0x3b00, .ADDI .x7 .x7 0x28),
+  (0x3b04, .ADDI .x10 .x0 4)]
+
+def firstBottomSecretPrelude (s : MachineState) : MachineState :=
+  runSchedule firstBottomSecretPreludeCode s
+
+theorem first_bottom_secret_prelude_code :
+    ∀ e ∈ firstBottomSecretPreludeCode,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2) := by decide
+
+theorem first_bottom_secret_prelude_checked (s : MachineState)
+    (pc : s.pc = 0x3a8c) : Checked firstBottomSecretPreludeCode s := by
+  simp [firstBottomSecretPreludeCode, Checked, execInstrBr, ordinaryStep,
+    memoryArgumentsValid, accessValid, rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne, pc]
+
+theorem first_bottom_secret_prelude (s : MachineState) (pc : s.pc = 0x3a8c) :
+    OrdinarySteps SphincsMaskedImages.sign s 31 (firstBottomSecretPrelude s) := by
+  have run := checked_sound SphincsMaskedImages.sign firstBottomSecretPreludeCode
+    first_bottom_secret_prelude_code s (first_bottom_secret_prelude_checked s pc)
+  simpa only [firstBottomSecretPrelude, firstBottomSecretPreludeCode, List.length_cons,
+    List.length_nil, Nat.reduceAdd] using run
+
+theorem first_bottom_secret_prelude_registers (s : MachineState)
+    (pc : s.pc = 0x3a8c) :
+    (firstBottomSecretPrelude s).pc = 0x3b08 ∧
+    (firstBottomSecretPrelude s).getReg .x6 = 0x20 ∧
+    (firstBottomSecretPrelude s).getReg .x7 = 0x40028 ∧
+    (firstBottomSecretPrelude s).getReg .x10 = 4 := by
+  simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+    execInstrBr, signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+  all_goals bv_omega
+
+theorem first_bottom_secret_prelude_seed (s : MachineState) (i : Fin 4) :
+    (firstBottomSecretPrelude s).getMem (wordAddress 0x20 i.val) =
+      s.getMem (wordAddress 0x20 i.val) := by
+  fin_cases i <;>
+    simp [firstBottomSecretPrelude, firstBottomSecretPreludeCode, runSchedule,
+      wordAddress, execInstrBr, signExtend12,
+      MachineState.getMem_setMem_ne, MachineState.getReg_setReg_eq,
+      MachineState.getReg_setReg_ne]
+  all_goals simp [setWord32_eq, alignToDword, MachineState.getMem_setMem_ne]
+
+/-- The accepted bottom encoding enters the first complete secret-key copy. -/
+theorem first_bottom_secret_copy_from_encoding (s : MachineState)
+    (pc : s.pc = 0x3a8c) :
+    ∃ t, OrdinarySteps SphincsMaskedImages.sign s 55 t ∧
+      t.pc = 0x3b20 ∧
+      (∀ i, i < 4 → t.getMem (wordAddress 0x40028 i) =
+        s.getMem (wordAddress 0x20 i)) := by
+  let mid := firstBottomSecretPrelude s
+  obtain ⟨midPc, source, destination, count⟩ :=
+    first_bottom_secret_prelude_registers s pc
+  obtain ⟨t, copied, endPc, bytes⟩ :=
+    first_bottom_secret_copy mid midPc source destination count
+  exact ⟨t, by simpa only [mid, Nat.reduceAdd] using
+      (first_bottom_secret_prelude s pc).append copied,
+    endPc, by
+      intro i hi
+      exact (bytes i hi).trans (first_bottom_secret_prelude_seed s ⟨i, hi⟩)⟩
+
+/-- info: 'SigGolfCandidate.SphincsMaskedSignOtsPathValue.first_bottom_secret_copy_from_encoding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs (whitespace := lax) in
+#print axioms first_bottom_secret_copy_from_encoding
+
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
