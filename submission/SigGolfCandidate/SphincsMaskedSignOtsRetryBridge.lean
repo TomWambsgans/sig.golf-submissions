@@ -8072,3 +8072,128 @@ theorem signerOutputBase_bound (location : Fin 5) :
 #print axioms signerOutputBase_aligned
 #print axioms signerOutputBase_bound
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsMaskedKeygenPrefix SphincsVerifierFtsRootCopy SphincsMaskedChainLoop
+open SphincsSecurity SphincsMaskedChainDomain SphincsBridge
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_secret_copy_code (location : Fin 5) :
+    SphincsVerifierMessageCopy.Copy20Code SphincsMaskedImages.sign
+      (2805 + signerShiftWords location) := by
+  constructor
+  · intro i
+    have same := signer_five_layer_chain_word location ⟨45 + 2 * i.val, by omega⟩
+    have left : 2760 + signerShiftWords location + (45 + 2 * i.val) =
+        2805 + signerShiftWords location + 2 * i.val := by omega
+    have right : 2760 + (45 + 2 * i.val) = 2805 + 2 * i.val := by omega
+    simp only [left, right] at same
+    rw [same]
+    exact first_bottom_secret_answer_copy_code.load i
+  · intro i
+    have same := signer_five_layer_chain_word location ⟨46 + 2 * i.val, by omega⟩
+    have left : 2760 + signerShiftWords location + (46 + 2 * i.val) =
+        2805 + signerShiftWords location + 2 * i.val + 1 := by omega
+    have right : 2760 + (46 + 2 * i.val) = 2805 + 2 * i.val + 1 := by omega
+    simp only [left, right] at same
+    rw [same]
+    exact first_bottom_secret_answer_copy_code.store i
+
+#print axioms signer_secret_copy_code
+
+/-- The answer-copy segment preserves the shifted source and destination words. -/
+theorem signer_secret_copy_shift (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3bc4) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      14
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomSecretAnswerCopy s)) := by
+  let setup := firstBottomSecretAnswerSetup s
+  have baseSupport : ∀ e ∈ firstBottomSecretAnswerSetupCode,
+      SphincsMaskedSignOtsShift.Supported e.2 := by decide
+  have supported : ∀ e ∈ firstBottomSecretAnswerSetupCode,
+      signerSupported e.2 := by
+    intro e he
+    exact Or.inl (baseSupport e he)
+  have inside : ∀ e ∈ firstBottomSecretAnswerSetupCode,
+      0x3b20 ≤ e.1.toNat ∧ e.1.toNat < 0x3dec ∧ e.1.toNat % 4 = 0 := by
+    decide
+  have setupRun : OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      4 (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) setup) := by
+    have run := signer_block_shift location firstBottomSecretAnswerSetupCode
+      supported inside first_bottom_secret_answer_setup_code s
+      (first_bottom_secret_answer_setup_checked s pc)
+    simpa [setup, firstBottomSecretAnswerSetup,
+      firstBottomSecretAnswerSetupCode] using run
+  obtain ⟨setupPc, source, destination⟩ :=
+    first_bottom_secret_answer_setup_registers s pc
+  have shiftedPc : (SphincsMaskedSignOtsShift.shift
+      (signerShiftBytes location) setup).pc =
+      BitVec.ofNat 64 (0x1000 + 4 * (2805 + signerShiftWords location)) := by
+    rw [SphincsMaskedSignOtsShift.shift_pc, setupPc]
+    change (BitVec.ofNat 64 0x3bd4) +
+      BitVec.ofNat 64 (4 * signerShiftWords location) = _
+    rw [← BitVec.ofNat_add]
+    congr 1
+    omega
+  have shiftedSource : (SphincsMaskedSignOtsShift.shift
+      (signerShiftBytes location) setup).getReg .x6 = 0x42000 := by
+    simpa only [SphincsMaskedSignOtsShift.shift_reg] using source
+  have shiftedDestination : (SphincsMaskedSignOtsShift.shift
+      (signerShiftBytes location) setup).getReg .x7 = 0x44b00 := by
+    simpa only [SphincsMaskedSignOtsShift.shift_reg] using destination
+  have copied := SphincsVerifierFtsCopyAccess.copy20_block_general
+    SphincsMaskedImages.sign (2805 + signerShiftWords location)
+    (signer_secret_copy_code location)
+    (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) setup)
+    0x42000 0x44b00 shiftedPc shiftedSource shiftedDestination
+    (by decide) (by decide) (by decide) (by decide)
+    (by have := signer_shift_bound location; omega)
+  rw [SphincsMaskedSignOtsShift.copyRoot_shift] at copied
+  simpa only [firstBottomSecretAnswerCopy, setup, Nat.reduceAdd] using
+    setupRun.append copied
+
+#print axioms signer_secret_copy_shift
+
+/-- Every WOTS layer initializes its chain buffer with the same abstract first secret. -/
+theorem signer_secret_initial_shift (location : Fin 5) (hash : Hash)
+    (s : MachineState) (pc : s.pc = 0x3b20) :
+    Trace hash SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      55 70 1 2
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s))) := by
+  have hashed := signer_secret_hash_shift location hash s pc
+  have answerPc : (firstBottomSecretHashAnswer hash s).pc = 0x3bc4 :=
+    (first_bottom_secret_hash hash s pc).2
+  have copied := signer_secret_copy_shift location
+    (firstBottomSecretHashAnswer hash s) answerPc
+  simpa only [Nat.reduceAdd] using hashed.trans copied.trace
+
+#print axioms signer_secret_initial_shift
+
+/-- The relocated initializer leaves the abstract WOTS secret in the live chain buffer. -/
+theorem signer_secret_initial_value_shift (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (chain : ChainIndex) (pc : s.pc = 0x3b20)
+    (ctx : FirstBottomSecretContext s parameter seed lay treeIdx leaf chain) :
+    let t := firstBottomSecretAnswerCopy (firstBottomSecretHashAnswer hash s)
+    Trace hash SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      55 70 1 2 (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) t) ∧
+    Words20 (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) t)
+      0x44b00
+      (truncateHash (hash (toQuery
+        (keygenHashInput parameter (.ots lay treeIdx leaf chain) seed)))) := by
+  have old := first_bottom_secret_initial_value hash s parameter seed lay
+    treeIdx leaf chain pc ctx
+  exact ⟨signer_secret_initial_shift location hash s pc,
+    by simpa only [Words20, SphincsMaskedSignOtsShift.shift_word] using old.2.2⟩
+
+#print axioms signer_secret_initial_value_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue

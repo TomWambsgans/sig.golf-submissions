@@ -291,6 +291,11 @@ open AdaptiveResidualLabels hiding World State Environment
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 set_option synthInstance.maxHeartbeats 200000
+variable (key : SecretKey) (inputs : Finset HashInput)
+    (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
+    (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels)
+    (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
+    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
 theorem macroStoppedExceptionRun_hashCalls_le {Result : Type} (q overshoot : Nat)
     (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : ExceptionHistoryState inputs)
