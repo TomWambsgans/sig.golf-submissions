@@ -12,17 +12,17 @@ The proofs of the claims of `Completeness.lean`. Correctness is `Game.correct`, 
 `Game.lean` pulls the seed out of the experiment and, through recovery, charges failure to signing
 returning `none`. `Keygen.lean` shows key generation leaves every input a later search hashes
 uncached, and caches its MAC query with the tag it returns, so the signer's MAC check is a cache hit
-that passes. `Signing.lean` charges a signing failure to its seven searches: the randomizer search
-(`Digest.lean`) and the six counter searches (`Counter.lean`, with the code's size from `Code.lean`
+that passes. `Signing.lean` charges a signing failure to its six searches: the randomizer search
+(`Digest.lean`) and the five counter searches (`Counter.lean`, with the code's size from `Code.lean`
 and `Encoding.lean`). Each search is long enough that its failure decays exponentially
 (`Decay.lean`), which is what closes the bound below. Nothing in the bound depends on the seed, so it
 holds for every seed (`complete_seeded`), and averaging over the seed gives `complete`.
 
 The numbers: a randomizer trial fails with probability at most `1 - 2⁻¹⁰ + 2²⁰/2¹²⁸`, which leaves
 room for `1/1025`, so `2²⁰ ≥ 1025 · 1023` trials all fail with probability at most `2⁻¹⁰²³`. A
-counter trial accepts at least one in `codeShare = 4741` of the `2¹²⁸` digests, so
-`2²² ≥ 4741 · 884` counters all fail with probability at most `2⁻⁸⁸⁴`. Over `2²⁵⁶` messages,
-`2²⁵⁶ · (2⁻¹⁰²³ + 6 · 2⁻⁸⁸⁴) ≤ 2⁻²⁵⁶`.
+counter trial accepts at least one in `codeShare = 2821` of the `2¹²⁸` digests, so
+`2²² ≥ 2821 · 1486` counters all fail with probability at most `2⁻¹⁴⁸⁶`. Over `2²⁵⁶` messages,
+`2²⁵⁶ · (2⁻¹⁰²³ + 5 · 2⁻¹⁴⁸⁶) ≤ 2⁻²⁵⁶`.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -41,20 +41,20 @@ theorem digestFactor_pow_le : digestFactor ^ digestAttemptLimit ≤ (2⁻¹ : �
     _ = (digestFactor ^ 1025) ^ 1023 := pow_mul _ _ _
     _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 := pow_le_pow_left₀ (by positivity) hhalf _
 
-theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ 884 := by
+theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ 1486 := by
   have hroom := failMass_encoding_add_le
   have hhalf := pow_le_half_ennreal codeShare (by decide) _ hroom
   have hone : failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ≤ 1 :=
     le_trans le_self_add hroom
   rw [encodingBound]
   calc failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ encodingAttemptLimit
-        ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ (codeShare * 884) :=
+        ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ (codeShare * 1486) :=
           pow_le_pow_right_of_le_one' hone (by rw [encodingAttemptLimit, codeShare]; norm_num)
-    _ = (failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ codeShare) ^ 884 :=
+    _ = (failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ codeShare) ^ 1486 :=
           pow_mul _ _ _
-    _ ≤ (2⁻¹ : ℝ≥0∞) ^ 884 := pow_le_pow_left₀ (by positivity) hhalf _
+    _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1486 := pow_le_pow_left₀ (by positivity) hhalf _
 
-/-- Key generation then signing fails only if one of signing's seven searches does. -/
+/-- Key generation then signing fails only if one of signing's six searches does. -/
 theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
     Pr[fun r => r.1.2 = none | (simulateQ (randomOracle : QueryImpl HashSpec _)
       (signedWithKeys seed message)).run ∅]
@@ -70,15 +70,15 @@ theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
   · rw [add_zero]
     exact probEvent_sign_none r.1.2.2 r.1.2.1 message r.2 hmac hrand hmsg henc
 
-/-- One message fails from a fixed seed with probability at most `2⁻¹⁰²³ + 6 · 2⁻⁸⁸⁴`. -/
+/-- One message fails from a fixed seed with probability at most `2⁻¹⁰²³ + 5 · 2⁻¹⁴⁸⁶`. -/
 theorem seeded_failure_le (seed : MasterSeed) (message : Message) :
     Pr[= false | seededExperiment seed message]
-      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 6 * (2⁻¹ : ℝ≥0∞) ^ 884 := by
+      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486 := by
   rw [seededExperiment_eq, ← probEvent_eq_eq_probOutput, probEvent_map]
   refine ((probEvent_honest_false_le seed message).trans
     (probEvent_signedWithKeys_none seed message)).trans ?_
   refine add_le_add digestFactor_pow_le ?_
-  rw [show ((numLayers : Nat) : ℝ≥0∞) = 6 by norm_num [numLayers]]
+  rw [show ((numLayers : Nat) : ℝ≥0∞) = 5 by norm_num [numLayers]]
   exact mul_le_mul_right encoding_pow_le _
 
 /-- **Per-seed completeness.** From every master seed, the scheme is `2⁻²⁵⁶`-complete. -/
@@ -86,9 +86,9 @@ theorem complete_seeded : SphincsSeededCompletenessStatement := by
   intro seed
   calc
     ∑' message : Message, Pr[= false | seededExperiment seed message]
-        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 6 * (2⁻¹ : ℝ≥0∞) ^ 884) :=
+        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486) :=
           ENNReal.tsum_le_tsum fun message => seeded_failure_le seed message
-    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 6 * (2⁻¹ : ℝ≥0∞) ^ 884) := by
+    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486) := by
           rw [tsum_fintype, Finset.sum_const, nsmul_eq_mul, Finset.card_univ,
             show Fintype.card Message = 2 ^ 256 by simp [messageBits], Nat.cast_pow, Nat.cast_ofNat]
     _ ≤ ((2 ^ 256 : Nat) : ℝ≥0∞)⁻¹ := closing_sum

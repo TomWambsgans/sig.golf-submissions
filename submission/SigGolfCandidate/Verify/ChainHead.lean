@@ -118,20 +118,20 @@ theorem entIdx_spec (c : CCtx) (i : Nat) (hi : i < 42) :
 
 def tabOk (lay i : Nat) : Bool :=
   decide (tabAddr lay i % 4 = 0) && decide (0x1000 ≤ tabAddr lay i) &&
-    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 335)) && decide (bVal lay i < 2 ^ 32) &&
+    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 279)) && decide (bVal lay i < 2 ^ 32) &&
     decide (nextPc' lay i = s1Pc lay i + 22) &&
     (!(decide (i + 1 < 42) && !hasPrep (i + 1)) || bVal lay (i + 1) == bVal lay i)
 
-def tabOkAll : Bool := (List.range 6).all fun lay => (List.range 42).all fun i => tabOk lay i
+def tabOkAll : Bool := (List.range 5).all fun lay => (List.range 42).all fun i => tabOk lay i
 
 theorem tabOkAll_eq : tabOkAll = true := by decide +kernel
 
-theorem tabOk_at (lay i : Nat) (hl : lay < 6) (hi : i < 42) : tabOk lay i = true :=
+theorem tabOk_at (lay i : Nat) (hl : lay < 5) (hi : i < 42) : tabOk lay i = true :=
   List.all_eq_true.mp (List.all_eq_true.mp tabOkAll_eq lay (List.mem_range.mpr hl)) i
     (List.mem_range.mpr hi)
 
 theorem tabOk_spec {lay i : Nat} (h : tabOk lay i = true) :
-    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 335) ∧
+    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 279) ∧
       bVal lay i < 2 ^ 32 ∧ (i + 1 < 42 → hasPrep (i + 1) = false → bVal lay (i + 1) = bVal lay i) ∧
       nextPc' lay i = s1Pc lay i + 22 := by
   simp only [tabOk, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true',
@@ -147,7 +147,7 @@ def pairOk : Bool := (List.range 41).all fun i => hasPrep (i + 1) || (isFirst i 
 theorem pairOk_eq : pairOk = true := by decide
 
 /-- A chain without dispatch prep reuses the dispatch register of its predecessor. -/
-theorem rOf_next (c : CCtx) (i : Nat) (hl : c.lay < 6) (hi : i + 1 < 42)
+theorem rOf_next (c : CCtx) (i : Nat) (hl : c.lay < 5) (hi : i + 1 < 42)
     (hp : hasPrep (i + 1) = false) : rOf c (i + 1) = rOf c i := by
   have := List.all_eq_true.mp pairOk_eq i (List.mem_range.mpr (by omega))
   simp only [hp, Bool.false_or, Bool.and_eq_true, Bool.not_eq_true'] at this
@@ -282,7 +282,7 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
 
 /-! ## The checkpoint of the next chain -/
 
-theorem headInv_next (c : CCtx) (i : Nat) (hl : c.lay < 6) (hi : i < 42) (acc : List Val)
+theorem headInv_next (c : CCtx) (i : Nat) (hl : c.lay < 5) (hi : i < 42) (acc : List Val)
     (t : MachineState) (hG : Glob gkL c.wl c.pk t) (hK : KnownOK (chK c.lay) t) (hR : c.Regs t)
     (hCB : CBOk c t) (hZ : CBZ t) (hLB : LBOk acc t) (hlen : acc.length = i + 1)
     (hvs : ∀ v ∈ acc, v.length = 16) (hB : RB c i t) (hpc : t.pc = pcOf (nextPc' c.lay i)) :

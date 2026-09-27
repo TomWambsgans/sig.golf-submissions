@@ -8,7 +8,7 @@ The refinement proofs state phases as
 `(fun r => (r.value, r.hashCalls, r.hashCompressions)) <$> submission.run phase input =
   (fun p => (F p.1, p.2.1, p.2.2)) <$> Sign.countBoth oa` (`Sign.Sim.run_eq`). This file turns
 such statements into the hypotheses of `compressionBounds_of_refinement`, and discharges the
-keygen one with `Keygen.keygen_run_counts`.
+keygen one taken as a hypothesis (no dependency on the Keygen build).
 -/
 
 namespace SigGolfCandidate.Budget
@@ -62,8 +62,7 @@ end
 /-- **Compression bounds** for `SigGolfCandidate.submission`, given the keygen, sign and expand
 refinements in the form of `Sign.Sim.run_eq`.
 
-(v4: the keygen refinement `Keygen.keygen_run_counts` is being redone for the cached top tree;
-once it states `RefinesCounts submission .keygen sk (keygenRef sk)`, `hK` is discharged by it and
+(Budget does not import the Keygen proofs; once it states `RefinesCounts submission .keygen sk (keygenRef sk)`, `hK` is discharged by it and
 `submission_compressionBounds_of_counts` below takes only `hS` and `hE` again.) -/
 theorem submission_compressionBounds_of_counts'
     (hK : ∀ sk, RefinesCounts submission .keygen sk (keygenRef sk))

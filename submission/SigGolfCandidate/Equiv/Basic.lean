@@ -287,4 +287,22 @@ theorem getD_ofFn {β : Type} {n : Nat} (f : Fin n → β) (i : Nat) (d : β) :
   · simp [List.getD_eq_getElem?_getD, h]
   · simp [List.getD_eq_getElem?_getD, h]
 
+theorem map_range_eq_ofFn {β : Type} (n : Nat) (f : Nat → β) :
+    (List.range n).map f = List.ofFn fun j : Fin n => f j.val := by
+  apply List.ext_getElem (by simp)
+  intro i h1 h2
+  simp
+
+/-- Pairs flattened: `[F 0, F 1] ++ [F 2, F 3] ++ ...`. -/
+theorem flatten_ofFn_pairs {β : Type} (n : Nat) (F : Nat → β) :
+    (List.ofFn fun k : Fin n => [F (2 * k.val), F (2 * k.val + 1)]).flatten =
+      (List.range (2 * n)).map F := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [List.ofFn_succ_last, List.flatten_append]
+    simp only [Fin.val_castSucc, Fin.val_last, List.flatten_cons, List.flatten_nil, List.append_nil]
+    rw [ih, show 2 * (n + 1) = 2 * n + 1 + 1 by ring, List.range_succ, List.range_succ]
+    simp
+
 end SigGolfCandidate.Equiv

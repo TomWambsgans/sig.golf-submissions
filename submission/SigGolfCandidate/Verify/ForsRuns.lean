@@ -75,7 +75,7 @@ def k0 : List (Reg × Word) :=
 def gkD : List (Reg × Word) := baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10)]
 def dgK : List (Reg × Word) := gkD ++ [(.x10, 0), (.x11, 128), (.x12, 0x160)]
 
-def ctrX : E := .bin .or (.bin .or (ldE 9104) (ldE 9112)) (ldE 9120)
+def ctrX : E := .bin .or (.bin .or (ldE 8432) (ldE 8440)) (.un (.ld .wu 0) (ldE 8448))
 def ctrE' : E := .bin .srl (.bin .or ctrX (.bin .sll ctrX (cw 32))) (cw 54)
 
 def specStartOk : Spec :=

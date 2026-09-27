@@ -107,6 +107,16 @@ theorem valAt_writeHash (t : MachineState) (a : BitVec 256) (B : Nat)
   · rw [getMem_writeHash t a B B h12 hB (by omega), if_pos rfl, lo_answer]
   · rw [getMem_writeHash t a B (B + 8) h12 hB (by omega), if_neg (by omega), if_pos rfl, hi_answer]
 
+/-- The answer's last 16 bytes are stored at `B + 16` by `writeHash`. -/
+theorem valAt_writeHash_hi (t : MachineState) (a : BitVec 256) (B : Nat)
+    (h12 : t.getReg .x12 = BitVec.ofNat 64 B) (hB : B + 32 < 2 ^ 64) :
+    ValAt (writeHash t a) (B + 16) ((answerBytes 32 a).drop 16) := by
+  constructor
+  · rw [getMem_writeHash t a B (B + 16) h12 hB (by omega), if_neg (by omega), if_neg (by omega),
+      if_pos rfl, lo_answer_hi]
+  · rw [getMem_writeHash t a B (B + 16 + 8) h12 hB (by omega), if_neg (by omega), if_neg (by omega),
+      if_neg (by omega), if_pos (by omega), hi_answer_hi]
+
 theorem getMem_writeHash_frame (t : MachineState) (a : BitVec 256) (B A : Nat)
     (h12 : t.getReg .x12 = BitVec.ofNat 64 B) (hB : B + 32 < 2 ^ 64) (hA : A < 2 ^ 64)
     (h : A + 8 ≤ B ∨ B + 32 ≤ A) :

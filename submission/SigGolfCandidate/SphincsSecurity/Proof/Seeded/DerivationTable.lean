@@ -10,8 +10,10 @@ namespace SphincsSecurity.Seeded
 set_option backward.isDefEq.respectTransparency false
 set_option maxRecDepth 4096
 
-abbrev OtsPosition := Layer × TreeIndex × LeafIndex × ChainIndex
-abbrev FtsPosition := Index × FtsTree × FtsLeaf
+/-- A derivation of one-time secrets: a chain pair of a leaf. -/
+abbrev OtsPosition := Layer × TreeIndex × LeafIndex × ChainPair
+/-- A derivation of few-time secrets: a leaf pair of a tree. -/
+abbrev FtsPosition := Index × FtsTree × FtsPair
 abbrev SecretPosition := OtsPosition ⊕ FtsPosition
 abbrev SecretOutputs := SecretPosition → HashOutput
 abbrev SecretValues := SecretPosition → Digest

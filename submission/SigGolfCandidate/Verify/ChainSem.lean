@@ -25,7 +25,7 @@ def CCtx.Regs (c : CCtx) (s : MachineState) : Prop :=
   s.getReg .x31 = c.x31
 
 def CCtx.ok (c : CCtx) : Prop :=
-  c.lay < 6 ∧ c.tau < 2 ^ 32 ∧ c.e < 2 ^ 32 ∧ c.wl.length = 7080 ∧ c.d0.toNat < 2 ^ 63 ∧
+  c.lay < 5 ∧ c.tau < 2 ^ 32 ∧ c.e < 2 ^ 32 ∧ c.wl.length = 6404 ∧ c.d0.toNat < 2 ^ 63 ∧
     c.d1.toNat < 2 ^ 63
 
 def CBOk (c : CCtx) (s : MachineState) : Prop :=
@@ -79,11 +79,11 @@ def EndInv (c : CCtx) (i : Nat) (acc : List Val) (v : Val) (s : MachineState) : 
   LBOk (acc ++ [v]) s ∧ acc.length = i ∧ (∀ v ∈ acc, v.length = 16) ∧ v.length = 16 ∧
   s.pc = pcOf (s1Pc c.lay i + 22)
 
-theorem witLayerOff_eq (lay : Nat) (h : lay < 6) : witLayerOff lay = layBody lay := by
+theorem witLayerOff_eq (lay : Nat) (h : lay < 5) : witLayerOff lay = layBody lay := by
   interval_cases lay <;> decide
 
-theorem layBody_le (lay : Nat) (h : lay < 6) : layBody lay ≤ 6320 ∧ layBody lay % 8 = 0 ∧
-    layBody lay + 672 + 16 * heightL lay = (if lay + 1 < 6 then layBody (lay + 1) else 7056) := by
+theorem layBody_le (lay : Nat) (h : lay < 5) : layBody lay ≤ 5632 ∧ layBody lay % 8 = 0 ∧
+    layBody lay + 672 + 16 * heightL lay = (if lay + 1 < 5 then layBody (lay + 1) else 6384) := by
   interval_cases lay <;> decide
 
 theorem length_witChain (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) :

@@ -71,7 +71,8 @@ theorem digok_run (S : List Byte) (rho : Val) (ans : BitVec 256) (t : MachineSta
     (hpbP : t.readWords (BitVec.ofNat 64 0x6B0) 2 = [0, 0])
     (hpbS : t.readWords (BitVec.ofNat 64 0x6C0) 4 = wordsOf S)
     (hcbP : t.readWords (BitVec.ofNat 64 0xD0) 2 = [0, 0])
-    (hnbP : t.readWords (BitVec.ofNat 64 0x1D0) 2 = [0, 0]) :
+    (hnbP : t.readWords (BitVec.ofNat 64 0x1D0) 2 = [0, 0])
+    (hcbZ : t.readWords (BitVec.ofNat 64 0xF0) 2 = [0, 0]) :
     ∃ tF, Steps image t 66 66 tF ∧ ForsCtx S (idxOf (ans.toNat % 2 ^ 184)) (ans.toNat % 2 ^ 184) tF ∧
       tF.pc = pcOf 153 ∧ tF.getReg .x8 = BitVec.ofNat 64 0 ∧
       tF.getReg .x18 = BitVec.ofNat 64 0x2650 ∧
@@ -119,7 +120,7 @@ theorem digok_run (S : List Byte) (rho : Val) (ans : BitVec 256) (t : MachineSta
   refine ⟨tF, hs, ?_, by simp only [htF, blk87.res, rv_simp], by simp only [htF, blk87.res, rv_simp],
     by simp only [htF, blk87.res, rv_simp], by rw [x22, hidx], blk87_sig t, ?_, ?_, r, f⟩
   · refine ⟨by rw [r.get .x5, t5], ?_, by simp only [htF, blk87.res, rv_simp], ?_, ?_, ?_, ?_, ?_,
-      ?_, ?_, ?_, ?_, ?_⟩
+      ?_, ?_, ?_, ?_, ?_, ?_⟩
     · simp only [htF, blk87.res, rv_simp, m160, BitVec.toNat_ofNat, Nat.reduceMod, Nat.reducePow,
         idxExpr_eq]
       unfold fwVal; simp only [Nat.reducePow, hidx']
@@ -148,6 +149,7 @@ theorem digok_run (S : List Byte) (rho : Val) (ans : BitVec 256) (t : MachineSta
     · rw [f.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW]; omega), hpbS]
     · rw [f.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW]; omega), hcbP]
     · rw [f.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW]; omega), hnbP]
+    · rw [f.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW]; omega), hcbZ]
   · simp only [htF, blk87.res, rv_simp, m160, BitVec.toNat_ofNat, Nat.reduceMod, Nat.reducePow,
       idxExpr_eq]
     simp only [if_true, ite_true, lo32_replace0, truncate32_ofNat, hidx', Nat.zero_div, ofNat_eq_iff,

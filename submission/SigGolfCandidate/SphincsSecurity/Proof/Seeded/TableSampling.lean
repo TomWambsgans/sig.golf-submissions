@@ -18,13 +18,6 @@ noncomputable local instance : SampleableType OtsSecrets := Concrete.otsSecretsS
 noncomputable local instance : SampleableType FtsSecrets := Concrete.ftsSecretsSampleableType
 noncomputable opaque secretsSampleableType : SampleableType Secrets := SampleableType.ofFintype Secrets
 noncomputable local instance : SampleableType Secrets := secretsSampleableType
-noncomputable opaque secretHalvesSampleableType : SampleableType (Secrets × Secrets) :=
-  SampleableType.ofFintype (Secrets × Secrets)
-noncomputable local instance : SampleableType (Secrets × Secrets) := secretHalvesSampleableType
-
-def flattenSecrets (secrets : Secrets) : SecretValues
-  | .inl (lay, tree, leaf, chain) => secrets.1 lay tree leaf chain
-  | .inr (index, tree, leaf) => secrets.2 index tree leaf
 
 /-- An oracle answer is its low and its high `128` bits. -/
 def splitOutput (output : HashOutput) : Digest × Digest :=
@@ -42,31 +35,56 @@ noncomputable def outputHalves : HashOutput ≃ (Digest × Digest) :=
 
 theorem outputHalves_low (output : HashOutput) : (outputHalves output).1 = truncateHash output := rfl
 
-noncomputable def secretHalves : SecretOutputs ≃ (Secrets × Secrets) where
-  toFun outputs := ((tableOts outputs, tableFts outputs),
-    ((fun lay tree leaf chain => (outputHalves (outputs (.inl (lay, tree, leaf, chain)))).2),
-      fun index tree leaf => (outputHalves (outputs (.inr (index, tree, leaf)))).2))
-  invFun halves := fun position => outputHalves.symm (flattenSecrets halves.1 position, flattenSecrets halves.2 position)
+theorem splitSecrets_eq (output : HashOutput) : splitSecrets output = outputHalves output := rfl
+
+theorem evenChain_chainPairOf (chain : ChainIndex) (h : chain.val % 2 = 0) : evenChain (chainPairOf chain) = chain :=
+  Fin.ext (by simp only [evenChain, chainPairOf]; omega)
+
+theorem oddChain_chainPairOf (chain : ChainIndex) (h : ¬ chain.val % 2 = 0) : oddChain (chainPairOf chain) = chain :=
+  Fin.ext (by simp only [oddChain, chainPairOf]; omega)
+
+theorem evenFtsLeaf_ftsPairOf (leaf : FtsLeaf) (h : leaf.val % 2 = 0) : evenFtsLeaf (ftsPairOf leaf) = leaf :=
+  Fin.ext (by simp only [evenFtsLeaf, ftsPairOf]; omega)
+
+theorem oddFtsLeaf_ftsPairOf (leaf : FtsLeaf) (h : ¬ leaf.val % 2 = 0) : oddFtsLeaf (ftsPairOf leaf) = leaf :=
+  Fin.ext (by simp only [oddFtsLeaf, ftsPairOf]; omega)
+
+/-- The derivation answers are the secret tables: each answer is the pair of its two members' secrets. -/
+noncomputable def secretTables : SecretOutputs ≃ Secrets where
+  toFun outputs := (tableOts outputs, tableFts outputs)
+  invFun secrets
+    | .inl (lay, tree, leaf, pair) =>
+        outputHalves.symm (Concrete.pairOf (secrets.1 lay tree leaf) pair)
+    | .inr (index, tree, pair) =>
+        outputHalves.symm (Concrete.ftsPairOf (secrets.2 index tree) pair)
   left_inv outputs := by
     funext position
-    cases position <;> exact outputHalves.symm_apply_apply (outputs _)
-  right_inv halves := by
-    rcases halves with ⟨⟨ots, fts⟩, ⟨otsHigh, ftsHigh⟩⟩
-    apply Prod.ext <;> apply Prod.ext
+    rcases position with ⟨lay, tree, leaf, pair⟩ | ⟨index, tree, pair⟩
+    · show outputHalves.symm (Concrete.pairOf (tableOts outputs lay tree leaf) pair) = _
+      rw [pairOf_tableOts, splitSecrets_eq, Equiv.symm_apply_apply]
+    · show outputHalves.symm (Concrete.ftsPairOf (tableFts outputs index tree) pair) = _
+      rw [ftsPairOf_tableFts, splitSecrets_eq, Equiv.symm_apply_apply]
+  right_inv secrets := by
+    rcases secrets with ⟨ots, fts⟩
+    apply Prod.ext
     · funext lay tree leaf chain
-      exact congrArg Prod.fst (outputHalves.apply_symm_apply (ots lay tree leaf chain, otsHigh lay tree leaf chain))
+      show unpairChains (fun pair => splitSecrets (outputHalves.symm (Concrete.pairOf (ots lay tree leaf) pair))) chain = _
+      simp only [splitSecrets_eq, Equiv.apply_symm_apply, unpairChains, Concrete.pairOf]
+      split
+      · rename_i h; rw [evenChain_chainPairOf chain h]
+      · rename_i h; rw [oddChain_chainPairOf chain h]
     · funext index tree leaf
-      exact congrArg Prod.fst (outputHalves.apply_symm_apply (fts index tree leaf, ftsHigh index tree leaf))
-    · funext lay tree leaf chain
-      exact congrArg Prod.snd (outputHalves.apply_symm_apply (ots lay tree leaf chain, otsHigh lay tree leaf chain))
-    · funext index tree leaf
-      exact congrArg Prod.snd (outputHalves.apply_symm_apply (fts index tree leaf, ftsHigh index tree leaf))
+      show unpairFtsLeaves (fun pair => splitSecrets (outputHalves.symm (Concrete.ftsPairOf (fts index tree) pair))) leaf = _
+      simp only [splitSecrets_eq, Equiv.apply_symm_apply, unpairFtsLeaves, Concrete.ftsPairOf]
+      split
+      · rename_i h; rw [evenFtsLeaf_ftsPairOf leaf h]
+      · rename_i h; rw [oddFtsLeaf_ftsPairOf leaf h]
 
-theorem tableOts_from_halves (low high : Secrets) : tableOts (secretHalves.symm (low, high)) = low.1 :=
-  congrArg (fun halves => halves.1.1) (secretHalves.apply_symm_apply (low, high))
+theorem tableOts_secretTables (secrets : Secrets) : tableOts (secretTables.symm secrets) = secrets.1 :=
+  congrArg Prod.fst (secretTables.apply_symm_apply secrets)
 
-theorem tableFts_from_halves (low high : Secrets) : tableFts (secretHalves.symm (low, high)) = low.2 :=
-  congrArg (fun halves => halves.1.2) (secretHalves.apply_symm_apply (low, high))
+theorem tableFts_secretTables (secrets : Secrets) : tableFts (secretTables.symm secrets) = secrets.2 :=
+  congrArg Prod.snd (secretTables.apply_symm_apply secrets)
 
 theorem truncate_from_halves (low high : Digest) : truncateHash (outputHalves.symm (low, high)) = low :=
   congrArg Prod.fst (outputHalves.apply_symm_apply (low, high))
@@ -80,25 +98,11 @@ theorem evalDist_sampleSecrets : 𝒮[sampleSecrets] = 𝒮[$ᵗ Secrets] := by
   unfold sampleSecrets Concrete.sampleOtsSecrets Concrete.sampleFtsSecrets
   exact evalDist_independent_uniform_pair (α := OtsSecrets) (β := FtsSecrets)
 
-theorem evalDist_secretOutputs_from_halves :
-    𝒮[sampleSecretOutputs] = 𝒮[do
-      let low ← sampleSecrets
-      let high ← sampleSecrets
-      pure (secretHalves.symm (low, high))] := by
-  calc
-    _ = 𝒮[secretHalves.symm <$> ($ᵗ (Secrets × Secrets))] :=
-      (evalSPMF_map_bijective_uniform_cross (α := Secrets × Secrets) (β := SecretOutputs) secretHalves.symm secretHalves.symm.bijective).symm
-    _ = 𝒮[secretHalves.symm <$> (do
-        let low ← $ᵗ Secrets
-        let high ← $ᵗ Secrets
-        pure (low, high))] := by
-      rw [evalSPMF_map, evalSPMF_map, evalDist_independent_uniform_pair]
-    _ = _ := by
-      simp only [map_bind, map_pure]
-      rw [evalSPMF_bind, evalSPMF_bind, evalDist_sampleSecrets]
-      apply bind_congr
-      intro low
-      rw [evalSPMF_bind, evalSPMF_bind, evalDist_sampleSecrets]
+theorem evalDist_secretOutputs :
+    𝒮[sampleSecretOutputs] = 𝒮[secretTables.symm <$> sampleSecrets] := by
+  rw [evalSPMF_map, evalDist_sampleSecrets, ← evalSPMF_map]
+  exact (evalSPMF_map_bijective_uniform_cross (α := Secrets) (β := SecretOutputs) secretTables.symm
+    secretTables.symm.bijective).symm
 
 /-- The parameter is the constant `P = 0`. -/
 theorem sampleParameter_eq_zero : Concrete.sampleParameter = pure 0 := by
@@ -115,8 +119,5 @@ theorem evalDist_truncate_uniform :
   rw [hmap, evalSPMF_map, evalSPMF_map_bijective_uniform_cross (α := HashOutput) (β := Digest × Digest)
     outputHalves outputHalves.bijective, ← evalSPMF_map]
   exact evalSPMF_map_fst_uniformSample_prod
-
-noncomputable def programmedCache (seed : MasterSeed) (secret secretHigh : Secrets) : QueryCache HashSpec :=
-  derivationCache seed (secretHalves.symm (secret, secretHigh))
 
 end SphincsSecurity.Seeded

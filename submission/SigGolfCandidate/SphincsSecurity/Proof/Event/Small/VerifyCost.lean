@@ -224,7 +224,7 @@ theorem evenBound_verify (publicKey : PublicKey) (message : Message) (signature 
     exact evenBound_bind hdigest hrest
   · exact evenBound_pure _ _
 
-theorem verifyHashBound_eq : verifyHashBound = 1998 := by
+theorem verifyHashBound_eq : verifyHashBound = 1691 := by
   simp only [verifyHashBound, layerVerifyBound, Fintype.card_fin]
   decide
 

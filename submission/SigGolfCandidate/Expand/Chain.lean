@@ -7,10 +7,10 @@ import SigGolfCandidate.Expand.Stages
 namespace SigGolfCandidate.Expand
 open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Mem
 
-/-- The whole program up to the final `ecall`: 10686 steps and cycles, `t0 = 1`, `a0 = 0`, and
+/-- The whole program up to the final `ecall`: 9662 steps and cycles, `t0 = 1`, `a0 = 0`, and
 the byte view of memory is the copies applied to the initial one. -/
 theorem expand_steps (s : MachineState) (hpc : s.pc = 0x1000) :
-    ∃ u, Steps image s 10686 10686 u ∧ fetch image u = some (.base .ECALL) ∧
+    ∃ u, Steps image s 9662 9662 u ∧ fetch image u = some (.base .ECALL) ∧
       u.getReg .x5 = 1 ∧ u.getReg .x10 = 0 ∧
       BytesEq u (applyCopies copies (fun a => s.getByte (BitVec.ofNat 64 a))) := by
   obtain ⟨u0, st0, pc0, b0⟩ := stage0 s (by rw [hpc]; rfl) _ (fun a _ => rfl)
@@ -24,15 +24,13 @@ theorem expand_steps (s : MachineState) (hpc : s.pc = 0x1000) :
   obtain ⟨u8, st8, pc8, b8⟩ := stage8 u7 (by rw [pc7]; decide) _ b7
   obtain ⟨u9, st9, pc9, b9⟩ := stage9 u8 (by rw [pc8]; decide) _ b8
   obtain ⟨u10, st10, pc10, b10⟩ := stage10 u9 (by rw [pc9]; decide) _ b9
-  obtain ⟨u11, st11, pc11, b11⟩ := stage11 u10 (by rw [pc10]; decide) _ b10
-  obtain ⟨u12, st12, pc12, b12⟩ := stage12 u11 (by rw [pc11]; decide) _ b11
-  have hpcF : u12.pc = BitVec.ofNat 64 (0x1000 + 4 * 142) := by rw [pc12]; decide
-  have hobl : runFin.res.obligs u12 := by simp only [runFin.res, rv_simp]
-  have stF := symRun_sound runFin codeAt_26 u12 hpcF hobl
-  refine ⟨_, Steps.of_eq (((((((((((((st0.trans st1).trans st2).trans st3).trans st4).trans st5).trans st6).trans st7).trans st8).trans st9).trans st10).trans st11).trans st12).trans stF) rfl rfl,
-    symRun_ecall runFin codeAt_26 u12 hobl rfl, by simp [runFin.res, rv_simp], by simp [runFin.res, rv_simp], ?_⟩
+  have hpcF : u10.pc = BitVec.ofNat 64 (0x1000 + 4 * 120) := by rw [pc10]; decide
+  have hobl : runFin.res.obligs u10 := by simp only [runFin.res, rv_simp]
+  have stF := symRun_sound runFin codeAt_22 u10 hpcF hobl
+  refine ⟨_, Steps.of_eq (((((((((((st0.trans st1).trans st2).trans st3).trans st4).trans st5).trans st6).trans st7).trans st8).trans st9).trans st10).trans stF) rfl rfl,
+    symRun_ecall runFin codeAt_22 u10 hobl rfl, by simp [runFin.res, rv_simp], by simp [runFin.res, rv_simp], ?_⟩
   intro a ha
-  have h := b12 a ha
+  have h := b10 a ha
   simp only [MachineState.getByte, Result.toState_getMem, runFin.res, memEval_nil] at h ⊢
   exact h
 

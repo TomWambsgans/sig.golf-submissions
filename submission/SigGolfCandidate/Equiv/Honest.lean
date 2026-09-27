@@ -285,13 +285,26 @@ theorem hq_messageDigest (root : Digest) (m : Message) (rho : Digest) :
     (fun h => by simp [SphincsSecurity.hashDomainFields, SphincsSecurity.tweakFields] at h))) fun _ =>
     hq_pure _
 
-theorem hq_deriveKey (dom : SphincsSecurity.KeygenDomain) (seed : MasterSeed) :
-    HQ (SphincsSecurity.deriveKey (m := AComp) P dom seed) := by
-  refine hq_bind (hq_oracleHash _ ?_) fun _ => hq_pure _
+theorem honest_keygenInput (dom : SphincsSecurity.KeygenDomain) (seed : MasterSeed) :
+    Honest (SphincsSecurity.keygenHashInput P dom seed) := by
   unfold SphincsSecurity.keygenHashInput
   rw [List.append_assoc]
   apply honest_fieldBytes <;> cases dom <;> simp [SphincsSecurity.keygenDomainFields,
     SphincsSecurity.tweakFields, tagLen, length_bytesLE]
+
+theorem hq_deriveKey (dom : SphincsSecurity.KeygenDomain) (seed : MasterSeed) :
+    HQ (SphincsSecurity.deriveKey (m := AComp) P dom seed) :=
+  hq_bind (hq_oracleHash _ (honest_keygenInput P dom seed)) fun _ => hq_pure _
+
+theorem hq_otsSecret (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (pair : SphincsSecurity.ChainPair) :
+    HQ (SphincsSecurity.Seeded.otsSecret (m := AComp) P seed lay tree leaf pair) :=
+  hq_bind (hq_oracleHash _ (honest_keygenInput P _ seed)) fun _ => hq_pure _
+
+theorem hq_ftsSecret (seed : MasterSeed) (index : Index) (tree : FtsTree)
+    (pair : SphincsSecurity.FtsPair) :
+    HQ (SphincsSecurity.Seeded.ftsSecret (m := AComp) P seed index tree pair) :=
+  hq_bind (hq_oracleHash _ (honest_keygenInput P _ seed)) fun _ => hq_pure _
 
 theorem hq_deriveRandomizer (seed : MasterSeed) (m : Message) (trial : BitVec 32) :
     HQ (SphincsSecurity.deriveRandomizer (m := AComp) P seed m trial) := by
@@ -487,6 +500,90 @@ theorem hq_signFrom (hP : P = 0) (index : Index) (ftsSecret : FtsTree → FtsLea
     hq_bind (hq_signLayers _ hP _ _ ho _ ht _ _) fun r => ?_
   split <;> exact hq_pure _
 
+/-! ### Paired builders -/
+
+theorem hq_buildLeafPaired (hP : P = 0) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (secret : SphincsSecurity.ChainPair → AComp (Digest × Digest)) (hs : ∀ c, HQ (secret c))
+    (digits : Encoding) : HQ (buildLeafPaired P lay tree leaf secret digits) :=
+  hq_bind (hq_sequenceFin _ fun c => hq_bind (hs c) fun _ =>
+      hq_bind (hq_buildChain _ hP _ _ _ _ _ (hq_pure _) _) fun _ =>
+        hq_bind (hq_buildChain _ hP _ _ _ _ _ (hq_pure _) _) fun _ => hq_pure _) fun _ =>
+    hq_bind (hq_leafHash _ _ _ _ _) fun _ => hq_pure _
+
+theorem hq_buildLayerTablePaired (hP : P = 0) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
+    (hs : ∀ e c, HQ (secret e c)) (leaf : LeafIndex) (digits : Encoding) :
+    HQ (buildLayerTablePaired P lay tree secret leaf digits) :=
+  hq_bind (hq_sequenceFin _ fun _ => hq_buildLeafPaired _ hP _ _ _ _ (hs _) _) fun _ =>
+    hq_bind (hq_buildLevels _ (fun _ _ _ _ => hq_node _ _ _ _ _ _ _) _ _ _) fun _ => hq_pure _
+
+theorem hq_buildLayerTreePaired (hP : P = 0) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
+    (hs : ∀ e c, HQ (secret e c)) (leaf : LeafIndex) (digits : Encoding) :
+    HQ (buildLayerTreePaired P lay tree secret leaf digits) :=
+  hq_bind (hq_buildLayerTablePaired _ hP _ _ _ hs _ _) fun _ => hq_pure _
+
+theorem hq_buildFtsTreePaired (index : Index) (tree : FtsTree)
+    (secret : SphincsSecurity.FtsPair → AComp (Digest × Digest)) (hs : ∀ j, HQ (secret j))
+    (leaf : FtsLeaf) : HQ (buildFtsTreePaired P index tree secret leaf) :=
+  hq_bind (hq_sequenceFin _ fun j => hq_bind (hs j) fun _ =>
+      hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ =>
+        hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ => hq_pure _) fun _ =>
+    hq_bind (hq_buildLevels _ (fun _ _ _ _ => hq_ftsNode _ _ _ _ _ _ _) _ _ _) fun _ => hq_pure _
+
+theorem hq_buildForestPaired (index : Index)
+    (secret : FtsTree → SphincsSecurity.FtsPair → AComp (Digest × Digest))
+    (hs : ∀ t j, HQ (secret t j)) (leaves : IndexGroup → FtsLeaf) :
+    HQ (buildForestPaired P index secret leaves) :=
+  hq_bind (hq_sequenceFin _ fun t => hq_buildFtsTreePaired _ _ _ _ (hs t) _) fun _ =>
+    hq_bind (hq_ftsRoots _ _ _) fun _ => hq_pure _
+
+theorem hq_signTopLayerPaired (hP : P = 0) (index : Index)
+    (secret : LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
+    (hs : ∀ e c, HQ (secret e c)) (topNode : Nat → Nat → AComp Digest) (ht : ∀ l j, HQ (topNode l j))
+    (M : Digest) : HQ (signTopLayerPaired P index secret topNode M) := by
+  unfold signTopLayerPaired
+  refine hq_bind (hq_encodingSearch _ _ _ _ _ _ _) fun r => ?_
+  split
+  · exact hq_bind (hq_sequenceFin _ fun c => hq_bind (hs _ _) fun _ =>
+      hq_bind (hq_chainWalk _ hP _ _ _ _ _ _ _) fun _ =>
+        hq_bind (hq_chainWalk _ hP _ _ _ _ _ _ _) fun _ => hq_pure _)
+      fun _ => hq_bind (hq_sequenceFin _ fun _ => ht _ _) fun _ => hq_pure _
+  · exact hq_pure _
+
+theorem hq_signLayersPaired (hP : P = 0) (index : Index)
+    (secret : Layer → TreeIndex → LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
+    (hs : ∀ a b c d, HQ (secret a b c d)) (topNode : Nat → Nat → AComp Digest)
+    (ht : ∀ l j, HQ (topNode l j)) (n : Nat) (M : Digest) :
+    HQ (signLayersPaired P index secret topNode n M) := by
+  induction n generalizing M with
+  | zero => exact hq_pure _
+  | succ n ih =>
+    unfold signLayersPaired
+    split
+    · split
+      · refine hq_bind (hq_signTopLayerPaired _ hP _ _ (hs _ _) _ ht _) fun r => ?_
+        split <;> exact hq_pure _
+      · refine hq_bind (hq_encodingSearch _ _ _ _ _ _ _) fun r => ?_
+        split
+        · refine hq_bind (hq_buildLayerTreePaired _ hP _ _ _ (hs _ _) _ _) fun _ =>
+            hq_bind (ih _) fun r' => ?_
+          split <;> exact hq_pure _
+        · exact hq_pure _
+    · exact hq_pure _
+
+theorem hq_signFromPaired (hP : P = 0) (index : Index)
+    (ftsSecret : FtsTree → SphincsSecurity.FtsPair → AComp (Digest × Digest))
+    (hf : ∀ t j, HQ (ftsSecret t j))
+    (otsSecret : Layer → TreeIndex → LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
+    (ho : ∀ a b c d, HQ (otsSecret a b c d)) (topNode : Nat → Nat → AComp Digest)
+    (ht : ∀ l j, HQ (topNode l j)) (randomness : Digest) (leaves : IndexGroup → FtsLeaf) :
+    HQ (signFromPaired P index ftsSecret otsSecret topNode randomness leaves) := by
+  unfold signFromPaired
+  refine hq_bind (hq_buildForestPaired _ _ _ hf _) fun _ =>
+    hq_bind (hq_signLayersPaired _ hP _ _ ho _ ht _ _) fun r => ?_
+  split <;> exact hq_pure _
+
 end algs
 
 theorem hq_mac (P : SphincsSecurity.PublicParameter) (seed : MasterSeed)
@@ -535,7 +632,8 @@ theorem hq_sign (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
         · exact hq_pure _
         · exact ih _
     · split
-      · exact hq_signFrom _ hP _ _ (fun _ _ => hq_deriveKey _ _ _) _ (fun _ _ _ _ => hq_deriveKey _ _ _)
+      · exact hq_signFromPaired _ hP _ _ (fun _ _ => hq_ftsSecret _ _ _ _ _) _
+          (fun _ _ _ _ => hq_otsSecret _ _ _ _ _ _)
           _ (fun _ _ => hq_bind (hq_maskSecret _ _ _ _) fun _ => hq_pure _) _ _
       · exact hq_pure _
   · exact hq_pure _
@@ -543,7 +641,8 @@ theorem hq_sign (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
 /-- **keygen** makes only honest queries. -/
 theorem hq_keygen (seed : MasterSeed) : HQ (SphincsSecurity.Seeded.keygenFromSeed seed) := by
   unfold SphincsSecurity.Seeded.keygenFromSeed SphincsSecurity.Seeded.maskRegion
-  refine hq_bind (hq_buildLayerTable _ rfl _ _ _ (fun _ _ => hq_deriveKey _ _ _) _ _) fun _ => ?_
+  refine hq_bind (hq_buildLayerTablePaired _ rfl _ _ _ (fun _ _ => hq_otsSecret _ _ _ _ _ _) _ _)
+    fun _ => ?_
   refine hq_bind (hq_bind (hq_sequenceFin _ fun _ => hq_bind (hq_sequenceFin _ fun _ =>
     hq_bind (hq_maskSecret _ _ _ _) fun _ => hq_pure _) fun _ => hq_pure _) fun _ => hq_pure _) fun _ => ?_
   exact hq_bind (hq_mac _ _ _) fun _ => hq_pure _

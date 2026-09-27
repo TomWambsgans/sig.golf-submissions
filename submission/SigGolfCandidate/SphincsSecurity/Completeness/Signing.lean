@@ -7,10 +7,10 @@ import SigGolfCandidate.SphincsSecurity.Completeness.Encoding
 
 `sign` first checks the cache's MAC; for the cache key generation wrote, that query is a cache hit
 returning the stored tag, so the check passes. Then it runs the randomizer search, builds the few-time
-forest, and signs the six layers from the bottom up: layers `5, ..., 1` each a counter search followed
+forest, and signs the five layers from the bottom up: layers `4, ..., 1` each a counter search followed
 by its tree built once, and the top layer a counter search followed by its chains and the path read
 from the cache. It returns `none` as soon as a search runs out. A union bound through that structure
-charges the failure to the seven searches. The tree builds and cache reads never fail and do not matter
+charges the failure to the six searches. The tree builds and cache reads never fail and do not matter
 for the probability except through what they cache.
 
 Each counter search needs its own inputs uncached when it starts; `EncodingFresh` carries that from
@@ -24,7 +24,7 @@ namespace SphincsSecurity.Completeness
 
 open Concrete
 
-attribute [local irreducible] Seeded.signDigestLoop Concrete.buildLayerTree Concrete.buildForest
+attribute [local irreducible] Seeded.signDigestLoop Concrete.buildLayerTreePaired Concrete.buildForestPaired
   Concrete.encodingSearch digestAttemptLimit encodingAttemptLimit SphincsSecurity.deriveKey
   Seeded.signChecked
 
@@ -39,14 +39,14 @@ theorem EncodingFresh.mono {parameter : PublicParameter} {pending pending' : Lay
 
 /-- The top layer fails only through its counter search, provided its encoding inputs are uncached. -/
 theorem probEvent_signTopLayer_none (parameter : PublicParameter) (index : Index)
-    (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest)
+    (secret : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest))
     (topNode : Nat → Nat → OracleComp HashSpec Digest) (message : Digest) (cache : QueryCache HashSpec)
     (hfresh : EncodingFresh parameter (fun l => l.val < 1) cache) :
     Pr[fun r => r.1 = none | (simulateQ (randomOracle : QueryImpl HashSpec _)
-      (signTopLayer parameter index secret topNode message
+      (signTopLayerPaired parameter index secret topNode message
         : OracleComp HashSpec (Option LayerOutput))).run cache]
       ≤ encodingBound := by
-  rw [signTopLayer]
+  rw [signTopLayerPaired]
   refine le_trans (probEvent_bind_le_add _ _ (fun r => r.1 = none) _ cache 0 ?_) ?_
   · rintro ⟨result, c1⟩ _ hsome
     obtain ⟨⟨counter, word⟩, rfl⟩ := Option.ne_none_iff_exists'.mp hsome
@@ -65,15 +65,15 @@ theorem probEvent_signLayers_none (sk : Seeded.SecretKey) (index : Index)
     ∀ (remaining : Nat), remaining ≤ numLayers → ∀ (message : Digest) (cache : QueryCache HashSpec),
       EncodingFresh sk.parameter (fun l => l.val < remaining) cache →
       Pr[fun r => r.1 = none | (simulateQ (randomOracle : QueryImpl HashSpec _)
-        (signLayers sk.parameter index (Seeded.otsSecret sk.parameter sk.seed) topNode remaining message
+        (signLayersPaired sk.parameter index (Seeded.otsSecret sk.parameter sk.seed) topNode remaining message
           : OracleComp HashSpec (Option (Layer → LayerOutput)))).run cache]
         ≤ (remaining : ℝ≥0∞) * encodingBound := by
   intro remaining
   induction remaining with
-  | zero => intro _ message cache _; simp [signLayers]
+  | zero => intro _ message cache _; simp [signLayersPaired]
   | succ r ih =>
       intro hrem message cache hfresh
-      rw [signLayers]
+      rw [signLayersPaired]
       split
       next hlayer =>
         by_cases hzero : r = 0
@@ -98,7 +98,7 @@ theorem probEvent_signLayers_none (sk : Seeded.SecretKey) (index : Index)
                   (fun h => by rw [← h] at hl; exact absurd hl (Nat.lt_irrefl _)) _ _ _ _ _ _) _ _)
           refine probEvent_bind_le _ _ _ c1 _ (fun built hbuilt => ?_)
           have h2 := h1.step _ built hbuilt (fun f l _ tree leaf payload =>
-            Avoids.buildLayerTree_of_structural f _ _ _ _ _ _ _
+            Avoids.buildLayerTreePaired_of_structural f _ _ _ _ _ _ _
               (structural_encoding sk.parameter sk.seed l tree leaf payload))
           obtain ⟨⟨values, path, root⟩, c2⟩ := built
           dsimp only
@@ -115,21 +115,21 @@ theorem probEvent_signLayers_none (sk : Seeded.SecretKey) (index : Index)
             _ = ((r + 1 : Nat) : ℝ≥0∞) * encodingBound := by push_cast; ring
       next hlayer => exact absurd (Nat.lt_of_succ_le hrem) hlayer
 
-/-- After the digest loop: the forest never fails, and the six layers fail only through their
+/-- After the digest loop: the forest never fails, and the five layers fail only through their
 counter searches. -/
 theorem probEvent_signFrom_none (sk : Seeded.SecretKey) (index : Index)
     (topNode : Nat → Nat → OracleComp HashSpec Digest) (randomness : Randomness)
     (leaves : IndexGroup → FtsLeaf) (cache : QueryCache HashSpec)
     (hfresh : EncodingFresh sk.parameter (fun _ => True) cache) :
     Pr[fun r => r.1 = none | (simulateQ (randomOracle : QueryImpl HashSpec _)
-      (signFrom sk.parameter index (Seeded.ftsSecret sk.parameter sk.seed index)
+      (signFromPaired sk.parameter index (Seeded.ftsSecret sk.parameter sk.seed index)
         (Seeded.otsSecret sk.parameter sk.seed) topNode randomness leaves
         : OracleComp HashSpec (Option Signature))).run cache]
       ≤ (numLayers : ℝ≥0∞) * encodingBound := by
-  rw [signFrom]
+  rw [signFromPaired]
   refine probEvent_bind_le _ _ _ cache _ (fun forest hforest => ?_)
   have h1 := hfresh.step _ forest hforest (fun f l _ tree leaf payload =>
-    Avoids.buildForest_of_structural f _ _ _ _ _
+    Avoids.buildForestPaired_of_structural f _ _ _ _ _
       (structural_encoding sk.parameter sk.seed l tree leaf payload))
   obtain ⟨⟨secrets, ftsPath, ftsPublicKey⟩, c1⟩ := forest
   dsimp only
@@ -141,7 +141,7 @@ theorem probEvent_signFrom_none (sk : Seeded.SecretKey) (index : Index)
     exact probEvent_signLayers_none sk index topNode numLayers le_rfl ftsPublicKey c1
       (h1.mono fun _ _ => trivial)
 
-/-- After the MAC check, signing fails only if the randomizer search or one of the six counter
+/-- After the MAC check, signing fails only if the randomizer search or one of the five counter
 searches does. -/
 theorem probEvent_signChecked_none (sk : Seeded.SecretKey) (topCache : TopCache) (message : Message)
     (cache : QueryCache HashSpec)
@@ -166,7 +166,7 @@ theorem probEvent_signChecked_none (sk : Seeded.SecretKey) (topCache : TopCache)
       (by rw [digestAttemptLimit]; omega) (by simp) (fun s _ _ => hrand s) (fun ρ _ => hmsg ρ)) le_rfl
 
 /-- When the cache's MAC is already cached (key generation queried it), the check is a cache hit that
-passes, and signing fails only if the randomizer search or one of the six counter searches does. -/
+passes, and signing fails only if the randomizer search or one of the five counter searches does. -/
 theorem probEvent_sign_none (sk : Seeded.SecretKey) (topCache : TopCache) (message : Message)
     (cache : QueryCache HashSpec)
     (hmac : cache (macHashInput sk.parameter sk.seed topCache.region) = some topCache.tag)

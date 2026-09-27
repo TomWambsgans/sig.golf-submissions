@@ -107,7 +107,7 @@ def pSlots : List Nat := [0x10, 0x18, 0xD0, 0xD8, 0x110, 0x118, 0x1D0, 0x1D8, 0x
   0x350, 0x358]
 
 def WitOK (wl : List Byte) (s : MachineState) : Prop :=
-  ∀ j, j < 885 → s.getMem (BitVec.ofNat 64 (0x800 + 8 * j)) = w64 (slice wl (8 * j) 8)
+  ∀ j, j < 801 → s.getMem (BitVec.ofNat 64 (0x800 + 8 * j)) = w64 (slice wl (8 * j) 8)
 
 def PkOK (pk : List Byte) (s : MachineState) : Prop :=
   s.getMem 0xA0 = w64 (pk.take 8) ∧ s.getMem 0xA8 = w64 (pk.drop 8)

@@ -108,18 +108,18 @@ theorem index_eq_of_bottom_position_eq {left right : Index}
   apply Fin.ext
   have htreeVal := congrArg Fin.val htree
   have hleafVal := congrArg Fin.val hleaf
-  have habove : heightAbove bottomLayer = 30 := by decide
-  have hheight : layerHeight bottomLayer = 4 := by decide
-  have hleftTree : (treeIndexAt left bottomLayer).val = left.val / 16 := by
+  have habove : heightAbove bottomLayer = 29 := by decide
+  have hheight : layerHeight bottomLayer = 5 := by decide
+  have hleftTree : (treeIndexAt left bottomLayer).val = left.val / 32 := by
     rw [treeIndexAt_val, habove]
     norm_num [totalHeight]
-  have hrightTree : (treeIndexAt right bottomLayer).val = right.val / 16 := by
+  have hrightTree : (treeIndexAt right bottomLayer).val = right.val / 32 := by
     rw [treeIndexAt_val, habove]
     norm_num [totalHeight]
-  have hleftLeaf : (leafIndexAt left bottomLayer).val = left.val % 16 := by
+  have hleftLeaf : (leafIndexAt left bottomLayer).val = left.val % 32 := by
     rw [leafIndexAt_bottomLayer, hheight]
     norm_num
-  have hrightLeaf : (leafIndexAt right bottomLayer).val = right.val % 16 := by
+  have hrightLeaf : (leafIndexAt right bottomLayer).val = right.val % 32 := by
     rw [leafIndexAt_bottomLayer, hheight]
     norm_num
   rw [hleftTree, hrightTree] at htreeVal

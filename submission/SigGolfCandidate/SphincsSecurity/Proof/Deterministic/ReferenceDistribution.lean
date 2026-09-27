@@ -13,13 +13,8 @@ attribute [local irreducible] Concrete.gameAfterSecrets
 theorem evalDist_secrets_continuation {α : Type} (next : Secrets → ProbComp α) :
     𝒮[do let outputs ← sampleSecretOutputs; next (tableOts outputs, tableFts outputs)] =
       𝒮[do let secret ← sampleSecrets; next secret] := by
-  rw [evalSPMF_bind, evalDist_secretOutputs_from_halves, ← evalSPMF_bind]
-  simp only [bind_assoc, pure_bind, tableOts_from_halves, tableFts_from_halves]
-  apply evalSPMF_bind_congr'
-  intro secret
-  apply evalSPMF_ext
-  intro value
-  simp
+  rw [evalSPMF_bind, evalDist_secretOutputs, ← evalSPMF_bind]
+  simp only [bind_map_left, tableOts_secretTables, tableFts_secretTables]
 
 theorem evalDist_referenceOutputs (adversary : Adversary) :
     𝒮[do

@@ -89,7 +89,7 @@ theorem ofList_toList {n : Nat} (x : Bytes n) : ofList n (toList x) = x := by
 theorem length_toList {n : Nat} (x : Bytes n) : (toList x).length = n := by
   simp [toList, SigGolf.bytes]
 
-/-- The witness permutation checked on all `7080` positions (kernel evaluation). -/
+/-- The witness permutation checked on all `6404` positions (kernel evaluation). -/
 theorem witness_check : (List.range sigBytes).all (fun i =>
     witnessSrc (signatureSrc i) == i && decide (signatureSrc i < sigBytes) &&
       signatureSrc (witnessSrc i) == i && decide (witnessSrc i < sigBytes)) = true := by
@@ -116,12 +116,12 @@ theorem witnessSrc_lt : ∀ i, i < sigBytes → witnessSrc i < sigBytes :=
 
 /-- Layer offsets. -/
 theorem sigLayerOff_values :
-    (List.range (nLayers + 1)).map sigLayerOff = [2480, 3332, 4088, 4844, 5600, 6340, 7080] := by
+    (List.range (nLayers + 1)).map sigLayerOff = [2480, 3332, 4104, 4876, 5648, 6404] := by
   decide
 theorem witLayerOff_values :
-    (List.range (nLayers + 1)).map witLayerOff = [2480, 3328, 4080, 4832, 5584, 6320, 7056] := by
+    (List.range (nLayers + 1)).map witLayerOff = [2480, 3328, 4096, 4864, 5632, 6384] := by
   decide
-theorem witCounters_eq : witCounters = 7056 := by decide
+theorem witCounters_eq : witCounters = 6384 := by decide
 
 private theorem getD_map_range (n : Nat) (f : Nat → Byte) (i : Nat) (h : i < n) :
     ((List.range n).map f).getD i 0 = f i := by
@@ -148,12 +148,12 @@ theorem toWitness_fromWitness (l : List Byte) (h : l.length = sigBytes) :
   rw [getD_map_range _ _ _ (witnessSrc_lt i h1), signatureSrc_witnessSrc i h1,
     List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h2]; rfl
 
-theorem unexpandRef_expandRef (sig : Bytes 7080) : unexpandRef (expandRef sig) = sig := by
+theorem unexpandRef_expandRef (sig : Bytes 6404) : unexpandRef (expandRef sig) = sig := by
   unfold unexpandRef expandRef
   rw [toList_ofList _ _ (by rw [length_toWitness]; rfl), fromWitness_toWitness _ (length_toList sig),
     ofList_toList]
 
-theorem expandRef_unexpandRef (w : Bytes 7080) : expandRef (unexpandRef w) = w := by
+theorem expandRef_unexpandRef (w : Bytes 6404) : expandRef (unexpandRef w) = w := by
   unfold unexpandRef expandRef
   rw [toList_ofList _ _ (by rw [length_fromWitness]; rfl), toWitness_fromWitness _ (length_toList w),
     ofList_toList]
@@ -228,9 +228,9 @@ theorem blocks_fmt (x : List Byte) : (fmt x).blocks = (pad64 x).blocks := by
 
 /-! ## Parameter tables -/
 
-theorem height_values : (List.range nLayers).map height = [11, 5, 5, 5, 4, 4] := by decide
+theorem height_values : (List.range nLayers).map height = [11, 6, 6, 6, 5] := by decide
 theorem shiftBelow_values :
-    (List.range nLayers).map shiftBelow = [23, 18, 13, 8, 4, 0] := by decide
+    (List.range nLayers).map shiftBelow = [23, 17, 11, 5, 0] := by decide
 theorem topH_eq : topH = 11 := rfl
 theorem topN_values : (List.range (topH + 1)).map topN =
     [0, 2048, 3072, 3584, 3840, 3968, 4032, 4064, 4080, 4088, 4092, 4094] := by decide

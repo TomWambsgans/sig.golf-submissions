@@ -44,7 +44,7 @@ theorem seededExperiment_eq (seed : MasterSeed) (message : Message) :
 theorem hq_game (seed : MasterSeed) (message : Message) : Equiv.HQ (game seed message) := by
   unfold game Seeded.keygenFromSeed Seeded.maskRegion
   simp only [bind_assoc, pure_bind]
-  refine Equiv.hq_bind (Equiv.hq_buildLayerTable _ rfl _ _ _ (fun _ _ => Equiv.hq_deriveKey _ _ _) _ _)
+  refine Equiv.hq_bind (Equiv.hq_buildLayerTablePaired _ rfl _ _ _ (fun _ _ => Equiv.hq_otsSecret _ _ _ _ _ _) _ _)
     fun t => ?_
   refine Equiv.hq_bind (Equiv.hq_sequenceFin _ fun _ => Equiv.hq_bind (Equiv.hq_sequenceFin _ fun _ =>
     Equiv.hq_bind (Equiv.hq_maskSecret _ _ _ _) fun _ => Equiv.hq_pure _) fun _ => Equiv.hq_pure _)

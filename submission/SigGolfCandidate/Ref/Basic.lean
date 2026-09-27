@@ -63,13 +63,13 @@ def slice (l : List Byte) (off len : Nat) : List Byte := (l.drop off).take len
 
 def nChains : Nat := 42
 /-- The WOTS target sum (the 42 3-bit digits of an accepted encoding sum to it). -/
-def targetSum : Nat := 186
+def targetSum : Nat := 183
 /-- Old name of `targetSum`. -/
 abbrev target : Nat := targetSum
 /-- The number of hypertree layers `d`. -/
-def nLayers : Nat := 6
+def nLayers : Nat := 5
 /-- The layer heights, layer 0 (the cached top tree) first. -/
-def heights : List Nat := [11, 5, 5, 5, 4, 4]
+def heights : List Nat := [11, 6, 6, 6, 5]
 def totalH : Nat := 34
 def ftsA : Nat := 10
 /-- Number of opened FORS trees (`k - 1`; tree 14 is the pinned group `u_14 = 0`). -/
@@ -78,7 +78,7 @@ def ftsTrees : Nat := 14
 def aMax : Nat := 2 ^ 20
 /-- The counter limit `C_max`: the signer tries `c < cMax`, the verifier rejects `c ≥ cMax`. -/
 def cMax : Nat := 2 ^ 22
-def sigBytes : Nat := 7080
+def sigBytes : Nat := 6404
 
 /-- Height of hypertree layer `lay` (layer 0 = top): `heights[lay]`. -/
 def height (lay : Nat) : Nat := heights.getD lay 0
@@ -159,6 +159,12 @@ def fmt (x : List Byte) : Query :=
 /-- One oracle call on `fmt x`. -/
 def H (x : List Byte) : OracleComp HashSpec (BitVec 256) := HashSpec.query (fmt x)
 
+/-- One paired seed derivation: the full 32-byte answer on `fmt x` as two 16-byte secrets
+(low half, high half). -/
+def prf2 (x : List Byte) : OracleComp HashSpec (Val × Val) := do
+  let a ← H x
+  pure ((answerBytes 32 a).take 16, (answerBytes 32 a).drop 16)
+
 /-- One oracle call on `fmt x`, truncated to its first 16 bytes. -/
 def hash16 (x : List Byte) : OracleComp HashSpec Val := do
   let a ← H x
@@ -172,7 +178,8 @@ def th (tw payload : List Byte) : OracleComp HashSpec Val := hash16 (thInput tw 
 Hypertree formats take `(lay, tau, e)` = (layer, tree, leaf) first; FORS formats take
 `(k, idx)` = (tree kappa, instance). -/
 
-/-- WOTS secret (chain start) `i` of leaf `e`: `tw(0, lay, tau, i, e) || P || S` (64 bytes). -/
+/-- WOTS secrets of chain pair `i` (chains `2i`, `2i+1`) of leaf `e`: `tw(0, lay, tau, i, e) || P || S`
+(64 bytes; queried with `prf2`). -/
 def prfInput (S : List Byte) (lay tau e i : Nat) : List Byte := thInput (tweak 0 lay tau i e) S
 
 /-- Chain step `mu ∈ 1..7` of chain `i`: `tw(1, lay, tau, 8i + mu - 1, e) || P || v` (48 bytes). -/
@@ -194,7 +201,8 @@ def encInput (lay tau e : Nat) (M : Val) (c : Nat) : List Byte :=
 /-- Randomizer trial `a`: `tw(7, 0, 0, a, 0) || P || S || m` (96 bytes). -/
 def rndInput (S m : List Byte) (a : Nat) : List Byte := thInput (tweak 7 0 0 a 0) (S ++ m)
 
-/-- FORS secret `j` of tree `k`: `tw(8, k, idx, 0, j) || P || S` (64 bytes). -/
+/-- FORS secrets of leaf pair `j` (leaves `2j`, `2j+1`) of tree `k`: `tw(8, k, idx, 0, j) || P || S`
+(64 bytes; queried with `prf2`). -/
 def ftsPrfInput (S : List Byte) (k idx j : Nat) : List Byte := thInput (tweak 8 k idx 0 j) S
 
 /-- FORS leaf `j` of tree `k`: `tw(9, k, idx, 0, j) || P || s` (48 bytes). -/

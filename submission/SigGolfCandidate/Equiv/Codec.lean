@@ -3,8 +3,8 @@ import SigGolfCandidate.Equiv.Basic
 /-!
 # The signature codec
 
-`sigCodec : Bytes 7080 ≃ Signature`: the signature layout of `ref.py`
-(`rho | (s_k, path_k)_{k<14} | (LE32 c, 42 chain values, path)_{lay<6}`), and the witness decoder
+`sigCodec : Bytes 6404 ≃ Signature`: the signature layout of `ref.py`
+(`rho | (s_k, path_k)_{k<14} | (LE32 c, 42 chain values, path)_{lay<5}`), and the witness decoder
 `witDec` (the same fields read at the witness offsets), with `witDec (expandRef b) = sigCodec b`.
 -/
 
@@ -131,19 +131,19 @@ theorem layerBytes_eq (lay : Layer) :
 theorem pre_succ (lay : Nat) : pre (lay + 1) = pre lay + Ref.sigLayerBytes lay := by
   simp [pre, List.range_succ]
 
-theorem layer_bound (lay : Layer) : Ref.sigLayerOff lay + Ref.sigLayerBytes lay ≤ 7080 := by
+theorem layer_bound (lay : Layer) : Ref.sigLayerOff lay + Ref.sigLayerBytes lay ≤ 6404 := by
   fin_cases lay <;> decide
 
-theorem pre_all : pre SphincsSecurity.numLayers = 4600 := by decide
+theorem pre_all : pre SphincsSecurity.numLayers = 3924 := by decide
 
 theorem wit_bound (lay : Layer) :
     Ref.witLayerOff lay + 672 + 16 * SphincsSecurity.layerHeight lay ≤ Ref.witCounters := by
   fin_cases lay <;> decide
 
-theorem witCounters_eq : Ref.witCounters = 7056 := by decide
+theorem witCounters_eq : Ref.witCounters = 6384 := by decide
 
 /-- The witness permutation on each layer (kernel evaluation over the six layers). -/
-theorem sig_layer_check : (List.range 6).all (fun lay => (List.range (Ref.sigLayerBytes lay)).all
+theorem sig_layer_check : (List.range 5).all (fun lay => (List.range (Ref.sigLayerBytes lay)).all
     fun r => Ref.signatureSrc (Ref.sigLayerOff lay + r) ==
       if r < 4 then Ref.witCounters + 4 * lay + r else Ref.witLayerOff lay + (r - 4)) = true := by
   decide +kernel
@@ -188,7 +188,7 @@ theorem length_layerPart (σ : Signature) (lay : Layer) :
 
 theorem fts_lt (k : FtsTree) : k.val < 14 := k.isLt
 theorem ftsH_lt (j : Fin SphincsSecurity.ftsTreeHeight) : j.val < 10 := j.isLt
-theorem lay_lt (lay : Layer) : lay.val < 6 := lay.isLt
+theorem lay_lt (lay : Layer) : lay.val < 5 := lay.isLt
 theorem chain_lt (i : ChainIndex) : i.val < 42 := i.isLt
 
 theorem length_fts_block (σ : Signature) : (List.ofFn (ftsPart σ)).flatten.length = 2464 := by
@@ -295,7 +295,7 @@ theorem dv_ofList_slice (l : List Byte) (a : Nat) (h : a + 16 ≤ l.length) :
     dv (Ref.ofList 16 (Ref.slice l a 16)) = Ref.slice l a 16 :=
   Ref.toList_ofList 16 _ (length_slice l a 16 h)
 
-theorem ftsPart_sigOfList (l : List Byte) (hl : l.length = 7080) (k : FtsTree) :
+theorem ftsPart_sigOfList (l : List Byte) (hl : l.length = 6404) (k : FtsTree) :
     ftsPart (sigOfList l) k = Ref.slice l (16 + 176 * k.val) 176 := by
   have hk := fts_lt k
   unfold ftsPart
@@ -310,7 +310,7 @@ theorem ftsPart_sigOfList (l : List Byte) (hl : l.length = 7080) (k : FtsTree) :
     exact dv_ofList_slice _ _ (by omega)
   rw [e, flatten_ofFn_slices, ← slice_split]
 
-theorem layerPart_sigOfList (l : List Byte) (hl : l.length = 7080) (lay : Layer) :
+theorem layerPart_sigOfList (l : List Byte) (hl : l.length = 6404) (lay : Layer) :
     layerPart (sigOfList l) lay = Ref.slice l (Ref.sigLayerOff lay) (Ref.sigLayerBytes lay) := by
   have hb := layer_bound lay
   have hB := layerBytes_eq lay
@@ -348,13 +348,13 @@ theorem flatten_ofFn_slices_var (l : List Byte) (a : Nat) {n : Nat} (w : Nat →
     rw [ih, ← slice_split, List.range_succ, List.map_append, List.sum_append]
     simp
 
-theorem sigToList_sigOfList (l : List Byte) (hl : l.length = 7080) : sigToList (sigOfList l) = l := by
+theorem sigToList_sigOfList (l : List Byte) (hl : l.length = 6404) : sigToList (sigOfList l) = l := by
   unfold sigToList
   have e1 : (List.ofFn (ftsPart (sigOfList l))).flatten = Ref.slice l 16 (176 * 14) := by
     rw [← flatten_ofFn_slices]
     congr 1
     exact List.ofFn_inj.mpr (funext fun k => ftsPart_sigOfList l hl k)
-  have e2 : (List.ofFn (layerPart (sigOfList l))).flatten = Ref.slice l 2480 4600 := by
+  have e2 : (List.ofFn (layerPart (sigOfList l))).flatten = Ref.slice l 2480 3924 := by
     have e3 : List.ofFn (layerPart (sigOfList l)) =
         List.ofFn fun lay : Fin SphincsSecurity.numLayers =>
           Ref.slice l (2480 + ((List.range lay).map Ref.sigLayerBytes).sum) (Ref.sigLayerBytes lay) :=
@@ -367,7 +367,7 @@ theorem sigToList_sigOfList (l : List Byte) (hl : l.length = 7080) : sigToList (
     ← slice_split]
   exact slice_full _ _ hl
 
-theorem length_sigToList (σ : Signature) : (sigToList σ).length = 7080 := by
+theorem length_sigToList (σ : Signature) : (sigToList σ).length = 6404 := by
   unfold sigToList
   rw [List.length_append, List.length_append, length_dv, length_fts_block, List.length_flatten,
     List.map_ofFn, List.sum_ofFn]
@@ -377,9 +377,9 @@ theorem length_sigToList (σ : Signature) : (sigToList σ).length = 7080 := by
   decide
 
 /-- **The signature codec** (the `ref.py` signature layout). -/
-def sigCodec : Bytes 7080 ≃ Signature where
+def sigCodec : Bytes 6404 ≃ Signature where
   toFun b := sigOfList (Ref.toList b)
-  invFun σ := Ref.ofList 7080 (sigToList σ)
+  invFun σ := Ref.ofList 6404 (sigToList σ)
   left_inv b := by
     simp only
     rw [sigToList_sigOfList _ (Ref.length_toList b), Ref.ofList_toList]
@@ -387,9 +387,9 @@ def sigCodec : Bytes 7080 ≃ Signature where
     simp only
     rw [Ref.toList_ofList _ _ (length_sigToList σ), sigOfList_sigToList]
 
-theorem sigCodec_symm_apply (σ : Signature) : sigCodec.symm σ = Ref.ofList 7080 (sigToList σ) := rfl
+theorem sigCodec_symm_apply (σ : Signature) : sigCodec.symm σ = Ref.ofList 6404 (sigToList σ) := rfl
 
-theorem sigCodec_apply (b : Bytes 7080) : sigCodec b = sigOfList (Ref.toList b) := rfl
+theorem sigCodec_apply (b : Bytes 6404) : sigCodec b = sigOfList (Ref.toList b) := rfl
 
 /-! ## The witness decoder -/
 
@@ -402,10 +402,10 @@ def sigOfWit (w : List Byte) : Signature where
     fun i => Ref.ofList 16 (Ref.witChain w lay i), fun j => Ref.ofList 16 (Ref.witSib w lay j)⟩
 
 /-- The witness decoder. -/
-def witDec (w : Bytes 7080) : Signature := sigOfWit (Ref.toList w)
+def witDec (w : Bytes 6404) : Signature := sigOfWit (Ref.toList w)
 
-theorem slice_fromWitness (wl : List Byte) (hl : wl.length = 7080) (a b len : Nat)
-    (ha : a + len ≤ 7080) (hb : b + len ≤ 7080)
+theorem slice_fromWitness (wl : List Byte) (hl : wl.length = 6404) (a b len : Nat)
+    (ha : a + len ≤ 6404) (hb : b + len ≤ 6404)
     (hsrc : ∀ t < len, Ref.signatureSrc (a + t) = b + t) :
     Ref.slice (Ref.fromWitness wl) a len = Ref.slice wl b len := by
   apply List.ext_getElem
@@ -417,7 +417,7 @@ theorem slice_fromWitness (wl : List Byte) (hl : wl.length = 7080) (a b len : Na
     rw [hsrc t ht, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega)]
     rfl
 
-theorem sigOfWit_eq (wl : List Byte) (hl : wl.length = 7080) :
+theorem sigOfWit_eq (wl : List Byte) (hl : wl.length = 6404) :
     sigOfWit wl = sigOfList (Ref.fromWitness wl) := by
   have hwc := witCounters_eq
   apply sig_ext
@@ -472,11 +472,11 @@ theorem sigOfWit_eq (wl : List Byte) (hl : wl.length = 7080) :
         omega)]
 
 /-- The witness decoder reads the signature that expands to the witness. -/
-theorem witDec_eq (w : Bytes 7080) : witDec w = sigCodec (Ref.unexpandRef w) := by
+theorem witDec_eq (w : Bytes 6404) : witDec w = sigCodec (Ref.unexpandRef w) := by
   rw [witDec, sigOfWit_eq _ (Ref.length_toList w), sigCodec_apply, Ref.unexpandRef,
-    Ref.toList_ofList 7080 _ (Ref.length_fromWitness _)]
+    Ref.toList_ofList 6404 _ (Ref.length_fromWitness _)]
 
-theorem witDec_expandRef (b : Bytes 7080) : witDec (Ref.expandRef b) = sigCodec b := by
+theorem witDec_expandRef (b : Bytes 6404) : witDec (Ref.expandRef b) = sigCodec b := by
   rw [witDec_eq, Ref.unexpandRef_expandRef]
 
 end SigGolfCandidate.Equiv

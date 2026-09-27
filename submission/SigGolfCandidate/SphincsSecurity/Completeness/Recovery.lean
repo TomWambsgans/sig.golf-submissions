@@ -1,4 +1,4 @@
-import SigGolfCandidate.SphincsSecurity.Proof.Scheme.BuildEval
+import SigGolfCandidate.SphincsSecurity.Completeness.Paired
 import Mathlib.Data.Nat.Bitwise
 
 /-!
@@ -336,7 +336,7 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
     have hbottom : enterMessage f key index numLayers
         = evalWithAnswerFn f (ftsKey key.parameter index (key.ftsSecret index)
           : OracleComp HashSpec Digest) := by
-      rw [show numLayers = 5 + 1 from rfl, enterMessage, dif_pos (by decide),
+      rw [show numLayers = 4 + 1 from rfl, enterMessage, dif_pos (by decide),
         ← layerMessage_bottomLayer_eq]
       rfl
     have htop : layerRoot f key index topLayer = key.root := by
@@ -352,8 +352,9 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
 
 /-! ## The seeded signer
 
-The seeded signer derives its secrets from the seed; read under `f`, they are a table of secrets,
-and the key they form is a key of the specification. It reads the top layer's path from the cache,
+The seeded signer derives its secrets from the seed, two per query; read under `f`, they are a table
+of secrets (`unpairedOts`, `unpairedFts`), the paired builders compute what the per-secret builders
+compute with that table (`Paired.lean`), and the key they form is a key of the specification. It reads the top layer's path from the cache,
 unmasking each node with a freshly derived mask; for the cache key generation wrote, that is the top
 tree's node. -/
 
@@ -362,16 +363,10 @@ derived secrets span (the signer reads the top path through the cache instead). 
 def tableKey (secretKey : Seeded.SecretKey) : SecretKey where
   parameter := secretKey.parameter
   root := secretKey.root
-  otsSecret lay tree leaf chainIdx := evalWithAnswerFn f
-    (Seeded.otsSecret secretKey.parameter secretKey.seed lay tree leaf chainIdx
-      : OracleComp HashSpec Digest)
-  ftsSecret index tree leaf := evalWithAnswerFn f
-    (Seeded.ftsSecret secretKey.parameter secretKey.seed index tree leaf
-      : OracleComp HashSpec Digest)
+  otsSecret lay tree leaf chainIdx := unpairedOts f (Seeded.otsSecret secretKey.parameter secretKey.seed lay tree leaf) chainIdx
+  ftsSecret index tree leaf := unpairedFts f (Seeded.ftsSecret secretKey.parameter secretKey.seed index tree) leaf
   top level nodeIdx := honestNode f secretKey.parameter topLayer rootTree
-    (fun leaf chainIdx => evalWithAnswerFn f
-      (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf chainIdx
-        : OracleComp HashSpec Digest)) level nodeIdx
+    (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf) chainIdx) level nodeIdx
 
 @[simp] theorem eval_oracleHash (input : HashInput) :
     evalWithAnswerFn f (oracleHash input : OracleComp HashSpec HashOutput) = f input := by
@@ -384,9 +379,7 @@ def CacheHonest (secretKey : Seeded.SecretKey) (cache : TopCache) : Prop :=
     (hnodeIdx : nodeIdx < 2 ^ (maxLayerHeight - level)),
     cache.region ⟨level, hlevel⟩ ⟨nodeIdx, hnodeIdx⟩
       = honestNode f secretKey.parameter topLayer rootTree
-          (fun leaf chainIdx => evalWithAnswerFn f
-            (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf chainIdx
-              : OracleComp HashSpec Digest)) level nodeIdx
+          (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf) chainIdx) level nodeIdx
         ^^^ evalWithAnswerFn f (Seeded.maskSecret secretKey.parameter secretKey.seed level nodeIdx
           : OracleComp HashSpec Digest)
 
@@ -439,7 +432,7 @@ theorem signDigestLoop_spec (secretKey : Seeded.SecretKey) (message : Message) :
         exact ih (trial + 1) h
 
 -- Below, only the shape of `sign` matters; sealing the loop keeps the unfolding shallow.
-attribute [local irreducible] Seeded.signDigestLoop Concrete.signFrom
+attribute [local irreducible] Seeded.signDigestLoop Concrete.signFrom Concrete.signFromPaired
 
 /-- What a successful signing after the MAC check produced: an admissible digest, and the
 specification's signature after it for the key the seed derives. -/
@@ -460,14 +453,18 @@ theorem signChecked_spec (secretKey : Seeded.SecretKey) (cache : TopCache)
       rw [hloop] at h
       obtain ⟨hadmissible, hindex, hleaves⟩ :=
         signDigestLoop_spec f secretKey message digestAttemptLimit 0 hloop
-      change evalWithAnswerFn f (signFrom secretKey.parameter index
+      change evalWithAnswerFn f (signFromPaired secretKey.parameter index
         (Seeded.ftsSecret secretKey.parameter secretKey.seed index)
         (Seeded.otsSecret secretKey.parameter secretKey.seed)
         (Seeded.cachedTopNode secretKey.parameter secretKey.seed cache) randomness leaves
           : OracleComp HashSpec (Option Signature)) = some signature at h
+      rw [eval_signFromPaired] at h
       have hsf := eval_signFrom f (tableKey f secretKey) index
-        (Seeded.ftsSecret secretKey.parameter secretKey.seed index)
-        (Seeded.otsSecret secretKey.parameter secretKey.seed) (fun _ _ => rfl) (fun _ _ _ _ => rfl)
+        (fun tree leaf => pure (unpairedFts f
+          (Seeded.ftsSecret secretKey.parameter secretKey.seed index tree) leaf))
+        (fun lay tree leaf chainIdx => pure (unpairedOts f
+          (Seeded.otsSecret secretKey.parameter secretKey.seed lay tree leaf) chainIdx))
+        (fun _ _ => rfl) (fun _ _ _ _ => rfl)
         (Seeded.cachedTopNode secretKey.parameter secretKey.seed cache)
         (cachedTopNode_agrees f secretKey cache hcache) randomness leaves
       rw [show (tableKey f secretKey).parameter = secretKey.parameter from rfl] at hsf
@@ -502,8 +499,7 @@ theorem signChecked_of_sign (secretKey : Seeded.SecretKey) (cache : TopCache) (m
 theorem verify_of_sign (secretKey : Seeded.SecretKey) (cache : TopCache) (message : Message)
     {signature : Signature}
     (hroot : secretKey.root = honestNode f secretKey.parameter topLayer rootTree
-      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret secretKey.parameter secretKey.seed
-        topLayer rootTree leaf chainIdx : OracleComp HashSpec Digest)) (layerHeight topLayer) 0)
+      (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf) chainIdx) (layerHeight topLayer) 0)
     (hcache : CacheHonest f secretKey cache)
     (h : evalWithAnswerFn f (Seeded.sign secretKey cache message
         : OracleComp HashSpec (Option Signature)) = some signature) :
@@ -518,16 +514,16 @@ theorem verify_of_sign (secretKey : Seeded.SecretKey) (cache : TopCache) (messag
 
 /-- The node table key generation builds from the seed under `f`. -/
 def keygenTableValue (seed : MasterSeed) : Nat → Nat → Digest :=
-  (evalWithAnswerFn f (buildLayerTable 0 topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree)
+  (evalWithAnswerFn f (buildLayerTablePaired 0 topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree)
     ⟨0, Nat.two_pow_pos _⟩ zeroEncoding : OracleComp HashSpec _)).2
 
 /-- `keygenTableValue`'s definition, proved at the level of the function: the generated equation
 lemma would make the kernel unfold `Prod.snd` first and so run the whole tree build. -/
 theorem keygenTableValue_def (seed : MasterSeed) :
-    keygenTableValue f seed = (evalWithAnswerFn f (buildLayerTable 0 topLayer rootTree
+    keygenTableValue f seed = (evalWithAnswerFn f (buildLayerTablePaired 0 topLayer rootTree
       (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
         : OracleComp HashSpec _)).2 :=
-  congrFun (congrFun (show keygenTableValue = fun f seed => (evalWithAnswerFn f (buildLayerTable 0
+  congrFun (congrFun (show keygenTableValue = fun f seed => (evalWithAnswerFn f (buildLayerTablePaired 0
     topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
       : OracleComp HashSpec _)).2 from rfl) f) seed
 
@@ -567,14 +563,24 @@ theorem eval_buildLayerTable_node (parameter : PublicParameter) (lay : Layer) (t
   simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
   exact htable
 
+/-- A table built with pair getters carries the specification's nodes for the secrets they hand out. -/
+theorem eval_buildLayerTablePaired_node (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)) (leaf : LeafIndex)
+    (digits : Encoding) (level : Nat) (hlevel : level ≤ layerHeight lay) (nodeIdx : Nat)
+    (hnodeIdx : nodeIdx < 2 ^ (layerHeight lay - level)) :
+    (evalWithAnswerFn f (buildLayerTablePaired parameter lay tree secret leaf digits)).2 level nodeIdx
+      = honestNode f parameter lay tree
+          (fun leaf chainIdx => unpairedOts f (secret leaf) chainIdx) level nodeIdx := by
+  rw [eval_buildLayerTablePaired]
+  exact eval_buildLayerTable_node f parameter lay tree _ leaf digits level hlevel nodeIdx hnodeIdx
+
 /-- Key generation's table is the specification's top tree for the derived secrets. -/
 theorem keygenTableValue_eq (seed : MasterSeed) (level : Nat) (hlevel : level ≤ layerHeight topLayer)
     (nodeIdx : Nat) (hnodeIdx : nodeIdx < 2 ^ (layerHeight topLayer - level)) :
     keygenTableValue f seed level nodeIdx = honestNode f 0 topLayer rootTree
-      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
-        : OracleComp HashSpec Digest)) level nodeIdx := by
+      (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret 0 seed topLayer rootTree leaf) chainIdx) level nodeIdx := by
   rw [keygenTableValue_def]
-  exact eval_buildLayerTable_node f 0 topLayer rootTree _ _ _ level hlevel nodeIdx hnodeIdx
+  exact eval_buildLayerTablePaired_node f 0 topLayer rootTree _ _ _ level hlevel nodeIdx hnodeIdx
 
 theorem eval_maskRegion (parameter : PublicParameter) (seed : MasterSeed) (table : Nat → Nat → Digest)
     (level : Fin maxLayerHeight) (nodeIdx : Fin (2 ^ (maxLayerHeight - level.val))) :
@@ -589,8 +595,7 @@ theorem cacheHonest_of_table (seed : MasterSeed) (root : Digest) (tag : HashOutp
     (table : Nat → Nat → Digest)
     (htable : ∀ level, level ≤ layerHeight topLayer → ∀ nodeIdx, nodeIdx < 2 ^ (layerHeight topLayer - level) →
       table level nodeIdx = honestNode f 0 topLayer rootTree
-        (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
-          : OracleComp HashSpec Digest)) level nodeIdx) :
+        (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret 0 seed topLayer rootTree leaf) chainIdx) level nodeIdx) :
     CacheHonest f ⟨seed, 0, root⟩
       ⟨tag, evalWithAnswerFn f (Seeded.maskRegion 0 seed table : OracleComp HashSpec TopRegion)⟩ := by
   intro level hlevel nodeIdx hnodeIdx
@@ -612,16 +617,14 @@ theorem keygen_cacheHonest (seed : MasterSeed) (tag : HashOutput) :
 /-- The root is the specification's root of the top tree for the derived secrets. -/
 theorem keygenRootValue_eq (seed : MasterSeed) :
     keygenTableValue f seed (layerHeight topLayer) 0 = honestNode f 0 topLayer rootTree
-      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
-        : OracleComp HashSpec Digest)) (layerHeight topLayer) 0 :=
+      (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret 0 seed topLayer rootTree leaf) chainIdx) (layerHeight topLayer) 0 :=
   keygenTableValue_eq f seed _ le_rfl 0 (by simp)
 
 /-- Recovery for a key of key generation's shape, stated with its fields as variables. -/
 theorem verify_of_sign_seeded (seed : MasterSeed) (root : Digest) (cache : TopCache) (message : Message)
     {signature : Signature}
     (hroot : root = honestNode f 0 topLayer rootTree
-      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
-        : OracleComp HashSpec Digest)) (layerHeight topLayer) 0)
+      (fun leaf chainIdx => unpairedOts f (Seeded.otsSecret 0 seed topLayer rootTree leaf) chainIdx) (layerHeight topLayer) 0)
     (hcache : CacheHonest f ⟨seed, 0, root⟩ cache)
     (h : evalWithAnswerFn f (Seeded.sign ⟨seed, 0, root⟩ cache message
         : OracleComp HashSpec (Option Signature)) = some signature) :

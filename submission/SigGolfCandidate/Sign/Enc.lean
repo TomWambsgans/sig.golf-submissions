@@ -27,7 +27,7 @@ theorem decodeDigits_answer (a : BitVec 256) :
     decodeDigits (answerBytes 16 a) =
       if (a.extractLsb' 0 64).toNat < 2 ^ 63 ∧ (a.extractLsb' 64 64).toNat < 2 ^ 63 then
         (if (digitsOfWord (a.extractLsb' 0 64).toNat ++ digitsOfWord (a.extractLsb' 64 64).toNat).sum
-            = 186 then
+            = 183 then
           some (digitsOfWord (a.extractLsb' 0 64).toNat ++ digitsOfWord (a.extractLsb' 64 64).toNat)
         else none)
       else none := by
@@ -56,14 +56,14 @@ def swS1 (a b m1 : Word) : Word := ((a >>> 3) &&& m1) + (a &&& m1) + ((b >>> 3) 
 /-- One folding step `x + (x >> k)`. -/
 def swF (x : Word) (k : Nat) : Word := x + (x >>> k)
 
-/-- The machine's SWAR digit sum of `(d0, d1)` (instructions 303 .. 321). -/
+/-- The machine's SWAR digit sum of `(d0, d1)` (instructions 309 .. 327). -/
 def swarW (a b m1 m2 : Word) : Word :=
   swF (swF (swF (swF (swS1 a b m1) 6 &&& m2) 12) 24) 48 &&& 2047
 
--- The final pc of the SWAR block (`bne t3, x0` after `addi t3, t3, -186`).
-kernel_theorem blk303_pc_raw : ∀ t : MachineState, (blk303.res.toState t).pc =
+-- The final pc of the SWAR block (`bne t3, x0` after `addi t3, t3, -183`).
+kernel_theorem blk309_pc_raw : ∀ t : MachineState, (blk309.res.toState t).pc =
     if (swarW (t.getReg .x1) (t.getReg .x2) (t.getReg .x26) (t.getReg .x27) +
-        BitVec.ofNat 64 (2 ^ 64 - 186) != 0#64) = true then pcOf 325 else pcOf 324
+        BitVec.ofNat 64 (2 ^ 64 - 183) != 0#64) = true then pcOf 331 else pcOf 330
 
 theorem swF_toNat (x : Word) (k : Nat) : (swF x k).toNat = (x.toNat + x.toNat / 2 ^ k) % 2 ^ 64 := by
   rw [swF, BitVec.toNat_add, BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
@@ -119,17 +119,17 @@ theorem swarW_toNat (a b : Nat) (ha : a < 2 ^ 63) (hb : b < 2 ^ 63) :
   omega
 
 theorem swar_check (a b : Nat) (ha : a < 2 ^ 63) (hb : b < 2 ^ 63) :
-    (swarW (BitVec.ofNat 64 a) (BitVec.ofNat 64 b) swM1 swM2 + BitVec.ofNat 64 (2 ^ 64 - 186)
-      != 0#64) = !decide ((digitsOfWord a ++ digitsOfWord b).sum = 186) := by
+    (swarW (BitVec.ofNat 64 a) (BitVec.ofNat 64 b) swM1 swM2 + BitVec.ofNat 64 (2 ^ 64 - 183)
+      != 0#64) = !decide ((digitsOfWord a ++ digitsOfWord b).sum = 183) := by
   have h := swarW_toNat a b ha hb
   have hle := digits_sum_le a b
   generalize swarW (BitVec.ofNat 64 a) (BitVec.ofNat 64 b) swM1 swM2 = w at h
-  have hc : (BitVec.ofNat 64 (2 ^ 64 - 186)).toNat = 2 ^ 64 - 186 := rfl
-  by_cases hs : (digitsOfWord a ++ digitsOfWord b).sum = 186
-  · have : w + BitVec.ofNat 64 (2 ^ 64 - 186) = 0#64 := by
+  have hc : (BitVec.ofNat 64 (2 ^ 64 - 183)).toNat = 2 ^ 64 - 183 := rfl
+  by_cases hs : (digitsOfWord a ++ digitsOfWord b).sum = 183
+  · have : w + BitVec.ofNat 64 (2 ^ 64 - 183) = 0#64 := by
       apply BitVec.eq_of_toNat_eq; rw [BitVec.toNat_add, h, hs, hc]; rfl
     rw [this, decide_eq_true hs]; rfl
-  · have : w + BitVec.ofNat 64 (2 ^ 64 - 186) ≠ 0#64 := by
+  · have : w + BitVec.ofNat 64 (2 ^ 64 - 183) ≠ 0#64 := by
       intro h'
       have := congrArg BitVec.toNat h'
       rw [BitVec.toNat_add, h, hc] at this
@@ -167,12 +167,12 @@ def encW (a : Nat) : Prop := a = 0x130 ∨ (0x140 ≤ a ∧ a < 0x160)
 def encRegs : List Reg := [.x1, .x2, .x3, .x6, .x10, .x11, .x12, .x28, .x29]
 
 def EncInv (u : MachineState) (c : Nat) (t : MachineState) : Prop :=
-  t.pc = pcOf 294 ∧ t.getReg .x6 = BitVec.ofNat 64 c ∧ c < 2 ^ 22 ∧ RegsEq u t encRegs ∧ Frame u t encW
+  t.pc = pcOf 300 ∧ t.getReg .x6 = BitVec.ofNat 64 c ∧ c < 2 ^ 22 ∧ RegsEq u t encRegs ∧ Frame u t encW
 
 def EncPost (u : MachineState) : Option (Nat × List Nat) → MachineState → Prop
-  | none, t => t.pc = pcOf 329 ∧ t.getReg .x5 = 1 ∧ t.getReg .x10 = 1
-  | some (c, x), t => t.pc = pcOf 330 ∧ t.getReg .x6 = BitVec.ofNat 64 c ∧ c < 2 ^ 22 ∧
-      (∃ d0 d1, d0 < 2 ^ 63 ∧ d1 < 2 ^ 63 ∧ x = digitsOfWord d0 ++ digitsOfWord d1 ∧ x.sum = 186 ∧
+  | none, t => t.pc = pcOf 335 ∧ t.getReg .x5 = 1 ∧ t.getReg .x10 = 1
+  | some (c, x), t => t.pc = pcOf 336 ∧ t.getReg .x6 = BitVec.ofNat 64 c ∧ c < 2 ^ 22 ∧
+      (∃ d0 d1, d0 < 2 ^ 63 ∧ d1 < 2 ^ 63 ∧ x = digitsOfWord d0 ++ digitsOfWord d1 ∧ x.sum = 183 ∧
         t.getReg .x1 = BitVec.ofNat 64 d0 ∧ t.getReg .x2 = BitVec.ofNat 64 d1) ∧
       RegsEq u t encRegs ∧ Frame u t encW
 
@@ -185,7 +185,7 @@ theorem searchCounter_succ (lay tau e : Nat) (M : Val) (c f : Nat) :
 theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem lay tau e M u)
     (c : Nat) (t : MachineState) (hinv : EncInv u c t) (rest : OracleComp HashSpec (Option (Nat × List Nat)))
     (Wr : Nat)
-    (hrest : ∀ t', t'.pc = pcOf 325 → t'.getReg .x6 = BitVec.ofNat 64 c → RegsEq u t' encRegs →
+    (hrest : ∀ t', t'.pc = pcOf 331 → t'.getReg .x6 = BitVec.ofNat 64 c → RegsEq u t' encRegs →
       Frame u t' encW → Sim image t' Wr rest (EncPost u)) :
     Sim image t (38 + Wr) (hash16 (encInput lay tau e M c) >>= fun d =>
       match decodeDigits d with
@@ -196,24 +196,24 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
   have htau := hmem.htau
   have he := hmem.he
   -- block 294
-  have hs1 := symRun_sound blk294 codeAt_294 t tpc (by simp only [blk294.res, rv_simp])
-  have hc1 : blk294.res.cycles = 4 := rfl
+  have hs1 := symRun_sound blk300 codeAt_300 t tpc (by simp only [blk300.res, rv_simp])
+  have hc1 : blk300.res.cycles = 4 := rfl
   rw [hc1] at hs1
-  set t1 := blk294.res.toState t with ht1
+  set t1 := blk300.res.toState t with ht1
   have f1 : Frame t t1 (fun x => x = 0x130) := by
     apply frame_toState; intro x hx hW
-    simp only [blk294.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk300.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r1 : RegsEq t t1 [.x10, .x11, .x12] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have e1 := symRun_ecall blk294 codeAt_294 t (by simp only [blk294.res, rv_simp]) rfl
-  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0x100 := by simp only [ht1, blk294.res, rv_simp]
-  have x11 : t1.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht1, blk294.res, rv_simp]
-  have x12 : t1.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht1, blk294.res, rv_simp]
+  have e1 := symRun_ecall blk300 codeAt_300 t (by simp only [blk300.res, rv_simp]) rfl
+  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0x100 := by simp only [ht1, blk300.res, rv_simp]
+  have x11 : t1.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht1, blk300.res, rv_simp]
+  have x12 : t1.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht1, blk300.res, rv_simp]
   have x5 : t1.getReg .x5 = 0 := by rw [r1.get .x5, tregs.get .x5, hmem.x5]
-  have pc1 : t1.pc = pcOf 298 := by simp only [ht1, blk294.res, rv_simp]
+  have pc1 : t1.pc = pcOf 304 := by simp only [ht1, blk300.res, rv_simp]
   have hq : hashInput t1 = pad64 (encInput lay tau e M c) := by
     obtain ⟨hn, hw⟩ := words_encInput lay tau e M hmem.hM c
     refine hashInput_eq_pad64 t1 _ 0 hn (by rw [x11]) (by norm_num) (by rw [x10]; decide) ?_
@@ -232,7 +232,7 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
       tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [encW]; omega), hmem.ebM,
       f1.getMem (a := 0x138) (by norm_num) (by norm_num),
       tframe.getMem (a := 0x138) (by norm_num) (by simp only [encW]; omega), hmem.eb56]
-    simp only [ht1, blk294.res, rv_simp, t6]
+    simp only [ht1, blk300.res, rv_simp, t6]
     simp only [twWords_eq, List.cons_append, List.nil_append, List.append_assoc, List.cons.injEq,
       true_and, and_true]
     refine ⟨?_, ?_⟩
@@ -245,7 +245,7 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
       (by norm_num)) hq (fmt_thInput _ _ _ _ _ _ (by decide)) (fun a => ?_))).mono (by rw [hb]; omega) (fun _ _ h => h)
   set t2 := writeHash t1 a with ht2
   have f2 : Frame t1 t2 (fun x => 0x140 ≤ x ∧ x < 0x140 + 32) := frame_writeHash t1 a _ x12 (by norm_num)
-  have pc2 : t2.pc = pcOf 299 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
+  have pc2 : t2.pc = pcOf 305 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
   have w0 : t2.getMem (BitVec.ofNat 64 0x140) = a.extractLsb' 0 64 := by
     rw [ht2, writeHash_getMem_ofNat t1 a 0x140 0x140 x12 (by norm_num) (by norm_num)]; simp
   have w1 : t2.getMem (BitVec.ofNat 64 0x148) = a.extractLsb' 64 64 := by
@@ -258,19 +258,19 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
   have hd1l : d1 < 2 ^ 64 := BitVec.isLt _
   rw [decodeDigits_answer]
   -- block 299: load the encoding, sign test
-  have hs3 := symRun_sound blk299 codeAt_299 t2 pc2 (by simp only [blk299.res, rv_simp])
-  have hc3 : blk299.res.cycles = 4 := rfl
+  have hs3 := symRun_sound blk305 codeAt_305 t2 pc2 (by simp only [blk305.res, rv_simp])
+  have hc3 : blk305.res.cycles = 4 := rfl
   rw [hc3] at hs3
-  set t3 := blk299.res.toState t2 with ht3
+  set t3 := blk305.res.toState t2 with ht3
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk299.res]
+    apply frame_toState; intro x hx hW; simp [blk305.res]
   have r3 : RegsEq t2 t3 [.x1, .x2, .x3] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have y1 : t3.getReg .x1 = BitVec.ofNat 64 d0 := by
-    simp only [ht3, blk299.res, rv_simp]; rw [w0, hd0']
+    simp only [ht3, blk305.res, rv_simp]; rw [w0, hd0']
   have y2 : t3.getReg .x2 = BitVec.ofNat 64 d1 := by
-    simp only [ht3, blk299.res, rv_simp]; rw [w1, hd1']
+    simp only [ht3, blk305.res, rv_simp]; rw [w1, hd1']
   have fu3 : Frame u t3 encW := (((tframe.trans f1).trans f2).trans f3).mono (by
     intro x hx; simp only [encW] at hx ⊢; rcases hx with ((h | h) | h) | h
     · exact h
@@ -281,8 +281,8 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
     (by decide)
   have x36 : t3.getReg .x6 = BitVec.ofNat 64 c := by
     rw [r3.get .x6, ht2, writeHash_getReg, r1.get .x6, t6]
-  have pc3 : t3.pc = if 2 ^ 63 ≤ d0 ∨ 2 ^ 63 ≤ d1 then pcOf 325 else pcOf 303 := by
-    simp only [ht3, blk299.res, rv_simp, CmpOp.eval, w0, w1, hd0', hd1', slt_or_ofNat _ _ hd0l hd1l]
+  have pc3 : t3.pc = if 2 ^ 63 ≤ d0 ∨ 2 ^ 63 ≤ d1 then pcOf 331 else pcOf 309 := by
+    simp only [ht3, blk305.res, rv_simp, CmpOp.eval, w0, w1, hd0', hd1', slt_or_ofNat _ _ hd0l hd1l]
     by_cases h : 2 ^ 63 ≤ d0 ∨ 2 ^ 63 ≤ d1
     · rw [if_pos h, if_pos (by simpa using h)]
     · rw [if_neg h, if_neg (by simpa using h)]
@@ -293,40 +293,40 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
       (fun _ _ h => h)
   obtain ⟨h0, h1⟩ := h01
   rw [if_pos ⟨h0, h1⟩]
-  have hs5 := symRun_sound blk303 codeAt_303 t3 (by rw [pc3, if_neg (by omega)])
-    (by simp only [blk303.res, rv_simp])
-  have hc5 : blk303.res.cycles = 21 := rfl
+  have hs5 := symRun_sound blk309 codeAt_309 t3 (by rw [pc3, if_neg (by omega)])
+    (by simp only [blk309.res, rv_simp])
+  have hc5 : blk309.res.cycles = 21 := rfl
   rw [hc5] at hs5
-  set t5 := blk303.res.toState t3 with ht5
+  set t5 := blk309.res.toState t3 with ht5
   have f5 : Frame t3 t5 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk303.res]
+    apply frame_toState; intro x hx hW; simp [blk309.res]
   have r5 : RegsEq t3 t5 [.x28, .x29] := by
     intro r hr; rw [ht5, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have fu5 : Frame u t5 encW := (fu3.trans f5).mono (by
     intro x hx; rcases hx with h | h; exact h; exact h.elim)
   have ru5 : RegsEq u t5 encRegs := (ru3.trans r5).mono (by decide)
-  have pc5 : t5.pc = if (digitsOfWord d0 ++ digitsOfWord d1).sum = 186 then pcOf 324 else pcOf 325 := by
-    rw [ht5, blk303_pc_raw, y1, y2, ru3.get .x26, hmem.x26, ru3.get .x27, hmem.x27,
+  have pc5 : t5.pc = if (digitsOfWord d0 ++ digitsOfWord d1).sum = 183 then pcOf 330 else pcOf 331 := by
+    rw [ht5, blk309_pc_raw, y1, y2, ru3.get .x26, hmem.x26, ru3.get .x27, hmem.x27,
       swar_check d0 d1 h0 h1]
-    by_cases h : (digitsOfWord d0 ++ digitsOfWord d1).sum = 186
+    by_cases h : (digitsOfWord d0 ++ digitsOfWord d1).sum = 183
     · rw [if_pos h, if_neg (by rw [decide_eq_true h]; decide)]
     · rw [if_neg h, if_pos (by rw [decide_eq_false h]; rfl)]
-  by_cases hsum : (digitsOfWord d0 ++ digitsOfWord d1).sum = 186
+  by_cases hsum : (digitsOfWord d0 ++ digitsOfWord d1).sum = 183
   · rw [if_pos hsum]
-    have hs6 := symRun_sound blk324 codeAt_324 t5 (by rw [pc5, if_pos hsum])
-      (by simp only [blk324.res, rv_simp])
-    have hc6 : blk324.res.cycles = 1 := rfl
+    have hs6 := symRun_sound blk330 codeAt_330 t5 (by rw [pc5, if_pos hsum])
+      (by simp only [blk330.res, rv_simp])
+    have hc6 : blk330.res.cycles = 1 := rfl
     rw [hc6] at hs6
-    set t6 := blk324.res.toState t5 with ht6
+    set t6 := blk330.res.toState t5 with ht6
     have f6 : Frame t5 t6 (fun _ => False) := by
-      apply frame_toState; intro x hx hW; simp [blk324.res]
+      apply frame_toState; intro x hx hW; simp [blk330.res]
     have r6 : RegsEq t5 t6 [] := by
       intro r hr; rw [ht6, Result.toState_getReg]
       cases r <;> first | exact absurd (by decide) hr | rfl
     refine (Sim.steps hs3 (Sim.steps hs5 (Sim.pure_steps hs6 ?_))).mono
       (by omega) (fun _ _ h => h)
-    refine ⟨by simp only [ht6, blk324.res, rv_simp], ?_, hc, ⟨d0, d1, h0, h1, rfl, hsum, ?_, ?_⟩,
+    refine ⟨by simp only [ht6, blk330.res, rv_simp], ?_, hc, ⟨d0, d1, h0, h1, rfl, hsum, ?_, ?_⟩,
       (ru5.trans r6).mono (by decide), (fu5.trans f6).mono (by
         intro x hx; rcases hx with h | h; exact h; exact h.elim)⟩
     · rw [r6.get .x6, r5.get .x6, x36]
@@ -338,25 +338,25 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
 
 /-- After a failing trial (instruction 325): `c += 1`, back to the loop or fail. -/
 theorem encNext (u : MachineState) (hx7 : u.getReg .x7 = BitVec.ofNat 64 (2 ^ 22)) (c : Nat)
-    (hc : c < 2 ^ 22) (t : MachineState) (tpc : t.pc = pcOf 325) (t6 : t.getReg .x6 = BitVec.ofNat 64 c)
+    (hc : c < 2 ^ 22) (t : MachineState) (tpc : t.pc = pcOf 331) (t6 : t.getReg .x6 = BitVec.ofNat 64 c)
     (tregs : RegsEq u t encRegs) (tframe : Frame u t encW) :
     ∃ t', Steps image t 2 2 t' ∧ (c + 1 < 2 ^ 22 → EncInv u (c + 1) t') ∧
-      (c + 1 = 2 ^ 22 → t'.pc = pcOf 327) := by
-  have hs := symRun_sound blk325 codeAt_325 t tpc (by simp only [blk325.res, rv_simp])
-  have r1 : RegsEq t (blk325.res.toState t) [.x6] := by
+      (c + 1 = 2 ^ 22 → t'.pc = pcOf 333) := by
+  have hs := symRun_sound blk331 codeAt_331 t tpc (by simp only [blk331.res, rv_simp])
+  have r1 : RegsEq t (blk331.res.toState t) [.x6] := by
     intro r hr; rw [Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have t7 : t.getReg .x7 = BitVec.ofNat 64 (2 ^ 22) := by rw [tregs.get .x7, hx7]
   refine ⟨_, hs, ?_, ?_⟩
   · intro h
     refine ⟨?_, ?_, h, (tregs.trans r1).mono (by decide), ?_⟩
-    · simp only [blk325.res, rv_simp, t6, t7, ofNat_add_ofNat, ofNat_bne_ofNat]
+    · simp only [blk331.res, rv_simp, t6, t7, ofNat_add_ofNat, ofNat_bne_ofNat]
       rw [if_pos (by rw [bne_cond _ _ (by omega) (by omega)]; omega)]
-    · simp only [blk325.res, rv_simp, t6, ofNat_add_ofNat]
+    · simp only [blk331.res, rv_simp, t6, ofNat_add_ofNat]
     · intro x hx hW
-      rw [Result.toState_getMem, show blk325.res.st.mem = [] from rfl, memEval_nil]; exact tframe x hx hW
+      rw [Result.toState_getMem, show blk331.res.st.mem = [] from rfl, memEval_nil]; exact tframe x hx hW
   · intro h
-    simp only [blk325.res, rv_simp, t6, t7, ofNat_add_ofNat, ofNat_bne_ofNat]
+    simp only [blk331.res, rv_simp, t6, t7, ofNat_add_ofNat, ofNat_bne_ofNat]
     rw [if_neg (by rw [bne_cond _ _ (by omega) (by omega)]; omega)]
 
 /-- **Counter search** of a layer, from counter `c` with `fuel + 1` trials left. -/
@@ -371,12 +371,12 @@ theorem encLoop_sim (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMe
     refine (encTrial lay tau e M u hmem c t hinv _ 4 ?_).mono (by omega) (fun _ _ h => h)
     intro t' tpc t6 tregs tframe
     obtain ⟨t'', hs, -, hfail⟩ := encNext u hmem.x7 c (by omega) t' tpc t6 tregs tframe
-    have hs67 := symRun_sound blk327 codeAt_327 t'' (hfail (by omega)) (by simp only [blk327.res, rv_simp])
-    have hc67 : blk327.res.cycles = 2 := rfl
+    have hs67 := symRun_sound blk333 codeAt_333 t'' (hfail (by omega)) (by simp only [blk333.res, rv_simp])
+    have hc67 : blk333.res.cycles = 2 := rfl
     rw [hc67] at hs67
     have := Sim.steps hs (Sim.pure_steps (a := (none : Option (Nat × List Nat))) (Q := EncPost u) hs67
-      ⟨by simp only [blk327.res, rv_simp], by simp only [blk327.res, rv_simp],
-       by simp only [blk327.res, rv_simp]⟩)
+      ⟨by simp only [blk333.res, rv_simp], by simp only [blk333.res, rv_simp],
+       by simp only [blk333.res, rv_simp]⟩)
     simpa [searchCounter] using this
   | succ f ih =>
     intro c t hc hinv

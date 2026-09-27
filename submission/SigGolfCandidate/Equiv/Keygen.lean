@@ -160,7 +160,7 @@ theorem keygenList_eq (seed : MasterSeed) :
     Ref.keygenList (Ref.toList (n := 32) seed) =
       (fun r => (dv r.1.root, cacheList r.2.1)) <$>
         relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed seed) := by
-  unfold Ref.keygenList SphincsSecurity.Seeded.keygenFromSeed SphincsSecurity.Concrete.buildLayerTable
+  unfold Ref.keygenList SphincsSecurity.Seeded.keygenFromSeed SphincsSecurity.Concrete.buildLayerTablePaired
   have h := buildLeaves_eq seed SphincsSecurity.topLayer SphincsSecurity.Concrete.rootTree ⟨0, by decide⟩
     (by decide) SphincsSecurity.Concrete.zeroEncoding [] (fun i => rfl)
   have e1 : ((SphincsSecurity.topLayer : Layer) : Nat) = 0 := rfl

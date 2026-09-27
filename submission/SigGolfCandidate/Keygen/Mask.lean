@@ -145,19 +145,19 @@ theorem nodes_getD (levels : List (List Val)) (hs : Shape 11 levels) (l j : Nat)
 /-- One mask step: `mask(l, j)`, node `(l, j)` ^= mask. -/
 theorem mask_node_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List (List Val))
     (root : Val) (l j : Nat) (hl : l < 11) (hj : j < 2 ^ (11 - l)) (macc inner : List Val)
-    (t : MachineState) (h : ICtx W levels root l j macc inner t) (hpc : t.pc = pcOf 109) :
+    (t : MachineState) (h : ICtx W levels root l j macc inner t) (hpc : t.pc = pcOf 120) :
     XSim image t 21 28 1 1
       (do let mk ← Ref.hash16 (maskInput S l j)
           pure (inner ++ [xorBytes ((levels.getD l []).getD j []) mk]))
       (fun inner' u => ICtx W levels root l (j + 1) macc inner' u ∧
-        u.pc = if j + 1 < 2 ^ (11 - l) then pcOf 109 else pcOf 130) := by
+        u.pc = if j + 1 < 2 ^ (11 - l) then pcOf 120 else pcOf 141) := by
   have hs := h.shape
   have hlt := lvOff_add_lt l j hl hj
   have hj11 : 2 ^ (11 - l) ≤ 2048 := by
     calc 2 ^ (11 - l) ≤ 2 ^ 11 := Nat.pow_le_pow_right (by norm_num) (by omega)
       _ = 2048 := by norm_num
   obtain ⟨u, hst, upc, u10, u11, u12, uun, u1696, u1704, ufr⟩ :=
-    spec_109 t hpc l j hl (by omega) h.r15 h.r16
+    spec_120 t hpc l j hl (by omega) h.r15 h.r16
   have ux : ∀ r, r ≠ .x3 ∧ r ≠ .x10 ∧ r ≠ .x11 ∧ r ≠ .x12 → u.getReg r = t.getReg r :=
     fun r hr => uun r hr.1 hr.2.1 hr.2.2.1 hr.2.2.2
   have hq : hashInput u = pad64 (maskInput S l j) := by
@@ -202,15 +202,15 @@ theorem mask_node_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels :
     exact this
   refine (XSim.steps hst (XSim.hash16_bind (x := maskInput S l j) (k := 11) (c := 11) (n := 0) (b := 0)
     (f := fun mk => pure (inner ++ [xorBytes lv mk]))
-    ((codeAt_118.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
+    ((codeAt_129.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
     (hashArgs_const u 1696 64 320 u10 u11 u12 (by norm_num) (by norm_num) (by norm_num)
       (by norm_num) (by norm_num))
     (hq.trans (fmt_thInput 13 0 0 l j S (by decide)).symm) (fun a => ?_))).of_eq rfl (by rfl)
       (by rw [hblk]) (by rfl) (by rw [hblk])
-  have wpc : (writeHash u a).pc = pcOf 119 := by rw [pc_writeHash, upc]; rfl
+  have wpc : (writeHash u a).pc = pcOf 130 := by rw [pc_writeHash, upc]; rfl
   have hwf := Frame.writeHash u a 320 u12 (by norm_num) (by norm_num)
   have hA0 : A + 16 < 2 ^ 24 := by rw [hAdef]; unfold REGION; omega
-  obtain ⟨v, vst, vpc, v20, v16, vun, vA, vA8, vfr⟩ := spec_119 (writeHash u a) wpc A j (2 ^ (11 - l))
+  obtain ⟨v, vst, vpc, v20, v16, vun, vA, vA8, vfr⟩ := spec_130 (writeHash u a) wpc A j (2 ^ (11 - l))
     hA0 (by rw [hAdef]; unfold REGION; omega) (by rw [hAdef]; unfold REGION; omega) (by omega) (by omega)
     (by rw [getReg_writeHash, ux _ (by simp), h.r20])
     (by rw [getReg_writeHash, ux _ (by simp), h.r16])
@@ -272,14 +272,14 @@ theorem mask_node_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels :
 /-- One mask level `l` (all its nodes, left to right). -/
 theorem mask_level_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List (List Val))
     (root : Val) (l : Nat) (hl : l < 11) (macc : List Val) (t : MachineState)
-    (h : OCtx W levels root l macc t) (hpc : t.pc = pcOf 104) :
+    (h : OCtx W levels root l macc t) (hpc : t.pc = pcOf 115) :
     XSim image t (8 + 2 ^ (11 - l) * 21) (8 + 2 ^ (11 - l) * 28) (2 ^ (11 - l)) (2 ^ (11 - l))
       (do let ml ← maskLevel S l (levels.getD l []); pure (macc ++ ml))
       (fun macc' u => OCtx W levels root (l + 1) macc' u ∧
-        u.pc = if l + 1 < 11 then pcOf 104 else pcOf 133) := by
+        u.pc = if l + 1 < 11 then pcOf 115 else pcOf 144) := by
   have hs := h.shape
   have hn1 : 1 ≤ 2 ^ (11 - l) := Nat.one_le_two_pow
-  obtain ⟨u, hst, upc, u17, u16, uun, ufr⟩ := spec_104 t hpc l hl h.r15
+  obtain ⟨u, hst, upc, u17, u16, uun, ufr⟩ := spec_115 t hpc l hl h.r15
   have h0 : ICtx W levels root l 0 macc [] u := by
     refine ⟨h.base.frame (fun r hr => uun r ?_ ?_ ?_ ?_) ufr (by simp), ?_, u16, u17, ?_, hs, h.mlen, rfl,
       ?_, h.out.frame ufr (by simp)⟩ <;> try (rcases hr with h | h | h | h <;> simp [h])
@@ -297,7 +297,7 @@ theorem mask_level_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels 
       pure (acc ++ [xorBytes ((levels.getD l []).getD j []) mk]))
     []
     (fun j inner w => ICtx W levels root l j macc inner w ∧
-      w.pc = if j < 2 ^ (11 - l) then pcOf 109 else pcOf 130)
+      w.pc = if j < 2 ^ (11 - l) then pcOf 120 else pcOf 141)
     (fun _ => 21) (fun _ => 28) (fun _ => 1) (fun _ => 1)
     (fun j hj inner w hw => mask_node_xsim W S hS levels root l j hl hj macc inner w hw.1
       (by rw [hw.2, if_pos hj]))
@@ -309,7 +309,7 @@ theorem mask_level_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels 
     (by simp only [sumTo_const] <;> ring) (by simp only [sumTo_const] <;> ring)
     (by simp only [sumTo_const] <;> ring) (by simp only [sumTo_const] <;> ring)
   obtain ⟨hc, hpc130⟩ := hw
-  obtain ⟨x, xst, xpc, x15, xun, xfr⟩ := spec_130 w (by rw [hpc130, if_neg (by omega)]) l hl hc.r15
+  obtain ⟨x, xst, xpc, x15, xun, xfr⟩ := spec_141 w (by rw [hpc130, if_neg (by omega)]) l hl hc.r15
   have hoff := lvOff_succ l
   refine XSim.pure_steps xst ⟨⟨?_, x15, ?_, hs, by simp [h.mlen, hc.ilen, hoff], ?_, ?_⟩, ?_⟩
   · exact hc.base.frame (fun r hr => xun r (by rcases hr with h | h | h | h <;> simp [h])
@@ -330,15 +330,15 @@ theorem mask_level_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels 
 /-- All masks: levels `l = 0 .. 10`, from instruction 101. -/
 theorem masks_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List (List Val))
     (root : Val) (t : MachineState) (hb : Base W t) (hs : Shape 11 levels)
-    (hv : Vals t REGION (nodes levels)) (hout : Out root t) (hpc : t.pc = pcOf 101) :
+    (hv : Vals t REGION (nodes levels)) (hout : Out root t) (hpc : t.pc = pcOf 112) :
     XSim image t (3 + sumTo (fun l => 8 + 2 ^ (11 - l) * 21) 11)
       (3 + sumTo (fun l => 8 + 2 ^ (11 - l) * 28) 11) (sumTo (fun l => 2 ^ (11 - l)) 11)
       (sumTo (fun l => 2 ^ (11 - l)) 11)
       ((List.range 11).foldlM (fun (acc : List Val) l => do
         let ml ← maskLevel S l (levels.getD l [])
         pure (acc ++ ml)) [])
-      (fun masked u => OCtx W levels root 11 masked u ∧ u.pc = pcOf 133) := by
-  obtain ⟨u, hst, upc, u20, u15, uun, ufr⟩ := spec_101 t hpc
+      (fun masked u => OCtx W levels root 11 masked u ∧ u.pc = pcOf 144) := by
+  obtain ⟨u, hst, upc, u20, u15, uun, ufr⟩ := spec_112 t hpc
   have h0 : OCtx W levels root 0 [] u := by
     refine ⟨hb.frame (fun r hr => uun r (by rcases hr with h | h | h | h <;> simp [h])
       (by rcases hr with h | h | h | h <;> simp [h])) ufr (by simp), u15, ?_, hs, rfl, ?_,
@@ -348,7 +348,7 @@ theorem masks_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : Lis
         ⟨hv.1, fun i hi => (hv.2 i hi).frame ufr (by
           simp [nodes_length levels hs] at hi; unfold REGION; omega) (by simp)⟩)
   refine (XSim.steps hst (XSim.foldlM_range 11 _ [] (fun l macc w => OCtx W levels root l macc w ∧
-    w.pc = if l < 11 then pcOf 104 else pcOf 133)
+    w.pc = if l < 11 then pcOf 115 else pcOf 144)
     (fun l => 8 + 2 ^ (11 - l) * 21) (fun l => 8 + 2 ^ (11 - l) * 28) (fun l => 2 ^ (11 - l))
     (fun l => 2 ^ (11 - l))
     (fun l hl macc w hw => mask_level_xsim W S hS levels root l hl macc w hw.1 (by rw [hw.2, if_pos hl]))

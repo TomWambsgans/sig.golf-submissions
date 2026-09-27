@@ -45,7 +45,7 @@ noncomputable def deterministicGameAfterSeed (adversary : Security.Adversary) (s
 and few-time secrets, masks, MAC answers, randomizers) from the tables. -/
 noncomputable def cachedTableGameAfterSecrets (adversary : Security.Adversary) (outputs : SecretOutputs)
     (randomizers : RandomizerOutputs) (masks : MaskOutputs) (macs : MacOutputs) : OracleComp OracleWorld Bool :=
-  (liftM (keygenCachedWith (fun leaf chainIdx => pure (tableOts outputs topLayer rootTree leaf chainIdx))
+  (liftM (keygenCachedWith (fun leaf pair => pure (pairOf (tableOts outputs topLayer rootTree leaf) pair))
       (fun level nodeIdx => pure (maskValue masks level nodeIdx)) (fun region => pure (macs region))) :
       OracleComp OracleWorld _) >>= fun result =>
     cachedGameRest (cachedTableSign randomizers masks macs (tableKey 0 result.1 outputs))
@@ -119,8 +119,8 @@ theorem erases_deterministicGameAfterSeed (adversary : Security.Adversary) :
 been answered with the table's value. -/
 theorem erases_deterministicGameAfterSeed_first (adversary : Security.Adversary) :
     Erases (worldKnown known)
-      ((liftM (keygenCachedWith (withFirst (otsSecret 0 seed topLayer rootTree)
-          (truncateHash (outputs firstSecretPosition))) (maskSecret 0 seed)
+      ((liftM (keygenCachedWith (withFirstPair (otsSecret 0 seed topLayer rootTree)
+          (splitSecrets (outputs firstSecretPosition))) (maskSecret 0 seed)
           (fun region => oracleHash (macHashInput 0 seed region))) : OracleComp OracleWorld _) >>= fun result =>
         cachedGameRest (fun cache message => sign ⟨seed, 0, result.1 (layerHeight topLayer) 0⟩ cache message)
           adversary ⟨result.1 (layerHeight topLayer) 0, 0⟩ result.2)
@@ -135,7 +135,7 @@ end Erasure
 theorem deterministicAfterSeed_first_query (adversary : Security.Adversary) (seed : MasterSeed) :
     deterministicGameAfterSeed adversary seed = (do
       let output ← liftM (OracleWorld.query (.inr (secretInputs 0 seed firstSecretPosition)))
-      (liftM (keygenCachedWith (withFirst (otsSecret 0 seed topLayer rootTree) (truncateHash output))
+      (liftM (keygenCachedWith (withFirstPair (otsSecret 0 seed topLayer rootTree) (splitSecrets output))
           (maskSecret 0 seed) (fun region => oracleHash (macHashInput 0 seed region))) :
           OracleComp OracleWorld _) >>= fun result =>
         cachedGameRest (fun cache message => sign ⟨seed, 0, result.1 (layerHeight topLayer) 0⟩ cache message)

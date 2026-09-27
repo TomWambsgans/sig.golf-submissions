@@ -10,7 +10,7 @@ only type `4` at its layer, and the digest search only types `7` and `12`.
 
 Compressions: a WOTS chain 8, an OTS leaf `42 * 8 + 11 = 347`, a tree of height `h`
 `347 * 2^h + 2^h - 1`, a FORS tree `2 * 1024 + 1023 = 3071`, the FORS part `14 * 3071`, the roots
-hash 4. Keygen is `347 * 32 + 31 = 11135`.
+hash 4. (v5 values: leaf `21 + 294 + 11 = 326`, FORS tree `512·3 + 1023 = 2559`, keygen 674814.)
 -/
 
 namespace SigGolfCandidate.Budget
@@ -175,29 +175,48 @@ theorem prf_ok (S : List Byte) (hS : S.length = 32) (lay tau e i : Nat) :
   refine ⟨?_, blocks_fmt_le _ 1 (by simp [prfInput, hS]) le_rfl⟩
   unfold PT prfInput; rw [qbyte_tag]; omega
 
-theorem spec_buildChain (S : List Byte) (hS : S.length = 32) (lay tau e i x : Nat) :
-    Spec PT (fun r : Val × Val => r.1.length ≤ 16) 8 (buildChain S lay tau e i x) := by
-  unfold buildChain
-  obtain ⟨h1, h2⟩ := prf_ok S hS lay tau e i
-  refine spec_hash16_bind _ h1 h2 (fun v hv => ?_) (show 1 + 7 ≤ 8 by omega)
+theorem spec_prf2 {P : Query → Prop} {β : Type} {R : β → Prop} (x : List Byte)
+    {f : Val × Val → OracleComp HashSpec β} {kx l n : Nat} (hP : P (fmt x))
+    (hk : (fmt x).blocks ≤ kx) (hf : ∀ v : Val × Val, v.1.length ≤ 16 → v.2.length ≤ 16 →
+      Spec P R l (f v)) (hn : kx + l ≤ n) : Spec P R n (prf2 x >>= f) := by
+  show Spec P R n ((qry (fmt x) >>= fun a => Pure.pure ((answerBytes 32 a).take 16,
+    (answerBytes 32 a).drop 16)) >>= f)
+  rw [bind_assoc]
+  refine Spec.qry_bind hP (k := l) (fun u => ?_) (by omega)
+  rw [pure_bind]
+  exact hf _ (by simp) (by simp)
+
+theorem spec_chainSteps (lay tau e i x : Nat) (v : Val) (hv : v.length ≤ 16) :
+    Spec PT (fun r : Val × Val => r.1.length ≤ 16) 7 (chainSteps lay tau e i x v) := by
+  unfold chainSteps
   refine Spec.foldlM_range'_le (P := PT) 1 7 _ (fun _ (st : Val × Val) => st.1.length ≤ 16)
-    (fun _ => 1) (v, v) (by simp [hv]) (fun i' _ st hst => ?_) (fun _ h => h) (by simp)
+    (fun _ => 1) (v, v) hv (fun i' _ st hst => ?_) (fun _ h => h) (by simp)
   refine spec_hash16_bind (chainInput lay tau e i (1 + i') st.1) ?_
     (blocks_fmt_le _ 1 (by simp [chainInput]; omega) le_rfl)
     (fun w hw => Spec.pure _ 0 (by simp [hw])) le_rfl
   unfold PT chainInput; rw [qbyte_tag]; omega
 
 theorem spec_buildLeaf (S : List Byte) (hS : S.length = 32) (lay tau e : Nat) (x : List Nat) :
-    Spec PT (fun r : Val × List Val => r.1.length ≤ 16) 347 (buildLeaf S lay tau e x) := by
+    Spec PT (fun r : Val × List Val => r.1.length ≤ 16) 326 (buildLeaf S lay tau e x) := by
   unfold buildLeaf
-  refine Spec.bind' (Spec.foldlM_range (P := PT) nChains _
-    (fun i (st : List Val × List Val) => st.1.length = i ∧ AllShort st.1) (fun _ => 8) ([], [])
-    ⟨rfl, AllShort.nil⟩ (fun i _ st hst => ?_)) (fun st hst => ?_)
-    (show (∑ _i ∈ range nChains, 8) + 11 ≤ 347 by decide)
-  · refine (spec_buildChain S hS lay tau e i (x.getD i 0)).bind' (l := 0)
-      (fun r hr => ?_) (by omega)
-    obtain ⟨v, c⟩ := r
-    exact Spec.pure _ 0 ⟨by simp [hst.1], hst.2.append hr⟩
+  refine Spec.bind' (Spec.foldlM_range (P := PT) (nChains / 2) _
+    (fun i (st : List Val × List Val) => st.1.length = 2 * i ∧ AllShort st.1) (fun _ => 15)
+    ([], []) ⟨rfl, AllShort.nil⟩ (fun k _ st hst => ?_)) (fun st hst => ?_)
+    (show (∑ _i ∈ range (nChains / 2), 15) + 11 ≤ 326 by decide)
+  · obtain ⟨h1, h2⟩ := prf_ok S hS lay tau e k
+    refine spec_prf2 _ h1 h2 (l := 14) (fun s hs0 hs1 => ?_) (by omega)
+    obtain ⟨s0, s1⟩ := s
+    refine (spec_chainSteps lay tau e (2 * k) _ s0 hs0).bind' (l := 7) (fun r0 hr0 => ?_) le_rfl
+    obtain ⟨v0, c0⟩ := r0
+    refine (spec_chainSteps lay tau e (2 * k + 1) _ s1 hs1).bind' (l := 0)
+      (fun r1 hr1 => ?_) (by omega)
+    obtain ⟨v1, c1⟩ := r1
+    refine Spec.pure _ 0 ⟨by simp [hst.1]; omega, fun w hw => ?_⟩
+    simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+    rcases hw with hw | rfl | rfl
+    · exact hst.2 w hw
+    · exact hr0
+    · exact hr1
   refine spec_hash16_bind (leafInput lay tau e st.1) ?_ (blocks_fmt_le _ 11 ?_ (by omega))
     (fun v hv => Spec.pure _ 0 (by simp [hv])) (show 11 + 0 ≤ 11 by omega)
   · unfold PT leafInput; rw [qbyte_tag]; omega
@@ -207,18 +226,18 @@ theorem spec_buildLeaf (S : List Byte) (hS : S.length = 32) (lay tau e : Nat) (x
 
 theorem spec_buildLeaves (S : List Byte) (hS : S.length = 32) (lay tau h cap : Nat)
     (x : List Nat) :
-    Spec PT (fun r : List Val × List Val => r.1.length = 2 ^ h ∧ AllShort r.1) (2 ^ h * 347)
+    Spec PT (fun r : List Val × List Val => r.1.length = 2 ^ h ∧ AllShort r.1) (2 ^ h * 326)
       (buildLeaves S lay tau h cap x) := by
   unfold buildLeaves
   refine Spec.foldlM_range_le (P := PT) (2 ^ h) _
-    (fun i (st : List Val × List Val) => st.1.length = i ∧ AllShort st.1) (fun _ => 347) ([], [])
+    (fun i (st : List Val × List Val) => st.1.length = i ∧ AllShort st.1) (fun _ => 326) ([], [])
     ⟨rfl, AllShort.nil⟩ (fun i _ st hst => ?_) (fun _ h => h) (by simp)
   refine (spec_buildLeaf S hS lay tau i x).bind' (l := 0) (fun r hr => ?_) (by omega)
   obtain ⟨v, c⟩ := r
   exact Spec.pure _ 0 ⟨by simp [hst.1], hst.2.append hr⟩
 
 /-- Compressions of a hypertree tree of height `h`. -/
-def treeCost (h : Nat) : Nat := 2 ^ h * 347 + (2 ^ h - 1)
+def treeCost (h : Nat) : Nat := 2 ^ h * 326 + (2 ^ h - 1)
 
 theorem spec_buildTree (S : List Byte) (hS : S.length = 32) (lay tau h cap : Nat)
     (x : List Nat) :
@@ -232,8 +251,8 @@ theorem spec_buildTree (S : List Byte) (hS : S.length = 32) (lay tau h cap : Nat
   obtain ⟨root, path⟩ := r'
   exact Spec.pure _ 0 hr'
 
-theorem treeCost_5 : treeCost 5 = 11135 := by decide
-theorem treeCost_4 : treeCost 4 = 5567 := by decide
+theorem treeCost_6 : treeCost 6 = 20927 := by decide
+theorem treeCost_5 : treeCost 5 = 10463 := by decide
 
 /-! ## keygen -/
 
@@ -303,10 +322,10 @@ theorem topH_eq : topH = 11 := by decide
 theorem topN_succ (l : Nat) : topN (l + 1) = topN l + 2 ^ (topH - l) := by
   simp [topN, List.range_succ]
 
-/-- Compressions of keygen: `2048 * 347 + 2047 + 4094 + 1025`. -/
-def keygenCost : Nat := 2 ^ 11 * 347 + (2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025
+/-- Compressions of keygen: `2048 * 326 + 2047 + 4094 + 1025`. -/
+def keygenCost : Nat := 2 ^ 11 * 326 + (2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025
 
-theorem keygenCost_eq : keygenCost = 717822 := by decide
+theorem keygenCost_eq : keygenCost = 674814 := by decide
 
 theorem spec_keygenRef (sk : Bytes 32) :
     Spec PK (fun _ => True) keygenCost (keygenRef sk) := by
@@ -316,7 +335,7 @@ theorem spec_keygenRef (sk : Bytes 32) :
   refine Spec.bind' (Q := fun _ => True) (l := 0) ?_ (fun _ _ => Spec.pure _ 0 trivial) le_rfl
   rw [topH_eq]
   refine Spec.bind' (((spec_buildLeaves (toList sk) hS 0 0 11 0 []).mono hPT fun _ h => h))
-    (fun r hr => ?_) (show 2 ^ 11 * 347 + ((2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025) ≤ _
+    (fun r hr => ?_) (show 2 ^ 11 * 326 + ((2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025) ≤ _
       by omega)
   obtain ⟨leaves, _⟩ := r
   refine Spec.bind' ((spec_buildAllLevels (nodeOK_nodeInput 0 0) 11 leaves hr.1 hr.2).mono hPT
@@ -347,31 +366,46 @@ theorem spec_keygenRef (sk : Bytes 32) :
 /-! ## FORS -/
 
 theorem spec_buildFtsLeaves (S : List Byte) (hS : S.length = 32) (k idx a u : Nat) :
-    Spec PF (fun r : List Val × Val => r.1.length = 2 ^ a ∧ AllShort r.1) (2 ^ a * 2)
-      (buildFtsLeaves S k idx a u) := by
+    Spec PF (fun r : List Val × Val => r.1.length = 2 * (2 ^ a / 2) ∧ AllShort r.1)
+      (2 ^ a / 2 * 3) (buildFtsLeaves S k idx a u) := by
   unfold buildFtsLeaves
-  refine Spec.foldlM_range_le (P := PF) (2 ^ a) _
-    (fun i (st : List Val × Val) => st.1.length = i ∧ AllShort st.1) (fun _ => 2) ([], [])
-    ⟨rfl, AllShort.nil⟩ (fun i _ st hst => ?_) (fun _ h => h) (by simp)
-  refine spec_hash16_bind (ftsPrfInput S k idx i) ?_
-    (blocks_fmt_le _ 1 (by simp [ftsPrfInput, hS]) le_rfl)
-    (fun s hs => ?_) (show 1 + 1 ≤ 2 by omega)
+  refine Spec.foldlM_range_le (P := PF) (2 ^ a / 2) _
+    (fun i (st : List Val × Val) => st.1.length = 2 * i ∧ AllShort st.1) (fun _ => 3) ([], [])
+    ⟨rfl, AllShort.nil⟩ (fun j _ st hst => ?_) (fun _ h => h) (by simp)
+  refine spec_prf2 (ftsPrfInput S k idx j) ?_
+    (blocks_fmt_le _ 1 (by simp [ftsPrfInput, hS]) le_rfl) (l := 2)
+    (fun s hs0 hs1 => ?_) (show 1 + 2 ≤ 3 by omega)
   · unfold PF ftsPrfInput; rw [qbyte_tag]; omega
-  refine spec_hash16_bind (ftsLeafInput k idx i s) ?_
-    (blocks_fmt_le _ 1 (by simp [ftsLeafInput, hs]) le_rfl)
-    (fun leaf hleaf => Spec.pure _ 0 ⟨by simp [hst.1], hst.2.append (by omega)⟩) le_rfl
-  unfold PF ftsLeafInput; rw [qbyte_tag]; omega
+  obtain ⟨s0, s1⟩ := s
+  dsimp only at hs0 hs1 ⊢
+  refine spec_hash16_bind (ftsLeafInput k idx (2 * j) s0) ?_
+    (blocks_fmt_le _ 1 (by simp [ftsLeafInput]; omega) le_rfl) (l := 1)
+    (fun l0 hl0 => ?_) le_rfl
+  · unfold PF ftsLeafInput; rw [qbyte_tag]; omega
+  refine spec_hash16_bind (ftsLeafInput k idx (2 * j + 1) s1) ?_
+    (blocks_fmt_le _ 1 (by simp [ftsLeafInput]; omega) le_rfl)
+    (fun l1 hl1 => Spec.pure _ 0 ⟨by simp [hst.1]; omega, fun w hw => ?_⟩) le_rfl
+  · unfold PF ftsLeafInput; rw [qbyte_tag]; omega
+  simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+  rcases hw with hw | rfl | rfl
+  · exact hst.2 w hw
+  · omega
+  · omega
 
 /-- Compressions of a FORS tree of height `a`. -/
-def ftsCost (a : Nat) : Nat := 2 ^ a * 2 + (2 ^ a - 1)
+def ftsCost (a : Nat) : Nat := 2 ^ a / 2 * 3 + (2 ^ a - 1)
 
-theorem spec_buildFtsTree (S : List Byte) (hS : S.length = 32) (k idx a u : Nat) :
+theorem spec_buildFtsTree (S : List Byte) (hS : S.length = 32) (k idx a u : Nat) (ha : 1 ≤ a) :
     Spec PF (fun r : Val × List Val × Val => r.2.2.length ≤ 16) (ftsCost a)
       (buildFtsTree S k idx a u) := by
   unfold buildFtsTree ftsCost
   refine (spec_buildFtsLeaves S hS k idx a u).bind (fun r hr => ?_)
   obtain ⟨leaves, s⟩ := r
-  refine (spec_buildLevels (nodeOK_ftsNodeInput k idx) u a leaves hr.1 hr.2).bind' (l := 0)
+  have hlen : leaves.length = 2 ^ a := by
+    rw [hr.1]
+    obtain ⟨b, rfl⟩ : ∃ b, a = b + 1 := ⟨a - 1, by omega⟩
+    rw [pow_succ, Nat.mul_div_cancel _ (by norm_num), Nat.mul_comm]
+  refine (spec_buildLevels (nodeOK_ftsNodeInput k idx) u a leaves hlen hr.2).bind' (l := 0)
     (fun r' hr' => ?_) (by omega)
   obtain ⟨root, path⟩ := r'
   exact Spec.pure _ 0 hr'
@@ -384,12 +418,12 @@ theorem spec_signFors (S : List Byte) (hS : S.length = 32) (N : Nat) :
     (fun i (st : List (Val × List Val) × List Val) => st.2.length = i ∧ AllShort st.2)
     (fun _ => ftsCost 10) ([], []) ⟨rfl, AllShort.nil⟩ (fun i _ st hst => ?_)
     (fun _ h => by simpa [ftsTrees] using h) (by simp [ftsTrees])
-  refine (spec_buildFtsTree S hS i (idxOf N) ftsA (uOf N i)).bind' (l := 0)
+  refine (spec_buildFtsTree S hS i (idxOf N) ftsA (uOf N i) (by decide)).bind' (l := 0)
     (fun r hr => ?_) (by simp [ftsA])
   obtain ⟨s, path, root⟩ := r
   exact Spec.pure _ 0 ⟨by simp [hst.1], hst.2.append hr⟩
 
-theorem ftsCost_10 : ftsCost 10 = 3071 := by decide
+theorem ftsCost_10 : ftsCost 10 = 2559 := by decide
 
 /-- The FORS key hash: 4 blocks. -/
 theorem roots_ok (idx : Nat) (roots : List Val) (h1 : roots.length = 14) (h2 : AllShort roots) :

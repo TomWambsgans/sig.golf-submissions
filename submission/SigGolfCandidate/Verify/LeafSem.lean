@@ -43,7 +43,7 @@ theorem sll63_lt (u : Nat) (hu : u < 2 ^ 64) (s : MachineState) (h23 : s.getReg 
   omega
 
 def layFC (L : LCtx) : FCtx :=
-  ⟨L.wl, L.pk, L.e, heightL L.lay, false, 7 - L.lay, 0, 704, 3, L.lay, L.tau, layBody L.lay + 672,
+  ⟨L.wl, L.pk, L.e, heightL L.lay, false, 6 - L.lay, 0, 704, 3, L.lay, L.tau, layBody L.lay + 672,
     if L.lay = 0 then 0x180 else 0x120⟩
 
 theorem layFC_ok (L : LCtx) (hL : L.ok) : (layFC L).ok := by

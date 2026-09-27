@@ -100,13 +100,13 @@ structure NCtx (W : List Word) (k : Nat) (levels : List (List Val)) (j : Nat) (a
 /-- One node. -/
 theorem node_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List Val)) (j : Nat)
     (hj : j < 2 ^ (10 - k)) (acc : List Val) (t : MachineState) (h : NCtx W k levels j acc t)
-    (hpc : t.pc = pcOf 72) :
+    (hpc : t.pc = pcOf 83) :
     XSim image t 18 25 1 1
       (do let v ← Ref.hash16 (nodeInput 0 0 (k + 1) j ((levels.getD k []).getD (2 * j) [])
             ((levels.getD k []).getD (2 * j + 1) []))
           pure (acc ++ [v]))
       (fun acc' u => NCtx W k levels (j + 1) acc' u ∧
-        u.pc = if j + 1 < 2 ^ (10 - k) then pcOf 72 else pcOf 90) := by
+        u.pc = if j + 1 < 2 ^ (10 - k) then pcOf 83 else pcOf 101) := by
   have hs := h.shape
   have hfl := flatten_length k levels hs
   have hoff := lvOff_succ k
@@ -119,7 +119,7 @@ theorem node_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List V
     calc 2 ^ (10 - k) ≤ 2 ^ 10 := Nat.pow_le_pow_right (by norm_num) (by omega)
       _ = 1024 := by norm_num
   obtain ⟨u, hst, upc, u10, u11, u12, uun, u456, u480, u488, u496, u504, ufr⟩ :=
-    spec_72 t hpc j (REGION + 16 * lvOff k) (REGION + 16 * lvOff (k + 1)) (by omega)
+    spec_83 t hpc j (REGION + 16 * lvOff k) (REGION + 16 * lvOff (k + 1)) (by omega)
       (by unfold REGION; omega) (by unfold REGION; omega) (by unfold REGION; omega)
       (by unfold REGION; omega) h.r16 h.r19 h.r25 h.w456
   have ux : ∀ r, r ≠ .x1 ∧ r ≠ .x3 ∧ r ≠ .x10 ∧ r ≠ .x11 ∧ r ≠ .x12 → u.getReg r = t.getReg r :=
@@ -164,13 +164,13 @@ theorem node_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List V
     (x := nodeInput 0 0 (k + 1) j ((levels.getD k []).getD (2 * j) []) ((levels.getD k []).getD (2 * j + 1) []))
     (k := 2) (c := 2) (n := 0) (b := 0)
     (f := fun v => pure (acc ++ [v]))
-    ((codeAt_87.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
+    ((codeAt_98.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
     (hashArgs_const u 448 64 (REGION + 16 * lvOff (k + 1) + 16 * j) u10 u11 u12 (by norm_num)
       (by norm_num) (by norm_num) (by unfold REGION; omega) (by unfold REGION; omega))
     (hq.trans (fmt_thInput 3 0 0 _ _ _ (by decide)).symm) (fun a => ?_))).of_eq rfl (by rfl)
       (by rw [hblk]) (by rfl) (by rw [hblk])
-  have wpc : (writeHash u a).pc = pcOf 88 := by rw [pc_writeHash, upc]; rfl
-  obtain ⟨v, vst, vpc, v16, vun, vfr⟩ := spec_88 (writeHash u a) wpc j (2 ^ (10 - k)) (by omega)
+  have wpc : (writeHash u a).pc = pcOf 99 := by rw [pc_writeHash, upc]; rfl
+  obtain ⟨v, vst, vpc, v16, vun, vfr⟩ := spec_99 (writeHash u a) wpc j (2 ^ (10 - k)) (by omega)
     (by omega) (by rw [getReg_writeHash, ux _ (by simp), h.r16])
     (by rw [getReg_writeHash, ux _ (by simp), h.r17])
   have hwf := Frame.writeHash u a (REGION + 16 * lvOff (k + 1) + 16 * j) u12
@@ -222,11 +222,11 @@ structure VCtx (W : List Word) (k : Nat) (levels : List (List Val)) (t : Machine
 
 /-- One tree level `lam = k + 1`. -/
 theorem level_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List Val))
-    (t : MachineState) (h : VCtx W k levels t) (hpc : t.pc = pcOf 62) :
+    (t : MachineState) (h : VCtx W k levels t) (hpc : t.pc = pcOf 73) :
     XSim image t (13 + 2 ^ (10 - k) * 18) (13 + 2 ^ (10 - k) * 25) (2 ^ (10 - k)) (2 ^ (10 - k))
       (do let level ← buildLevel (nodeInput 0 0) (1 + k) (levels.getD (1 + k - 1) [])
           pure (levels ++ [level]))
-      (fun levels' u => VCtx W (k + 1) levels' u ∧ u.pc = if k + 1 < 11 then pcOf 62 else pcOf 93) := by
+      (fun levels' u => VCtx W (k + 1) levels' u ∧ u.pc = if k + 1 < 11 then pcOf 73 else pcOf 104) := by
   have hs := h.shape
   have hn : 2 ^ (11 - k) = 2 * 2 ^ (10 - k) := by
     rw [show 11 - k = (10 - k) + 1 by omega, Nat.pow_succ]; ring
@@ -237,7 +237,7 @@ theorem level_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List 
   have hle := lvOff_le (k + 1) (by omega)
   have hle0 := lvOff_le k (by omega)
   obtain ⟨u, hst, upc, u17, u16, u25, uun, u448, u456, ufr⟩ :=
-    spec_62 t hpc (k + 1) (2 ^ (11 - k)) (REGION + 16 * lvOff k) (by omega) (by omega)
+    spec_73 t hpc (k + 1) (2 ^ (11 - k)) (REGION + 16 * lvOff k) (by omega) (by omega)
       (by unfold REGION; omega) h.r15 h.base.r8 h.base.r30 h.r17 h.r19
   have h0 : NCtx W k levels 0 [] u := by
     refine NCtx.mk ?_ ?_ ?_ u16 ?_ ?_ u448 u456 hs rfl ?_
@@ -261,7 +261,7 @@ theorem level_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List 
       pure (acc ++ [v]))
     []
     (fun j acc w => NCtx W k levels j acc w ∧
-      w.pc = if j < 2 ^ (10 - k) then pcOf 72 else pcOf 90)
+      w.pc = if j < 2 ^ (10 - k) then pcOf 83 else pcOf 101)
     (fun _ => 18) (fun _ => 25) (fun _ => 1) (fun _ => 1)
     (fun j hj acc w hw => by
       rw [Nat.add_comm 1 k]
@@ -274,7 +274,7 @@ theorem level_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List 
     (by simp only [sumTo_const] <;> ring) (by simp only [sumTo_const] <;> ring)
     (by simp only [sumTo_const] <;> ring) (by simp only [sumTo_const] <;> ring)
   obtain ⟨hc, hpc90⟩ := hw
-  obtain ⟨x, xst, xpc, x15, x19, xun, xfr⟩ := spec_90 w (by rw [hpc90, if_neg (by omega)]) (k + 1)
+  obtain ⟨x, xst, xpc, x15, x19, xun, xfr⟩ := spec_101 w (by rw [hpc90, if_neg (by omega)]) (k + 1)
     (by omega) hc.r15 hc.base.r9
   have hfl := flatten_length k levels hs
   refine XSim.pure_steps xst ⟨VCtx.mk ?_ x15 ?_ ?_ ?_ ?_, ?_⟩

@@ -102,7 +102,7 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
     rfl
   sign_honest seed pk cache' sk' h cache m := hq_sign sk' (keygen_support _ _ h).2.1 cache m
   expand_eq m pk σ := R.expand m pk σ
-  verify_eq seed pk cache' sk' h m (w : Bytes 7080) := by
+  verify_eq seed pk cache' sk' h m (w : Bytes 6404) := by
     obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
     have hpk' : pk = ⟨sk'.root, 0⟩ := hpk
     have e : (⟨pkEnc pk, 0⟩ : SphincsSecurity.PublicKey) = pk := by

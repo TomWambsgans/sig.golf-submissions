@@ -62,11 +62,11 @@ def lowerTreesCost : Nat := lowerTreesFrom numLayers
 /-- The least cost of a signing request. -/
 def signCharge : Nat := ftsOpenHashCost + lowerTreesCost
 
-theorem lowerTreesCost_eq : lowerTreesCost = 37883 := by
+theorem lowerTreesCost_eq : lowerTreesCost = 66300 := by
   simp only [lowerTreesCost, lowerTreesFrom, numLayers, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
-theorem signCharge_eq : signCharge = 66542 := by
+theorem signCharge_eq : signCharge = 94959 := by
   rw [signCharge, lowerTreesCost_eq, ftsOpenHashCost_def]
   decide
 

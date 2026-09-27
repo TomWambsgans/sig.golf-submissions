@@ -116,6 +116,34 @@ theorem hi_answer (a : BitVec 256) : hi (answerBytes 16 a) = a.extractLsb' 64 64
   norm_num
   omega
 
+/-- The paired-secret answer: low half. -/
+theorem take16_answer32 (a : BitVec 256) : (answerBytes 32 a).take 16 = answerBytes 16 a := by
+  simp only [answerBytes, ← List.map_take, List.take_range]
+  rfl
+
+@[simp] theorem length_drop16_answer32 (a : BitVec 256) : ((answerBytes 32 a).drop 16).length = 16 := by
+  simp [answerBytes]
+
+theorem leNat_drop16_answer32 (a : BitVec 256) :
+    leNat ((answerBytes 32 a).drop 16) = a.toNat / 2 ^ 128 := by
+  have h := leNat_answer 32 a
+  rw [← List.take_append_drop 16 (answerBytes 32 a), leNat_append, take16_answer32, leNat_answer,
+    length_answer16] at h
+  have := a.isLt
+  norm_num at h this ⊢
+  omega
+
+theorem lo_answer_hi (a : BitVec 256) : lo ((answerBytes 32 a).drop 16) = a.extractLsb' 128 64 := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [lo, BitVec.toNat_ofNat, BitVec.extractLsb'_toNat, leNat_drop16_answer32,
+    Nat.shiftRight_eq_div_pow]
+
+theorem hi_answer_hi (a : BitVec 256) : hi ((answerBytes 32 a).drop 16) = a.extractLsb' 192 64 := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [hi, BitVec.toNat_ofNat, BitVec.extractLsb'_toNat, leNat_drop16_answer32,
+    Nat.shiftRight_eq_div_pow, Nat.div_div_eq_div_mul]
+  norm_num
+
 /-! ## Buffers -/
 
 theorem wordsToNat_append (l₁ l₂ : List Word) :

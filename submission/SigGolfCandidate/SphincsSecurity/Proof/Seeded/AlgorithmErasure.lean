@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Seeded.Erasure
 import SigGolfCandidate.SphincsSecurity.Proof.Seeded.DerivationTable
 import SigGolfCandidate.SphincsSecurity.Proof.Scheme.StatementLemmas
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.PairedEquations
 
 /-!
 # Erasing the secret derivations from the signer
@@ -58,11 +59,33 @@ theorem Erases.bind_map_right {ι : Type} {spec : OracleSpec ι} {α β γ : Typ
   apply Erases.trans (h.bind nextLeft nextLeft (fun _ => Erases.refl known _))
   simpa only [bind_map_left] using (Erases.refl known right).bind _ _ hnext
 
+/-- A chain's secret: its pair's derivation answer, low half for chain `2k`, high half for `2k + 1`. -/
 def tableOts (outputs : SecretOutputs) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
-    (chain : ChainIndex) : Digest := truncateHash (outputs (.inl (lay, tree, leaf, chain)))
+    (chain : ChainIndex) : Digest :=
+  unpairChains (fun pair => splitSecrets (outputs (.inl (lay, tree, leaf, pair)))) chain
 
+/-- A few-time leaf's secret: its pair's derivation answer, low half for leaf `2k`, high half for `2k + 1`. -/
 def tableFts (outputs : SecretOutputs) (index : Index) (tree : FtsTree) (leaf : FtsLeaf) : Digest :=
-  truncateHash (outputs (.inr (index, tree, leaf)))
+  unpairFtsLeaves (fun pair => splitSecrets (outputs (.inr (index, tree, pair)))) leaf
+
+theorem pairOf_tableOts (outputs : SecretOutputs) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (pair : ChainPair) :
+    Concrete.pairOf (tableOts outputs lay tree leaf) pair = splitSecrets (outputs (.inl (lay, tree, leaf, pair))) := by
+  unfold Concrete.pairOf tableOts unpairChains
+  have he : (evenChain pair).val % 2 = 0 := by simp [evenChain]
+  have ho : ¬ (oddChain pair).val % 2 = 0 := by simp [oddChain]
+  have hpe : chainPairOf (evenChain pair) = pair := Fin.ext (by simp [chainPairOf, evenChain])
+  have hpo : chainPairOf (oddChain pair) = pair := Fin.ext (by simp [chainPairOf, oddChain]; omega)
+  simp only [he, ho, if_true, if_false, hpe, hpo]
+
+theorem ftsPairOf_tableFts (outputs : SecretOutputs) (index : Index) (tree : FtsTree) (pair : FtsPair) :
+    Concrete.ftsPairOf (tableFts outputs index tree) pair = splitSecrets (outputs (.inr (index, tree, pair))) := by
+  unfold Concrete.ftsPairOf tableFts unpairFtsLeaves
+  have he : (evenFtsLeaf pair).val % 2 = 0 := by simp [evenFtsLeaf]
+  have ho : ¬ (oddFtsLeaf pair).val % 2 = 0 := by simp [oddFtsLeaf]
+  have hpe : ftsPairOf (evenFtsLeaf pair) = pair := Fin.ext (by simp [ftsPairOf, evenFtsLeaf])
+  have hpo : ftsPairOf (oddFtsLeaf pair) = pair := Fin.ext (by simp [ftsPairOf, oddFtsLeaf]; omega)
+  simp only [he, ho, if_true, if_false, hpe, hpo]
 
 /-- The table key: the secrets from `outputs`, the top tree's node table `top` built by key generation,
 and its root. -/
@@ -203,6 +226,119 @@ theorem erases_signFrom (index : Index)
   intro parts
   cases parts <;> exact .pure _
 
+theorem erases_buildLeafPaired (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    {left right : ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ pair, Erases known (left pair) (right pair)) (digits : Encoding) :
+    Erases known (buildLeafPaired parameter lay tree leaf left digits)
+      (buildLeafPaired parameter lay tree leaf right digits) := by
+  unfold buildLeafPaired
+  exact (Erases.sequenceFin known _ _ fun pair =>
+    (h pair).bind _ _ fun _ => .refl _ _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildLayerTablePaired (lay : Layer) (tree : TreeIndex)
+    {left right : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ leaf pair, Erases known (left leaf pair) (right leaf pair))
+    (leaf : LeafIndex) (digits : Encoding) :
+    Erases known (buildLayerTablePaired parameter lay tree left leaf digits)
+      (buildLayerTablePaired parameter lay tree right leaf digits) := by
+  unfold buildLayerTablePaired
+  exact (Erases.sequenceFin known _ _ fun _ =>
+    erases_buildLeafPaired parameter lay tree _ (h _) _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildLayerTreePaired (lay : Layer) (tree : TreeIndex)
+    {left right : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ leaf pair, Erases known (left leaf pair) (right leaf pair))
+    (leaf : LeafIndex) (digits : Encoding) :
+    Erases known (buildLayerTreePaired parameter lay tree left leaf digits)
+      (buildLayerTreePaired parameter lay tree right leaf digits) := by
+  unfold buildLayerTreePaired
+  exact (erases_buildLayerTablePaired parameter lay tree h leaf digits).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildFtsTreePaired (index : Index) (tree : FtsTree)
+    {left right : FtsPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ pair, Erases known (left pair) (right pair)) (leaf : FtsLeaf) :
+    Erases known (buildFtsTreePaired parameter index tree left leaf)
+      (buildFtsTreePaired parameter index tree right leaf) := by
+  unfold buildFtsTreePaired
+  exact (Erases.sequenceFin known _ _ fun pair =>
+    (h pair).bind _ _ fun _ => .refl _ _).bind _ _ fun _ => .refl _ _
+
+theorem erases_buildForestPaired (index : Index)
+    {left right : FtsTree → FtsPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ tree pair, Erases known (left tree pair) (right tree pair))
+    (leaves : IndexGroup → FtsLeaf) :
+    Erases known (buildForestPaired parameter index left leaves)
+      (buildForestPaired parameter index right leaves) := by
+  unfold buildForestPaired
+  exact (Erases.sequenceFin known _ _ fun tree =>
+    erases_buildFtsTreePaired parameter index tree (h tree) _).bind _ _ fun _ => .refl _ _
+
+theorem erases_signTopLayerPaired (index : Index)
+    {left right : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ leaf pair, Erases known (left leaf pair) (right leaf pair))
+    {topLeft topRight : Nat → Nat → OracleComp HashSpec Digest}
+    (htop : ∀ level nodeIdx, Erases known (topLeft level nodeIdx) (topRight level nodeIdx))
+    (message : Digest) :
+    Erases known (signTopLayerPaired parameter index left topLeft message)
+      (signTopLayerPaired parameter index right topRight message) := by
+  unfold signTopLayerPaired
+  apply (Erases.refl known _).bind
+  intro search
+  rcases search with _ | ⟨counter, encoding⟩
+  · exact .pure _
+  · apply (Erases.sequenceFin known _ _ fun pair =>
+      (h _ pair).bind _ _ fun _ => .refl _ _).bind
+    intro values
+    apply (Erases.sequenceFin known _ _ fun level => htop _ _).bind
+    intro path
+    exact .pure _
+
+theorem erases_signLayersPaired (index : Index)
+    {left right : Layer → TreeIndex → LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (h : ∀ lay tree leaf pair, Erases known (left lay tree leaf pair) (right lay tree leaf pair))
+    {topLeft topRight : Nat → Nat → OracleComp HashSpec Digest}
+    (htop : ∀ level nodeIdx, Erases known (topLeft level nodeIdx) (topRight level nodeIdx))
+    (remaining : Nat) (message : Digest) :
+    Erases known (signLayersPaired parameter index left topLeft remaining message)
+      (signLayersPaired parameter index right topRight remaining message) := by
+  induction remaining generalizing message with
+  | zero => exact .pure _
+  | succ remaining ih =>
+      simp only [signLayersPaired]
+      split
+      · split
+        · apply (erases_signTopLayerPaired parameter index (h _ _) htop message).bind
+          intro output
+          cases output <;> exact .pure _
+        · apply (Erases.refl known _).bind
+          intro search
+          rcases search with _ | ⟨counter, encoding⟩
+          · exact .pure _
+          · apply (erases_buildLayerTreePaired parameter _ _ (h _ _) _ _).bind
+            rintro ⟨values, path, root⟩
+            apply (ih root).bind
+            intro rest
+            cases rest <;> exact .pure _
+      · exact .pure _
+
+theorem erases_signFromPaired (index : Index)
+    {ftsLeft ftsRight : FtsTree → FtsPair → OracleComp HashSpec (Digest × Digest)}
+    (hfts : ∀ tree pair, Erases known (ftsLeft tree pair) (ftsRight tree pair))
+    {otsLeft otsRight : Layer → TreeIndex → LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
+    (hots : ∀ lay tree leaf pair,
+      Erases known (otsLeft lay tree leaf pair) (otsRight lay tree leaf pair))
+    {topLeft topRight : Nat → Nat → OracleComp HashSpec Digest}
+    (htop : ∀ level nodeIdx, Erases known (topLeft level nodeIdx) (topRight level nodeIdx))
+    (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) :
+    Erases known (signFromPaired parameter index ftsLeft otsLeft topLeft randomness leaves)
+      (signFromPaired parameter index ftsRight otsRight topRight randomness leaves) := by
+  unfold signFromPaired
+  apply (erases_buildForestPaired parameter index hfts leaves).bind
+  rintro ⟨secrets, path, key⟩
+  apply (erases_signLayersPaired parameter index hots htop _ _).bind
+  intro parts
+  cases parts <;> exact .pure _
+
 end Builders
 
 /-! ## The first secret of key generation -/
@@ -309,6 +445,42 @@ theorem buildLayerTable_split_first (parameter : PublicParameter) (lay : Layer) 
     funext chainIdx
     simp [withFirst, hne]
 
+/-- The pair getter with the secrets of leaf `0`, pair `0` already known. -/
+def withFirstPair {m : Type → Type} [Monad m] (secret : LeafIndex → ChainPair → m (Digest × Digest))
+    (first : Digest × Digest) : LeafIndex → ChainPair → m (Digest × Digest) :=
+  fun leaf pair => if leaf.val = 0 ∧ pair.val = 0 then pure first else secret leaf pair
+
+/-- The paired table build's first query is the derivation of its first pair of secrets. -/
+theorem buildLayerTablePaired_split_first (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainPair → m (Digest × Digest)) (leaf : LeafIndex) (digits : Encoding) :
+    buildLayerTablePaired parameter lay tree secret leaf digits =
+      secret (leafOfNat 0) ⟨0, by decide⟩ >>= fun first =>
+        buildLayerTablePaired parameter lay tree (withFirstPair secret first) leaf digits := by
+  unfold buildLayerTablePaired
+  rw [sequenceFin_split_first (Nat.two_pow_pos _) _ (secret (leafOfNat 0) ⟨0, by decide⟩)
+    (fun first leafNat => buildLeafPaired parameter lay tree (leafOfNat leafNat.val)
+      (withFirstPair secret first (leafOfNat leafNat.val))
+      (if leafNat.val = leaf.val then digits else zeroEncoding)), bind_assoc]
+  · unfold buildLeafPaired
+    rw [sequenceFin_split_first (by decide) _ (secret (leafOfNat 0) ⟨0, by decide⟩)
+      (fun first pair => do
+        let secrets ← withFirstPair secret first (leafOfNat 0) pair
+        let a ← buildChain parameter lay tree (leafOfNat 0) (evenChain pair) (pure secrets.1)
+          ((if (0 : Nat) = leaf.val then digits else zeroEncoding) (evenChain pair)).val
+        let b ← buildChain parameter lay tree (leafOfNat 0) (oddChain pair) (pure secrets.2)
+          ((if (0 : Nat) = leaf.val then digits else zeroEncoding) (oddChain pair)).val
+        return (a, b)), bind_assoc]
+    · apply bind_congr
+      intro first
+      simp [withFirstPair, leafOfNat]
+    · intro first pair hpair
+      simp [withFirstPair, hpair]
+  · intro first leafNat hleaf
+    have hne := leafOfNat_val_ne_zero lay leafNat hleaf
+    congr 1
+    funext pair
+    simp [withFirstPair, hne]
+
 end FirstSecret
 
 section Algorithms
@@ -319,35 +491,38 @@ variable (known : QueryCache HashSpec) (parameter : PublicParameter) (seed : Mas
 
 include hknown
 
-theorem erases_deriveKey (position : SecretPosition) :
-    Erases known (deriveKey parameter (secretDomain position) seed : OracleComp HashSpec Digest)
-      (pure (truncateHash (outputs position))) := by
-  unfold deriveKey Concrete.oracleHash
+theorem erases_derivePair (position : SecretPosition) :
+    Erases known ((do return splitSecrets (← Concrete.oracleHash
+        (keygenHashInput parameter (secretDomain position) seed))) : OracleComp HashSpec (Digest × Digest))
+      (pure (splitSecrets (outputs position))) := by
+  unfold Concrete.oracleHash
   exact Erases.skip _ _ (hknown position) _ _ (.pure _)
 
-theorem erases_otsSecret (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chainIdx : ChainIndex) :
-    Erases known (otsSecret parameter seed lay tree leaf chainIdx : OracleComp HashSpec Digest)
-      (pure (tableOts outputs lay tree leaf chainIdx)) :=
-  erases_deriveKey known parameter seed outputs hknown (.inl (lay, tree, leaf, chainIdx))
+theorem erases_otsSecret (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (pair : ChainPair) :
+    Erases known (otsSecret parameter seed lay tree leaf pair : OracleComp HashSpec (Digest × Digest))
+      (pure (Concrete.pairOf (tableOts outputs lay tree leaf) pair)) := by
+  rw [pairOf_tableOts]
+  exact erases_derivePair known parameter seed outputs hknown (.inl (lay, tree, leaf, pair))
 
-theorem erases_ftsSecret (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
-    Erases known (ftsSecret parameter seed index tree leaf : OracleComp HashSpec Digest)
-      (pure (tableFts outputs index tree leaf)) :=
-  erases_deriveKey known parameter seed outputs hknown (.inr (index, tree, leaf))
+theorem erases_ftsSecret (index : Index) (tree : FtsTree) (pair : FtsPair) :
+    Erases known (ftsSecret parameter seed index tree pair : OracleComp HashSpec (Digest × Digest))
+      (pure (Concrete.ftsPairOf (tableFts outputs index tree) pair)) := by
+  rw [ftsPairOf_tableFts]
+  exact erases_derivePair known parameter seed outputs hknown (.inr (index, tree, pair))
 
-/-- After the digest loop, the seeded signer erases to the table signer, provided the seeded top-node
-getter erases to the table's. -/
+/-- After the digest loop, the seeded signer (paired derivations) erases to the table signer, provided the
+seeded top-node getter erases to the table's. -/
 theorem erases_signFrom_table (top : Nat → Nat → Digest) (index : Index) (randomness : Randomness)
     (leaves : IndexGroup → FtsLeaf) {topNode : Nat → Nat → OracleComp HashSpec Digest}
     (htop : ∀ level nodeIdx, Erases known (topNode level nodeIdx) (pure (top level nodeIdx))) :
     Erases known
-      (Concrete.signFrom parameter index (ftsSecret parameter seed index) (otsSecret parameter seed)
+      (Concrete.signFromPaired parameter index (ftsSecret parameter seed index) (otsSecret parameter seed)
         topNode randomness leaves : OracleComp HashSpec (Option Signature))
       (Concrete.signAfterDigest (tableKey parameter top outputs) randomness index leaves) := by
-  rw [Concrete.signAfterDigest]
-  exact erases_signFrom parameter index
-    (fun tree leaf => erases_ftsSecret known parameter seed outputs hknown index tree leaf)
-    (fun lay tree leaf chainIdx => erases_otsSecret known parameter seed outputs hknown lay tree leaf chainIdx)
+  rw [Concrete.signAfterDigest, ← Concrete.signFromPaired_pure]
+  exact erases_signFromPaired parameter index
+    (fun tree pair => erases_ftsSecret known parameter seed outputs hknown index tree pair)
+    (fun lay tree leaf pair => erases_otsSecret known parameter seed outputs hknown lay tree leaf pair)
     htop randomness leaves
 
 end Algorithms

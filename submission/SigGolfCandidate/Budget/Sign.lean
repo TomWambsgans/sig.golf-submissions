@@ -7,11 +7,12 @@ From any random-oracle cache without tweak types `4`, `7`, `12` (e.g. after keyg
 queries types `0..3`, `13`, `14`), and for **every** cache argument, the expectation of
 `z ^ (compressions of signRef sk cache m)` is at most
 
-  `z ^ 1025 * (bD * (z ^ (14 * 3071 + 4) * (bC ^ 6 * z ^ (44539 + 239))))`,
+  `z ^ 1025 * (bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215))))`,
 
-where `bD` bounds the digest search and `bC` each of the 6 counter searches (`V_signRef`). The
-deterministic part is MAC 1025 + FORS 42998 + layers 1..5 44539 + top layer 239 = 88801 blocks
-(top layer: 42 secrets, `targetSum = 186` chain steps, 11 masks).
+where `bD` bounds the digest search and `bC` each of the 5 counter searches (`V_signRef`). The
+deterministic part (v5: paired PRF secrets, 5 layers (11,6,6,6,5), T = 183) is MAC 1025 + FORS
+35830 + layers 1..4 73244 + top layer 215 = 110314 blocks (top layer: 21 paired secret queries,
+`targetSum = 183` chain steps, 11 masks).
 -/
 
 namespace SigGolfCandidate.Budget
@@ -23,7 +24,7 @@ def layerCost (n : Nat) : Nat := ∑ l ∈ Finset.range n, treeCost (height (l +
 theorem layerCost_succ (n : Nat) : layerCost (n + 1) = layerCost n + treeCost (height (n + 1)) := by
   simp [layerCost, Finset.sum_range_succ]
 
-theorem layerCost_5 : layerCost 5 = 44539 := by decide
+theorem layerCost_4 : layerCost 4 = 73244 := by decide
 
 /-- Before the layers `n-1 .. 0`: every cached counter query is of a layer `≥ n`. -/
 def InvL (n : Nat) (q : Query) : Prop := qbyte q 1 = 4 → n ≤ qbyte q 2
@@ -41,15 +42,22 @@ theorem sum_getD (x : List Nat) : ∑ i ∈ range x.length, x.getD i 0 = x.sum :
     simp only [List.getD_cons_succ, List.getD_cons_zero, ih]
     omega
 
-theorem spec_chainTo (S : List Byte) (hS : S.length = 32) (lay tau e i x : Nat) :
-    Spec (fun _ => True) (fun v : Val => v.length ≤ 16) (1 + x) (chainTo S lay tau e i x) := by
+theorem spec_chainTo (lay tau e i x : Nat) (v : Val) (hv : v.length ≤ 16) :
+    Spec (fun _ => True) (fun v : Val => v.length ≤ 16) x (chainTo lay tau e i x v) := by
   unfold chainTo
-  refine spec_hash16_bind _ trivial (prf_ok S hS lay tau e i).2 (fun v hv => ?_) le_rfl
   refine Spec.foldlM_range'_le (P := fun _ => True) 1 x _ (fun _ (w : Val) => w.length ≤ 16)
-    (fun _ => 1) v (by omega) (fun i' _ w hw => ?_) (fun _ h => h) (by simp)
+    (fun _ => 1) v hv (fun i' _ w hw => ?_) (fun _ h => h) (by simp)
   exact spec_hash16_bind (chainInput lay tau e i (1 + i') w) trivial
     (blocks_fmt_le _ 1 (by simp [chainInput]; omega) le_rfl)
     (fun w' hw' => Spec.pure _ 0 (by omega)) le_rfl
+
+theorem sum_pairs (f : Nat → Nat) (n : Nat) :
+    ∑ k ∈ range n, (f (2 * k) + f (2 * k + 1)) = ∑ i ∈ range (2 * n), f i := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [Finset.sum_range_succ, ih, show 2 * (n + 1) = 2 * n + 1 + 1 by ring,
+      Finset.sum_range_succ, Finset.sum_range_succ, Nat.add_assoc]
 
 theorem spec_topPath (S cache : List Byte) (hS : S.length = 32) (e : Nat) :
     Spec (fun _ => True) (fun _ => True) 11 (topPath S cache e) := by
@@ -60,7 +68,7 @@ theorem spec_topPath (S cache : List Byte) (hS : S.length = 32) (e : Nat) :
   exact spec_hash16_bind _ trivial (mask_ok S hS l _).2 (fun _ _ => Spec.pure _ 0 trivial) le_rfl
 
 /-- Compressions of the top layer after its counter search. -/
-def topCost : Nat := 42 + 186 + 11
+def topCost : Nat := 21 + 183 + 11
 
 theorem V_signTop (z bC : ℝ≥0∞) (hz : 1 ≤ z) (hbC : 1 ≤ bC)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC) (S cache : List Byte) (hS : S.length = 32)
@@ -88,20 +96,26 @@ theorem V_signTop (z bC : ℝ≥0∞) (hz : 1 ≤ z) (hbC : 1 ≤ bC)
   · dsimp only
     obtain ⟨hlen, hsum⟩ := hx'.1 cnt xs rfl
     refine Spec.V_le (P := fun _ => True) (Post := fun _ => True) ?_ hz c1
-    refine Spec.bind' (l := 11) (Spec.foldlM_range (P := fun _ => True) nChains _
-      (fun _ (_ : List Val) => True) (fun i => 1 + xs.getD i 0) [] trivial
-      (fun i _ acc _ => ?_)) (fun vals _ => ?_) ?_
-    · exact (spec_chainTo S hS 0 tau e i (xs.getD i 0)).bind' (l := 0)
+    refine Spec.bind' (l := 11) (Spec.foldlM_range (P := fun _ => True) (nChains / 2) _
+      (fun _ (_ : List Val) => True) (fun k => 1 + (xs.getD (2 * k) 0 + xs.getD (2 * k + 1) 0))
+      [] trivial (fun k _ acc _ => ?_)) (fun vals _ => ?_) ?_
+    · obtain ⟨h1, h2⟩ := prf_ok S hS 0 tau e k
+      refine spec_prf2 _ trivial h2 (l := xs.getD (2 * k) 0 + xs.getD (2 * k + 1) 0)
+        (fun sp hs0 hs1 => ?_) le_rfl
+      obtain ⟨s0, s1⟩ := sp
+      dsimp only at hs0 hs1 ⊢
+      refine (spec_chainTo 0 tau e (2 * k) _ s0 hs0).bind' (fun v0 _ => ?_) le_rfl
+      exact (spec_chainTo 0 tau e (2 * k + 1) _ s1 hs1).bind' (l := 0)
         (fun _ _ => Spec.pure _ 0 trivial) (by omega)
     · exact (spec_topPath S cache hS e).bind' (l := 0) (fun _ _ => Spec.pure _ 0 trivial) le_rfl
-    · have h42 : nChains = xs.length := by rw [hlen]; rfl
-      rw [Finset.sum_add_distrib, h42, sum_getD, hsum]
-      simp [topCost, targetSum, hlen]
+    · have h42 : 2 * (nChains / 2) = xs.length := by rw [hlen]; rfl
+      rw [Finset.sum_add_distrib, sum_pairs (fun i => xs.getD i 0), h42, sum_getD, hsum]
+      simp [topCost, targetSum, nChains]
 
 theorem V_signLayers (z bC : ℝ≥0∞) (hz : 1 ≤ z) (hbC : 1 ≤ bC)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC) (S cache : List Byte) (hS : S.length = 32)
     (idx : Nat) :
-    ∀ lay (M : Val) (c : RCache), lay ≤ 5 → M.length ≤ 16 → CacheInv (InvL (lay + 1)) c →
+    ∀ lay (M : Val) (c : RCache), lay ≤ 4 → M.length ≤ 16 → CacheInv (InvL (lay + 1)) c →
       V z (signLayers S cache idx lay M) c ≤ bC ^ (lay + 1) * z ^ (layerCost lay + topCost) := by
   intro lay
   induction lay with
@@ -177,7 +191,7 @@ theorem mac_ok (S cache : List Byte) (hS : S.length = 32) :
 
 /-- The signing bound without the MAC check. -/
 noncomputable abbrev signBound (z bD bC : ℝ≥0∞) : ℝ≥0∞ :=
-  bD * (z ^ (14 * 3071 + 4) * (bC ^ 6 * z ^ (44539 + 239)))
+  bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215)))
 
 set_option maxRecDepth 100000 in
 /-- The expectation bound for the part of `signList` after the MAC check, from `Inv0`. -/
@@ -195,7 +209,7 @@ theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
         match ← signLayers S cache (idxOf N) (nLayers - 1) M with
         | none => pure none
         | some lays => pure (some (serialize rho fors lays))) c ≤ signBound z bD bC := by
-  have hbig : 1 ≤ z ^ (14 * 3071 + 4) * (bC ^ 6 * z ^ (44539 + 239)) :=
+  have hbig : 1 ≤ z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215)) :=
     one_le_mul (one_le_pow₀ hz) (one_le_mul (one_le_pow₀ hbC) (one_le_pow₀ hz))
   refine (V_bind_le z _ _ c _ fun x hx => ?_).trans (mul_le_mul' ?_ le_rfl)
   · have hx' := (spec_searchDigest S m hS hm aMax 0).support
@@ -205,25 +219,25 @@ theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
     rcases o with _ | ⟨rho, N⟩
     · simpa using hbig
     · dsimp only
-      refine (V_bind_le z _ _ c1 (z ^ 4 * (bC ^ 6 * z ^ (44539 + 239))) fun y hy => ?_).trans ?_
+      refine (V_bind_le z _ _ c1 (z ^ 4 * (bC ^ 5 * z ^ (73244 + 215))) fun y hy => ?_).trans ?_
       · have hy' := (spec_signFors S hS N).support (I := fun q => qbyte q 1 ≠ 4)
           (fun q hq => by unfold PF at hq; omega) c1 hx'.2 y hy
         obtain ⟨⟨fors, roots⟩, c2⟩ := y
         dsimp only
         obtain ⟨hp1, hp2⟩ := roots_ok (idxOf N) roots hy'.1.1 hy'.1.2
-        refine (V_bind_le z _ _ c2 (bC ^ 6 * z ^ (44539 + 239)) fun w hw => ?_).trans ?_
+        refine (V_bind_le z _ _ c2 (bC ^ 5 * z ^ (73244 + 215)) fun w hw => ?_).trans ?_
         · have hw' := (spec_hash16 (P := PF) (rootsInput (idxOf N) roots) 4 hp1 hp2).support
             (I := fun q => qbyte q 1 ≠ 4) (fun q hq => by unfold PF at hq; omega) c2 hy'.2 w hw
           obtain ⟨M, c3⟩ := w
           refine (V_bind_le z _ _ c3 1 fun r _ => ?_).trans ?_
           · obtain ⟨r, _⟩ := r
             rcases r with _ | lays <;> simp
-          · rw [mul_one, ← layerCost_5, show (239 : Nat) = topCost from rfl]
+          · rw [mul_one, ← layerCost_4, show (215 : Nat) = topCost from rfl]
             refine V_signLayers z bC hz hbC hstepC S cache hS (idxOf N) (nLayers - 1) M c3
               (by decide) (by rw [hw'.1]) ?_
             exact hw'.2.mono fun q h h4 => absurd h4 h
         · exact mul_le_mul' ((spec_hash16 (P := PF) _ 4 hp1 hp2).V_le hz c2) le_rfl
-      · rw [pow_add z (14 * 3071) 4, mul_assoc]
+      · rw [pow_add z (14 * 2559) 4, mul_assoc]
         refine mul_le_mul' ?_ le_rfl
         rw [← ftsCost_10]
         exact (spec_signFors S hS N).V_le hz c1

@@ -11,9 +11,9 @@ def ldE (a : Nat) : E := .ld (cw a)
 def stW (a : Nat) (v : E) : E := .bin (.st .w 4) (ldE a) v
 def stW0 (a : Nat) (v : E) : E := .bin (.st .w 0) (ldE a) v
 
-/-- Layer heights (layer 0 = top) and witness offsets of the layer bodies (SPEC-v4). -/
-def heightL (lay : Nat) : Nat := [11, 5, 5, 5, 4, 4].getD lay 0
-def layBody (lay : Nat) : Nat := [2480, 3328, 4080, 4832, 5584, 6320].getD lay 0
+/-- Layer heights (layer 0 = top) and witness offsets of the layer bodies (SPEC-v5). -/
+def heightL (lay : Nat) : Nat := [11, 6, 6, 6, 5].getD lay 0
+def layBody (lay : Nat) : Nat := [2480, 3328, 4096, 4864, 5632].getD lay 0
 
 /-- X-block pc `j` of stream `t` of region `rg`. -/
 def xPc (rg t j : Nat) : Nat := ((xTab.getD rg []).getD t []).getD j 0

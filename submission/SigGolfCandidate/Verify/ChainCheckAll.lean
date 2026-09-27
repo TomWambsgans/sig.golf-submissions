@@ -1,5 +1,5 @@
-import SigGolfCandidate.Verify.ChainCheckA12
-import SigGolfCandidate.Verify.ChainCheckB12
+import SigGolfCandidate.Verify.ChainCheckA10
+import SigGolfCandidate.Verify.ChainCheckB09
 
 /-! All chain blocks. -/
 
@@ -230,58 +230,12 @@ theorem chainCheck_4 (i : Nat) (hi : i < 42) : chainCheck 4 i = true := by
   · exact chainCheck_4_40
   · exact chainCheck_4_41
 
-theorem chainCheck_5 (i : Nat) (hi : i < 42) : chainCheck 5 i = true := by
-  interval_cases i
-  · exact chainCheck_5_0
-  · exact chainCheck_5_1
-  · exact chainCheck_5_2
-  · exact chainCheck_5_3
-  · exact chainCheck_5_4
-  · exact chainCheck_5_5
-  · exact chainCheck_5_6
-  · exact chainCheck_5_7
-  · exact chainCheck_5_8
-  · exact chainCheck_5_9
-  · exact chainCheck_5_10
-  · exact chainCheck_5_11
-  · exact chainCheck_5_12
-  · exact chainCheck_5_13
-  · exact chainCheck_5_14
-  · exact chainCheck_5_15
-  · exact chainCheck_5_16
-  · exact chainCheck_5_17
-  · exact chainCheck_5_18
-  · exact chainCheck_5_19
-  · exact chainCheck_5_20
-  · exact chainCheck_5_21
-  · exact chainCheck_5_22
-  · exact chainCheck_5_23
-  · exact chainCheck_5_24
-  · exact chainCheck_5_25
-  · exact chainCheck_5_26
-  · exact chainCheck_5_27
-  · exact chainCheck_5_28
-  · exact chainCheck_5_29
-  · exact chainCheck_5_30
-  · exact chainCheck_5_31
-  · exact chainCheck_5_32
-  · exact chainCheck_5_33
-  · exact chainCheck_5_34
-  · exact chainCheck_5_35
-  · exact chainCheck_5_36
-  · exact chainCheck_5_37
-  · exact chainCheck_5_38
-  · exact chainCheck_5_39
-  · exact chainCheck_5_40
-  · exact chainCheck_5_41
-
-theorem chainCheck_at (lay i : Nat) (hl : lay < 6) (hi : i < 42) : chainCheck lay i = true := by
+theorem chainCheck_at (lay i : Nat) (hl : lay < 5) (hi : i < 42) : chainCheck lay i = true := by
   interval_cases lay
   · exact chainCheck_0 i hi
   · exact chainCheck_1 i hi
   · exact chainCheck_2 i hi
   · exact chainCheck_3 i hi
   · exact chainCheck_4 i hi
-  · exact chainCheck_5 i hi
 
 end SigGolfCandidate.Verify

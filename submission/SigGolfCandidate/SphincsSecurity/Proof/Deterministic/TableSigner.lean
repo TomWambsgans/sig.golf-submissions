@@ -157,9 +157,11 @@ theorem erases_signChecked
   intro attempt
   rcases attempt with _ | ⟨randomness, index, leaves⟩
   · exact .pure _
-  · exact erases_signFrom parameter index
-      (fun tree leaf => erases_ftsSecret known parameter seed outputs hsecrets index tree leaf)
-      (fun lay tree leaf chainIdx => erases_otsSecret known parameter seed outputs hsecrets lay tree leaf chainIdx)
+  · dsimp only
+    rw [← Concrete.signFromPaired_pure]
+    exact erases_signFromPaired parameter index
+      (fun tree pair => erases_ftsSecret known parameter seed outputs hsecrets index tree pair)
+      (fun lay tree leaf pair => erases_otsSecret known parameter seed outputs hsecrets lay tree leaf pair)
       (fun level nodeIdx => erases_cachedTopNode known parameter seed masks hmasks cache level nodeIdx)
       randomness leaves
 

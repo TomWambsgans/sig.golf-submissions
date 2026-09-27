@@ -44,8 +44,8 @@ structure FCtx where
   dst : Nat
 
 def FCtx.ok (fc : FCtx) : Prop :=
-  2 ≤ fc.h ∧ fc.h ≤ 11 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 7080 ∧
-  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 7080 ∧ safeDest fc.dst = true ∧
+  2 ≤ fc.h ∧ fc.h ≤ 11 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 6404 ∧
+  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 6404 ∧ safeDest fc.dst = true ∧
   (fc.dst + 32 ≤ 0x1C0 ∨ 0x210 ≤ fc.dst) ∧ fc.a1 < 2 ^ 20
 
 def FCtx.lo0 (fc : FCtx) : Nat := 1 + 256 * fc.t + 65536 * fc.f2 + 2 ^ 24 * (fc.tau / 2 ^ 32 % 256)

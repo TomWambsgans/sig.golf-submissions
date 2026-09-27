@@ -143,7 +143,7 @@ def InitOK (ml pkl wl : List Byte) (s : MachineState) : Prop :=
   (∀ j, j < 4 → s.getMem (BitVec.ofNat 64 (0x40 + 8 * j)) = w64 (slice ml (8 * j) 8)) ∧
   (∀ A, A < 0x800 → (A < 0x40 ∨ (0x60 ≤ A ∧ A < 0xA0) ∨ 0xB0 ≤ A) → s.getMem (BitVec.ofNat 64 A) = 0)
 
-theorem init_ok (m : Message) (pk : PublicKey) (w : Bytes 7080) (s : MachineState)
+theorem init_ok (m : Message) (pk : PublicKey) (w : Bytes 6404) (s : MachineState)
     (h : initialState submission .verify (m, pk, w) = some s) :
     InitOK (toList m) (toList pk) (toList w) s := by
   unfold initialState at h
@@ -157,7 +157,7 @@ theorem init_ok (m : Message) (pk : PublicKey) (w : Bytes 7080) (s : MachineStat
   simp only [List.foldl_cons, List.foldl_nil]
   have lm : (toList m).length = 32 := length_toList m
   have lp : (toList pk).length = 16 := length_toList pk
-  have lw : (toList w).length = 7080 := length_toList w
+  have lw : (toList w).length = 6404 := length_toList w
   set blank : MachineState := { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
   set s1 := blank.writeBytesAsWords (BitVec.ofNat 64 0x40) (toList m)
   set s2 := s1.writeBytesAsWords (BitVec.ofNat 64 0xA0) (toList pk)

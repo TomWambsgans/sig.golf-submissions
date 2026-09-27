@@ -21,13 +21,12 @@ theorem forsFoldOk_at (k : Nat) (hk : k < 14) : forsFoldOk k = true := by
   · exact forsFoldOk_12
   · exact forsFoldOk_13
 
-theorem layFoldOk_at (k : Nat) (hk : k < 6) : layFoldOk k = true := by
+theorem layFoldOk_at (k : Nat) (hk : k < 5) : layFoldOk k = true := by
   interval_cases k
   · exact layFoldOk_0
   · exact layFoldOk_1
   · exact layFoldOk_2
   · exact layFoldOk_3
   · exact layFoldOk_4
-  · exact layFoldOk_5
 
 end SigGolfCandidate.Verify

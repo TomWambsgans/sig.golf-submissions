@@ -5,7 +5,7 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 /-!
 # SPHINCS+ scheme
 
-Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: six layers of heights `(11,5,5,5,4,4)`, target sum `186`, a top tree cached by key generation (masked, and authenticated by a MAC keyed with the master seed), no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
+Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: five layers of heights `(11,6,6,6,5)`, target sum `183`, paired secret derivations (one query yields two secrets), a top tree cached by key generation (masked, and authenticated by a MAC keyed with the master seed), no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -23,8 +23,8 @@ def counterBits : Nat := 32
 def winternitzBits : Nat := 3
 def chainLength : Nat := 2 ^ winternitzBits
 def numChains : Nat := 42
-def targetSum : Nat := 186
-def numLayers : Nat := 6
+def targetSum : Nat := 183
+def numLayers : Nat := 5
 def totalHeight : Nat := 34
 /-- The tallest layer, the top one, `h_0 = 11`, which bounds every layer's leaf index. -/
 def maxLayerHeight : Nat := 11
@@ -63,10 +63,36 @@ abbrev IndexGroup := Fin ftsTrees
 abbrev FtsLeaf := Fin (2 ^ ftsTreeHeight)
 abbrev Encoding := ChainIndex → Digit
 abbrev HashInput := List UInt8
+/-- A pair of chains `(2k, 2k + 1)` of a one-time key, whose secrets one derivation query yields. -/
+abbrev ChainPair := Fin (numChains / 2)
+/-- A pair of leaves `(2k, 2k + 1)` of a few-time tree, whose secrets one derivation query yields. -/
+abbrev FtsPair := Fin (2 ^ (ftsTreeHeight - 1))
 
-/-- The `d` Merkle heights, `(h_0, ..., h_5) = (11, 5, 5, 5, 4, 4)`. Layer `0` carries the public key; its
+/-- Chain `2k`. -/
+def evenChain (pair : ChainPair) : ChainIndex := ⟨2 * pair.val, by have := pair.isLt; unfold numChains at *; omega⟩
+/-- Chain `2k + 1`. -/
+def oddChain (pair : ChainPair) : ChainIndex := ⟨2 * pair.val + 1, by have := pair.isLt; unfold numChains at *; omega⟩
+/-- The pair of a chain. -/
+def chainPairOf (chainIdx : ChainIndex) : ChainPair := ⟨chainIdx.val / 2, by have := chainIdx.isLt; unfold numChains at *; omega⟩
+
+/-- Leaf `2k`. -/
+def evenFtsLeaf (pair : FtsPair) : FtsLeaf := ⟨2 * pair.val, by have := pair.isLt; unfold ftsTreeHeight at *; omega⟩
+/-- Leaf `2k + 1`. -/
+def oddFtsLeaf (pair : FtsPair) : FtsLeaf := ⟨2 * pair.val + 1, by have := pair.isLt; unfold ftsTreeHeight at *; omega⟩
+/-- The pair of a leaf. -/
+def ftsPairOf (leaf : FtsLeaf) : FtsPair := ⟨leaf.val / 2, by have := leaf.isLt; unfold ftsTreeHeight at *; omega⟩
+
+/-- Spread per-pair values back to the members: even members take the first component. -/
+def unpairChains {α : Type} (pairs : ChainPair → α × α) (chainIdx : ChainIndex) : α :=
+  if chainIdx.val % 2 = 0 then (pairs (chainPairOf chainIdx)).1 else (pairs (chainPairOf chainIdx)).2
+
+/-- Spread per-pair values back to the members: even leaves take the first component. -/
+def unpairFtsLeaves {α : Type} (pairs : FtsPair → α × α) (leaf : FtsLeaf) : α :=
+  if leaf.val % 2 = 0 then (pairs (ftsPairOf leaf)).1 else (pairs (ftsPairOf leaf)).2
+
+/-- The `d` Merkle heights, `(h_0, ..., h_4) = (11, 6, 6, 6, 5)`. Layer `0` carries the public key; its
 tree is built by key generation and cached. -/
-def layerHeight (lay : Layer) : Nat := if lay.val = 0 then maxLayerHeight else if lay.val < 4 then 5 else 4
+def layerHeight (lay : Layer) : Nat := if lay.val = 0 then maxLayerHeight else if lay.val < 4 then 6 else 5
 
 def topLayer : Layer := ⟨0, by decide⟩
 def bottomLayer : Layer := ⟨numLayers - 1, by decide⟩
@@ -103,7 +129,7 @@ structure LayerSignature (lay : Layer) where
   path : Fin (layerHeight lay) → Digest
 deriving DecidableEq
 
-/-- The randomizer, FORS openings, and six layer signatures, totaling 7080 bytes. -/
+/-- The randomizer, FORS openings, and five layer signatures, totaling 6404 bytes. -/
 structure Signature where
   randomness : Randomness
   ftsSecret : FtsTree → Digest
@@ -178,15 +204,17 @@ def randomizerHashInput (parameter : PublicParameter) (seed : MasterSeed)
     bytesLE 16 parameter ++ bytesLE 32 seed ++ bytesLE 32 message
 
 inductive KeygenDomain where
-  | ots (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (chain : ChainIndex)
-  | fts (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
+  /-- The secrets of chains `2k` and `2k + 1` of a one-time key. -/
+  | ots (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (pair : ChainPair)
+  /-- The secrets of leaves `2k` and `2k + 1` of a few-time tree. -/
+  | fts (index : Index) (tree : FtsTree) (pair : FtsPair)
   /-- The mask of the cached top-tree node `(level, nodeIdx)`. -/
   | mask (level : Fin maxLayerHeight) (nodeIdx : Fin (2 ^ maxLayerHeight))
 deriving DecidableEq
 
 def keygenDomainFields : KeygenDomain → TweakFields
-  | .ots lay tree leaf chain => tweakFields 0 lay tree chain leaf
-  | .fts index tree leaf => tweakFields 8 tree index 0 leaf
+  | .ots lay tree leaf pair => tweakFields 0 lay tree pair leaf
+  | .fts index tree pair => tweakFields 8 tree index 0 pair
   | .mask level nodeIdx => tweakFields 13 0 0 level nodeIdx
 
 /-- `tweak || P || S`. -/
@@ -227,7 +255,7 @@ def macHashInput (parameter : PublicParameter) (seed : MasterSeed) (region : Top
 
 /-! ### The target-sum code
 
-`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 186`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
+`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 183`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
 
 namespace TargetSum
 
@@ -676,6 +704,133 @@ def signFrom (parameter : PublicParameter) (index : Index)
 
 attribute [irreducible] verify
 
+/-! ### The builders with paired secrets
+
+The seeded signer derives the secrets of a pair of chains (or of few-time leaves) with one query. These
+builders take a getter per pair and walk the pair's two members after it; with table secrets they make
+exactly the queries of the per-secret builders above (`Proof/Scheme/PairedEval.lean`). -/
+
+/-- One leaf of a layer tree, with pair getters: per pair, its secrets, chain `2k`, chain `2k + 1`; then the
+leaf hash. -/
+def buildLeafPaired (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+    (secret : ChainPair → m (Digest × Digest)) (digits : Encoding) : m ((ChainIndex → Digest) × Digest) := do
+  let pairs ← sequenceFin fun pair : ChainPair => do
+    let secrets ← secret pair
+    let first ← buildChain parameter lay tree leaf (evenChain pair) (pure secrets.1) (digits (evenChain pair)).val
+    let second ← buildChain parameter lay tree leaf (oddChain pair) (pure secrets.2) (digits (oddChain pair)).val
+    return (first, second)
+  let chains := unpairChains pairs
+  let value ← leafHash parameter lay tree leaf fun chainIdx => (chains chainIdx).2
+  return (fun chainIdx => (chains chainIdx).1, value)
+
+/-- `buildLayerTable` with pair getters. -/
+def buildLayerTablePaired (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainPair → m (Digest × Digest)) (leaf : LeafIndex) (digits : Encoding) :
+    m ((Fin (2 ^ layerHeight lay) → (ChainIndex → Digest) × Digest) × (Nat → Nat → Digest)) := do
+  let leaves ← sequenceFin (n := 2 ^ layerHeight lay) fun leafNat =>
+    buildLeafPaired parameter lay tree (leafOfNat leafNat.val) (secret (leafOfNat leafNat.val))
+      (if leafNat.val = leaf.val then digits else zeroEncoding)
+  let table ← buildLevels
+    (fun level nodeIdx left right =>
+      tweakableHash parameter (.node lay tree level nodeIdx) (nodePayload left right))
+    (layerHeight lay)
+    (fun nodeIdx => if h : nodeIdx < 2 ^ layerHeight lay then (leaves ⟨nodeIdx, h⟩).2 else 0)
+    (layerHeight lay)
+  return (leaves, table)
+
+/-- `buildLayerTree` with pair getters. -/
+def buildLayerTreePaired (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainPair → m (Digest × Digest)) (leaf : LeafIndex) (digits : Encoding) :
+    m ((ChainIndex → Digest) × (Nat → Digest) × Digest) := do
+  let (leaves, table) ← buildLayerTablePaired parameter lay tree secret leaf digits
+  let values := if h : leaf.val < 2 ^ layerHeight lay then (leaves ⟨leaf.val, h⟩).1 else fun _ => 0
+  return (values, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
+    table (layerHeight lay) 0)
+
+/-- `buildFtsTree` with pair getters: per pair, its secrets, the leaf hash of `2k`, of `2k + 1`; then the
+levels. -/
+def buildFtsTreePaired (parameter : PublicParameter) (index : Index) (tree : FtsTree)
+    (secret : FtsPair → m (Digest × Digest)) (leaf : FtsLeaf) : m (Digest × (Nat → Digest) × Digest) := do
+  let pairs ← sequenceFin fun pair : FtsPair => do
+    let secrets ← secret pair
+    let first ← ftsLeafHash parameter index tree (evenFtsLeaf pair) secrets.1
+    let second ← ftsLeafHash parameter index tree (oddFtsLeaf pair) secrets.2
+    return ((secrets.1, first), (secrets.2, second))
+  let leaves := unpairFtsLeaves pairs
+  let table ← buildLevels
+    (fun level nodeIdx left right =>
+      tweakableHash parameter (.ftsNode index tree level nodeIdx) (nodePayload left right))
+    ftsTreeHeight
+    (fun nodeIdx => if h : nodeIdx < 2 ^ ftsTreeHeight then (leaves ⟨nodeIdx, h⟩).2 else 0)
+    ftsTreeHeight
+  return ((leaves leaf).1, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
+    table ftsTreeHeight 0)
+
+/-- `buildForest` with pair getters. -/
+def buildForestPaired (parameter : PublicParameter) (index : Index)
+    (secret : FtsTree → FtsPair → m (Digest × Digest)) (leaves : IndexGroup → FtsLeaf) :
+    m ((FtsTree → Digest) × (FtsTree → Fin ftsTreeHeight → Digest) × Digest) := do
+  let trees ← sequenceFin fun tree =>
+    buildFtsTreePaired parameter index tree (secret tree) (leaves (ftsIndexOf tree))
+  let key ← tweakableHash parameter (.ftsRoots index) (ftsRootsPayload fun tree => (trees tree).2.2)
+  return (fun tree => (trees tree).1, fun tree level => (trees tree).2.1 level.val, key)
+
+/-- `signTopLayer` with pair getters: per pair, its secrets, the first `x_{2k}` steps of chain `2k`, the
+first `x_{2k+1}` steps of chain `2k + 1`. -/
+def signTopLayerPaired (parameter : PublicParameter) (index : Index)
+    (secret : LeafIndex → ChainPair → m (Digest × Digest)) (topNode : Nat → Nat → m Digest) (message : Digest) :
+    m (Option LayerOutput) := do
+  let tree := treeIndexAt index topLayer
+  let leaf := leafIndexAt index topLayer
+  let some (counter, encoding) ←
+      encodingSearch parameter topLayer tree leaf message encodingAttemptLimit 0
+    | return none
+  let pairs ← sequenceFin fun pair : ChainPair => do
+    let secrets ← secret leaf pair
+    let first ← chainWalk parameter topLayer tree leaf (evenChain pair) 0 (encoding (evenChain pair)).val secrets.1
+    let second ← chainWalk parameter topLayer tree leaf (oddChain pair) 0 (encoding (oddChain pair)).val secrets.2
+    return (first, second)
+  let values := unpairChains pairs
+  let path ← sequenceFin (n := maxLayerHeight) fun level =>
+    topNode level.val (Nat.xor (leaf.val / 2 ^ level.val) 1)
+  return some (counter, values, fun level => if h : level < maxLayerHeight then path ⟨level, h⟩ else 0)
+
+/-- `signLayers` with pair getters. -/
+def signLayersPaired (parameter : PublicParameter) (index : Index)
+    (secret : Layer → TreeIndex → LeafIndex → ChainPair → m (Digest × Digest)) (topNode : Nat → Nat → m Digest) :
+    Nat → Digest → m (Option (Layer → LayerOutput))
+  | 0, _ => pure (some fun _ => (0, fun _ => 0, fun _ => 0))
+  | remaining + 1, message =>
+      if hlayer : remaining < numLayers then
+        if remaining = 0 then do
+          let some output ← signTopLayerPaired parameter index (secret topLayer (treeIndexAt index topLayer))
+              topNode message
+            | return none
+          return some fun other => if other = topLayer then output else (0, fun _ => 0, fun _ => 0)
+        else do
+          let lay : Layer := ⟨remaining, hlayer⟩
+          let tree := treeIndexAt index lay
+          let leaf := leafIndexAt index lay
+          let some (counter, encoding) ←
+              encodingSearch parameter lay tree leaf message encodingAttemptLimit 0
+            | return none
+          let (values, path, root) ← buildLayerTreePaired parameter lay tree (secret lay tree) leaf encoding
+          let some rest ← signLayersPaired parameter index secret topNode remaining root | return none
+          return some fun other => if other = lay then (counter, values, path) else rest other
+      else
+        pure none
+
+/-- `signFrom` with pair getters. -/
+def signFromPaired (parameter : PublicParameter) (index : Index)
+    (ftsSecret : FtsTree → FtsPair → m (Digest × Digest))
+    (otsSecret : Layer → TreeIndex → LeafIndex → ChainPair → m (Digest × Digest))
+    (topNode : Nat → Nat → m Digest)
+    (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) : m (Option Signature) := do
+  let (secrets, ftsPath, ftsPublicKey) ← buildForestPaired parameter index ftsSecret leaves
+  let some parts ← signLayersPaired parameter index otsSecret topNode numLayers ftsPublicKey
+    | return none
+  return some ⟨randomness, secrets, ftsPath, fun lay => LayerOutput.toSignature lay (parts lay)⟩
+
 end Concrete
 
 def deriveKey {m : Type → Type} [Monad m] [HasQuery HashSpec m]
@@ -702,15 +857,19 @@ structure SecretKey where
 
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 
-/-- `sk_{lay,tau,e,i}`, derived from the seed. -/
-def otsSecret (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (chainIdx : ChainIndex) : m Digest :=
-  deriveKey parameter (.ots lay tree leaf chainIdx) seed
+/-- The two secrets of one derivation answer: its low and its high 16 bytes. -/
+def splitSecrets (output : HashOutput) : Digest × Digest :=
+  (truncateHash output, output.extractLsb' digestBits digestBits)
 
-/-- `s^{idx,kappa}_j`, derived from the seed. -/
+/-- `sk_{lay,tau,e,2k}` and `sk_{lay,tau,e,2k+1}`, derived from the seed with one query. -/
+def otsSecret (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (pair : ChainPair) : m (Digest × Digest) := do
+  return splitSecrets (← Concrete.oracleHash (keygenHashInput parameter (.ots lay tree leaf pair) seed))
+
+/-- `s^{idx,kappa}_{2k}` and `s^{idx,kappa}_{2k+1}`, derived from the seed with one query. -/
 def ftsSecret (parameter : PublicParameter) (seed : MasterSeed) (index : Index) (tree : FtsTree)
-    (leaf : FtsLeaf) : m Digest :=
-  deriveKey parameter (.fts index tree leaf) seed
+    (pair : FtsPair) : m (Digest × Digest) := do
+  return splitSecrets (← Concrete.oracleHash (keygenHashInput parameter (.fts index tree pair) seed))
 
 /-- The mask domain of node `(l, j)`. The signer only asks for nodes of the cached region, where the
 reductions are the identity. -/
@@ -743,7 +902,7 @@ def cachedTopNode (parameter : PublicParameter) (seed : MasterSeed) (cache : Top
 /-- Build the top tree from the supplied seed (its root is the public key), mask its nodes below the root,
 and authenticate the masked region with the MAC. There is no parameter derivation: `P = 0`. -/
 def keygenFromSeed (seed : MasterSeed) : OracleComp HashSpec (PublicKey × TopCache × SecretKey) := do
-  let (_, table) ← buildLayerTable 0 topLayer rootTree (otsSecret 0 seed topLayer rootTree)
+  let (_, table) ← buildLayerTablePaired 0 topLayer rootTree (otsSecret 0 seed topLayer rootTree)
     ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
   let root := table (layerHeight topLayer) 0
   let region ← maskRegion 0 seed table
@@ -773,7 +932,7 @@ bottom up, each a counter search followed by its tree built once, and the top la
 def signChecked (secretKey : SecretKey) (cache : TopCache) (message : Message) : m (Option Signature) := do
   let some (randomness, index, leaves) ← signDigestLoop secretKey message digestAttemptLimit 0
     | return none
-  signFrom secretKey.parameter index (ftsSecret secretKey.parameter secretKey.seed index)
+  signFromPaired secretKey.parameter index (ftsSecret secretKey.parameter secretKey.seed index)
     (otsSecret secretKey.parameter secretKey.seed)
     (cachedTopNode secretKey.parameter secretKey.seed cache) randomness leaves
 
