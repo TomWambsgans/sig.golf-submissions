@@ -4,7 +4,7 @@ import SigGolfCandidate.Final.Discharge
 /-!
 # sig.golf solution: a SPHINCS+ variant
 
-`S = W = 7756` bytes, `C = 17301` cycles. Layout (bytes): message 64, secret key 128,
+`S = W = 7756` bytes, `C = 16545` cycles. Layout (bytes): message 64, secret key 128,
 public key 160, cache 17568, signature 9808, witness 2048.
 
 The certificate is `SigGolfCandidate.Final.certificate`: the four RISC-V images are proved to refine
@@ -26,7 +26,7 @@ theorem layout_offsets : submission.layout =
   { message := 64, secretKey := 128, publicKey := 160,
     cache := 17568, signature := 9808, witness := 2048 } := rfl
 
-theorem certificate : SigGolf.Certificate submission 17301 :=
+theorem certificate : SigGolf.Certificate submission 16545 :=
   SigGolfCandidate.Final.certificate
 
 end SigGolf.Challenge

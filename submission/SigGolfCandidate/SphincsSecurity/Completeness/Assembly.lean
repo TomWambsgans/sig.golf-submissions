@@ -19,8 +19,9 @@ holds for every seed (`complete_seeded`), and averaging over the seed gives `com
 
 The numbers: a randomizer trial fails with probability at most `1 - 2⁻¹⁰ + 2²⁰/2¹²⁸`, which leaves
 room for `1/1025`, so `2²⁰ ≥ 1025 · 1023` trials all fail with probability at most `2⁻¹⁰²³`. A
-counter trial accepts at least `2¹¹⁹` of the `2¹²⁸` digests, so `2²⁰ = 2⁹ · 2¹¹` counters all fail
-with probability at most `2⁻²⁰⁴⁸`. Over `2²⁵⁶` messages, `2²⁵⁶ · (2⁻¹⁰²³ + 7 · 2⁻²⁰⁴⁸) ≤ 2⁻²⁵⁶`.
+counter trial accepts at least one in `codeShare = 1536` of the `2¹²⁸` digests, so
+`2²⁰ ≥ 1536 · 682` counters all fail with probability at most `2⁻⁶⁸²`. Over `2²⁵⁶` messages,
+`2²⁵⁶ · (2⁻¹⁰²³ + 7 · 2⁻⁶⁸²) ≤ 2⁻²⁵⁶`.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -39,15 +40,18 @@ theorem digestFactor_pow_le : digestFactor ^ digestAttemptLimit ≤ (2⁻¹ : �
     _ = (digestFactor ^ 1025) ^ 1023 := pow_mul _ _ _
     _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 := pow_le_pow_left₀ (by positivity) hhalf _
 
-theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ (2 ^ 11) := by
-  have hroom : failMass (fun out => TargetSum.decodeDigest (truncateHash out))
-      + ((2 ^ 9 : Nat) : ℝ≥0∞)⁻¹ ≤ 1 := by
-    have h := failMass_encoding_add_le
-    rwa [← Nat.cast_ofNat, ← Nat.cast_pow] at h
-  have hhalf := pow_le_half_ennreal (2 ^ 9) (by positivity) _ hroom
-  rw [encodingBound, show encodingAttemptLimit = 2 ^ 9 * 2 ^ 11 by rw [encodingAttemptLimit]; norm_num,
-    pow_mul]
-  exact pow_le_pow_left₀ (by positivity) hhalf _
+theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ 682 := by
+  have hroom := failMass_encoding_add_le
+  have hhalf := pow_le_half_ennreal codeShare (by decide) _ hroom
+  have hone : failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ≤ 1 :=
+    le_trans le_self_add hroom
+  rw [encodingBound]
+  calc failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ encodingAttemptLimit
+        ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ (codeShare * 682) :=
+          pow_le_pow_right_of_le_one' hone (by rw [encodingAttemptLimit, codeShare]; norm_num)
+    _ = (failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ codeShare) ^ 682 :=
+          pow_mul _ _ _
+    _ ≤ (2⁻¹ : ℝ≥0∞) ^ 682 := pow_le_pow_left₀ (by positivity) hhalf _
 
 /-- Key generation then signing fails only if one of signing's eight searches does. -/
 theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
@@ -64,10 +68,10 @@ theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
   · rw [add_zero]
     exact probEvent_sign_none r.1.2 message r.2 hrand hmsg henc
 
-/-- One message fails from a fixed seed with probability at most `2⁻¹⁰²³ + 7 · 2⁻²⁰⁴⁸`. -/
+/-- One message fails from a fixed seed with probability at most `2⁻¹⁰²³ + 7 · 2⁻⁶⁸²`. -/
 theorem seeded_failure_le (seed : MasterSeed) (message : Message) :
     Pr[= false | seededExperiment seed message]
-      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ (2 ^ 11) := by
+      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ 682 := by
   rw [seededExperiment_eq, ← probEvent_eq_eq_probOutput, probEvent_map]
   refine ((probEvent_honest_false_le seed message).trans
     (probEvent_signedWithKeys_none seed message)).trans ?_
@@ -80,9 +84,9 @@ theorem complete_seeded : SphincsSeededCompletenessStatement := by
   intro seed
   calc
     ∑' message : Message, Pr[= false | seededExperiment seed message]
-        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ (2 ^ 11)) :=
+        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ 682) :=
           ENNReal.tsum_le_tsum fun message => seeded_failure_le seed message
-    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ (2 ^ 11)) := by
+    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 7 * (2⁻¹ : ℝ≥0∞) ^ 682) := by
           rw [tsum_fintype, Finset.sum_const, nsmul_eq_mul, Finset.card_univ,
             show Fintype.card Message = 2 ^ 256 by simp [messageBits], Nat.cast_pow, Nat.cast_ofNat]
     _ ≤ ((2 ^ 256 : Nat) : ℝ≥0∞)⁻¹ := closing_sum

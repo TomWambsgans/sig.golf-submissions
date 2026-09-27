@@ -181,9 +181,9 @@ theorem chainsCost_aux (c : CCtx) : ∀ k i,
     omega
 
 theorem chainsCost_eq (c : CCtx) (xs : List Nat) (hlen : xs.length = 42)
-    (hxs : ∀ i < 42, xs.getD i 0 = dig c i) (hsum : xs.sum = 170) :
-    chainsCost c 0 42 = 1614 + headSum c.lay := by
-  have hs : ((List.range' 0 42).map (dig c)).sum = 170 := by
+    (hxs : ∀ i < 42, xs.getD i 0 = dig c i) (hsum : xs.sum = targetSum) :
+    chainsCost c 0 42 = 42 * 87 - 12 * targetSum + headSum c.lay := by
+  have hs : ((List.range' 0 42).map (dig c)).sum = targetSum := by
     rw [← hsum, sum_eq_getD xs, hlen, List.range_eq_range']
     congr 1
     apply List.map_congr_left
@@ -192,6 +192,7 @@ theorem chainsCost_eq (c : CCtx) (xs : List Nat) (hlen : xs.length = 42)
   have := chainsCost_aux c 42 0
   rw [hs] at this
   unfold chainsCost headSum
+  simp only [targetSum] at this ⊢
   omega
 
 end SigGolfCandidate.Verify

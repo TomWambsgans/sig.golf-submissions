@@ -188,7 +188,7 @@ theorem encpost_step (L : LCtx) (hL : L.ok) (t : Nat) (ht : t < 2) (a : BitVec 2
         u.getReg .x5 = 1 ∧ u.getReg .x10 = 1) ∧
     (∀ xs, decodeDigits (answerBytes 16 a) = some xs →
       ∃ u, Steps image s (stepsB L.lay) (stepsB L.lay) u ∧ EntInv (L.cctx a) 0 [] u ∧
-        (L.cctx a).ok ∧ (∀ i < 42, xs.getD i 0 = dig (L.cctx a) i) ∧ xs.sum = 170 ∧
+        (L.cctx a).ok ∧ (∀ i < 42, xs.getD i 0 = dig (L.cctx a) i) ∧ xs.sum = targetSum ∧
         xs.length = 42) := by
   obtain ⟨hlay, hidx, hwl⟩ := hL
   obtain ⟨-, hBok, hR1, hR2, -⟩ := lc_stream hlay ht

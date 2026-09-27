@@ -243,16 +243,17 @@ theorem swS_toNat : (swS.eval s).toNat = swarOf (dA s) (dB s) * 2 ^ 52 := by
   omega
 
 theorem swS_eq (h0 : dA s < 2 ^ 63) (h1 : dB s < 2 ^ 63) :
-    swS.eval s = K170 ↔ (digitsOfWord (dA s) ++ digitsOfWord (dB s)).sum = 170 := by
+    swS.eval s = KT ↔ (digitsOfWord (dA s) ++ digitsOfWord (dB s)).sum = targetSum := by
   have hs := swar_nat (dA s) (dB s) h0 h1
   have hl : swarOf (dA s) (dB s) < 4096 := Nat.mod_lt _ (by decide)
   rw [← hs]
-  change _ ↔ swarOf (dA s) (dB s) = 170
+  change _ ↔ swarOf (dA s) (dB s) = targetSum
+  have hK : KT = BitVec.ofNat 64 (179 * 2 ^ 52) := rfl
+  rw [hK, show targetSum = 179 from rfl]
   constructor
   · intro h
     have := congrArg BitVec.toNat h
-    rw [swS_toNat] at this
-    simp only [K170, BitVec.toNat_ofNat] at this
+    rw [swS_toNat, BitVec.toNat_ofNat] at this
     omega
   · intro h
     apply BitVec.eq_of_toNat_eq

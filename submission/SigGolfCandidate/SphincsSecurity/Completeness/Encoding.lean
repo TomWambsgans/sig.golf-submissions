@@ -7,7 +7,7 @@ import SigGolfCandidate.SphincsSecurity.Completeness.Uniform
 
 A trial keeps the low `128` bits of a uniform answer, and that truncation is uniform on digests
 (`probEvent_truncateHash_mem`). So one trial accepts exactly as often as a uniform digest decodes,
-which by `Code.lean` is at least `2 ^ 119` times in `2 ^ 128`: one trial in `2 ^ 9`.
+which by `Code.lean` is at least one trial in `codeShare`.
 -/
 
 open Finset ENNReal OracleComp
@@ -29,12 +29,13 @@ theorem probEvent_accept :
     simp only [Finset.mem_filter, Finset.mem_univ, true_and]
   · rfl
 
-/-- One trial rejects at most `1 - 2 ^ -9` of the answers. -/
+/-- One trial rejects at most `1 - 1 / codeShare` of the answers. -/
 theorem failMass_encoding_add_le :
-    failMass (fun out => decodeDigest (truncateHash out)) + ((2 : ℝ≥0∞) ^ 9)⁻¹ ≤ 1 := by
+    failMass (fun out => decodeDigest (truncateHash out)) + (codeShare : ℝ≥0∞)⁻¹ ≤ 1 := by
   obtain ⟨accepted, haccepted⟩ :
       ∃ n, (univ.filter fun d : Digest => (decodeDigest d).isSome).card = n := ⟨_, rfl⟩
-  have hnat : (2 : Nat) ^ 119 ≤ accepted := haccepted ▸ two_pow_le_card_accepting
+  have hnat : (2 : Nat) ^ 128 ≤ codeShare * accepted :=
+    haccepted ▸ digests_le_codeShare_mul_card_accepting
   have hcard : (Fintype.card Digest : ℝ≥0∞) = (2 : ℝ≥0∞) ^ 128 := by
     rw [show Fintype.card Digest = 2 ^ 128 by simp [digestBits], Nat.cast_pow, Nat.cast_ofNat]
   have hcompl := probEvent_compl ($ᵗ HashOutput : ProbComp HashOutput)
@@ -49,10 +50,9 @@ theorem failMass_encoding_add_le :
     · rfl
   have hfail : Pr[⊥ | ($ᵗ HashOutput : ProbComp HashOutput)] = 0 := by simp
   rw [hreject, probEvent_accept, hfail, tsub_zero, hcard, haccepted] at hcompl
-  have hshare : ((2 : ℝ≥0∞) ^ 9)⁻¹ ≤ (accepted : ℝ≥0∞) / (2 : ℝ≥0∞) ^ 128 := by
+  have hshare : (codeShare : ℝ≥0∞)⁻¹ ≤ (accepted : ℝ≥0∞) / (2 : ℝ≥0∞) ^ 128 := by
     rw [ENNReal.le_div_iff_mul_le (Or.inl (by simp)) (Or.inl (by simp)),
-      show (2 : ℝ≥0∞) ^ 128 = 2 ^ 9 * 2 ^ 119 by rw [← pow_add],
-      ← mul_assoc, ENNReal.inv_mul_cancel (by simp) (by simp), one_mul]
+      ENNReal.inv_mul_le_iff (by simp [codeShare]) (by simp)]
     exact_mod_cast hnat
   exact (add_le_add le_rfl hshare).trans_eq ((add_comm _ _).trans hcompl)
 

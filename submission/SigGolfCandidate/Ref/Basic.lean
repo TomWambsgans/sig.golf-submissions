@@ -60,7 +60,10 @@ def slice (l : List Byte) (off len : Nat) : List Byte := (l.drop off).take len
 /-! ## Parameters (SPEC.md) -/
 
 def nChains : Nat := 42
-def target : Nat := 170
+/-- The WOTS target sum (the 42 3-bit digits of an accepted encoding sum to it). -/
+def targetSum : Nat := 179
+/-- Old name of `targetSum`. -/
+abbrev target : Nat := targetSum
 def nLayers : Nat := 7
 def totalH : Nat := 34
 def ftsA : Nat := 10
@@ -179,13 +182,13 @@ def digitsOfWord (d : Nat) : List Nat := (List.range 21).map fun r => d / 8 ^ r 
 
 /-- TargetSum decoding of an encoding output `v` (first 16 bytes): `d0`, `d1` = the two LE 64-bit
 halves; reject if bit 63 of `d0` or of `d1` is set, else the 42 digits (21 of `d0`, then 21 of
-`d1`) if they sum to 170. -/
+`d1`) if they sum to `targetSum`. -/
 def decodeDigits (v : Val) : Option (List Nat) :=
   let d0 := leNat (slice v 0 8)
   let d1 := leNat (slice v 8 8)
   if d0 < 2 ^ 63 ∧ d1 < 2 ^ 63 then
     let x := digitsOfWord d0 ++ digitsOfWord d1
-    if x.sum = target then some x else none
+    if x.sum = targetSum then some x else none
   else none
 
 end SigGolfCandidate.Ref

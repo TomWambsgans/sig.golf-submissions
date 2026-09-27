@@ -5,7 +5,7 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 /-!
 # SPHINCS+ scheme
 
-Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: seven layers of heights `(5,5,5,5,5,5,4)`, target sum `170`, no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
+Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: seven layers of heights `(5,5,5,5,5,5,4)`, target sum `179`, no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -23,7 +23,7 @@ def counterBits : Nat := 32
 def winternitzBits : Nat := 3
 def chainLength : Nat := 2 ^ winternitzBits
 def numChains : Nat := 42
-def targetSum : Nat := 170
+def targetSum : Nat := 179
 def numLayers : Nat := 7
 def totalHeight : Nat := 34
 /-- The tallest layer, `h_0 = ... = h_5`, which bounds every layer's leaf index. -/
@@ -192,7 +192,7 @@ def keygenHashInput (parameter : PublicParameter) (domain : KeygenDomain)
 
 /-! ### The target-sum code
 
-`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 170`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
+`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 179`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
 
 namespace TargetSum
 

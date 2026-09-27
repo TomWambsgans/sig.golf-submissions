@@ -26,7 +26,7 @@ theorem decodeDigits_answer (a : BitVec 256) :
     decodeDigits (answerBytes 16 a) =
       if (a.extractLsb' 0 64).toNat < 2 ^ 63 ∧ (a.extractLsb' 64 64).toNat < 2 ^ 63 then
         (if (digitsOfWord (a.extractLsb' 0 64).toNat ++ digitsOfWord (a.extractLsb' 64 64).toNat).sum
-            = 170 then
+            = 179 then
           some (digitsOfWord (a.extractLsb' 0 64).toNat ++ digitsOfWord (a.extractLsb' 64 64).toNat)
         else none)
       else none := by
@@ -42,11 +42,11 @@ theorem slt_zero_ofNat (d : Nat) (hd : d < 2 ^ 64) :
 
 theorem land7 (n : Nat) : n &&& 7 = n % 8 := Nat.and_two_pow_sub_one_eq_mod n 3
 
-theorem ofNat_sub170_bne (X : Nat) (hX : X < 2 ^ 64) :
-    (BitVec.ofNat 64 X - BitVec.ofNat 64 170 != BitVec.ofNat 64 0) = !decide (X = 170) := by
-  by_cases h : X = 170
+theorem ofNat_subTarget_bne (X : Nat) (hX : X < 2 ^ 64) :
+    (BitVec.ofNat 64 X - BitVec.ofNat 64 179 != BitVec.ofNat 64 0) = !decide (X = 179) := by
+  by_cases h : X = 179
   · subst h; rfl
-  · have : BitVec.ofNat 64 X - BitVec.ofNat 64 170 ≠ BitVec.ofNat 64 0 := by
+  · have : BitVec.ofNat 64 X - BitVec.ofNat 64 179 ≠ BitVec.ofNat 64 0 := by
       intro h'
       have := congrArg BitVec.toNat h'
       simp [BitVec.toNat_sub] at this; omega
@@ -62,9 +62,9 @@ def dsumAcc (acc a : Word) : Nat → Nat → Word
 /-- The machine's digit sum of `(d0, d1)`. -/
 def dsum2 (a b : Word) : Word := dsumAcc (dsumAcc (a &&& 7) a 1 20) b 0 21
 
--- The final pc of the digit-sum block (`bne t3, x0` after `addi t3, t3, -170`).
+-- The final pc of the digit-sum block (`bne t3, x0` after `addi t3, t3, -179`, `179 = targetSum`).
 kernel_theorem blk239_pc_raw : ∀ t : MachineState, (blk239.res.toState t).pc =
-    if (dsum2 (t.getReg .x1) (t.getReg .x2) + 18446744073709551446#64 != 0#64) = true then
+    if (dsum2 (t.getReg .x1) (t.getReg .x2) + 18446744073709551437#64 != 0#64) = true then
       pcOf 365 else pcOf 364
 
 theorem digit_toNat (a : Word) (r : Nat) : ((a >>> (3 * r)) &&& 7).toNat = a.toNat / 2 ^ (3 * r) % 8 := by
@@ -132,7 +132,7 @@ theorem dsum2_toNat (d0 d1 : Nat) (h0 : d0 < 2 ^ 64) (h1 : d1 < 2 ^ 64) :
 theorem blk239_pc (t : MachineState) (d0 d1 : Nat) (h0 : d0 < 2 ^ 63) (h1 : d1 < 2 ^ 63)
     (t1 : t.getReg .x1 = BitVec.ofNat 64 d0) (t2 : t.getReg .x2 = BitVec.ofNat 64 d1) :
     (blk239.res.toState t).pc =
-      if (digitsOfWord d0 ++ digitsOfWord d1).sum = 170 then pcOf 364 else pcOf 365 := by
+      if (digitsOfWord d0 ++ digitsOfWord d1).sum = 179 then pcOf 364 else pcOf 365 := by
   rw [blk239_pc_raw, t1, t2]
   have hs := dsum2_toNat d0 d1 (by omega) (by omega)
   have hle : (digitsOfWord d0 ++ digitsOfWord d1).sum ≤ 294 := by
@@ -143,7 +143,7 @@ theorem blk239_pc (t : MachineState) (d0 d1 : Nat) (h0 : d0 < 2 ^ 63) (h1 : d1 <
     apply BitVec.eq_of_toNat_eq; rw [hs, BitVec.toNat_ofNat]; omega
   subst hw
   generalize (digitsOfWord d0 ++ digitsOfWord d1).sum = X at hle ⊢
-  by_cases hX : X = 170
+  by_cases hX : X = 179
   · subst hX
     rw [if_pos rfl, if_neg]
     rw [ofNat_add_ofNat, bne_iff_ne, ne_eq, not_not, show (0#64 : Word) = BitVec.ofNat 64 0 from rfl,
@@ -180,7 +180,7 @@ def EncInv (u : MachineState) (c : Nat) (t : MachineState) : Prop :=
 def EncPost (u : MachineState) : Option (Nat × List Nat) → MachineState → Prop
   | none, t => t.pc = pcOf 369 ∧ t.getReg .x5 = 1 ∧ t.getReg .x10 = 1
   | some (c, x), t => t.pc = pcOf 370 ∧ t.getReg .x6 = BitVec.ofNat 64 c ∧ c < 2 ^ 20 ∧
-      (∃ d0 d1, d0 < 2 ^ 63 ∧ d1 < 2 ^ 63 ∧ x = digitsOfWord d0 ++ digitsOfWord d1 ∧ x.sum = 170 ∧
+      (∃ d0 d1, d0 < 2 ^ 63 ∧ d1 < 2 ^ 63 ∧ x = digitsOfWord d0 ++ digitsOfWord d1 ∧ x.sum = 179 ∧
         t.getReg .x1 = BitVec.ofNat 64 d0 ∧ t.getReg .x2 = BitVec.ofNat 64 d1) ∧
       RegsEq u t encRegs ∧ Frame u t encW
 
@@ -329,7 +329,7 @@ theorem encTrial (lay tau e : Nat) (M : Val) (u : MachineState) (hmem : EncMem l
       have ru5 : RegsEq u t5 encRegs := (ru4.trans r5).mono (by decide)
       have pc5 := blk239_pc t4 d0 d1 h0 h1 (by rw [r4.get .x1, y1]) (by rw [r4.get .x2, y2])
       rw [if_pos ⟨h0, h1⟩]
-      by_cases hsum : (digitsOfWord d0 ++ digitsOfWord d1).sum = 170
+      by_cases hsum : (digitsOfWord d0 ++ digitsOfWord d1).sum = 179
       · rw [if_pos hsum]
         have hs6 := symRun_sound blk364 codeAt_364 t5 (by rw [pc5, if_pos hsum])
           (by simp only [blk364.res, rv_simp])

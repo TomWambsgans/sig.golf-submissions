@@ -9,8 +9,8 @@ For a uniform answer `u : BitVec 256`:
 * the randomizer lands in a set `R` of values with probability at most `|R| / 2^128`
   (`probEvent_answerBytes_mem_le`);
 * the encoding decodes with probability exactly `codeCount / 2^128`, where
-  `codeCount = 693523430046796437145478038506044352` is the number of pairs of 21-digit octal
-  words with digit sum 170 (`probEvent_decode_none`). The count is a generating-function identity
+  `codeCount = 225088310516032931291895886701782592` is the number of pairs of 21-digit octal
+  words with digit sum `targetSum` (179) (`probEvent_decode_none`). The count is a generating-function identity
   evaluated by the kernel (`codeCount_eq`), as in the leanVM completeness proof.
 -/
 
@@ -279,20 +279,21 @@ theorem npair_coeff (n s X : Nat) (hX : 8 ^ n * 8 ^ n < X) (hs : s < 14 * n + 1)
   rw [← gf_pairs]
   exact (digit_of_sum X (by omega) (npair n) (fun s => (npair_le n s).trans_lt hX) _ s hs).symm
 
-/-- The number of accepted encodings (pairs of 21-digit words with digit sum 170). -/
-def codeCount : Nat := 693523430046796437145478038506044352
+/-- The number of accepted encodings (pairs of 21-digit words with digit sum `targetSum = 179`). -/
+def codeCount : Nat := 225088310516032931291895886701782592
 
 theorem gfDigit_eq (X : Nat) : gfDigit X = 1 + X + X ^ 2 + X ^ 3 + X ^ 4 + X ^ 5 + X ^ 6 + X ^ 7 := by
   simp [gfDigit, Finset.sum_range_succ]
 
-theorem npair_170 : npair 21 170 = codeCount := by
-  rw [npair_coeff 21 170 (2 ^ 128) (by norm_num) (by norm_num), gfDigit_eq]
+theorem npair_target : npair 21 targetSum = codeCount := by
+  rw [npair_coeff 21 targetSum (2 ^ 128) (by norm_num) (by simp [targetSum]), gfDigit_eq]
+  simp only [targetSum]
   decide
 
 /-- The decoding condition on the low 128 bits `k`. -/
 def Dok (k : Nat) : Prop :=
   k % 2 ^ 64 < 2 ^ 63 ∧ k / 2 ^ 64 % 2 ^ 64 < 2 ^ 63 ∧
-    ds 21 (k % 2 ^ 64) + ds 21 (k / 2 ^ 64 % 2 ^ 64) = 170
+    ds 21 (k % 2 ^ 64) + ds 21 (k / 2 ^ 64 % 2 ^ 64) = targetSum
 
 instance : DecidablePred Dok := fun k => by unfold Dok; infer_instance
 
@@ -304,7 +305,7 @@ theorem Dok_high (a b : Nat) : Dok (a + 2 ^ 128 * b) ↔ Dok a := by
   unfold Dok; rw [h1, h2]
 
 theorem Dok_split (a0 a1 : Nat) (h0 : a0 < 2 ^ 64) (h1 : a1 < 2 ^ 64) :
-    Dok (a0 + 2 ^ 64 * a1) ↔ (a0 < 2 ^ 63 ∧ a1 < 2 ^ 63 ∧ ds 21 a0 + ds 21 a1 = 170) := by
+    Dok (a0 + 2 ^ 64 * a1) ↔ (a0 < 2 ^ 63 ∧ a1 < 2 ^ 63 ∧ ds 21 a0 + ds 21 a1 = targetSum) := by
   have e1 : (a0 + 2 ^ 64 * a1) % 2 ^ 64 = a0 := by
     rw [Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt h0]
   have e2 : (a0 + 2 ^ 64 * a1) / 2 ^ 64 % 2 ^ 64 = a1 := by
@@ -323,31 +324,31 @@ theorem sum_half (M : Nat) (f : Nat → Nat) (P : Nat → Prop) [DecidablePred P
   by_cases hp : P x <;> simp [hp, this]
 
 theorem Dok_split' (M a0 a1 : Nat) (hM : M = 2 ^ 63) (h0 : a0 < M + M) (h1 : a1 < M + M) :
-    Dok (a0 + (M + M) * a1) ↔ (a0 < M ∧ a1 < M ∧ ds 21 a0 + ds 21 a1 = 170) := by
+    Dok (a0 + (M + M) * a1) ↔ (a0 < M ∧ a1 < M ∧ ds 21 a0 + ds 21 a1 = targetSum) := by
   have hMM : M + M = 2 ^ 64 := by subst hM; norm_num
   rw [hMM] at h0 h1 ⊢
   rw [Dok_split a0 a1 h0 h1, hM]
 
 theorem count_Dok_low (M : Nat) (hM : M = 2 ^ 63) :
     (∑ a ∈ range ((M + M) * (M + M)), if Dok a then 1 else 0) =
-      ∑ a1 ∈ range M, ∑ a0 ∈ range M, if ds 21 a0 + ds 21 a1 = 170 then 1 else 0 := by
+      ∑ a1 ∈ range M, ∑ a0 ∈ range M, if ds 21 a0 + ds 21 a1 = targetSum then 1 else 0 := by
   rw [sum_range_mul]
   have step : ∀ a1 ∈ range (M + M),
       (∑ a0 ∈ range (M + M), if Dok (a0 + (M + M) * a1) then 1 else 0)
-      = if a1 < M then ∑ a0 ∈ range M, (if ds 21 a0 + ds 21 a1 = 170 then 1 else 0) else 0 := by
+      = if a1 < M then ∑ a0 ∈ range M, (if ds 21 a0 + ds 21 a1 = targetSum then 1 else 0) else 0 := by
     intro a1 ha1
     rw [Finset.sum_congr rfl fun a0 ha0 => by
       rw [if_congr (Dok_split' M a0 a1 hM (mem_range.mp ha0) (mem_range.mp ha1)) rfl rfl]]
     by_cases h : a1 < M
     · rw [if_pos h]
-      have := sum_half M (fun _ => 1) (fun a0 => ds 21 a0 + ds 21 a1 = 170)
+      have := sum_half M (fun _ => 1) (fun a0 => ds 21 a0 + ds 21 a1 = targetSum)
       rw [← this]
       refine Finset.sum_congr rfl fun a0 _ => ?_
       by_cases h' : a0 < M <;> simp [h, h']
     · rw [if_neg h]
       exact Finset.sum_eq_zero fun a0 _ => by simp [h]
   rw [Finset.sum_congr rfl step]
-  have := sum_half M (fun a1 => ∑ a0 ∈ range M, if ds 21 a0 + ds 21 a1 = 170 then 1 else 0)
+  have := sum_half M (fun a1 => ∑ a0 ∈ range M, if ds 21 a0 + ds 21 a1 = targetSum then 1 else 0)
     (fun _ => True)
   simp only [and_true, if_true] at this
   exact this
@@ -364,11 +365,11 @@ theorem count_Dok_256 :
     ((range (2 ^ 256)).filter Dok).card = 2 ^ 128 * codeCount := by
   have h1 := count_Dok ((2 ^ 63 + 2 ^ 63) * (2 ^ 63 + 2 ^ 63)) (2 ^ 128) (by norm_num)
   have h2 := count_Dok_low (2 ^ 63) rfl
-  have h3 : npair 21 170 = ∑ a1 ∈ range (2 ^ 63), ∑ a0 ∈ range (2 ^ 63),
-      if ds 21 a0 + ds 21 a1 = 170 then 1 else 0 := by
+  have h3 : npair 21 targetSum = ∑ a1 ∈ range (2 ^ 63), ∑ a0 ∈ range (2 ^ 63),
+      if ds 21 a0 + ds 21 a1 = targetSum then 1 else 0 := by
     unfold npair; rw [show (8 : Nat) ^ 21 = 2 ^ 63 by norm_num]
   have e : (2 : Nat) ^ 256 = (2 ^ 63 + 2 ^ 63) * (2 ^ 63 + 2 ^ 63) * 2 ^ 128 := by norm_num
-  rw [card_filter_range, e, h1, h2, ← h3, npair_170]
+  rw [card_filter_range, e, h1, h2, ← h3, npair_target]
 
 theorem slice_leBytes16 (v : Nat) :
     slice (leBytes 16 v) 0 8 = leBytes 8 v ∧ slice (leBytes 16 v) 8 8 = leBytes 8 (v / 256 ^ 8) := by
@@ -383,7 +384,7 @@ theorem decode_none_iff (u : BitVec 256) :
   rw [answerBytes_eq 16 u (by omega)]
   obtain ⟨h1, h2⟩ := slice_leBytes16 u.toNat
   unfold decodeDigits
-  simp only [h1, h2, leNat_leBytes, List.sum_append, sum_digitsOfWord, target]
+  simp only [h1, h2, leNat_leBytes, List.sum_append, sum_digitsOfWord]
   have e1 : (256 : Nat) ^ 8 = 2 ^ 64 := by norm_num
   rw [e1]
   unfold Dok

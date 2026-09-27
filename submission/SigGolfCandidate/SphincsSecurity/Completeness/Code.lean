@@ -3,9 +3,10 @@ import SigGolfCandidate.SphincsSecurity.Scheme
 /-!
 # How many digests the target-sum code accepts
 
-The signer's counter search succeeds on a digest whose 42 three-bit digits sum to `T = 170` and
+The signer's counter search succeeds on a digest whose 42 three-bit digits sum to `T = 179` and
 whose two padding bits are clear, so the search's failure probability is governed by how many of
-the `2^128` digests that is. The count is the coefficient of `z^170` in `(1 + z + ... + z^7)^42`.
+the `2^128` digests that is. The count is the coefficient of `z^179` in `(1 + z + ... + z^7)^42`,
+about `2^117.44`: at least one digest in `codeShare = 1536`.
 
 Counting it is one identity and one division. Packing the polynomial into a single natural number
 in base `2^128`, which is above every coefficient, turns the product of the `42` factors into a
@@ -99,7 +100,10 @@ theorem codeCount_target :
   rw [weight_pow, sum_encoding_pow]
   exact (digit_of_sum base (by decide) codeCount codeCount_lt_base 295 targetSum (by decide)).symm
 
-theorem two_pow_le_codeCount : 2 ^ 119 ≤ codeCount targetSum := by
+/-- One digest in `codeShare` or more is a codeword. -/
+def codeShare : Nat := 1536
+
+theorem digests_le_codeShare_mul_codeCount : 2 ^ 128 ≤ codeShare * codeCount targetSum := by
   rw [codeCount_target, weight_eq]
   decide
 
@@ -252,10 +256,10 @@ theorem decodeDigest_pack (x : Encoding) (hx : Valid x) : decodeDigest (pack x) 
   rw [decodeDigest, if_pos ⟨pack_padding_low x, pack_padding_high x, by rw [digestEncoding_pack]; exact hx⟩,
     digestEncoding_pack]
 
-/-- The signer's counter search accepts at least `2^119` of the `2^128` digests. -/
-theorem two_pow_le_card_accepting :
-    2 ^ 119 ≤ (Finset.univ.filter fun d : Digest => (decodeDigest d).isSome).card := by
-  refine le_trans two_pow_le_codeCount ?_
+/-- The signer's counter search accepts at least one in `codeShare` of the `2^128` digests. -/
+theorem digests_le_codeShare_mul_card_accepting :
+    2 ^ 128 ≤ codeShare * (Finset.univ.filter fun d : Digest => (decodeDigest d).isSome).card := by
+  refine le_trans digests_le_codeShare_mul_codeCount (Nat.mul_le_mul_left _ ?_)
   rw [codeCount]
   apply Finset.card_le_card_of_injOn pack
   · intro x hx

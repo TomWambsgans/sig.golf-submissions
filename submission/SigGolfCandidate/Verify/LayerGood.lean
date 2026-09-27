@@ -31,7 +31,7 @@ def FoldEndL (L : LCtx) (u : MachineState) : Prop :=
   ∃ s0, FoldEnd (layFC L) s0 u ∧ LeafCarry L s0
 
 def layerCost (lay : Nat) : Nat :=
-  stepsA lay + 8 + stepsB lay + (1614 + headSum lay) + 10 + 88 +
+  stepsA lay + 8 + stepsB lay + (42 * 87 - 12 * targetSum + headSum lay) + 10 + 88 +
     foldCost (heightL lay) 0 (heightL lay)
 
 theorem blocks_q (n : Nat) (ws : List Word) : (queryOfWords n ws).blocks = n + 1 := rfl
@@ -83,7 +83,7 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
       obtain ⟨t2, hst2, hent, hcok, hxs, hsum, hlen⟩ := hacc xs hd
       simp only [verifyLeaf, bind_assoc, cc_bind]
       set c := L.cctx a with hc
-      have hcost : chainsCost c 0 42 = 1614 + headSum L.lay := chainsCost_eq c xs hlen hxs hsum
+      have hcost : chainsCost c 0 42 = 42 * 87 - 12 * targetSum + headSum L.lay := chainsCost_eq c xs hlen hxs hsum
       have hch := chains_good0 c hcok xs hxs (fun i hi => chainCheck_at L.lay i hlay hi)
         (fun ends => cc (hash16 (leafInput L.lay L.tau L.e ends)) (fun leaf =>
           cc (foldPath (nodeInput L.lay L.tau) L.e leaf (witPath L.wl L.lay)) (fun root =>

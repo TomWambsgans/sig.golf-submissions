@@ -95,11 +95,12 @@ def baseK : List (Reg × Word) :=
 def gkF : List (Reg × Word) :=
   baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10), (.x24, 0x10000)]
 
-def K170 : Word := BitVec.ofNat 64 (170 * 2 ^ 52)
+/-- `targetSum << 52` (the encoding check compares the digit sum in bits 52..63). -/
+def KT : Word := BitVec.ofNat 64 (targetSum * 2 ^ 52)
 
-/-- Layer phase: masks, `K16`, `K170`. -/
+/-- Layer phase: masks, `K16`, `KT`. -/
 def gkL : List (Reg × Word) :=
-  baseK ++ [(.x20, M1w), (.x21, M2w), (.x24, 0x10000), (.x29, K170)]
+  baseK ++ [(.x20, M1w), (.x21, M2w), (.x24, 0x10000), (.x29, KT)]
 
 /-- The `P` slots (`+16 .. +32`) of the hash buffers DB, CB, EB, NB, RB2, LB. -/
 def pSlots : List Nat := [0x10, 0x18, 0xD0, 0xD8, 0x110, 0x118, 0x1D0, 0x1D8, 0x230, 0x238,

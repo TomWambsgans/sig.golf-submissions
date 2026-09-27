@@ -40,7 +40,7 @@ def specA (lay t : Nat) : Spec :=
     (⟨none, BitVec.ofNat 64 200⟩, x31Er lay), (⟨none, BitVec.ofNat 64 192⟩, cw (hWord lay + 768))],
    encPc lay t, true, stepsA lay, [], none⟩
 
-/-! ## The encoding check (`slli 52; bne K170`) -/
+/-! ## The encoding check (`slli 52; bne KT`) -/
 
 def d0E : E := ldE 320
 def d1E : E := ldE 328
@@ -71,14 +71,14 @@ def specBok (lay t : Nat) : Spec :=
     (.x15, cw (bVal lay 0)), (.x16, d0E), (.x17, d1E)],
    [(⟨none, BitVec.ofNat 64 240⟩, .c 0), (⟨none, BitVec.ofNat 64 192⟩, stW0 192 (cw (hWord lay)))],
    0, false, stepsB lay,
-   [⟨.ne, swS, .c K170, false⟩, ⟨.lt, orE, .c 0, false⟩],
+   [⟨.ne, swS, .c KT, false⟩, ⟨.lt, orE, .c 0, false⟩],
    some (mkBin .and (mkAdd (rE0 lay) (.c (BitVec.ofNat 64 (tabAddr lay 0) - BitVec.ofNat 64 (bVal lay 0))))
      (.c (~~~1#64)))⟩
 
 def rejK : List (Reg × E) := [(.x5, cw 1), (.x10, cw 1)]
 
 def specRej1 : Spec := ⟨rejK, [], 39, true, 7, [⟨.lt, orE, .c 0, true⟩], none⟩
-def specRej2 : Spec := ⟨rejK, [], 39, true, 27, [⟨.ne, swS, .c K170, true⟩, ⟨.lt, orE, .c 0, false⟩], none⟩
+def specRej2 : Spec := ⟨rejK, [], 39, true, 27, [⟨.ne, swS, .c KT, true⟩, ⟨.lt, orE, .c 0, false⟩], none⟩
 
 /-! ## Leaf -/
 
