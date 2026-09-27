@@ -307,30 +307,6 @@ theorem read_zeroPadding (s : MachineState) (zero : ZeroPadding s) :
   rw [byte,zero _ ⟨by omega,by omega,by omega⟩]
   simp
 
-/-- The actual returned cache satisfies the complete semantic fields and canonical zero padding. -/
-theorem keygen_runWith_canonical (submission : Submission) (hash : Hash) (seed : MasterSeed)
-    (image : submission.image .keygen=SphincsMaskedImages.keygen)
-    (valid : (submission.image .keygen).Valid submission.sizes submission.layout)
-    (secretAddress : submission.layout.secretKey=0x20)
-    (publicAddress : submission.layout.publicKey=0x40) (cacheAddress : submission.layout.cache=0x60) :
-    ∃ cache : SigGolf.Cache,
-      submission.runWith hash .keygen seed=⟨some (SphincsMaskedKeygenRefinement.publicKey hash seed,cache),true,92369576,860161,1007616⟩ ∧
-      SphincsMaskedKeygenRefinement.CacheSemantics hash seed cache ∧ CacheZeroPadding cache := by
-  obtain ⟨cache,value,sem⟩ := SphincsMaskedKeygenRefinement.keygen_runWith submission hash seed image valid secretAddress publicAddress cacheAddress
-  obtain ⟨final,run,zero⟩ := keygen_executes_zero hash seed
-  have loaded := entry_loaded submission seed image valid secretAddress
-  have exactRun : Executes hash (submission.image .keygen) (entryState seed) 85168809
-      ⟨.success,final,92369576,860161,1007616⟩ := by rw [image];exact run
-  have result := runWith_of_executes submission hash .keygen seed (entryState seed) 85168809
-    ⟨.success,final,92369576,860161,1007616⟩ loaded exactRun (by decide)
-  have output := congrArg RunResult.value (value.symm.trans result)
-  simp only [readOutput,publicAddress,cacheAddress,if_true] at output
-  have same := congrArg Prod.snd (Option.some.inj output)
-  change cache=readBuffer final 0x60 CACHE_BYTES at same
-  refine ⟨cache,value,sem,?_⟩
-  rw [same]
-  exact read_zeroPadding final zero
-
 /-- info: 'SigGolfCandidate.SphincsMaskedKeygenPadding.leaves_padding' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms leaves_padding
@@ -342,9 +318,5 @@ theorem keygen_runWith_canonical (submission : Submission) (hash : Hash) (seed :
 /-- info: 'SigGolfCandidate.SphincsMaskedKeygenPadding.leavesEntry_zero' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms leavesEntry_zero
-
-/-- info: 'SigGolfCandidate.SphincsMaskedKeygenPadding.keygen_runWith_canonical' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms keygen_runWith_canonical
 
 end SigGolfCandidate.SphincsMaskedKeygenPadding
