@@ -9802,3 +9802,112 @@ theorem signer_loop_step_shift_at (location : Fin 5) (outputBase : Nat)
 
 #print axioms signer_loop_step_shift_at
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_loop_prefix_shift_at (location : Fin 5) (outputBase : Nat)
+    (hash : Hash) (s : MachineState)
+    (lowBase : 0x100 ≤ outputBase)
+    (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopStateAt outputBase hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩)
+    (n : Nat) (hn : n < 52) :
+    ∃ v, Trace hash SphincsMaskedImages.sign
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+        (firstBottomPrefixInstructions digits n)
+        (firstBottomPrefixCycles digits n)
+        (firstBottomPrefixCalls digits n)
+        (firstBottomPrefixCompressions digits n)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) v) ∧
+      FirstBottomLoopStateAt outputBase hash v parameter seed lay treeIdx leaf digits
+        ⟨n, hn⟩ := by
+  induction n with
+  | zero =>
+    refine ⟨s, ?_, ?_⟩
+    · simpa [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+        firstBottomPrefixCalls, firstBottomPrefixCompressions] using
+        (Trace.refl (hash := hash) (image := SphincsMaskedImages.sign)
+          (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s))
+    · simpa using initial
+  | succ n ih =>
+    have hnPrev : n < 52 := by omega
+    have hnLast : n < 51 := by omega
+    obtain ⟨mid, run, state⟩ := ih hnPrev
+    let chain : ChainIndex := ⟨n, hnPrev⟩
+    obtain ⟨v, step, nextState⟩ :=
+      signer_loop_step_shift_at location outputBase hash mid lowBase
+        baseAligned baseBound parameter seed lay treeIdx leaf digits
+        chain hnLast state
+    refine ⟨v, ?_, ?_⟩
+    · have joined := run.trans step
+      simpa [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+        firstBottomPrefixCalls, firstBottomPrefixCompressions,
+        Finset.sum_range_succ, chain] using joined
+    · simpa [chain] using nextState
+
+#print axioms signer_loop_prefix_shift_at
+
+theorem signer_all_chains_shift_at (location : Fin 5) (outputBase : Nat)
+    (hash : Hash) (s : MachineState)
+    (lowBase : 0x100 ≤ outputBase)
+    (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopStateAt outputBase hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩) :
+    ∃ v, Trace hash SphincsMaskedImages.sign
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+        (firstBottomPrefixInstructions digits 52 - 59)
+        (firstBottomPrefixCycles digits 52 - 59)
+        (firstBottomPrefixCalls digits 52)
+        (firstBottomPrefixCompressions digits 52)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) v) ∧
+      v.pc = 0x3dec ∧
+      (∀ j : ChainIndex,
+        Words20 v (outputBase + 20 * j.val)
+          (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)) := by
+  let finalChain : ChainIndex := ⟨51, by decide⟩
+  obtain ⟨mid, firstRun, state⟩ :=
+    signer_loop_prefix_shift_at location outputBase hash s lowBase baseAligned
+      baseBound parameter seed lay treeIdx leaf digits initial 51 (by decide)
+  obtain ⟨pc, ctx, selected, chainControl, pointer, digitInvariant, priorWords⟩ := state
+  let digit := digits 51
+  have digitByte := digitInvariant finalChain
+  have lastRun := first_bottom_signed_chain_base hash mid outputBase baseAligned baseBound
+    parameter seed lay treeIdx leaf finalChain digit pc ctx chainControl pointer digitByte
+  have lastBody := signer_signed_chain_body hash mid outputBase baseAligned baseBound
+    parameter seed lay treeIdx leaf finalChain digit pc ctx chainControl pointer digitByte
+  let v := firstBottomSignedChain hash mid digit
+  have lastPc := first_bottom_signed_chain_pc_base hash mid parameter seed lay treeIdx
+    leaf finalChain digit pc ctx chainControl outputBase pointer digitByte
+  have allWords : ∀ j : ChainIndex,
+      Words20 v (outputBase + 20 * j.val)
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
+    intro j
+    by_cases earlier : j.val < 51
+    · exact first_bottom_signed_chain_prior_emission_at hash mid outputBase
+        baseAligned baseBound parameter seed lay treeIdx leaf j finalChain digit
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)
+        earlier pc ctx chainControl pointer digitByte (priorWords j earlier)
+    · have hj : j.val < 52 := by simpa [numChains] using j.isLt
+      have jLast : j = finalChain := Fin.ext (by dsimp [finalChain]; omega)
+      subst j
+      simpa [firstBottomExpectedChain, digit] using lastRun.2
+  refine ⟨v, ?_, lastPc, allWords⟩
+  have joined := firstRun.trans (SignerBodyTrace.shifted location lastBody)
+  convert joined using 1 <;>
+    simp [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+      firstBottomPrefixCalls, firstBottomPrefixCompressions,
+      Finset.sum_range_succ] <;> omega
+
+#print axioms signer_all_chains_shift_at
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
