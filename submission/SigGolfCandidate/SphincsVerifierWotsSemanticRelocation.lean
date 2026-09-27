@@ -7583,4 +7583,74 @@ theorem bottom_counter_word_after_frame (initial final : MachineState)
 
 #print axioms bottom_counter_word_after_frame
 
+structure BottomEntry (initial state : MachineState)
+    (index : Index) (message : Digest) : Prop where
+  pc : state.pc = 0x1e20
+  frame : ∀ address, address.toNat < 0x40000 →
+    state.getByte address = initial.getByte address
+  global : state.getMem 0x43078 = BitVec.ofNat 64 index.val
+  layer : state.getMem 0x43000 = BitVec.ofNat 64 bottomLayer.val
+  zero : state.getMem 0x43010 = 0
+  tree : state.getMem 0x43008 =
+    BitVec.ofNat 64 (Concrete.treeIndexAt index bottomLayer).val
+  leaf : state.getMem 0x43018 =
+    BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val
+  indexCell : state.getMem 0x43020 =
+    BitVec.ofNat 64 (Concrete.leafIndexAt index bottomLayer).val
+  payload : ∀ i, (hi : i < 20) →
+    state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+      message.extractLsb' (8 * i) 8
+
+theorem bottom_small_of_entry
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index) (message : Digest)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : BottomEntry initial state index message) :
+    BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0 := by
+  have counterWord := (bottom_counter_word_after_frame initial state entry.frame).trans
+    (loaded_bottom_counter_word publicKey inputMessage pk signature initial loaded)
+  rw [counterWord]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ushiftRight]
+  rw [BitVec.toNat_setWidth_of_le (by decide)]
+  simp only [BitVec.toNat_ofNat]
+  have below : (signature.layers bottomLayer).counter.toNat < 2 ^ 20 :=
+    (signature.layers bottomLayer).counter.isLt
+  rw [Nat.mod_eq_of_lt (by omega :
+    (signature.layers bottomLayer).counter.toNat < 2 ^ 32)]
+  exact Nat.shiftRight_eq_zero _ 20 below
+
+theorem bottom_query_of_entry
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index) (message : Digest)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : BottomEntry initial state index message) :
+    hashInput (bottomPrehashState state) =
+      toQuery (firstUpperEncodingInput pk bottomLayer
+        (Concrete.treeIndexAt index bottomLayer)
+        (Concrete.leafIndexAt index bottomLayer)
+        message (signature.layers bottomLayer).counter) := by
+  have counterWord := (bottom_counter_word_after_frame initial state entry.frame).trans
+    (loaded_bottom_counter_word publicKey inputMessage pk signature initial loaded)
+  have witness := loaded_upper_prefix_after_frame publicKey inputMessage pk
+    signature initial state loaded entry.frame
+  have ready := bottom_prehash_block state entry.pc
+    (bottom_small_of_entry publicKey inputMessage pk signature initial state
+      index message loaded entry)
+  exact bottom_encoding_query state pk bottomLayer
+    (Concrete.treeIndexAt index bottomLayer)
+    (Concrete.leafIndexAt index bottomLayer) message
+    (signature.layers bottomLayer).counter
+    entry.layer entry.zero entry.tree entry.leaf witness entry.payload
+    counterWord ready.2.2.1 ready.2.2.2.1
+
+#print axioms bottom_small_of_entry
+#print axioms bottom_query_of_entry
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
