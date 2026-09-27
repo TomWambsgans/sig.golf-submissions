@@ -9407,3 +9407,147 @@ theorem signer_signed_chain_body (hash : Hash) (s : MachineState)
 
 #print axioms signer_signed_chain_body
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+theorem signer_five_layer_loop_slice (location : Fin 5) :
+    (SphincsMaskedImages.sign.code.drop
+      ((0x3ac8 - 0x1000) / 4 + signerShiftWords location)).take
+      ((0x3e38 - 0x3ac8) / 4) =
+    (SphincsMaskedImages.sign.code.drop ((0x3ac8 - 0x1000) / 4)).take
+      ((0x3e38 - 0x3ac8) / 4) := by
+  fin_cases location <;> simp_all [signerShiftWords, SphincsMaskedSignOtsParents.offset,
+    SphincsMaskedSignOtsShift.chainOffset] <;> rfl
+
+#print axioms signer_five_layer_loop_slice
+
+theorem signer_five_layer_loop_word (location : Fin 5) (i : Fin 220) :
+    SphincsMaskedImages.sign.code[
+      (0x3ac8 - 0x1000) / 4 + signerShiftWords location + i.val]? =
+    SphincsMaskedImages.sign.code[(0x3ac8 - 0x1000) / 4 + i.val]? := by
+  have e := congrArg (fun words : List (BitVec 32) => words[i.val]?)
+    (signer_five_layer_loop_slice location)
+  simpa only [List.getElem?_take_of_lt i.isLt, List.getElem?_drop] using e
+
+theorem signer_five_layer_instruction_transfer_loop (location : Fin 5)
+    (pc : Word) (lower : 0x3ac8 ≤ pc.toNat) (upper : pc.toNat < 0x3e38)
+    (aligned : pc.toNat % 4 = 0) :
+    instructionAt SphincsMaskedImages.sign (pc + signerShiftBytes location) =
+      instructionAt SphincsMaskedImages.sign pc := by
+  let i : Fin 220 := ⟨(pc.toNat - 0x3ac8) / 4, by omega⟩
+  have bounded := signer_shift_bound location
+  have original : pc = BitVec.ofNat 64 (0x1000 +
+      4 * ((0x3ac8 - 0x1000) / 4 + i.val)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp [i]; omega)]
+    dsimp [i]
+    omega
+  have translated : pc + signerShiftBytes location =
+      BitVec.ofNat 64 (0x1000 +
+        4 * ((0x3ac8 - 0x1000) / 4 + signerShiftWords location + i.val)) := by
+    rw [original, signerShiftBytes, ← BitVec.ofNat_add]
+    congr 1
+    omega
+  rw [translated,
+    SphincsMaskedSignOtsShift.fetch_index _ _ (by omega), original,
+    SphincsMaskedSignOtsShift.fetch_index _ _ (by omega),
+    signer_five_layer_loop_word location i]
+
+#print axioms signer_five_layer_instruction_transfer_loop
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+theorem signer_block_shift_loop (location : Fin 5)
+    (code : List (Word × Instr))
+    (ok : ∀ e ∈ code, signerSupported e.2)
+    (inside : ∀ e ∈ code,
+      0x3ac8 ≤ e.1.toNat ∧ e.1.toNat < 0x3e38 ∧ e.1.toNat % 4 = 0)
+    (encoded : ∀ e ∈ code,
+      instructionAt SphincsMaskedImages.sign e.1 = some (.base e.2))
+    (s : MachineState) (checked : Checked code s) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      code.length
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (runSchedule code s)) := by
+  let delta := signerShiftBytes location
+  have encodedShift : ∀ e ∈ code,
+      instructionAt SphincsMaskedImages.sign (e.1 + delta) =
+        some (.base e.2) := by
+    intro e he
+    have bounds := inside e he
+    rw [signer_five_layer_instruction_transfer_loop location e.1
+      bounds.1 bounds.2.1 bounds.2.2]
+    exact encoded e he
+  have run := checked_sound SphincsMaskedImages.sign
+    (SphincsMaskedSignOtsShift.schedule delta code) (by
+      intro e he
+      obtain ⟨original, member, rfl⟩ := List.mem_map.mp he
+      exact encodedShift original member) _
+      (signer_checked_shift delta code ok s checked)
+  rw [signer_run_shift delta code ok s] at run
+  simpa only [SphincsMaskedSignOtsShift.schedule, List.length_map] using run
+
+#print axioms signer_block_shift_loop
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy SphincsMaskedKeygenPrefix
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_next_shift_loop (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3dec) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      19
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomNext s)) := by
+  have support : ∀ e ∈ firstBottomNextCode, signerSupported e.2 := by
+    have base : ∀ e ∈ firstBottomNextCode,
+        SphincsMaskedSignOtsShift.Supported e.2 := by decide
+    intro e he
+    exact Or.inl (base e he)
+  have inside : ∀ e ∈ firstBottomNextCode,
+      0x3ac8 ≤ e.1.toNat ∧ e.1.toNat < 0x3e38 ∧ e.1.toNat % 4 = 0 := by decide
+  have run := signer_block_shift_loop location firstBottomNextCode support
+    inside first_bottom_next_code s (first_bottom_next_checked s pc)
+  simpa [firstBottomNext, firstBottomNextCode] using run
+
+#print axioms signer_next_shift_loop
+
+theorem signer_repeat_shift_loop (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3ac8) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      16
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (firstBottomSecretRepeat s)) := by
+  have support : ∀ e ∈ firstBottomSecretRepeatCode, signerSupported e.2 := by
+    have base : ∀ e ∈ firstBottomSecretRepeatCode,
+        SphincsMaskedSignOtsShift.Supported e.2 := by decide
+    intro e he
+    exact Or.inl (base e he)
+  have inside : ∀ e ∈ firstBottomSecretRepeatCode,
+      0x3ac8 ≤ e.1.toNat ∧ e.1.toNat < 0x3e38 ∧ e.1.toNat % 4 = 0 := by decide
+  have run := signer_block_shift_loop location firstBottomSecretRepeatCode support
+    inside first_bottom_secret_repeat_code s (first_bottom_secret_repeat_checked s pc)
+  simpa only [firstBottomSecretRepeat,
+    show firstBottomSecretRepeatCode.length = 16 by decide] using run
+
+#print axioms signer_repeat_shift_loop
+
+theorem signer_secret_copy_code_shift_loop (location : Fin 5) :
+    CopyCode SphincsMaskedImages.sign (0x3b08 + signerShiftBytes location) := by
+  fin_cases location <;> decide
+
+#print axioms signer_secret_copy_code_shift_loop
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
