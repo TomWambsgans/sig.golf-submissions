@@ -1,0 +1,283 @@
+        ; copy S into the prf buffer
+start:
+      0 08003083  ld ra, 128(x0)
+      1 6e103823  sd ra, 1776(x0)
+      2 08803083  ld ra, 136(x0)
+      3 6e103c23  sd ra, 1784(x0)
+      4 09003083  ld ra, 144(x0)
+      5 70103023  sd ra, 1792(x0)
+      6 09803083  ld ra, 152(x0)
+      7 70103423  sd ra, 1800(x0)
+      8 00000413  addi s0, x0, 0
+      9 00000f13  addi t5, x0, 0
+     10 00b00493  addi s1, x0, 11
+        ; tree build: tweak words
+     11 000809b7  lui s3, 0x80
+     12 01041193  slli gp, s0, 16
+     13 0011ee93  ori t4, gp, 1
+     14 6dd03823  sd t4, 1744(x0)
+     15 1011ee93  ori t4, gp, 257
+     16 0dd02023  sw t4, 192(x0)
+     17 2011ee93  ori t4, gp, 513
+     18 35d03023  sd t4, 832(x0)
+     19 00100193  addi gp, x0, 1
+     20 009198b3  sll a7, gp, s1
+     21 00000a13  addi s4, x0, 0
+     22 0c003823  sd x0, 208(x0)
+     23 0c003c23  sd x0, 216(x0)
+     24 0e003023  sd x0, 224(x0)
+     25 0e003423  sd x0, 232(x0)
+tb_leaf_loop:
+     26 020a1193  slli gp, s4, 32
+     27 01e1e1b3  or gp, gp, t5
+     28 6c303c23  sd gp, 1752(x0)
+     29 0c303423  sd gp, 200(x0)
+     30 34303423  sd gp, 840(x0)
+     31 0002feb7  lui t4, 0x2f
+     32 800e8e93  addi t4, t4, -2048
+     33 00000193  addi gp, x0, 0
+stream_1:
+     34 6c302a23  sw gp, 1748(x0)
+     35 6d000513  addi a0, x0, 1744
+     36 04000593  addi a1, x0, 64
+     37 00519613  slli a2, gp, 5
+     38 01d60633  add a2, a2, t4
+     39 00000073  ecall
+     40 00118193  addi gp, gp, 1
+     41 01700213  addi tp, x0, 23
+     42 fe4190e3  bne gp, tp, -32
+     43 00000a93  addi s5, x0, 0
+tb_chain_loop:
+     44 004a9213  slli tp, s5, 4
+     45 01520233  add tp, tp, s5
+     46 0002f1b7  lui gp, 0x2f
+     47 80018193  addi gp, gp, -2048
+     48 00320233  add tp, tp, gp
+     49 00024083  lbu ra, 0(tp)
+     50 0e100823  sb ra, 240(x0)
+     51 00124083  lbu ra, 1(tp)
+     52 0e1008a3  sb ra, 241(x0)
+     53 00224083  lbu ra, 2(tp)
+     54 0e100923  sb ra, 242(x0)
+     55 00324083  lbu ra, 3(tp)
+     56 0e1009a3  sb ra, 243(x0)
+     57 00424083  lbu ra, 4(tp)
+     58 0e100a23  sb ra, 244(x0)
+     59 00524083  lbu ra, 5(tp)
+     60 0e100aa3  sb ra, 245(x0)
+     61 00624083  lbu ra, 6(tp)
+     62 0e100b23  sb ra, 246(x0)
+     63 00724083  lbu ra, 7(tp)
+     64 0e100ba3  sb ra, 247(x0)
+     65 00824083  lbu ra, 8(tp)
+     66 0e100c23  sb ra, 248(x0)
+     67 00924083  lbu ra, 9(tp)
+     68 0e100ca3  sb ra, 249(x0)
+     69 00a24083  lbu ra, 10(tp)
+     70 0e100d23  sb ra, 250(x0)
+     71 00b24083  lbu ra, 11(tp)
+     72 0e100da3  sb ra, 251(x0)
+     73 00c24083  lbu ra, 12(tp)
+     74 0e100e23  sb ra, 252(x0)
+     75 00d24083  lbu ra, 13(tp)
+     76 0e100ea3  sb ra, 253(x0)
+     77 00e24083  lbu ra, 14(tp)
+     78 0e100f23  sb ra, 254(x0)
+     79 00f24083  lbu ra, 15(tp)
+     80 0e100fa3  sb ra, 255(x0)
+     81 01024083  lbu ra, 16(tp)
+     82 0e1007a3  sb ra, 239(x0)
+     83 00000b93  addi s7, x0, 0
+tb_step_loop:
+     84 001b8b93  addi s7, s7, 1
+     85 008a9193  slli gp, s5, 8
+     86 017181b3  add gp, gp, s7
+     87 fff18193  addi gp, gp, -1
+     88 0c302223  sw gp, 196(x0)
+     89 0c000513  addi a0, x0, 192
+     90 04000593  addi a1, x0, 64
+     91 0f000613  addi a2, x0, 240
+     92 00000073  ecall
+     93 10004183  lbu gp, 256(x0)
+     94 0e3007a3  sb gp, 239(x0)
+     95 00700193  addi gp, x0, 7
+     96 fc3b98e3  bne s7, gp, -48
+     97 004a9193  slli gp, s5, 4
+     98 0f003083  ld ra, 240(x0)
+     99 0f803103  ld sp, 248(x0)
+    100 3811b823  sd ra, 912(gp)
+    101 3821bc23  sd sp, 920(gp)
+    102 0ef04083  lbu ra, 239(x0)
+    103 341a8823  sb ra, 848(s5)
+    104 001a8a93  addi s5, s5, 1
+    105 02b00193  addi gp, x0, 43
+    106 f03a94e3  bne s5, gp, -248
+    107 34000513  addi a0, x0, 832
+    108 30000593  addi a1, x0, 768
+    109 005a1193  slli gp, s4, 5
+    110 00398633  add a2, s3, gp
+    111 00000073  ecall
+    112 001a0a13  addi s4, s4, 1
+    113 eb1a12e3  bne s4, a7, -348
+        ; tree build: levels
+    114 00a00e13  addi t3, x0, 10
+    115 00100793  addi a5, x0, 1
+tb_level_loop:
+    116 01041193  slli gp, s0, 16
+    117 3011e193  ori gp, gp, 769
+    118 1c303023  sd gp, 448(x0)
+    119 1de02423  sw t5, 456(x0)
+    120 00589193  slli gp, a7, 5
+    121 00398cb3  add s9, s3, gp
+    122 0018d893  srli a7, a7, 1
+    123 00000813  addi a6, x0, 0
+tb_node_loop:
+    124 01180133  add sp, a6, a7
+    125 1c202623  sw sp, 460(x0)
+    126 00681193  slli gp, a6, 6
+    127 013181b3  add gp, gp, s3
+    128 0001b083  ld ra, 0(gp)
+    129 1e103023  sd ra, 480(x0)
+    130 0201b083  ld ra, 32(gp)
+    131 1e103823  sd ra, 496(x0)
+    132 0081b083  ld ra, 8(gp)
+    133 1e103423  sd ra, 488(x0)
+    134 0281b083  ld ra, 40(gp)
+    135 1e103c23  sd ra, 504(x0)
+    136 0101c083  lbu ra, 16(gp)
+    137 0010f093  andi ra, ra, 1
+    138 1c100823  sb ra, 464(x0)
+    139 0301c083  lbu ra, 48(gp)
+    140 0010f093  andi ra, ra, 1
+    141 1c1008a3  sb ra, 465(x0)
+    142 1c000513  addi a0, x0, 448
+    143 04000593  addi a1, x0, 64
+    144 00581193  slli gp, a6, 5
+    145 003c8633  add a2, s9, gp
+    146 00000073  ecall
+    147 00180813  addi a6, a6, 1
+    148 fb1810e3  bne a6, a7, -96
+    149 000c8993  addi s3, s9, 0
+    150 00178793  addi a5, a5, 1
+    151 f6fe5ae3  bge t3, a5, -140
+        ; root search: p = sigma until the root answer bit 128 is 0
+    152 30100193  addi gp, x0, 769
+    153 1c303023  sd gp, 448(x0)
+    154 00100193  addi gp, x0, 1
+    155 02019193  slli gp, gp, 32
+    156 1c303423  sd gp, 456(x0)
+    157 0009b083  ld ra, 0(s3)
+    158 1e103023  sd ra, 480(x0)
+    159 0209b083  ld ra, 32(s3)
+    160 1e103823  sd ra, 496(x0)
+    161 0109c083  lbu ra, 16(s3)
+    162 0010f093  andi ra, ra, 1
+    163 1c100823  sb ra, 464(x0)
+    164 0089b083  ld ra, 8(s3)
+    165 1e103423  sd ra, 488(x0)
+    166 0289b083  ld ra, 40(s3)
+    167 1e103c23  sd ra, 504(x0)
+    168 0309c083  lbu ra, 48(s3)
+    169 0010f093  andi ra, ra, 1
+    170 1c1008a3  sb ra, 465(x0)
+    171 00000313  addi t1, x0, 0
+root_loop:
+    172 1c602223  sw t1, 452(x0)
+    173 1c000513  addi a0, x0, 448
+    174 04000593  addi a1, x0, 64
+    175 14000613  addi a2, x0, 320
+    176 00000073  ecall
+    177 15004183  lbu gp, 336(x0)
+    178 0011f193  andi gp, gp, 1
+    179 00018e63  beq gp, x0, +28
+    180 00130313  addi t1, t1, 1
+    181 10000193  addi gp, x0, 256
+    182 fc331ce3  bne t1, gp, -40
+    183 00100293  addi t0, x0, 1
+    184 00100513  addi a0, x0, 1
+    185 00000073  ecall
+root_ok:
+    186 14003083  ld ra, 320(x0)
+    187 14803103  ld sp, 328(x0)
+    188 0a103023  sd ra, 160(x0)
+    189 0a203423  sd sp, 168(x0)
+    190 000151b7  lui gp, 0x15
+    191 d5818193  addi gp, gp, -680
+    192 0061b023  sd t1, 0(gp)
+        ; masks: region node n = N_l + j: lo ^= mask.lo, b = (b ^ mask.b) & 1
+    193 00000a13  addi s4, x0, 0
+    194 000809b7  lui s3, 0x80
+    195 00000793  addi a5, x0, 0
+mask_level_loop:
+    196 00100193  addi gp, x0, 1
+    197 00b00e93  addi t4, x0, 11
+    198 40fe8eb3  sub t4, t4, a5
+    199 01d198b3  sll a7, gp, t4
+    200 00000813  addi a6, x0, 0
+mask_node_loop:
+    201 02079193  slli gp, a5, 32
+    202 68118193  addi gp, gp, 1665
+    203 68018193  addi gp, gp, 1664
+    204 6c303823  sd gp, 1744(x0)
+    205 02081193  slli gp, a6, 32
+    206 6c303c23  sd gp, 1752(x0)
+    207 6d000513  addi a0, x0, 1744
+    208 04000593  addi a1, x0, 64
+    209 14000613  addi a2, x0, 320
+    210 00000073  ecall
+    211 004a1193  slli gp, s4, 4
+    212 00004237  lui tp, 0x4
+    213 d7820213  addi tp, tp, -648
+    214 004181b3  add gp, gp, tp
+    215 005a1213  slli tp, s4, 5
+    216 01320233  add tp, tp, s3
+    217 00023083  ld ra, 0(tp)
+    218 14003103  ld sp, 320(x0)
+    219 0020c0b3  xor ra, ra, sp
+    220 0011b023  sd ra, 0(gp)
+    221 00823083  ld ra, 8(tp)
+    222 14803103  ld sp, 328(x0)
+    223 0020c0b3  xor ra, ra, sp
+    224 0011b423  sd ra, 8(gp)
+    225 01024083  lbu ra, 16(tp)
+    226 15004103  lbu sp, 336(x0)
+    227 0020c0b3  xor ra, ra, sp
+    228 0010f093  andi ra, ra, 1
+    229 000141b7  lui gp, 0x14
+    230 d5818193  addi gp, gp, -680
+    231 014181b3  add gp, gp, s4
+    232 00118023  sb ra, 0(gp)
+    233 001a0a13  addi s4, s4, 1
+    234 00180813  addi a6, a6, 1
+    235 f7181ce3  bne a6, a7, -136
+    236 00178793  addi a5, a5, 1
+    237 00b00193  addi gp, x0, 11
+    238 f4379ce3  bne a5, gp, -168
+        ; MAC query over the cache region (1089 blocks)
+    239 00004eb7  lui t4, 0x4
+    240 d58e8e93  addi t4, t4, -680
+    241 000011b7  lui gp, 0x1
+    242 e0118193  addi gp, gp, -511
+    243 fe3eb023  sd gp, -32(t4)
+    244 08003083  ld ra, 128(x0)
+    245 001eb023  sd ra, 0(t4)
+    246 08803083  ld ra, 136(x0)
+    247 001eb423  sd ra, 8(t4)
+    248 09003083  ld ra, 144(x0)
+    249 001eb823  sd ra, 16(t4)
+    250 09803083  ld ra, 152(x0)
+    251 001ebc23  sd ra, 24(t4)
+    252 000151b7  lui gp, 0x15
+    253 d6018193  addi gp, gp, -672
+    254 0001b023  sd x0, 0(gp)
+    255 0001b423  sd x0, 8(gp)
+    256 0001b823  sd x0, 16(gp)
+    257 fe0e8513  addi a0, t4, -32
+    258 000115b7  lui a1, 0x11
+    259 04058593  addi a1, a1, 64
+    260 00004637  lui a2, 0x4
+    261 d5860613  addi a2, a2, -680
+    262 00000073  ecall
+    263 00100293  addi t0, x0, 1
+    264 00000513  addi a0, x0, 0
+    265 00000073  ecall

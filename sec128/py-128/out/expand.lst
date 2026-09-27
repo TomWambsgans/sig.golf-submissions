@@ -1,0 +1,1241 @@
+start:
+      0 00001937  lui s2, 0x1
+      1 80090913  addi s2, s2, -2048
+      2 000029b7  lui s3, 0x2
+      3 2f898993  addi s3, s3, 760
+      4 34200313  addi t1, x0, 834
+copy:
+      5 0009b183  ld gp, 0(s3)
+      6 00393023  sd gp, 0(s2)
+      7 00898993  addi s3, s3, 8
+      8 00890913  addi s2, s2, 8
+      9 fff30313  addi t1, t1, -1
+     10 fe0316e3  bne t1, x0, -20
+     11 0009c183  lbu gp, 0(s3)
+     12 00390023  sb gp, 0(s2)
+     13 0019c183  lbu gp, 1(s3)
+     14 003900a3  sb gp, 1(s2)
+     15 0029c183  lbu gp, 2(s3)
+     16 00390123  sb gp, 2(s2)
+     17 0039c183  lbu gp, 3(s3)
+     18 003901a3  sb gp, 3(s2)
+     19 0049c183  lbu gp, 4(s3)
+     20 00390223  sb gp, 4(s2)
+     21 0059c183  lbu gp, 5(s3)
+     22 003902a3  sb gp, 5(s2)
+     23 0069c183  lbu gp, 6(s3)
+     24 00390323  sb gp, 6(s2)
+     25 000041b7  lui gp, 0x4
+     26 d3718193  addi gp, gp, -713
+     27 0001c183  lbu gp, 0(gp)
+     28 0071d193  srli gp, gp, 7
+     29 00018863  beq gp, x0, +16
+     30 00100293  addi t0, x0, 1
+     31 00100513  addi a0, x0, 1
+     32 00000073  ecall
+spare_ok:
+     33 00000a13  addi s4, x0, 0
+     34 00001eb7  lui t4, 0x1
+     35 800e8e93  addi t4, t4, -2048
+     36 00002e37  lui t3, 0x2
+     37 a18e0e13  addi t3, t3, -1512
+     38 01de0e33  add t3, t3, t4
+     39 00000493  addi s1, x0, 0
+     40 00100893  addi a7, x0, 1
+     41 258010ef  jal ra, +4696
+     42 00002e37  lui t3, 0x2
+     43 a1ce0e13  addi t3, t3, -1508
+     44 01de0e33  add t3, t3, t4
+     45 00100493  addi s1, x0, 1
+     46 01400893  addi a7, x0, 20
+     47 240010ef  jal ra, +4672
+     48 00002e37  lui t3, 0x2
+     49 a34e0e13  addi t3, t3, -1484
+     50 01de0e33  add t3, t3, t4
+     51 00100493  addi s1, x0, 1
+     52 00800893  addi a7, x0, 8
+     53 228010ef  jal ra, +4648
+     54 00002e37  lui t3, 0x2
+     55 a20e0e13  addi t3, t3, -1504
+     56 01de0e33  add t3, t3, t4
+     57 00100493  addi s1, x0, 1
+     58 01600893  addi a7, x0, 22
+     59 210010ef  jal ra, +4624
+     60 00002e37  lui t3, 0x2
+     61 a24e0e13  addi t3, t3, -1500
+     62 01de0e33  add t3, t3, t4
+     63 00100493  addi s1, x0, 1
+     64 01600893  addi a7, x0, 22
+     65 1f8010ef  jal ra, +4600
+     66 00002e37  lui t3, 0x2
+     67 a28e0e13  addi t3, t3, -1496
+     68 01de0e33  add t3, t3, t4
+     69 00100493  addi s1, x0, 1
+     70 01600893  addi a7, x0, 22
+     71 1e0010ef  jal ra, +4576
+     72 00002e37  lui t3, 0x2
+     73 a2ce0e13  addi t3, t3, -1492
+     74 01de0e33  add t3, t3, t4
+     75 00100493  addi s1, x0, 1
+     76 01600893  addi a7, x0, 22
+     77 1c8010ef  jal ra, +4552
+     78 00002e37  lui t3, 0x2
+     79 a30e0e13  addi t3, t3, -1488
+     80 01de0e33  add t3, t3, t4
+     81 00100493  addi s1, x0, 1
+     82 01600893  addi a7, x0, 22
+     83 1b0010ef  jal ra, +4528
+     84 00002e37  lui t3, 0x2
+     85 a38e0e13  addi t3, t3, -1480
+     86 01de0e33  add t3, t3, t4
+     87 00000493  addi s1, x0, 0
+     88 00100893  addi a7, x0, 1
+     89 198010ef  jal ra, +4504
+     90 00002e37  lui t3, 0x2
+     91 a39e0e13  addi t3, t3, -1479
+     92 01de0e33  add t3, t3, t4
+     93 00000493  addi s1, x0, 0
+     94 00100893  addi a7, x0, 1
+     95 180010ef  jal ra, +4480
+     96 00002e37  lui t3, 0x2
+     97 a3ae0e13  addi t3, t3, -1478
+     98 01de0e33  add t3, t3, t4
+     99 00000493  addi s1, x0, 0
+    100 00100893  addi a7, x0, 1
+    101 168010ef  jal ra, +4456
+    102 00002e37  lui t3, 0x2
+    103 a3be0e13  addi t3, t3, -1477
+    104 01de0e33  add t3, t3, t4
+    105 00000493  addi s1, x0, 0
+    106 00100893  addi a7, x0, 1
+    107 150010ef  jal ra, +4432
+    108 00002e37  lui t3, 0x2
+    109 a3ce0e13  addi t3, t3, -1476
+    110 01de0e33  add t3, t3, t4
+    111 00000493  addi s1, x0, 0
+    112 00100893  addi a7, x0, 1
+    113 138010ef  jal ra, +4408
+    114 00002e37  lui t3, 0x2
+    115 a3de0e13  addi t3, t3, -1475
+    116 01de0e33  add t3, t3, t4
+    117 00000493  addi s1, x0, 0
+    118 00100893  addi a7, x0, 1
+    119 120010ef  jal ra, +4384
+    120 00002e37  lui t3, 0x2
+    121 a3ee0e13  addi t3, t3, -1474
+    122 01de0e33  add t3, t3, t4
+    123 00000493  addi s1, x0, 0
+    124 00100893  addi a7, x0, 1
+    125 108010ef  jal ra, +4360
+    126 00002e37  lui t3, 0x2
+    127 a3fe0e13  addi t3, t3, -1473
+    128 01de0e33  add t3, t3, t4
+    129 00000493  addi s1, x0, 0
+    130 00100893  addi a7, x0, 1
+    131 0f0010ef  jal ra, +4336
+    132 00002e37  lui t3, 0x2
+    133 a40e0e13  addi t3, t3, -1472
+    134 01de0e33  add t3, t3, t4
+    135 00000493  addi s1, x0, 0
+    136 00100893  addi a7, x0, 1
+    137 0d8010ef  jal ra, +4312
+    138 00002e37  lui t3, 0x2
+    139 a41e0e13  addi t3, t3, -1471
+    140 01de0e33  add t3, t3, t4
+    141 00000493  addi s1, x0, 0
+    142 00100893  addi a7, x0, 1
+    143 0c0010ef  jal ra, +4288
+    144 00002e37  lui t3, 0x2
+    145 a42e0e13  addi t3, t3, -1470
+    146 01de0e33  add t3, t3, t4
+    147 00000493  addi s1, x0, 0
+    148 00100893  addi a7, x0, 1
+    149 0a8010ef  jal ra, +4264
+    150 00002e37  lui t3, 0x2
+    151 a43e0e13  addi t3, t3, -1469
+    152 01de0e33  add t3, t3, t4
+    153 00000493  addi s1, x0, 0
+    154 00100893  addi a7, x0, 1
+    155 090010ef  jal ra, +4240
+    156 00002e37  lui t3, 0x2
+    157 a44e0e13  addi t3, t3, -1468
+    158 01de0e33  add t3, t3, t4
+    159 00000493  addi s1, x0, 0
+    160 00100893  addi a7, x0, 1
+    161 078010ef  jal ra, +4216
+    162 00002e37  lui t3, 0x2
+    163 a45e0e13  addi t3, t3, -1467
+    164 01de0e33  add t3, t3, t4
+    165 00000493  addi s1, x0, 0
+    166 00100893  addi a7, x0, 1
+    167 060010ef  jal ra, +4192
+    168 00002e37  lui t3, 0x2
+    169 a46e0e13  addi t3, t3, -1466
+    170 01de0e33  add t3, t3, t4
+    171 00000493  addi s1, x0, 0
+    172 00100893  addi a7, x0, 1
+    173 048010ef  jal ra, +4168
+    174 00002e37  lui t3, 0x2
+    175 a47e0e13  addi t3, t3, -1465
+    176 01de0e33  add t3, t3, t4
+    177 00000493  addi s1, x0, 0
+    178 00100893  addi a7, x0, 1
+    179 030010ef  jal ra, +4144
+    180 00002e37  lui t3, 0x2
+    181 a48e0e13  addi t3, t3, -1464
+    182 01de0e33  add t3, t3, t4
+    183 00000493  addi s1, x0, 0
+    184 00100893  addi a7, x0, 1
+    185 018010ef  jal ra, +4120
+    186 00002e37  lui t3, 0x2
+    187 a49e0e13  addi t3, t3, -1463
+    188 01de0e33  add t3, t3, t4
+    189 00000493  addi s1, x0, 0
+    190 00100893  addi a7, x0, 1
+    191 000010ef  jal ra, +4096
+    192 00002e37  lui t3, 0x2
+    193 a4ae0e13  addi t3, t3, -1462
+    194 01de0e33  add t3, t3, t4
+    195 00000493  addi s1, x0, 0
+    196 00100893  addi a7, x0, 1
+    197 7e9000ef  jal ra, +4072
+    198 00002e37  lui t3, 0x2
+    199 a4be0e13  addi t3, t3, -1461
+    200 01de0e33  add t3, t3, t4
+    201 00000493  addi s1, x0, 0
+    202 00100893  addi a7, x0, 1
+    203 7d1000ef  jal ra, +4048
+    204 00002e37  lui t3, 0x2
+    205 a4ce0e13  addi t3, t3, -1460
+    206 01de0e33  add t3, t3, t4
+    207 00000493  addi s1, x0, 0
+    208 00100893  addi a7, x0, 1
+    209 7b9000ef  jal ra, +4024
+    210 00002e37  lui t3, 0x2
+    211 a4de0e13  addi t3, t3, -1459
+    212 01de0e33  add t3, t3, t4
+    213 00000493  addi s1, x0, 0
+    214 00100893  addi a7, x0, 1
+    215 7a1000ef  jal ra, +4000
+    216 00002e37  lui t3, 0x2
+    217 a4ee0e13  addi t3, t3, -1458
+    218 01de0e33  add t3, t3, t4
+    219 00000493  addi s1, x0, 0
+    220 00100893  addi a7, x0, 1
+    221 789000ef  jal ra, +3976
+    222 00002e37  lui t3, 0x2
+    223 a4fe0e13  addi t3, t3, -1457
+    224 01de0e33  add t3, t3, t4
+    225 00000493  addi s1, x0, 0
+    226 00100893  addi a7, x0, 1
+    227 771000ef  jal ra, +3952
+    228 00002e37  lui t3, 0x2
+    229 a50e0e13  addi t3, t3, -1456
+    230 01de0e33  add t3, t3, t4
+    231 00000493  addi s1, x0, 0
+    232 00100893  addi a7, x0, 1
+    233 759000ef  jal ra, +3928
+    234 00002e37  lui t3, 0x2
+    235 a51e0e13  addi t3, t3, -1455
+    236 01de0e33  add t3, t3, t4
+    237 00000493  addi s1, x0, 0
+    238 00100893  addi a7, x0, 1
+    239 741000ef  jal ra, +3904
+    240 00002e37  lui t3, 0x2
+    241 a52e0e13  addi t3, t3, -1454
+    242 01de0e33  add t3, t3, t4
+    243 00000493  addi s1, x0, 0
+    244 00100893  addi a7, x0, 1
+    245 729000ef  jal ra, +3880
+    246 00002e37  lui t3, 0x2
+    247 a53e0e13  addi t3, t3, -1453
+    248 01de0e33  add t3, t3, t4
+    249 00000493  addi s1, x0, 0
+    250 00100893  addi a7, x0, 1
+    251 711000ef  jal ra, +3856
+    252 00002e37  lui t3, 0x2
+    253 a54e0e13  addi t3, t3, -1452
+    254 01de0e33  add t3, t3, t4
+    255 00000493  addi s1, x0, 0
+    256 00100893  addi a7, x0, 1
+    257 6f9000ef  jal ra, +3832
+    258 00002e37  lui t3, 0x2
+    259 a55e0e13  addi t3, t3, -1451
+    260 01de0e33  add t3, t3, t4
+    261 00000493  addi s1, x0, 0
+    262 00100893  addi a7, x0, 1
+    263 6e1000ef  jal ra, +3808
+    264 00002e37  lui t3, 0x2
+    265 a56e0e13  addi t3, t3, -1450
+    266 01de0e33  add t3, t3, t4
+    267 00000493  addi s1, x0, 0
+    268 00100893  addi a7, x0, 1
+    269 6c9000ef  jal ra, +3784
+    270 00002e37  lui t3, 0x2
+    271 a57e0e13  addi t3, t3, -1449
+    272 01de0e33  add t3, t3, t4
+    273 00000493  addi s1, x0, 0
+    274 00100893  addi a7, x0, 1
+    275 6b1000ef  jal ra, +3760
+    276 00002e37  lui t3, 0x2
+    277 a58e0e13  addi t3, t3, -1448
+    278 01de0e33  add t3, t3, t4
+    279 00000493  addi s1, x0, 0
+    280 00100893  addi a7, x0, 1
+    281 699000ef  jal ra, +3736
+    282 00002e37  lui t3, 0x2
+    283 a59e0e13  addi t3, t3, -1447
+    284 01de0e33  add t3, t3, t4
+    285 00000493  addi s1, x0, 0
+    286 00100893  addi a7, x0, 1
+    287 681000ef  jal ra, +3712
+    288 00002e37  lui t3, 0x2
+    289 a5ae0e13  addi t3, t3, -1446
+    290 01de0e33  add t3, t3, t4
+    291 00000493  addi s1, x0, 0
+    292 00100893  addi a7, x0, 1
+    293 669000ef  jal ra, +3688
+    294 00002e37  lui t3, 0x2
+    295 a5be0e13  addi t3, t3, -1445
+    296 01de0e33  add t3, t3, t4
+    297 00000493  addi s1, x0, 0
+    298 00100893  addi a7, x0, 1
+    299 651000ef  jal ra, +3664
+    300 00002e37  lui t3, 0x2
+    301 a5ce0e13  addi t3, t3, -1444
+    302 01de0e33  add t3, t3, t4
+    303 00000493  addi s1, x0, 0
+    304 00100893  addi a7, x0, 1
+    305 639000ef  jal ra, +3640
+    306 00002e37  lui t3, 0x2
+    307 a5de0e13  addi t3, t3, -1443
+    308 01de0e33  add t3, t3, t4
+    309 00000493  addi s1, x0, 0
+    310 00100893  addi a7, x0, 1
+    311 621000ef  jal ra, +3616
+    312 00002e37  lui t3, 0x2
+    313 a5ee0e13  addi t3, t3, -1442
+    314 01de0e33  add t3, t3, t4
+    315 00000493  addi s1, x0, 0
+    316 00100893  addi a7, x0, 1
+    317 609000ef  jal ra, +3592
+    318 00002e37  lui t3, 0x2
+    319 a5fe0e13  addi t3, t3, -1441
+    320 01de0e33  add t3, t3, t4
+    321 00000493  addi s1, x0, 0
+    322 00100893  addi a7, x0, 1
+    323 5f1000ef  jal ra, +3568
+    324 00002e37  lui t3, 0x2
+    325 a60e0e13  addi t3, t3, -1440
+    326 01de0e33  add t3, t3, t4
+    327 00000493  addi s1, x0, 0
+    328 00100893  addi a7, x0, 1
+    329 5d9000ef  jal ra, +3544
+    330 00002e37  lui t3, 0x2
+    331 a61e0e13  addi t3, t3, -1439
+    332 01de0e33  add t3, t3, t4
+    333 00000493  addi s1, x0, 0
+    334 00100893  addi a7, x0, 1
+    335 5c1000ef  jal ra, +3520
+    336 00002e37  lui t3, 0x2
+    337 a62e0e13  addi t3, t3, -1438
+    338 01de0e33  add t3, t3, t4
+    339 00000493  addi s1, x0, 0
+    340 00100893  addi a7, x0, 1
+    341 5a9000ef  jal ra, +3496
+    342 00002e37  lui t3, 0x2
+    343 a63e0e13  addi t3, t3, -1437
+    344 01de0e33  add t3, t3, t4
+    345 00000493  addi s1, x0, 0
+    346 00100893  addi a7, x0, 1
+    347 591000ef  jal ra, +3472
+    348 00002e37  lui t3, 0x2
+    349 a64e0e13  addi t3, t3, -1436
+    350 01de0e33  add t3, t3, t4
+    351 00000493  addi s1, x0, 0
+    352 00100893  addi a7, x0, 1
+    353 579000ef  jal ra, +3448
+    354 00002e37  lui t3, 0x2
+    355 a65e0e13  addi t3, t3, -1435
+    356 01de0e33  add t3, t3, t4
+    357 00000493  addi s1, x0, 0
+    358 00100893  addi a7, x0, 1
+    359 561000ef  jal ra, +3424
+    360 00002e37  lui t3, 0x2
+    361 a66e0e13  addi t3, t3, -1434
+    362 01de0e33  add t3, t3, t4
+    363 00000493  addi s1, x0, 0
+    364 00100893  addi a7, x0, 1
+    365 549000ef  jal ra, +3400
+    366 00002e37  lui t3, 0x2
+    367 a67e0e13  addi t3, t3, -1433
+    368 01de0e33  add t3, t3, t4
+    369 00000493  addi s1, x0, 0
+    370 00100893  addi a7, x0, 1
+    371 531000ef  jal ra, +3376
+    372 00002e37  lui t3, 0x2
+    373 a68e0e13  addi t3, t3, -1432
+    374 01de0e33  add t3, t3, t4
+    375 00000493  addi s1, x0, 0
+    376 00100893  addi a7, x0, 1
+    377 519000ef  jal ra, +3352
+    378 00002e37  lui t3, 0x2
+    379 a69e0e13  addi t3, t3, -1431
+    380 01de0e33  add t3, t3, t4
+    381 00000493  addi s1, x0, 0
+    382 00100893  addi a7, x0, 1
+    383 501000ef  jal ra, +3328
+    384 00002e37  lui t3, 0x2
+    385 a6ae0e13  addi t3, t3, -1430
+    386 01de0e33  add t3, t3, t4
+    387 00000493  addi s1, x0, 0
+    388 00100893  addi a7, x0, 1
+    389 4e9000ef  jal ra, +3304
+    390 00002e37  lui t3, 0x2
+    391 a6be0e13  addi t3, t3, -1429
+    392 01de0e33  add t3, t3, t4
+    393 00000493  addi s1, x0, 0
+    394 00100893  addi a7, x0, 1
+    395 4d1000ef  jal ra, +3280
+    396 00002e37  lui t3, 0x2
+    397 a6ce0e13  addi t3, t3, -1428
+    398 01de0e33  add t3, t3, t4
+    399 00000493  addi s1, x0, 0
+    400 00100893  addi a7, x0, 1
+    401 4b9000ef  jal ra, +3256
+    402 00002e37  lui t3, 0x2
+    403 a6de0e13  addi t3, t3, -1427
+    404 01de0e33  add t3, t3, t4
+    405 00000493  addi s1, x0, 0
+    406 00100893  addi a7, x0, 1
+    407 4a1000ef  jal ra, +3232
+    408 00002e37  lui t3, 0x2
+    409 a6ee0e13  addi t3, t3, -1426
+    410 01de0e33  add t3, t3, t4
+    411 00000493  addi s1, x0, 0
+    412 00100893  addi a7, x0, 1
+    413 489000ef  jal ra, +3208
+    414 00002e37  lui t3, 0x2
+    415 a6fe0e13  addi t3, t3, -1425
+    416 01de0e33  add t3, t3, t4
+    417 00000493  addi s1, x0, 0
+    418 00100893  addi a7, x0, 1
+    419 471000ef  jal ra, +3184
+    420 00002e37  lui t3, 0x2
+    421 a70e0e13  addi t3, t3, -1424
+    422 01de0e33  add t3, t3, t4
+    423 00000493  addi s1, x0, 0
+    424 00100893  addi a7, x0, 1
+    425 459000ef  jal ra, +3160
+    426 00002e37  lui t3, 0x2
+    427 a71e0e13  addi t3, t3, -1423
+    428 01de0e33  add t3, t3, t4
+    429 00000493  addi s1, x0, 0
+    430 00100893  addi a7, x0, 1
+    431 441000ef  jal ra, +3136
+    432 00002e37  lui t3, 0x2
+    433 a72e0e13  addi t3, t3, -1422
+    434 01de0e33  add t3, t3, t4
+    435 00000493  addi s1, x0, 0
+    436 00100893  addi a7, x0, 1
+    437 429000ef  jal ra, +3112
+    438 00002e37  lui t3, 0x2
+    439 a73e0e13  addi t3, t3, -1421
+    440 01de0e33  add t3, t3, t4
+    441 00000493  addi s1, x0, 0
+    442 00100893  addi a7, x0, 1
+    443 411000ef  jal ra, +3088
+    444 00002e37  lui t3, 0x2
+    445 a74e0e13  addi t3, t3, -1420
+    446 01de0e33  add t3, t3, t4
+    447 00000493  addi s1, x0, 0
+    448 00100893  addi a7, x0, 1
+    449 3f9000ef  jal ra, +3064
+    450 00002e37  lui t3, 0x2
+    451 a75e0e13  addi t3, t3, -1419
+    452 01de0e33  add t3, t3, t4
+    453 00000493  addi s1, x0, 0
+    454 00100893  addi a7, x0, 1
+    455 3e1000ef  jal ra, +3040
+    456 00002e37  lui t3, 0x2
+    457 a76e0e13  addi t3, t3, -1418
+    458 01de0e33  add t3, t3, t4
+    459 00000493  addi s1, x0, 0
+    460 00100893  addi a7, x0, 1
+    461 3c9000ef  jal ra, +3016
+    462 00002e37  lui t3, 0x2
+    463 a77e0e13  addi t3, t3, -1417
+    464 01de0e33  add t3, t3, t4
+    465 00000493  addi s1, x0, 0
+    466 00100893  addi a7, x0, 1
+    467 3b1000ef  jal ra, +2992
+    468 00002e37  lui t3, 0x2
+    469 a78e0e13  addi t3, t3, -1416
+    470 01de0e33  add t3, t3, t4
+    471 00000493  addi s1, x0, 0
+    472 00100893  addi a7, x0, 1
+    473 399000ef  jal ra, +2968
+    474 00002e37  lui t3, 0x2
+    475 a79e0e13  addi t3, t3, -1415
+    476 01de0e33  add t3, t3, t4
+    477 00000493  addi s1, x0, 0
+    478 00100893  addi a7, x0, 1
+    479 381000ef  jal ra, +2944
+    480 00002e37  lui t3, 0x2
+    481 a7ae0e13  addi t3, t3, -1414
+    482 01de0e33  add t3, t3, t4
+    483 00000493  addi s1, x0, 0
+    484 00100893  addi a7, x0, 1
+    485 369000ef  jal ra, +2920
+    486 00002e37  lui t3, 0x2
+    487 a7be0e13  addi t3, t3, -1413
+    488 01de0e33  add t3, t3, t4
+    489 00000493  addi s1, x0, 0
+    490 00100893  addi a7, x0, 1
+    491 351000ef  jal ra, +2896
+    492 00002e37  lui t3, 0x2
+    493 a7ce0e13  addi t3, t3, -1412
+    494 01de0e33  add t3, t3, t4
+    495 00000493  addi s1, x0, 0
+    496 00100893  addi a7, x0, 1
+    497 339000ef  jal ra, +2872
+    498 00002e37  lui t3, 0x2
+    499 a7de0e13  addi t3, t3, -1411
+    500 01de0e33  add t3, t3, t4
+    501 00000493  addi s1, x0, 0
+    502 00100893  addi a7, x0, 1
+    503 321000ef  jal ra, +2848
+    504 00002e37  lui t3, 0x2
+    505 a7ee0e13  addi t3, t3, -1410
+    506 01de0e33  add t3, t3, t4
+    507 00000493  addi s1, x0, 0
+    508 00100893  addi a7, x0, 1
+    509 309000ef  jal ra, +2824
+    510 00002e37  lui t3, 0x2
+    511 a7fe0e13  addi t3, t3, -1409
+    512 01de0e33  add t3, t3, t4
+    513 00000493  addi s1, x0, 0
+    514 00100893  addi a7, x0, 1
+    515 2f1000ef  jal ra, +2800
+    516 00002e37  lui t3, 0x2
+    517 a80e0e13  addi t3, t3, -1408
+    518 01de0e33  add t3, t3, t4
+    519 00000493  addi s1, x0, 0
+    520 00100893  addi a7, x0, 1
+    521 2d9000ef  jal ra, +2776
+    522 00002e37  lui t3, 0x2
+    523 a81e0e13  addi t3, t3, -1407
+    524 01de0e33  add t3, t3, t4
+    525 00000493  addi s1, x0, 0
+    526 00100893  addi a7, x0, 1
+    527 2c1000ef  jal ra, +2752
+    528 00002e37  lui t3, 0x2
+    529 a82e0e13  addi t3, t3, -1406
+    530 01de0e33  add t3, t3, t4
+    531 00000493  addi s1, x0, 0
+    532 00100893  addi a7, x0, 1
+    533 2a9000ef  jal ra, +2728
+    534 00002e37  lui t3, 0x2
+    535 a83e0e13  addi t3, t3, -1405
+    536 01de0e33  add t3, t3, t4
+    537 00000493  addi s1, x0, 0
+    538 00100893  addi a7, x0, 1
+    539 291000ef  jal ra, +2704
+    540 00002e37  lui t3, 0x2
+    541 a84e0e13  addi t3, t3, -1404
+    542 01de0e33  add t3, t3, t4
+    543 00000493  addi s1, x0, 0
+    544 00100893  addi a7, x0, 1
+    545 279000ef  jal ra, +2680
+    546 00002e37  lui t3, 0x2
+    547 a85e0e13  addi t3, t3, -1403
+    548 01de0e33  add t3, t3, t4
+    549 00000493  addi s1, x0, 0
+    550 00100893  addi a7, x0, 1
+    551 261000ef  jal ra, +2656
+    552 00002e37  lui t3, 0x2
+    553 a86e0e13  addi t3, t3, -1402
+    554 01de0e33  add t3, t3, t4
+    555 00000493  addi s1, x0, 0
+    556 00100893  addi a7, x0, 1
+    557 249000ef  jal ra, +2632
+    558 00002e37  lui t3, 0x2
+    559 a87e0e13  addi t3, t3, -1401
+    560 01de0e33  add t3, t3, t4
+    561 00000493  addi s1, x0, 0
+    562 00100893  addi a7, x0, 1
+    563 231000ef  jal ra, +2608
+    564 00002e37  lui t3, 0x2
+    565 a88e0e13  addi t3, t3, -1400
+    566 01de0e33  add t3, t3, t4
+    567 00000493  addi s1, x0, 0
+    568 00100893  addi a7, x0, 1
+    569 219000ef  jal ra, +2584
+    570 00002e37  lui t3, 0x2
+    571 a89e0e13  addi t3, t3, -1399
+    572 01de0e33  add t3, t3, t4
+    573 00000493  addi s1, x0, 0
+    574 00100893  addi a7, x0, 1
+    575 201000ef  jal ra, +2560
+    576 00002e37  lui t3, 0x2
+    577 a8ae0e13  addi t3, t3, -1398
+    578 01de0e33  add t3, t3, t4
+    579 00000493  addi s1, x0, 0
+    580 00100893  addi a7, x0, 1
+    581 1e9000ef  jal ra, +2536
+    582 00002e37  lui t3, 0x2
+    583 a8be0e13  addi t3, t3, -1397
+    584 01de0e33  add t3, t3, t4
+    585 00000493  addi s1, x0, 0
+    586 00100893  addi a7, x0, 1
+    587 1d1000ef  jal ra, +2512
+    588 00002e37  lui t3, 0x2
+    589 a8ce0e13  addi t3, t3, -1396
+    590 01de0e33  add t3, t3, t4
+    591 00000493  addi s1, x0, 0
+    592 00100893  addi a7, x0, 1
+    593 1b9000ef  jal ra, +2488
+    594 00002e37  lui t3, 0x2
+    595 a8de0e13  addi t3, t3, -1395
+    596 01de0e33  add t3, t3, t4
+    597 00000493  addi s1, x0, 0
+    598 00100893  addi a7, x0, 1
+    599 1a1000ef  jal ra, +2464
+    600 00002e37  lui t3, 0x2
+    601 a8ee0e13  addi t3, t3, -1394
+    602 01de0e33  add t3, t3, t4
+    603 00000493  addi s1, x0, 0
+    604 00100893  addi a7, x0, 1
+    605 189000ef  jal ra, +2440
+    606 00002e37  lui t3, 0x2
+    607 a8fe0e13  addi t3, t3, -1393
+    608 01de0e33  add t3, t3, t4
+    609 00000493  addi s1, x0, 0
+    610 00100893  addi a7, x0, 1
+    611 171000ef  jal ra, +2416
+    612 00002e37  lui t3, 0x2
+    613 a90e0e13  addi t3, t3, -1392
+    614 01de0e33  add t3, t3, t4
+    615 00000493  addi s1, x0, 0
+    616 00100893  addi a7, x0, 1
+    617 159000ef  jal ra, +2392
+    618 00002e37  lui t3, 0x2
+    619 a91e0e13  addi t3, t3, -1391
+    620 01de0e33  add t3, t3, t4
+    621 00000493  addi s1, x0, 0
+    622 00100893  addi a7, x0, 1
+    623 141000ef  jal ra, +2368
+    624 00002e37  lui t3, 0x2
+    625 a92e0e13  addi t3, t3, -1390
+    626 01de0e33  add t3, t3, t4
+    627 00000493  addi s1, x0, 0
+    628 00100893  addi a7, x0, 1
+    629 129000ef  jal ra, +2344
+    630 00002e37  lui t3, 0x2
+    631 a93e0e13  addi t3, t3, -1389
+    632 01de0e33  add t3, t3, t4
+    633 00000493  addi s1, x0, 0
+    634 00100893  addi a7, x0, 1
+    635 111000ef  jal ra, +2320
+    636 00002e37  lui t3, 0x2
+    637 a94e0e13  addi t3, t3, -1388
+    638 01de0e33  add t3, t3, t4
+    639 00000493  addi s1, x0, 0
+    640 00100893  addi a7, x0, 1
+    641 0f9000ef  jal ra, +2296
+    642 00002e37  lui t3, 0x2
+    643 a95e0e13  addi t3, t3, -1387
+    644 01de0e33  add t3, t3, t4
+    645 00000493  addi s1, x0, 0
+    646 00100893  addi a7, x0, 1
+    647 0e1000ef  jal ra, +2272
+    648 00002e37  lui t3, 0x2
+    649 a96e0e13  addi t3, t3, -1386
+    650 01de0e33  add t3, t3, t4
+    651 00000493  addi s1, x0, 0
+    652 00100893  addi a7, x0, 1
+    653 0c9000ef  jal ra, +2248
+    654 00002e37  lui t3, 0x2
+    655 a97e0e13  addi t3, t3, -1385
+    656 01de0e33  add t3, t3, t4
+    657 00000493  addi s1, x0, 0
+    658 00100893  addi a7, x0, 1
+    659 0b1000ef  jal ra, +2224
+    660 00002e37  lui t3, 0x2
+    661 a98e0e13  addi t3, t3, -1384
+    662 01de0e33  add t3, t3, t4
+    663 00000493  addi s1, x0, 0
+    664 00100893  addi a7, x0, 1
+    665 099000ef  jal ra, +2200
+    666 00002e37  lui t3, 0x2
+    667 a99e0e13  addi t3, t3, -1383
+    668 01de0e33  add t3, t3, t4
+    669 00000493  addi s1, x0, 0
+    670 00100893  addi a7, x0, 1
+    671 081000ef  jal ra, +2176
+    672 00002e37  lui t3, 0x2
+    673 a9ae0e13  addi t3, t3, -1382
+    674 01de0e33  add t3, t3, t4
+    675 00000493  addi s1, x0, 0
+    676 00100893  addi a7, x0, 1
+    677 069000ef  jal ra, +2152
+    678 00002e37  lui t3, 0x2
+    679 a9be0e13  addi t3, t3, -1381
+    680 01de0e33  add t3, t3, t4
+    681 00000493  addi s1, x0, 0
+    682 00100893  addi a7, x0, 1
+    683 051000ef  jal ra, +2128
+    684 00002e37  lui t3, 0x2
+    685 a9ce0e13  addi t3, t3, -1380
+    686 01de0e33  add t3, t3, t4
+    687 00000493  addi s1, x0, 0
+    688 00100893  addi a7, x0, 1
+    689 039000ef  jal ra, +2104
+    690 00002e37  lui t3, 0x2
+    691 a9de0e13  addi t3, t3, -1379
+    692 01de0e33  add t3, t3, t4
+    693 00000493  addi s1, x0, 0
+    694 00100893  addi a7, x0, 1
+    695 021000ef  jal ra, +2080
+    696 00002e37  lui t3, 0x2
+    697 a9ee0e13  addi t3, t3, -1378
+    698 01de0e33  add t3, t3, t4
+    699 00000493  addi s1, x0, 0
+    700 00100893  addi a7, x0, 1
+    701 009000ef  jal ra, +2056
+    702 00002e37  lui t3, 0x2
+    703 a9fe0e13  addi t3, t3, -1377
+    704 01de0e33  add t3, t3, t4
+    705 00000493  addi s1, x0, 0
+    706 00100893  addi a7, x0, 1
+    707 7f0000ef  jal ra, +2032
+    708 00002e37  lui t3, 0x2
+    709 aa0e0e13  addi t3, t3, -1376
+    710 01de0e33  add t3, t3, t4
+    711 00000493  addi s1, x0, 0
+    712 00100893  addi a7, x0, 1
+    713 7d8000ef  jal ra, +2008
+    714 00002e37  lui t3, 0x2
+    715 aa1e0e13  addi t3, t3, -1375
+    716 01de0e33  add t3, t3, t4
+    717 00000493  addi s1, x0, 0
+    718 00100893  addi a7, x0, 1
+    719 7c0000ef  jal ra, +1984
+    720 00002e37  lui t3, 0x2
+    721 aa2e0e13  addi t3, t3, -1374
+    722 01de0e33  add t3, t3, t4
+    723 00000493  addi s1, x0, 0
+    724 00100893  addi a7, x0, 1
+    725 7a8000ef  jal ra, +1960
+    726 00002e37  lui t3, 0x2
+    727 aa3e0e13  addi t3, t3, -1373
+    728 01de0e33  add t3, t3, t4
+    729 00000493  addi s1, x0, 0
+    730 00100893  addi a7, x0, 1
+    731 790000ef  jal ra, +1936
+    732 00002e37  lui t3, 0x2
+    733 aa4e0e13  addi t3, t3, -1372
+    734 01de0e33  add t3, t3, t4
+    735 00000493  addi s1, x0, 0
+    736 00100893  addi a7, x0, 1
+    737 778000ef  jal ra, +1912
+    738 00002e37  lui t3, 0x2
+    739 aa5e0e13  addi t3, t3, -1371
+    740 01de0e33  add t3, t3, t4
+    741 00000493  addi s1, x0, 0
+    742 00100893  addi a7, x0, 1
+    743 760000ef  jal ra, +1888
+    744 00002e37  lui t3, 0x2
+    745 aa6e0e13  addi t3, t3, -1370
+    746 01de0e33  add t3, t3, t4
+    747 00000493  addi s1, x0, 0
+    748 00100893  addi a7, x0, 1
+    749 748000ef  jal ra, +1864
+    750 00002e37  lui t3, 0x2
+    751 aa7e0e13  addi t3, t3, -1369
+    752 01de0e33  add t3, t3, t4
+    753 00000493  addi s1, x0, 0
+    754 00100893  addi a7, x0, 1
+    755 730000ef  jal ra, +1840
+    756 00002e37  lui t3, 0x2
+    757 aa8e0e13  addi t3, t3, -1368
+    758 01de0e33  add t3, t3, t4
+    759 00000493  addi s1, x0, 0
+    760 00100893  addi a7, x0, 1
+    761 718000ef  jal ra, +1816
+    762 00002e37  lui t3, 0x2
+    763 aa9e0e13  addi t3, t3, -1367
+    764 01de0e33  add t3, t3, t4
+    765 00000493  addi s1, x0, 0
+    766 00100893  addi a7, x0, 1
+    767 700000ef  jal ra, +1792
+    768 00002e37  lui t3, 0x2
+    769 aaae0e13  addi t3, t3, -1366
+    770 01de0e33  add t3, t3, t4
+    771 00000493  addi s1, x0, 0
+    772 00100893  addi a7, x0, 1
+    773 6e8000ef  jal ra, +1768
+    774 00002e37  lui t3, 0x2
+    775 aabe0e13  addi t3, t3, -1365
+    776 01de0e33  add t3, t3, t4
+    777 00000493  addi s1, x0, 0
+    778 00100893  addi a7, x0, 1
+    779 6d0000ef  jal ra, +1744
+    780 00002e37  lui t3, 0x2
+    781 aace0e13  addi t3, t3, -1364
+    782 01de0e33  add t3, t3, t4
+    783 00000493  addi s1, x0, 0
+    784 00100893  addi a7, x0, 1
+    785 6b8000ef  jal ra, +1720
+    786 00002e37  lui t3, 0x2
+    787 aade0e13  addi t3, t3, -1363
+    788 01de0e33  add t3, t3, t4
+    789 00000493  addi s1, x0, 0
+    790 00100893  addi a7, x0, 1
+    791 6a0000ef  jal ra, +1696
+    792 00002e37  lui t3, 0x2
+    793 aaee0e13  addi t3, t3, -1362
+    794 01de0e33  add t3, t3, t4
+    795 00000493  addi s1, x0, 0
+    796 00100893  addi a7, x0, 1
+    797 688000ef  jal ra, +1672
+    798 00002e37  lui t3, 0x2
+    799 aafe0e13  addi t3, t3, -1361
+    800 01de0e33  add t3, t3, t4
+    801 00000493  addi s1, x0, 0
+    802 00100893  addi a7, x0, 1
+    803 670000ef  jal ra, +1648
+    804 00002e37  lui t3, 0x2
+    805 ab0e0e13  addi t3, t3, -1360
+    806 01de0e33  add t3, t3, t4
+    807 00000493  addi s1, x0, 0
+    808 00100893  addi a7, x0, 1
+    809 658000ef  jal ra, +1624
+    810 00002e37  lui t3, 0x2
+    811 ab1e0e13  addi t3, t3, -1359
+    812 01de0e33  add t3, t3, t4
+    813 00000493  addi s1, x0, 0
+    814 00100893  addi a7, x0, 1
+    815 640000ef  jal ra, +1600
+    816 00002e37  lui t3, 0x2
+    817 ab2e0e13  addi t3, t3, -1358
+    818 01de0e33  add t3, t3, t4
+    819 00000493  addi s1, x0, 0
+    820 00100893  addi a7, x0, 1
+    821 628000ef  jal ra, +1576
+    822 00002e37  lui t3, 0x2
+    823 ab3e0e13  addi t3, t3, -1357
+    824 01de0e33  add t3, t3, t4
+    825 00000493  addi s1, x0, 0
+    826 00100893  addi a7, x0, 1
+    827 610000ef  jal ra, +1552
+    828 00002e37  lui t3, 0x2
+    829 ab4e0e13  addi t3, t3, -1356
+    830 01de0e33  add t3, t3, t4
+    831 00000493  addi s1, x0, 0
+    832 00100893  addi a7, x0, 1
+    833 5f8000ef  jal ra, +1528
+    834 00002e37  lui t3, 0x2
+    835 ab5e0e13  addi t3, t3, -1355
+    836 01de0e33  add t3, t3, t4
+    837 00000493  addi s1, x0, 0
+    838 00100893  addi a7, x0, 1
+    839 5e0000ef  jal ra, +1504
+    840 00002e37  lui t3, 0x2
+    841 ab6e0e13  addi t3, t3, -1354
+    842 01de0e33  add t3, t3, t4
+    843 00000493  addi s1, x0, 0
+    844 00100893  addi a7, x0, 1
+    845 5c8000ef  jal ra, +1480
+    846 00002e37  lui t3, 0x2
+    847 ab7e0e13  addi t3, t3, -1353
+    848 01de0e33  add t3, t3, t4
+    849 00000493  addi s1, x0, 0
+    850 00100893  addi a7, x0, 1
+    851 5b0000ef  jal ra, +1456
+    852 00002e37  lui t3, 0x2
+    853 ab8e0e13  addi t3, t3, -1352
+    854 01de0e33  add t3, t3, t4
+    855 00000493  addi s1, x0, 0
+    856 00100893  addi a7, x0, 1
+    857 598000ef  jal ra, +1432
+    858 00002e37  lui t3, 0x2
+    859 ab9e0e13  addi t3, t3, -1351
+    860 01de0e33  add t3, t3, t4
+    861 00000493  addi s1, x0, 0
+    862 00100893  addi a7, x0, 1
+    863 580000ef  jal ra, +1408
+    864 00002e37  lui t3, 0x2
+    865 abae0e13  addi t3, t3, -1350
+    866 01de0e33  add t3, t3, t4
+    867 00000493  addi s1, x0, 0
+    868 00100893  addi a7, x0, 1
+    869 568000ef  jal ra, +1384
+    870 00002e37  lui t3, 0x2
+    871 abbe0e13  addi t3, t3, -1349
+    872 01de0e33  add t3, t3, t4
+    873 00000493  addi s1, x0, 0
+    874 00100893  addi a7, x0, 1
+    875 550000ef  jal ra, +1360
+    876 00002e37  lui t3, 0x2
+    877 abce0e13  addi t3, t3, -1348
+    878 01de0e33  add t3, t3, t4
+    879 00000493  addi s1, x0, 0
+    880 00100893  addi a7, x0, 1
+    881 538000ef  jal ra, +1336
+    882 00002e37  lui t3, 0x2
+    883 abde0e13  addi t3, t3, -1347
+    884 01de0e33  add t3, t3, t4
+    885 00000493  addi s1, x0, 0
+    886 00100893  addi a7, x0, 1
+    887 520000ef  jal ra, +1312
+    888 00002e37  lui t3, 0x2
+    889 abee0e13  addi t3, t3, -1346
+    890 01de0e33  add t3, t3, t4
+    891 00000493  addi s1, x0, 0
+    892 00100893  addi a7, x0, 1
+    893 508000ef  jal ra, +1288
+    894 00002e37  lui t3, 0x2
+    895 abfe0e13  addi t3, t3, -1345
+    896 01de0e33  add t3, t3, t4
+    897 00000493  addi s1, x0, 0
+    898 00100893  addi a7, x0, 1
+    899 4f0000ef  jal ra, +1264
+    900 00002e37  lui t3, 0x2
+    901 ac0e0e13  addi t3, t3, -1344
+    902 01de0e33  add t3, t3, t4
+    903 00000493  addi s1, x0, 0
+    904 00100893  addi a7, x0, 1
+    905 4d8000ef  jal ra, +1240
+    906 00002e37  lui t3, 0x2
+    907 ac1e0e13  addi t3, t3, -1343
+    908 01de0e33  add t3, t3, t4
+    909 00000493  addi s1, x0, 0
+    910 00100893  addi a7, x0, 1
+    911 4c0000ef  jal ra, +1216
+    912 00002e37  lui t3, 0x2
+    913 ac2e0e13  addi t3, t3, -1342
+    914 01de0e33  add t3, t3, t4
+    915 00000493  addi s1, x0, 0
+    916 00100893  addi a7, x0, 1
+    917 4a8000ef  jal ra, +1192
+    918 00002e37  lui t3, 0x2
+    919 ac3e0e13  addi t3, t3, -1341
+    920 01de0e33  add t3, t3, t4
+    921 00000493  addi s1, x0, 0
+    922 00100893  addi a7, x0, 1
+    923 490000ef  jal ra, +1168
+    924 00002e37  lui t3, 0x2
+    925 ac4e0e13  addi t3, t3, -1340
+    926 01de0e33  add t3, t3, t4
+    927 00000493  addi s1, x0, 0
+    928 00100893  addi a7, x0, 1
+    929 478000ef  jal ra, +1144
+    930 00002e37  lui t3, 0x2
+    931 ac5e0e13  addi t3, t3, -1339
+    932 01de0e33  add t3, t3, t4
+    933 00000493  addi s1, x0, 0
+    934 00100893  addi a7, x0, 1
+    935 460000ef  jal ra, +1120
+    936 00002e37  lui t3, 0x2
+    937 ac6e0e13  addi t3, t3, -1338
+    938 01de0e33  add t3, t3, t4
+    939 00000493  addi s1, x0, 0
+    940 00100893  addi a7, x0, 1
+    941 448000ef  jal ra, +1096
+    942 00002e37  lui t3, 0x2
+    943 ac7e0e13  addi t3, t3, -1337
+    944 01de0e33  add t3, t3, t4
+    945 00000493  addi s1, x0, 0
+    946 00100893  addi a7, x0, 1
+    947 430000ef  jal ra, +1072
+    948 00002e37  lui t3, 0x2
+    949 ac8e0e13  addi t3, t3, -1336
+    950 01de0e33  add t3, t3, t4
+    951 00000493  addi s1, x0, 0
+    952 00100893  addi a7, x0, 1
+    953 418000ef  jal ra, +1048
+    954 00002e37  lui t3, 0x2
+    955 ac9e0e13  addi t3, t3, -1335
+    956 01de0e33  add t3, t3, t4
+    957 00000493  addi s1, x0, 0
+    958 00100893  addi a7, x0, 1
+    959 400000ef  jal ra, +1024
+    960 00002e37  lui t3, 0x2
+    961 acae0e13  addi t3, t3, -1334
+    962 01de0e33  add t3, t3, t4
+    963 00000493  addi s1, x0, 0
+    964 00100893  addi a7, x0, 1
+    965 3e8000ef  jal ra, +1000
+    966 00002e37  lui t3, 0x2
+    967 acbe0e13  addi t3, t3, -1333
+    968 01de0e33  add t3, t3, t4
+    969 00000493  addi s1, x0, 0
+    970 00100893  addi a7, x0, 1
+    971 3d0000ef  jal ra, +976
+    972 00002e37  lui t3, 0x2
+    973 acce0e13  addi t3, t3, -1332
+    974 01de0e33  add t3, t3, t4
+    975 00000493  addi s1, x0, 0
+    976 00100893  addi a7, x0, 1
+    977 3b8000ef  jal ra, +952
+    978 00002e37  lui t3, 0x2
+    979 acde0e13  addi t3, t3, -1331
+    980 01de0e33  add t3, t3, t4
+    981 00000493  addi s1, x0, 0
+    982 00100893  addi a7, x0, 1
+    983 3a0000ef  jal ra, +928
+    984 00002e37  lui t3, 0x2
+    985 acee0e13  addi t3, t3, -1330
+    986 01de0e33  add t3, t3, t4
+    987 00000493  addi s1, x0, 0
+    988 00100893  addi a7, x0, 1
+    989 388000ef  jal ra, +904
+    990 00002e37  lui t3, 0x2
+    991 acfe0e13  addi t3, t3, -1329
+    992 01de0e33  add t3, t3, t4
+    993 00000493  addi s1, x0, 0
+    994 00100893  addi a7, x0, 1
+    995 370000ef  jal ra, +880
+    996 00002e37  lui t3, 0x2
+    997 ad0e0e13  addi t3, t3, -1328
+    998 01de0e33  add t3, t3, t4
+    999 00000493  addi s1, x0, 0
+   1000 00100893  addi a7, x0, 1
+   1001 358000ef  jal ra, +856
+   1002 00002e37  lui t3, 0x2
+   1003 ad1e0e13  addi t3, t3, -1327
+   1004 01de0e33  add t3, t3, t4
+   1005 00000493  addi s1, x0, 0
+   1006 00100893  addi a7, x0, 1
+   1007 340000ef  jal ra, +832
+   1008 00002e37  lui t3, 0x2
+   1009 ad2e0e13  addi t3, t3, -1326
+   1010 01de0e33  add t3, t3, t4
+   1011 00000493  addi s1, x0, 0
+   1012 00100893  addi a7, x0, 1
+   1013 328000ef  jal ra, +808
+   1014 00002e37  lui t3, 0x2
+   1015 ad3e0e13  addi t3, t3, -1325
+   1016 01de0e33  add t3, t3, t4
+   1017 00000493  addi s1, x0, 0
+   1018 00100893  addi a7, x0, 1
+   1019 310000ef  jal ra, +784
+   1020 00002e37  lui t3, 0x2
+   1021 ad4e0e13  addi t3, t3, -1324
+   1022 01de0e33  add t3, t3, t4
+   1023 00000493  addi s1, x0, 0
+   1024 00100893  addi a7, x0, 1
+   1025 2f8000ef  jal ra, +760
+   1026 00002e37  lui t3, 0x2
+   1027 ad5e0e13  addi t3, t3, -1323
+   1028 01de0e33  add t3, t3, t4
+   1029 00000493  addi s1, x0, 0
+   1030 00100893  addi a7, x0, 1
+   1031 2e0000ef  jal ra, +736
+   1032 00002e37  lui t3, 0x2
+   1033 ad6e0e13  addi t3, t3, -1322
+   1034 01de0e33  add t3, t3, t4
+   1035 00000493  addi s1, x0, 0
+   1036 00100893  addi a7, x0, 1
+   1037 2c8000ef  jal ra, +712
+   1038 00002e37  lui t3, 0x2
+   1039 ad7e0e13  addi t3, t3, -1321
+   1040 01de0e33  add t3, t3, t4
+   1041 00000493  addi s1, x0, 0
+   1042 00100893  addi a7, x0, 1
+   1043 2b0000ef  jal ra, +688
+   1044 00002e37  lui t3, 0x2
+   1045 ad8e0e13  addi t3, t3, -1320
+   1046 01de0e33  add t3, t3, t4
+   1047 00000493  addi s1, x0, 0
+   1048 00100893  addi a7, x0, 1
+   1049 298000ef  jal ra, +664
+   1050 00002e37  lui t3, 0x2
+   1051 ad9e0e13  addi t3, t3, -1319
+   1052 01de0e33  add t3, t3, t4
+   1053 00000493  addi s1, x0, 0
+   1054 00100893  addi a7, x0, 1
+   1055 280000ef  jal ra, +640
+   1056 00002e37  lui t3, 0x2
+   1057 adae0e13  addi t3, t3, -1318
+   1058 01de0e33  add t3, t3, t4
+   1059 00000493  addi s1, x0, 0
+   1060 00100893  addi a7, x0, 1
+   1061 268000ef  jal ra, +616
+   1062 00002e37  lui t3, 0x2
+   1063 adbe0e13  addi t3, t3, -1317
+   1064 01de0e33  add t3, t3, t4
+   1065 00000493  addi s1, x0, 0
+   1066 00100893  addi a7, x0, 1
+   1067 250000ef  jal ra, +592
+   1068 00002e37  lui t3, 0x2
+   1069 adce0e13  addi t3, t3, -1316
+   1070 01de0e33  add t3, t3, t4
+   1071 00000493  addi s1, x0, 0
+   1072 00100893  addi a7, x0, 1
+   1073 238000ef  jal ra, +568
+   1074 00002e37  lui t3, 0x2
+   1075 adde0e13  addi t3, t3, -1315
+   1076 01de0e33  add t3, t3, t4
+   1077 00000493  addi s1, x0, 0
+   1078 00100893  addi a7, x0, 1
+   1079 220000ef  jal ra, +544
+   1080 00002e37  lui t3, 0x2
+   1081 adee0e13  addi t3, t3, -1314
+   1082 01de0e33  add t3, t3, t4
+   1083 00000493  addi s1, x0, 0
+   1084 00100893  addi a7, x0, 1
+   1085 208000ef  jal ra, +520
+   1086 00002e37  lui t3, 0x2
+   1087 adfe0e13  addi t3, t3, -1313
+   1088 01de0e33  add t3, t3, t4
+   1089 00000493  addi s1, x0, 0
+   1090 00100893  addi a7, x0, 1
+   1091 1f0000ef  jal ra, +496
+   1092 00002e37  lui t3, 0x2
+   1093 ae0e0e13  addi t3, t3, -1312
+   1094 01de0e33  add t3, t3, t4
+   1095 00000493  addi s1, x0, 0
+   1096 00100893  addi a7, x0, 1
+   1097 1d8000ef  jal ra, +472
+   1098 00002e37  lui t3, 0x2
+   1099 ae1e0e13  addi t3, t3, -1311
+   1100 01de0e33  add t3, t3, t4
+   1101 00000493  addi s1, x0, 0
+   1102 00100893  addi a7, x0, 1
+   1103 1c0000ef  jal ra, +448
+   1104 00002e37  lui t3, 0x2
+   1105 ae2e0e13  addi t3, t3, -1310
+   1106 01de0e33  add t3, t3, t4
+   1107 00000493  addi s1, x0, 0
+   1108 00100893  addi a7, x0, 1
+   1109 1a8000ef  jal ra, +424
+   1110 00002e37  lui t3, 0x2
+   1111 ae3e0e13  addi t3, t3, -1309
+   1112 01de0e33  add t3, t3, t4
+   1113 00000493  addi s1, x0, 0
+   1114 00100893  addi a7, x0, 1
+   1115 190000ef  jal ra, +400
+   1116 00002e37  lui t3, 0x2
+   1117 ae4e0e13  addi t3, t3, -1308
+   1118 01de0e33  add t3, t3, t4
+   1119 00000493  addi s1, x0, 0
+   1120 00100893  addi a7, x0, 1
+   1121 178000ef  jal ra, +376
+   1122 00002e37  lui t3, 0x2
+   1123 ae5e0e13  addi t3, t3, -1307
+   1124 01de0e33  add t3, t3, t4
+   1125 00000493  addi s1, x0, 0
+   1126 00100893  addi a7, x0, 1
+   1127 160000ef  jal ra, +352
+   1128 00002e37  lui t3, 0x2
+   1129 ae6e0e13  addi t3, t3, -1306
+   1130 01de0e33  add t3, t3, t4
+   1131 00000493  addi s1, x0, 0
+   1132 00100893  addi a7, x0, 1
+   1133 148000ef  jal ra, +328
+   1134 00002e37  lui t3, 0x2
+   1135 ae7e0e13  addi t3, t3, -1305
+   1136 01de0e33  add t3, t3, t4
+   1137 00000493  addi s1, x0, 0
+   1138 00100893  addi a7, x0, 1
+   1139 130000ef  jal ra, +304
+   1140 00002e37  lui t3, 0x2
+   1141 ae8e0e13  addi t3, t3, -1304
+   1142 01de0e33  add t3, t3, t4
+   1143 00000493  addi s1, x0, 0
+   1144 00100893  addi a7, x0, 1
+   1145 118000ef  jal ra, +280
+   1146 00002e37  lui t3, 0x2
+   1147 ae9e0e13  addi t3, t3, -1303
+   1148 01de0e33  add t3, t3, t4
+   1149 00000493  addi s1, x0, 0
+   1150 00100893  addi a7, x0, 1
+   1151 100000ef  jal ra, +256
+   1152 00002e37  lui t3, 0x2
+   1153 aeae0e13  addi t3, t3, -1302
+   1154 01de0e33  add t3, t3, t4
+   1155 00000493  addi s1, x0, 0
+   1156 00100893  addi a7, x0, 1
+   1157 0e8000ef  jal ra, +232
+   1158 00002e37  lui t3, 0x2
+   1159 aebe0e13  addi t3, t3, -1301
+   1160 01de0e33  add t3, t3, t4
+   1161 00000493  addi s1, x0, 0
+   1162 00100893  addi a7, x0, 1
+   1163 0d0000ef  jal ra, +208
+   1164 00002e37  lui t3, 0x2
+   1165 aece0e13  addi t3, t3, -1300
+   1166 01de0e33  add t3, t3, t4
+   1167 00000493  addi s1, x0, 0
+   1168 00100893  addi a7, x0, 1
+   1169 0b8000ef  jal ra, +184
+   1170 00002e37  lui t3, 0x2
+   1171 aede0e13  addi t3, t3, -1299
+   1172 01de0e33  add t3, t3, t4
+   1173 00000493  addi s1, x0, 0
+   1174 00100893  addi a7, x0, 1
+   1175 0a0000ef  jal ra, +160
+   1176 00002e37  lui t3, 0x2
+   1177 aeee0e13  addi t3, t3, -1298
+   1178 01de0e33  add t3, t3, t4
+   1179 00000493  addi s1, x0, 0
+   1180 00100893  addi a7, x0, 1
+   1181 088000ef  jal ra, +136
+   1182 00002e37  lui t3, 0x2
+   1183 aefe0e13  addi t3, t3, -1297
+   1184 01de0e33  add t3, t3, t4
+   1185 00000493  addi s1, x0, 0
+   1186 00100893  addi a7, x0, 1
+   1187 070000ef  jal ra, +112
+   1188 00002e37  lui t3, 0x2
+   1189 af0e0e13  addi t3, t3, -1296
+   1190 01de0e33  add t3, t3, t4
+   1191 00000493  addi s1, x0, 0
+   1192 00100893  addi a7, x0, 1
+   1193 058000ef  jal ra, +88
+   1194 00002e37  lui t3, 0x2
+   1195 af1e0e13  addi t3, t3, -1295
+   1196 01de0e33  add t3, t3, t4
+   1197 00000493  addi s1, x0, 0
+   1198 00100893  addi a7, x0, 1
+   1199 040000ef  jal ra, +64
+   1200 00002e37  lui t3, 0x2
+   1201 af2e0e13  addi t3, t3, -1294
+   1202 01de0e33  add t3, t3, t4
+   1203 00000493  addi s1, x0, 0
+   1204 00100893  addi a7, x0, 1
+   1205 028000ef  jal ra, +40
+   1206 00002e37  lui t3, 0x2
+   1207 af3e0e13  addi t3, t3, -1293
+   1208 01de0e33  add t3, t3, t4
+   1209 00000493  addi s1, x0, 0
+   1210 00100893  addi a7, x0, 1
+   1211 010000ef  jal ra, +16
+   1212 00100293  addi t0, x0, 1
+   1213 00000513  addi a0, x0, 0
+   1214 00000073  ecall
+getbits:
+   1215 00000c93  addi s9, x0, 0
+   1216 00000b93  addi s7, x0, 0
+gb_loop:
+   1217 003a5213  srli tp, s4, 3
+   1218 00004137  lui sp, 0x4
+   1219 d0f10113  addi sp, sp, -753
+   1220 00220233  add tp, tp, sp
+   1221 00024183  lbu gp, 0(tp)
+   1222 007a7213  andi tp, s4, 7
+   1223 0041d1b3  srl gp, gp, tp
+   1224 0011f193  andi gp, gp, 1
+   1225 017191b3  sll gp, gp, s7
+   1226 003cecb3  or s9, s9, gp
+   1227 001a0a13  addi s4, s4, 1
+   1228 001b8b93  addi s7, s7, 1
+   1229 fd1b98e3  bne s7, a7, -48
+   1230 00048663  beq s1, x0, +12
+   1231 019e2023  sw s9, 0(t3)
+   1232 00008067  jalr x0, ra, 0
+gb_byte:
+   1233 019e0023  sb s9, 0(t3)
+   1234 00008067  jalr x0, ra, 0
