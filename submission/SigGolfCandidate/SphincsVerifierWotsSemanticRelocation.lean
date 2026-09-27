@@ -7512,4 +7512,75 @@ theorem bottom_encoding_query (state : MachineState)
 
 #print axioms bottom_header_bytes
 
+theorem loaded_bottom_counter_word
+    (publicKey : SigGolf.PublicKey) (message : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, SphincsWireEncoding.wire pk signature) = some state) :
+    state.getWord32 0x25478 =
+      BitVec.ofNat 32 (signature.layers bottomLayer).counter.toNat := by
+  apply BitVec.eq_of_getLsbD_eq_iff.mpr
+  intro bit hbit
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  have split := variableWord_byte state 0x25478
+    (by decide) (by decide) (0 : Fin 5) byte
+  have value := SphincsWireEncoding.loaded_honest_bottomCounter
+    publicKey message pk signature state loaded byte.val
+      (by simpa only [SphincsWire.counterBytes] using byte.isLt)
+  have address : 0x22ca0 + SphincsWire.bottomOffset + byte.val =
+      0x25478 + byte.val := by
+    have base : 0x22ca0 + SphincsWire.bottomOffset = 0x25478 := by decide
+    omega
+  rw [address] at value
+  have bytes : (state.getWord32 0x25478).extractLsb' (8 * byte.val) 8 =
+      (BitVec.ofNat 32 (signature.layers bottomLayer).counter.toNat).extractLsb'
+        (8 * byte.val) 8 := by
+    have word : (state.getWord32
+        (BitVec.ofNat 64 (0x25478 + 4 * (0 : Fin 5).val))) =
+        state.getWord32 0x25478 := by rfl
+    rw [word] at split
+    simpa [byte] using split.symm.trans value
+  have bitEq := congrArg (fun value : BitVec 8 => value.getLsbD (bit % 8)) bytes
+  have offset : 8 * byte.val + bit % 8 = bit := by
+    dsimp [byte]
+    omega
+  simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
+    decide_true, Bool.true_and, offset] using bitEq
+
+#print axioms loaded_bottom_counter_word
+
+theorem bottom_counter_word_after_frame (initial final : MachineState)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      final.getByte address = initial.getByte address) :
+    final.getWord32 0x25478 = initial.getWord32 0x25478 := by
+  apply BitVec.eq_of_getLsbD_eq_iff.mpr
+  intro bit hbit
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  have finalByte := variableWord_byte final 0x25478
+    (by decide) (by decide) (0 : Fin 5) byte
+  have initialByte := variableWord_byte initial 0x25478
+    (by decide) (by decide) (0 : Fin 5) byte
+  have low : (BitVec.ofNat 64 (0x25478 + byte.val)).toNat < 0x40000 := by
+    simp only [BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega : 0x25478 + byte.val < 2 ^ 64)]
+    omega
+  have byteEq : (final.getWord32 0x25478).extractLsb' (8 * byte.val) 8 =
+      (initial.getWord32 0x25478).extractLsb' (8 * byte.val) 8 := by
+    have address : 0x25478 + 4 * (0 : Fin 5).val + byte.val =
+        0x25478 + byte.val := by simp
+    rw [address] at finalByte initialByte
+    calc
+      _ = final.getByte (BitVec.ofNat 64 (0x25478 + byte.val)) := finalByte.symm
+      _ = initial.getByte (BitVec.ofNat 64 (0x25478 + byte.val)) := frame _ low
+      _ = _ := initialByte
+  have bitEq := congrArg (fun value : BitVec 8 => value.getLsbD (bit % 8)) byteEq
+  have offset : 8 * byte.val + bit % 8 = bit := by
+    dsimp [byte]
+    omega
+  simpa only [BitVec.getLsbD_extractLsb', show bit % 8 < 8 by omega,
+    decide_true, Bool.true_and, offset] using bitEq
+
+#print axioms bottom_counter_word_after_frame
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
