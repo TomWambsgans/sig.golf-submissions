@@ -31,7 +31,7 @@ def FoldEndL (L : LCtx) (u : MachineState) : Prop :=
   ∃ s0, FoldEnd (layFC L) s0 u ∧ LeafCarry L s0
 
 def layerCost (lay : Nat) : Nat :=
-  stepsA lay + 8 + stepsB lay + (42 * 74 - 10 * targetSum + headSum lay) + 10 + 88 +
+  stepsA lay + 8 + stepsB lay + (42 * 67 - 9 * targetSum + headSum lay) + 11 + 88 +
     foldCost false (heightL lay) 0 (heightL lay)
 
 theorem blocks_q (n : Nat) (ws : List Word) : (queryOfWords n ws).blocks = n + 1 := rfl
@@ -63,8 +63,8 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
   simp only []
   rw [cc_bind]
   have hfc := layFC_ok L hL
-  have hsA : stepsA L.lay ≤ 29 := by unfold stepsA; split <;> omega
-  have hsB : stepsB L.lay ≤ 37 := by unfold stepsB; split <;> omega
+  have hsA : stepsA L.lay ≤ 29 := by unfold stepsA; split_ifs <;> omega
+  have hsB : stepsB L.lay ≤ 40 := by unfold stepsB; split_ifs <;> omega
   have H : ∀ a, Good (writeHash t1 a) (N + 4900) (C + layerCost L.lay - stepsA L.lay - 8)
       (cc (match decodeDigits (answerBytes 16 a) with
         | none => pure none
@@ -83,12 +83,12 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
       obtain ⟨t2, hst2, hent, hcok, hxs, hsum, hlen⟩ := hacc xs hd
       simp only [verifyLeaf, bind_assoc, cc_bind]
       set c := L.cctx a with hc
-      have hcost : chainsCost c 0 42 = 42 * 74 - 10 * targetSum + headSum L.lay := chainsCost_eq c xs hlen hxs hsum
+      have hcost : chainsCost c 0 42 = 42 * 67 - 9 * targetSum + headSum L.lay := chainsCost_eq c xs hlen hxs hsum
       have hch := chains_good0 c hcok xs hxs (fun i hi => chainCheck_at L.lay i hlay hi)
         (fun ends => cc (hash16 (leafInput L.lay L.tau L.e ends)) (fun leaf =>
           cc (foldPath (nodeInput L.lay L.tau) L.e leaf (witPath L.wl L.lay)) (fun root =>
             cc (pure (some root)) Kopt)))
-        (N + 2000) (C + 88 + 10 + foldCost false (heightL L.lay) 0 (heightL L.lay))
+        (N + 2000) (C + 88 + 11 + foldCost false (heightL L.lay) 0 (heightL L.lay))
         (by
           intro ends u hH42
           obtain ⟨t3, hst3, hf3, h53, hv3, hin3, hpost3⟩ := leaf_step L hL a ends u hH42
@@ -103,13 +103,15 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
               show nodeF 3 L.lay L.tau = (layFC L).node from rfl, show L.e = (layFC L).E from rfl,
               foldPath_eq]
             simp only [cc_pure]
-            have hfold := fold_good (layFC L) hfc (by simp [layFC]) (layFC_check L hL) _ (fun root => Kopt (some root))
+            have hfold := fold_good (layFC L) hfc
+              (Or.inl ⟨rfl, by simp [layFC, Nat.mod_eq_of_lt (show L.lay < 256 by omega), heightL_eq _ hlay]⟩)
+              (layFC_check L hL) _ (fun root => Kopt (some root))
               N C (fun a u hend => hK a u ⟨_, hend, hcar⟩) (heightL L.lay) 0 (by simp [layFC])
               (by have := heightL_le L.lay hlay; omega) _ _ hfi
             exact hfold.mono (by have := heightL_le L.lay hlay; omega) (by simp [layFC])
           have h3 := Good.hashP (x := leafInput L.lay L.tau L.e ends) (K := fun leaf => cc (foldPath (nodeInput L.lay L.tau) L.e leaf
             (witPath L.wl L.lay)) (fun root => cc (pure (some root)) Kopt))
-            (fmt_th _ _ _ _ _ _ (by decide) (by decide)) hf3 h53 hv3 hin3 H3
+            (fmt_th _ _ _ _ _ _ (by decide)) hf3 h53 hv3 hin3 H3
           rw [pad64_leafInput _ _ _ _ hends hvs, blocks_q] at h3
           exact Good.steps' hst3 h3 (by omega) (by omega))
         t2 hent
@@ -122,7 +124,7 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
         | some x => do
           let leaf ← verifyLeaf L.wl L.lay L.tau L.e x
           let root ← foldPath (nodeInput L.lay L.tau) L.e leaf (witPath L.wl L.lay)
-          pure (some root)) Kopt) (fmt_th _ _ _ _ _ _ (by decide) (by decide)) hf1 h51 hv1 hin1 H
+          pure (some root)) Kopt) (fmt_th _ _ _ _ _ _ (by decide)) hf1 h51 hv1 hin1 H
   rw [pad64_encInput _ _ _ _ hMl, blocks_q] at h3
   exact Good.steps' hst1 h3 (by omega) (by unfold layerCost; omega)
 
@@ -131,7 +133,7 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
 theorem foldEnd_layerIn (wl pk : List Byte) (lay idx : Nat) (h1 : 1 ≤ lay) (h7 : lay < 5)
     (u : MachineState) (hu : FoldEndL ⟨wl, pk, lay, idx⟩ u) (a : BitVec 256) :
     LayerIn ⟨wl, pk, lay - 1, idx⟩ (answerBytes 16 a) (writeHash u a) := by
-  obtain ⟨s0, ⟨hG, hK, hF, hpc, -, -⟩, ⟨h26, h27, h15, h30, hZ⟩⟩ := hu
+  obtain ⟨s0, ⟨hG, hK, hF, hpc, -, -⟩, ⟨h27, h15, h30, hZ, h48⟩⟩ := hu
   have hdst : (layFC ⟨wl, pk, lay, idx⟩).dst = 0x120 := by simp [layFC]; omega
   have h12 : u.getReg .x12 = BitVec.ofNat 64 0x120 := by
     rw [← hdst]; exact hK (.x12, _) (List.mem_append_right _ (List.mem_singleton_self _))
@@ -139,16 +141,15 @@ theorem foldEnd_layerIn (wl pk : List Byte) (lay idx : Nat) (h1 : 1 ≤ lay) (h7
   have kf : ∀ r ∈ fkeep false, (writeHash u a).getReg r = s0.getReg r := fun r hr => by
     rw [writeHash_getReg]; exact hF.1 r hr
   refine ⟨by simpa [LCtx.gk, show lay - 1 ≠ 4 by omega, layFC, FCtx.gk, gkOf] using
-      Glob_writeHash hG a _ h12 (by decide), ?_, ?_, ?_, ?_, by simp, fun _ => ⟨?_, ?_⟩, ?_⟩
+      Glob_writeHash hG a _ h12 (by decide), ?_, ?_, ?_, ?_, by simp, fun _ => ⟨?_, ?_⟩, ?_, ?_⟩
   · simp only [LCtx.lay, preK, if_neg (show lay - 1 ≠ 4 by omega), aK, Nat.sub_add_cancel h1]
     intro p hp
     simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hp
-    rcases hp with hp | hp | hp | hp | hp | hp | hp
+    rcases hp with hp | hp | hp | hp | hp | hp
     · rw [writeHash_getReg]; exact hK1 p (by simp [fk, gkOf, layFC, hp])
     · subst hp; rw [writeHash_getReg]; exact hK1 _ (by simp [fk, gkOf, layFC])
     · subst hp; rw [writeHash_getReg]; exact hK1 _ (by simp [fk, gkOf, layFC])
     · subst hp; rw [writeHash_getReg]; exact h12
-    · subst hp; rw [kf _ (by simp [fkeep])]; exact h26
     · subst hp; rw [kf _ (by simp [fkeep])]; exact h27
     · subst hp; rw [kf _ (by simp [fkeep])]; exact h15
   · simp only [routeReg, routeIn, if_neg (show lay - 1 ≠ 4 by omega)]
@@ -162,12 +163,13 @@ theorem foldEnd_layerIn (wl pk : List Byte) (lay idx : Nat) (h1 : 1 ≤ lay) (h7
     exact hZ.1
   · rw [writeHash_frame _ a _ _ h12 (by omega) (by omega) (by omega), hF.2 _ (by omega) (by omega)]
     exact hZ.2
+  · rw [writeHash_frame _ a _ _ h12 (by omega) (by omega) (by omega), hF.2 _ (by omega) (by omega)]
+    exact h48
   · refine ⟨bitOf (layFC ⟨wl, pk, lay, idx⟩).E ((layFC ⟨wl, pk, lay, idx⟩).h - 1),
       by simp [bitOf]; omega, ?_⟩
     rw [writeHash_pc, hpc, pcOf_add4]
     simp only [preStart, if_neg (show lay - 1 ≠ 4 by omega), layFC, Nat.sub_add_cancel h1,
       show 5 - (lay - 1) = 6 - lay by omega]
-    congr 1; omega
 
 /-! ## The final comparison -/
 
@@ -203,7 +205,7 @@ theorem val_eq_iff (M P : Val) (hM : M.length = 16) (hP : P.length = 16) :
 def FinalIn (wl pk : List Byte) (idx : Nat) (M : Val) (s : MachineState) : Prop :=
   ∃ u a, FoldEndL ⟨wl, pk, 0, idx⟩ u ∧ s = writeHash u a ∧ M = answerBytes 16 a
 
-theorem cmp_link (t : Nat) (ht : t < 2) : lvlPc 6 t 0 10 + 7 + xp false 10 + 1 = cmpPc t := by
+theorem cmp_link (t : Nat) (ht : t < 2) : lvlPc 6 t 0 10 + 6 + 1 = cmpPc t := by
   interval_cases t <;> decide
 
 theorem compare_good (wl pk : List Byte) (hpk : pk.length = 16) (idx : Nat) (M : Val)

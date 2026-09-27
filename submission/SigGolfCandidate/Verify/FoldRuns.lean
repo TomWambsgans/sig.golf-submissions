@@ -27,34 +27,29 @@ def gkOf (kind : Bool) : List (Reg × Word) := if kind then gkF else gkL
 def fk (kind : Bool) (a0 a1 : Nat) : List (Reg × Word) :=
   gkOf kind ++ [(.x10, BitVec.ofNat 64 a0), (.x11, BitVec.ofNat 64 a1)]
 
-/-- Extra instruction of a layer-phase fold level `lam ≥ 5`: `addi TP, x0, lam+1` (P6..P10 are
-reused in the layer phase), before `sw TP, NB+4`. -/
-def xp (kind : Bool) (lam : Nat) : Nat := if kind = false ∧ 5 ≤ lam then 1 else 0
-
 /-- Fold level `lam` of `h`, in stream `t`, sibling at witness address `wa`, next stream `t'`
-(unused for the last level), final destination `dst`. -/
+(unused for the last level), final destination `dst`. The level stores only the heap index of
+its output node (`srli TP, E, lam + 1; sw TP, NB+12`, with `E = e | 2^h` in `x23`); the root
+level stores the constant 1 (`sw P1, NB+12`). -/
 def lvlExp (kind : Bool) (a1 : Nat) (rg t j0 h lam wa dst t' : Nat) : PRes :=
   let sib := 0x1F0 - 16 * t
   let base := RegFile.withKnown (fk kind (if lam = 0 then (if kind then 0xC0 else 0x340) else 0x1C0) a1)
   let rf0 := if lam = 0 then
       (if kind then base.set .x10 (cw 0x1C0) else (base.set .x10 (cw 0x1C0)).set .x11 (cw 64))
     else base
-  let rf1 := (rf0.set .x1 (ldE wa)).set .x2 (ldE (wa + 8))
-  let rf := if xp kind lam = 1 then rf1.set .x4 (cw (lam + 1)) else rf1
+  let rf := (rf0.set .x1 (ldE wa)).set .x2 (ldE (wa + 8))
   let mb : List (Addr × E) :=
     [(⟨none, BitVec.ofNat 64 (sib + 8)⟩, ldE (wa + 8)), (⟨none, BitVec.ofNat 64 sib⟩, ldE wa)]
   let mh : List (Addr × E) := if lam = 0 ∧ kind then [(⟨none, BitVec.ofNat 64 0x1C0⟩, .reg .x27)] else []
-  let mp : List (Addr × E) :=
-    if lam = 0 then [] else [(⟨none, BitVec.ofNat 64 0x1C0⟩, stW 0x1C0 (cw (lam + 1)))]
-  let hs := (if lam = 0 then 2 else 1) + xp kind lam
+  let hs := if lam = 0 then 2 else 0
   if lam + 1 = h then
-    ⟨⟨rf.set .x12 (cw dst), [(⟨none, BitVec.ofNat 64 0x1C8⟩, stW 0x1C8 (cw 0))] ++ mp ++ mb ++ mh, []⟩,
+    ⟨⟨rf.set .x12 (cw dst), [(⟨none, BitVec.ofNat 64 0x1C8⟩, stW 0x1C8 (cw 1))] ++ mb ++ mh, []⟩,
       pcOf (lvlPc rg t j0 lam + hs + 6), true, hs + 6, hs + 6, [], none⟩
   else
     let tE : E := .bin .sll (.reg .x23) (cw (62 - lam))
     let jE : E := .bin .srl (.reg .x23) (cw (lam + 1))
     ⟨⟨(((rf.set .x4 jE).set .x3 tE).set .x12 (cw (0x1E0 + 16 * t'))),
-      [(⟨none, BitVec.ofNat 64 0x1C8⟩, stW 0x1C8 jE)] ++ mp ++ mb ++ mh, []⟩,
+      [(⟨none, BitVec.ofNat 64 0x1C8⟩, stW 0x1C8 jE)] ++ mb ++ mh, []⟩,
       pcOf (xPc rg t' (j0 + lam + 1) + 1), true, hs + 9, hs + 9,
       [⟨if t = 0 then .lt else .ge, tE, .c 0, if t = 0 then t' = 1 else t' = 0⟩], none⟩
 
@@ -65,7 +60,7 @@ def lvlDirs' (t h lam t' : Nat) : List Dir :=
 
 def fkeep (kind : Bool) : List Reg :=
   if kind then [.x16, .x17, .x22, .x23, .x25, .x27, .x28, .x29, .x30, .x31]
-  else [.x14, .x15, .x16, .x17, .x22, .x23, .x25, .x26, .x27, .x28, .x30, .x31]
+  else [.x14, .x15, .x16, .x17, .x22, .x23, .x25, .x27, .x28, .x30, .x31]
 
 def okFold (kind : Bool) (o : Option PRes) (e : PRes) (post : List (Reg × Word)) : Bool :=
   optBeq o e && resOK (gkOf kind) e && knownB post e && keepB (fkeep kind) e

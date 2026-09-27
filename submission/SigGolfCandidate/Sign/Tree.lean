@@ -21,7 +21,7 @@ def treeRegs : List Reg := leavesRegs ++ [.x15] ++ tlevRegs
 /-- Result of tree_build. -/
 def TreePost (p : TreePar) (tt : MachineState) (r : Val × List Val × List Val) (t : MachineState) :
     Prop :=
-  t.pc = pcOf 582 ∧ r.1.length = 16 ∧ Slots t 0x34100 [r.1] ∧
+  t.pc = pcOf 587 ∧ r.1.length = 16 ∧ Slots t 0x34100 [r.1] ∧
   r.2.1.length = 42 ∧ (∀ v ∈ r.2.1, v.length = 16) ∧ Slots t (p.sigl + 8) r.2.1 ∧
   r.2.2.length = p.h ∧ (∀ v ∈ r.2.2, v.length = 16) ∧ Slots t (p.sigl + 680) r.2.2 ∧
   RegsEq tt t treeRegs ∧ Frame tt t (treeW p)
@@ -34,10 +34,10 @@ theorem buildTree_eq (S : List Byte) (lay tau h e : Nat) (x : List Nat) :
   simp only [buildTree, buildLevels, bind_assoc, pure_bind]
 
 /-- Cycle bound of tree_build. -/
-def treeCyc : Nat := 64 * tleafCyc + (1 + 6 * 821)
+def treeCyc : Nat := 64 * tleafCyc + (1 + 6 * 853)
 
 theorem tree_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePar)
-    (tt : MachineState) (ctx : TreeCtx S x p tt) (h1 : 1 ≤ p.h) (hpc : tt.pc = pcOf 477)
+    (tt : MachineState) (ctx : TreeCtx S x p tt) (h1 : 1 ≤ p.h) (hpc : tt.pc = pcOf 479)
     (h20 : tt.getReg .x20 = BitVec.ofNat 64 0) :
     Sim image tt treeCyc (buildTree S p.lay p.tau p.h p.e x) (TreePost p tt) := by
   have hh := ctx.hh
@@ -45,22 +45,22 @@ theorem tree_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePa
   have hsig := ctx.hsigl
   have hlay := ctx.hlay
   rw [buildTree_eq]
-  have hW : 2 ^ p.h * tleafCyc + (1 + p.h * 821) ≤ treeCyc := by
+  have hW : 2 ^ p.h * tleafCyc + (1 + p.h * 853) ≤ treeCyc := by
     unfold treeCyc
     have := Nat.mul_le_mul_right tleafCyc h32
-    have := Nat.mul_le_mul_right 821 hh
+    have := Nat.mul_le_mul_right 853 hh
     omega
   refine (Sim.bind (leaves_sim S hS x p tt ctx hpc h20) (fun q t2 h2 => ?_)).mono hW
     (fun _ _ h => h)
   obtain ⟨-, hlv, hlvv, hlvs, hcap, pc2, -, lregs, lframe, -, -⟩ := h2
   obtain ⟨hc1, hc2, hc3⟩ := hcap ctx.he
-  have pc2' : t2.pc = pcOf 542 := by rw [pc2, if_neg (lt_irrefl _)]
-  have hs3 := symRun_sound blk542 codeAt_542 t2 pc2' (by simp only [blk542.res, rv_simp])
-  have hc67 : blk542.res.cycles = 1 := rfl
+  have pc2' : t2.pc = pcOf 548 := by rw [pc2, if_neg (lt_irrefl _)]
+  have hs3 := symRun_sound blk548 codeAt_548 t2 pc2' (by simp only [blk548.res, rv_simp])
+  have hc67 : blk548.res.cycles = 1 := rfl
   rw [hc67] at hs3
-  set t3 := blk542.res.toState t2 with ht3
+  set t3 := blk548.res.toState t2 with ht3
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk542.res]
+    apply frame_toState; intro x hx hW; simp [blk548.res]
   have r3 : RegsEq t2 t3 [.x15] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
@@ -68,7 +68,7 @@ theorem tree_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePa
   have ft3 : Frame tt t3 (leavesW p) := (lframe.trans f3).mono (by
     intro x hx; rcases hx with h | h; exact h; exact h.elim)
   have vctx : TLevCtx p t3 := by
-    refine ⟨ctx.hlay, ctx.htau, ⟨h1, hh⟩, ctx.he, ctx.hsigl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    refine ⟨ctx.hlay, ctx.htau, ⟨h1, hh⟩, ctx.he, ctx.hsigl, ctx.hheight, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · rw [rt3.get .x5, ctx.x5]
     · rw [rt3.get .x8, ctx.x8]
     · rw [rt3.get .x9, ctx.x9]
@@ -79,8 +79,8 @@ theorem tree_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePa
     · have := ctx.hsigl
       rw [ft3.readWords _ _ (by norm_num) (by intro i hi; simp only [leavesW]; omega), ctx.nbP]
   refine (Sim.steps hs3 (Sim.bind (W₂ := 0) (tlevels_sim p t3 vctx q.1 hlv hlvv
-    (hlvs.frame f3 (by omega) (by simp)) (by simp only [ht3, blk542.res, rv_simp])
-    (by simp only [ht3, blk542.res, rv_simp]) (by rw [rt3.get .x17, ctx.x17]))
+    (hlvs.frame f3 (by omega) (by simp)) (by simp only [ht3, blk548.res, rv_simp])
+    (by simp only [ht3, blk548.res, rv_simp]) (by rw [rt3.get .x17, ctx.x17]))
     (fun st t4 h4 => ?_))).mono (by omega) (fun _ _ h => h)
   obtain ⟨-, hl4, hv4, hs4, hp4, hpv4, hps4, pc4, -, -, vregs, vframe⟩ := h4
   refine Sim.pure ⟨by rw [pc4, if_neg (lt_irrefl _)], ?_, ?_, hc1, hc2, ?_, hp4, hpv4, hps4, ?_, ?_⟩

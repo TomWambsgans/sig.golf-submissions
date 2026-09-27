@@ -91,16 +91,15 @@ def M2w : Word := 0xf03f03f03f03f03f#64
 def baseK : List (Reg × Word) :=
   [(.x5, 0), (.x18, 0x1000), (.x19, 0x2000), (.x6, 1), (.x7, 2), (.x8, 3), (.x9, 4), (.x13, 5)]
 
-/-- FORS phase: also P6..P10 and `K16`. -/
-def gkF : List (Reg × Word) :=
-  baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10), (.x24, 0x10000)]
+/-- FORS phase: also `K16`. -/
+def gkF : List (Reg × Word) := baseK ++ [(.x24, 0x10000)]
 
 /-- `targetSum << 52` (the encoding check compares the digit sum in bits 52..63). -/
 def KT : Word := BitVec.ofNat 64 (targetSum * 2 ^ 52)
 
-/-- Layer phase: masks, `K16`, `KT`. -/
+/-- Layer phase: masks, `K16`, `KT`, `P6` (the step-7 MU register). -/
 def gkL : List (Reg × Word) :=
-  baseK ++ [(.x20, M1w), (.x21, M2w), (.x24, 0x10000), (.x29, KT)]
+  baseK ++ [(.x20, M1w), (.x21, M2w), (.x24, 0x10000), (.x29, KT), (.x26, 6)]
 
 /-- The `P` slots (`+16 .. +32`) of the hash buffers DB, CB, EB, NB, RB2, LB. -/
 def pSlots : List Nat := [0x10, 0x18, 0xD0, 0xD8, 0x110, 0x118, 0x1D0, 0x1D8, 0x230, 0x238,

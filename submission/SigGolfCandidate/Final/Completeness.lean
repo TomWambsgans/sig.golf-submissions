@@ -80,7 +80,8 @@ instance : Finite HD :=
 noncomputable instance : Fintype HD := Fintype.ofFinite HD
 
 theorem honest_witness : Equiv.Honest (1 :: List.replicate 63 0) := by
-  refine ⟨rfl, rfl, fun h => absurd h (by decide)⟩
+  exact ⟨rfl, rfl, fun h => absurd h (by decide), fun h => absurd h (by decide),
+    fun h => absurd h (by decide)⟩
 
 /-- Restrict an abstract input to the honest domain (a fixed honest input otherwise). -/
 noncomputable def toHD (x : List UInt8) : HD := by

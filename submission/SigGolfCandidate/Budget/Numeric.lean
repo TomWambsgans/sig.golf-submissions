@@ -4,10 +4,10 @@ import Mathlib.Analysis.Complex.ExponentialBounds
 /-!
 # Budget: the numbers
 
-With `z = 2 ^ (1 / 2^17)`, the digest search is bounded by `bD = 1.0222` and each counter search
+With `z = 2 ^ (1 / 2^17)`, the digest search is bounded by `bD = 1.0166` and each counter search
 by `bC = 1.01515` (v5: target sum 183, five counter searches); the deterministic part is
 `2 ^ (110314 / 2^17) ≈ 1.7924` (MAC 1025 + FORS 35830 + layers 1..4 73244 + top layer 215), and
-`1.7924 * 1.0222 * 1.01515^5 ≈ 1.9751 ≤ 2` (analytic value ≈ 1.9747) (`V_signRef_le_two`).
+`1.7924 * 1.0166 * 1.01515^5 ≈ 1.9644 ≤ 2` (v6: one-block digest, 3 compressions per digest trial; analytic value ≈ 1.9638) (`V_signRef_le_two`).
 Keygen: `z_K ^ 674814 ≤ 2` with
 `z_K = 2 ^ (1 / 2^20)` (`V_keygenRef_le_two`).
 
@@ -101,7 +101,7 @@ theorem epsD_eq : epsD = ENNReal.ofReal (1 / 2 ^ 108) := by
 /-! ## The step conditions -/
 
 /-- The digest-search bound. -/
-noncomputable def bD : ℝ≥0∞ := ENNReal.ofReal 1.0222
+noncomputable def bD : ℝ≥0∞ := ENNReal.ofReal 1.0166
 /-- The counter-search bound. -/
 noncomputable def bC : ℝ≥0∞ := ENNReal.ofReal 1.01515
 
@@ -111,20 +111,20 @@ theorem zS_le : zOf (2 ^ 17) ≤ ENNReal.ofReal (1 / (1 - 0.6931471808 / 131072)
   have := rpow_two_inv_le (2 ^ 17) (by norm_num)
   simpa using this
 
-theorem stepD : zOf (2 ^ 17) ^ 4 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD := by
+theorem stepD : zOf (2 ^ 17) ^ 3 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD := by
   rw [rhoD_eq, epsD_eq, one_sub_ofReal _ (by norm_num), bD]
   set zb : ℝ := 1 / (1 - 0.6931471808 / 131072)
-  calc zOf (2 ^ 17) ^ 4 * ((ENNReal.ofReal (1 / 2 ^ 108) + ENNReal.ofReal (1 - 1 / 1024)) *
-        ENNReal.ofReal 1.0222 + ENNReal.ofReal (1 - (1 - 1 / 1024)))
-      ≤ ENNReal.ofReal zb ^ 4 * ((ENNReal.ofReal (1 / 2 ^ 108) + ENNReal.ofReal (1 - 1 / 1024)) *
-        ENNReal.ofReal 1.0222 + ENNReal.ofReal (1 - (1 - 1 / 1024))) := by
+  calc zOf (2 ^ 17) ^ 3 * ((ENNReal.ofReal (1 / 2 ^ 108) + ENNReal.ofReal (1 - 1 / 1024)) *
+        ENNReal.ofReal 1.0166 + ENNReal.ofReal (1 - (1 - 1 / 1024)))
+      ≤ ENNReal.ofReal zb ^ 3 * ((ENNReal.ofReal (1 / 2 ^ 108) + ENNReal.ofReal (1 - 1 / 1024)) *
+        ENNReal.ofReal 1.0166 + ENNReal.ofReal (1 - (1 - 1 / 1024))) := by
         gcongr; exact zS_le
-    _ = ENNReal.ofReal (zb ^ 4 * ((1 / 2 ^ 108 + (1 - 1 / 1024)) * 1.0222 +
+    _ = ENNReal.ofReal (zb ^ 3 * ((1 / 2 ^ 108 + (1 - 1 / 1024)) * 1.0166 +
           (1 - (1 - 1 / 1024)))) := by
         rw [← ENNReal.ofReal_add (by norm_num) (by norm_num),
           ← ENNReal.ofReal_mul (by norm_num), ← ENNReal.ofReal_add (by norm_num) (by norm_num),
           ← ENNReal.ofReal_pow (by norm_num [zb]), ← ENNReal.ofReal_mul (by norm_num [zb])]
-    _ ≤ ENNReal.ofReal 1.0222 := by
+    _ ≤ ENNReal.ofReal 1.0166 := by
         refine ENNReal.ofReal_le_ofReal ?_
         norm_num [zb]
 

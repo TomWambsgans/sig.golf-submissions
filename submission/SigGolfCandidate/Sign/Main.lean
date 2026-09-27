@@ -24,10 +24,10 @@ theorem fetch_ecall (t : MachineState) (i : Nat) (hi : image.code[i]? = some 0x0
   rw [if_neg (by simp <;> omega), show (0x1000 + 4 * i - 0x1000) / 4 = i by omega, hi]
   exact decode_ecall
 
-theorem code83 : image.code[83]? = some 0x00000073#32 := by decide +kernel
 theorem code86 : image.code[86]? = some 0x00000073#32 := by decide +kernel
-theorem code335 : image.code[335]? = some 0x00000073#32 := by decide +kernel
-theorem code2791 : image.code[2791]? = some 0x00000073#32 := by decide +kernel
+theorem code89 : image.code[89]? = some 0x00000073#32 := by decide +kernel
+theorem code337 : image.code[337]? = some 0x00000073#32 := by decide +kernel
+theorem code2800 : image.code[2800]? = some 0x00000073#32 := by decide +kernel
 
 end SigGolfCandidate.Sign
 
@@ -224,7 +224,7 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
     (fun r t h => ?_)
   rcases r with _ | ⟨rho, N⟩
   · obtain ⟨tpc, t5, t10⟩ := h
-    exact (Sim.pure ⟨fetch_ecall t 83 code83 (by norm_num) tpc, t5, t10⟩).mono (by omega)
+    exact (Sim.pure ⟨fetch_ecall t 86 code86 (by norm_num) tpc, t5, t10⟩).mono (by omega)
       (fun _ _ h => h)
   · obtain ⟨tpc, tregs, tframe, hrl, hrw, ⟨ans, hN, hd⟩, hadm⟩ := h
     subst hN
@@ -261,7 +261,7 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
       rgt.frame fF (by intro a ha; simp only [regionA] at ha; simp only [digokW]; omega)
     refine Sim.steps hsF (Sim.bind (fors_sim (toList sk) hS N tF ctx pcF x8F x18F) (fun p t2 h2 => ?_))
     obtain ⟨-, hl1, hl2, hopen, hrv, hroots, pc2, -, -, fregs, fframe, -, -, -, -, -⟩ := h2
-    have pc2' : t2.pc = pcOf 239 := by rw [pc2]; rfl
+    have pc2' : t2.pc = pcOf 241 := by rw [pc2]; rfl
     have z2 : ∀ a, a % 8 = 0 → ZA a → t2.getMem (BitVec.ofNat 64 a) = 0 := by
       intro a h8 hz
       rw [fframe.getMem (by simp only [ZA] at hz; omega) (by simp only [ZA] at hz; simp only [forsW]; omega),
@@ -289,18 +289,18 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
       (fun r2 t4 h4 => ?_)
     rcases r2 with _ | lays
     · obtain ⟨pc4, x45, x410⟩ := h4
-      exact (Sim.pure ⟨fetch_ecall t4 335 code335 (by norm_num) pc4, x45, x410⟩).mono (by omega)
+      exact (Sim.pure ⟨fetch_ecall t4 337 code337 (by norm_num) pc4, x45, x410⟩).mono (by omega)
         (fun _ _ h => h)
     · obtain ⟨hll, hst, pc4, x45, lframe⟩ := h4
       obtain ⟨t5, hs5, pc5, hw5, hf5⟩ := pack_run t4 pc4
       rw [List.drop_zero, List.take_of_length_le (by rw [packTab_length])] at hw5
       have hf5' : Frame t4 t5 (fun x => packD ≤ x ∧ x < packD + 8 * 491) :=
         hf5.mono (fun x hx => by simp only [packD] at hx ⊢; omega)
-      have hs6 := symRun_sound blk2789 codeAt_2789 t5 pc5 (by simp only [blk2789.res, rv_simp])
-      set t6 := blk2789.res.toState t5 with ht6
-      have hc : 2123 + blk2789.res.cycles = 2123 + 2 := rfl
+      have hs6 := symRun_sound blk2798 codeAt_2798 t5 pc5 (by simp only [blk2798.res, rv_simp])
+      set t6 := blk2798.res.toState t5 with ht6
+      have hc : 2123 + blk2798.res.cycles = 2123 + 2 := rfl
       have mem6 : ∀ a, t6.getMem a = t5.getMem a := by
-        intro a; rw [ht6, Result.toState_getMem, show blk2789.res.st.mem = [] from rfl, memEval_nil]
+        intro a; rw [ht6, Result.toState_getMem, show blk2798.res.st.mem = [] from rfl, memEval_nil]
       have by6 : bytesAt t6 0x2650 6404 = bytesAt t5 0x2650 6404 := by
         unfold bytesAt; apply List.map_congr_left; intro i _
         simp only [MachineState.getByte, mem6]
@@ -315,8 +315,8 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
         rw [hl1] at hi
         exact (hopen i (by rw [hl1]; exact hi)).frame ft24 (by omega) (by
           intro a h1 h2; simp only [layW]; omega)
-      refine (Sim.pure_steps (hs5.trans hs6) ⟨fetch_ecall t6 2791 code2791 (by norm_num) rfl,
-        by simp only [ht6, blk2789.res, rv_simp], by simp only [ht6, blk2789.res, rv_simp], ?_⟩).mono
+      refine (Sim.pure_steps (hs5.trans hs6) ⟨fetch_ecall t6 2800 code2800 (by norm_num) rfl,
+        by simp only [ht6, blk2798.res, rv_simp], by simp only [ht6, blk2798.res, rv_simp], ?_⟩).mono
         (by rw [hc]) (fun _ _ h => h)
       rw [readBuffer_bytesAt, by6, final_bytes t4 rho p.1 lays hrl hrho4 hl1 hopen4 hll hst t5 hw5 hf5']
 
@@ -324,7 +324,7 @@ theorem signList_sim (sk : SecretKey) (cache : Cache) (m : Message) :
     Sim image (s0 sk cache m) signW (signList (toList sk) (toList cache) (toList m)) ListPost := by
   rw [signList_eq]
   exact mac_sim sk cache m _ restW ListPost (fun u hu => signRest_sim sk cache m u hu)
-    (fun t tpc t5 t10 => ⟨fetch_ecall t 86 code86 (by norm_num) tpc, t5, t10⟩)
+    (fun t tpc t5 t10 => ⟨fetch_ecall t 89 code89 (by norm_num) tpc, t5, t10⟩)
 
 end SigGolfCandidate.Sign
 

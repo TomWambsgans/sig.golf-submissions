@@ -74,8 +74,8 @@ theorem countBoth_bind (oa : OracleComp HashSpec α) (f : α → OracleComp Hash
   rfl
 
 @[simp] theorem countBoth_H (x : List Byte) :
-    countBoth (H x) = (fun a => (a, 1, (pad64 x).blocks)) <$> H x := by
-  rw [← blocks_fmt]; exact countBoth_query (fmt x)
+    countBoth (H x) = (fun a => (a, 1, (fmt x).blocks)) <$> H x :=
+  countBoth_query (fmt x)
 
 /-- The joint counter projects to `countCalls`. -/
 theorem countBoth_calls (oa : OracleComp HashSpec α) :
@@ -236,11 +236,11 @@ theorem Sim.hash16_bindF {s : MachineState} {x : List Byte} {W : Nat}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
     (hv : hashArgumentsValid s = true) (hq : hashInput s = fmt x)
     (h : ∀ a, Sim image (writeHash s a) W (f (answerBytes 16 a)) Q) :
-    Sim image s (8 * (pad64 x).blocks + W) (hash16 x >>= f) Q := by
+    Sim image s (8 * (fmt x).blocks + W) (hash16 x >>= f) Q := by
   have : hash16 x >>= f = (liftM (HashSpec.query (fmt x)) : OracleComp HashSpec _) >>=
       fun a => f (answerBytes 16 a) := by
     simp only [hash16, H, bind_assoc, pure_bind]
-  rw [this, ← blocks_fmt]
+  rw [this]
   exact Sim.query_bind hf ht0 hv hq h
 
 /-- `hash16 x` for a zero-padded input (`fmt x = pad64 x`) followed by a continuation. -/
@@ -249,8 +249,9 @@ theorem Sim.hash16_bind {s : MachineState} {x : List Byte} {W : Nat}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
     (hv : hashArgumentsValid s = true) (hq : hashInput s = pad64 x) (hx : fmt x = pad64 x)
     (h : ∀ a, Sim image (writeHash s a) W (f (answerBytes 16 a)) Q) :
-    Sim image s (8 * (pad64 x).blocks + W) (hash16 x >>= f) Q :=
-  Sim.hash16_bindF hf ht0 hv (hq.trans hx.symm) h
+    Sim image s (8 * (pad64 x).blocks + W) (hash16 x >>= f) Q := by
+  have := Sim.hash16_bindF hf ht0 hv (hq.trans hx.symm) h
+  rwa [hx] at this
 
 /-- `hash16 x` at the end. -/
 theorem Sim.hash16 {s : MachineState} {x : List Byte} {W : Nat} {Q : Val → MachineState → Prop}

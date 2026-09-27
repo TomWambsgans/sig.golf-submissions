@@ -48,7 +48,7 @@ theorem spec_chainTo (lay tau e i x : Nat) (v : Val) (hv : v.length ≤ 16) :
   refine Spec.foldlM_range'_le (P := fun _ => True) 1 x _ (fun _ (w : Val) => w.length ≤ 16)
     (fun _ => 1) v hv (fun i' _ w hw => ?_) (fun _ h => h) (by simp)
   exact spec_hash16_bind (chainInput lay tau e i (1 + i') w) trivial
-    (blocks_fmt_le _ 1 (by simp [chainInput]; omega) le_rfl)
+    (blocksFmt_le _ 1 (by simp [chainInput]; omega) le_rfl)
     (fun w' hw' => Spec.pure _ 0 (by omega)) le_rfl
 
 theorem sum_pairs (f : Nat → Nat) (n : Nat) :
@@ -184,7 +184,7 @@ theorem regionBytes_eq : regionBytes = 65504 := by decide
 theorem mac_ok (S cache : List Byte) (hS : S.length = 32) :
     qbyte (fmt (macInput S (cacheRegion cache))) 1 = 14 ∧
       (fmt (macInput S (cacheRegion cache))).blocks ≤ 1025 := by
-  refine ⟨by unfold macInput; rw [qbyte_tag], blocks_fmt_le _ 1025 ?_ (by omega)⟩
+  refine ⟨by unfold macInput; rw [qbyte_tag], blocksFmt_le _ 1025 ?_ (by omega)⟩
   have : (cacheRegion cache).length ≤ 65504 := by
     unfold cacheRegion slice; rw [List.length_take, ← regionBytes_eq]; omega
   simp only [macInput, length_thInput, length_tweak, List.length_append, hS]; omega
@@ -196,7 +196,7 @@ noncomputable abbrev signBound (z bD bC : ℝ≥0∞) : ℝ≥0∞ :=
 set_option maxRecDepth 100000 in
 /-- The expectation bound for the part of `signList` after the MAC check, from `Inv0`. -/
 theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC : 1 ≤ bC)
-    (hstepD : z ^ 4 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
+    (hstepD : z ^ 3 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC)
     (S cache m : List Byte) (hS : S.length = 32) (hm : m.length = 32) (c : RCache)
     (hinv : CacheInv Inv0 c) :
@@ -256,7 +256,7 @@ theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
 
 /-- The expectation bound for `signList` (MAC check first), for every cache argument. -/
 theorem V_signList (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC : 1 ≤ bC)
-    (hstepD : z ^ 4 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
+    (hstepD : z ^ 3 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC)
     (S cache m : List Byte) (hS : S.length = 32) (hm : m.length = 32) (c : RCache)
     (hinv : CacheInv Inv0 c) :
@@ -274,7 +274,7 @@ theorem V_signList (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
       (one_le_pow₀ hz)))
 
 theorem V_signRef (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC : 1 ≤ bC)
-    (hstepD : z ^ 4 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
+    (hstepD : z ^ 3 * ((epsD + rhoD) * bD + (1 - rhoD)) ≤ bD)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC)
     (sk : Bytes 32) (cache : Cache) (m : Bytes 32) (c : RCache) (hinv : CacheInv Inv0 c) :
     V z (signRef sk cache m) c ≤ z ^ 1025 * signBound z bD bC := by

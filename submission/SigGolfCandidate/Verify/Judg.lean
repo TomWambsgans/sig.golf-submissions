@@ -165,14 +165,10 @@ theorem Good.hashHP {s : MachineState} {N C : Nat} {x : List Byte}
   have := Good.hashH hf ht0 hv (hin.trans hx.symm) h
   rwa [hx] at this
 
-theorem byte_ne_one (t : Nat) (h1 : t < 256) (h2 : t ≠ 1) : byte t ≠ byte 1 := by
-  intro h
-  have := congrArg BitVec.toNat h
-  simp [byte] at this
-  omega
-
-theorem fmt_th (t lay tau p j : Nat) (payload : List Byte) (h1 : t < 256) (h2 : t ≠ 1) :
+/-- Zero-padded `thInput` for the tags that `fmt` leaves alone (not 1, 3, 10, 12). -/
+theorem fmt_th (t lay tau p j : Nat) (payload : List Byte)
+    (ht : byte t ∉ [byte 1, byte 3, byte 10, byte 12]) :
     fmt (thInput (tweak t lay tau p j) payload) = pad64 (thInput (tweak t lay tau p j) payload) :=
-  fmt_thInput t lay tau p j payload (byte_ne_one t h1 h2)
+  fmt_thInput t lay tau p j payload ht
 
 end SigGolfCandidate.Verify

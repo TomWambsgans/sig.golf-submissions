@@ -28,7 +28,7 @@ def RBOk (roots : List Val) (s : MachineState) : Prop :=
 def TreeCarry (d : DCtx) (k : Nat) (roots : List Val) (s : MachineState) : Prop :=
   s.getReg .x16 = d.a.extractLsb' 0 64 ∧ s.getReg .x17 = d.a.extractLsb' 64 64 ∧
   s.getReg .x25 = d.a.extractLsb' 128 64 ∧ s.getReg .x22 = BitVec.ofNat 64 d.idx ∧
-  s.getReg .x29 = BitVec.ofNat 64 (d.fw k) ∧ s.getReg .x27 = BitVec.ofNat 64 (d.fw k + 256 + 2 ^ 32) ∧
+  s.getReg .x29 = BitVec.ofNat 64 (d.fw k) ∧ s.getReg .x27 = BitVec.ofNat 64 (d.fw k + 256) ∧
   (s.getMem (BitVec.ofNat 64 0xC0)).toNat < 2 ^ 32 ∧
   (s.getMem (BitVec.ofNat 64 0xC8)).toNat % 2 ^ 32 = d.idx % 2 ^ 32 ∧
   s.getMem (BitVec.ofNat 64 0xF0) = 0 ∧ s.getMem (BitVec.ofNat 64 0xF8) = 0 ∧
@@ -107,6 +107,18 @@ theorem stW_eval' (s : MachineState) (a : Nat) (v : E) (V lo : Nat) (hv : v.eval
   omega
 
 
+theorem or1024_eval (X : E) (U : Nat) (hU : U < 1024) (s : MachineState)
+    (hX : X.eval s = BitVec.ofNat 64 U) : (E.bin .or X (cw 1024)).eval s = BitVec.ofNat 64 (U + 1024) := by
+  show X.eval s ||| BitVec.ofNat 64 1024 = _
+  rw [hX]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_or, BitVec.toNat_ofNat]
+  rw [Nat.mod_eq_of_lt (show U < 2 ^ 64 by omega), Nat.mod_eq_of_lt (show 1024 < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show U + 1024 < 2 ^ 64 by omega), Nat.or_comm]
+  have := Nat.two_pow_add_eq_or_of_lt (show U < 2 ^ 10 by omega) 1
+  rw [Nat.mul_one, show (2 : Nat) ^ 10 = 1024 from rfl] at this
+  omega
+
 theorem treeCheck_spec (k : Nat) (h1 : 1 ≤ k) (hk : k < 14) (t b : Nat) (ht : t < 2) (hb : b < 2) :
     specB gkF (runAt (fK (k - 1)) [] (tEnd (k - 1) t) [.br (dirOf (tsh k t) b)]) (specTree k t b)
       (fk true 0xC0 64) forsKeep = true := by
@@ -116,9 +128,12 @@ theorem treeCheck_spec (k : Nat) (h1 : 1 ≤ k) (hk : k < 14) (t b : Nat) (ht : 
 
 theorem tree_branch (d : DCtx) (k t : Nat) (hk : k < 14) (s : MachineState)
     (hu : (uE' k).eval s = BitVec.ofNat 64 (d.u k)) :
-    Br.holds s ⟨if tsh k t = 0 then .lt else .ge, .bin .sll (uE' k) (cw 63), .c 0,
+    Br.holds s ⟨if tsh k t = 0 then .lt else .ge, .bin .sll (.bin .or (uE' k) (cw 1024)) (cw 63), .c 0,
       dirOf (tsh k t) (d.u k % 2)⟩ := by
-  obtain ⟨hlt, hge⟩ := sll63_cmp (uE' k) (d.u k) (by have := d_u_lt d k; omega) s hu
+  have hul := d_u_lt d k
+  obtain ⟨hlt, hge⟩ := sll63_cmp _ (d.u k + 1024) (by omega) s (or1024_eval _ _ hul s hu)
+  have hpar : (d.u k + 1024) % 2 = d.u k % 2 := by omega
+  rw [hpar] at hlt hge
   simp only [Br.holds]
   by_cases h0 : tsh k t = 0
   · rw [if_pos h0, hlt, dirOf, if_pos h0]
@@ -209,7 +224,7 @@ theorem tree_leaf (d : DCtx) (hwl : d.wl.length = 6404) (k : Nat) (hk1 : 1 ≤ k
     have hbit : bitOf (d.u k) 0 = d.u k % 2 := by simp [bitOf]
     have r29 : (writeHash u ans).getReg .x29 = BitVec.ofNat 64 (d.fw k) := by
       rw [writeHash_getReg, hu.regs (.x29, fwE') (by simp [specTree]), hfw]
-    have r27 : (writeHash u ans).getReg .x27 = BitVec.ofNat 64 (d.fw k + 256 + 2 ^ 32) := by
+    have r27 : (writeHash u ans).getReg .x27 = BitVec.ofNat 64 (d.fw k + 256) := by
       rw [writeHash_getReg, hu.regs (.x27, .bin .add (.reg .x27) (.c 65536)) (by simp [specTree])]
       show s.getReg .x27 + 65536#64 = _
       rw [h27, show (65536#64 : Word) = BitVec.ofNat 64 65536 from rfl, BitVec.ofNat_add_ofNat]
@@ -220,8 +235,9 @@ theorem tree_leaf (d : DCtx) (hwl : d.wl.length = 6404) (k : Nat) (hk1 : 1 ≤ k
       ⟨?_, ?_, ?_, ?_, r29, r27, ?_, ?_, ?_, ?_, ?_, hrv, ?_, ?_⟩, by omega⟩
     · have := Known_writeHash hK' ans
       simpa [forsFC] using this
-    · rw [writeHash_getReg, hu.regs (.x23, uE' k) (by simp [specTree])]; exact hU
-    · simp only [NBhdr, forsFC, if_true]
+    · rw [writeHash_getReg, hu.regs (.x23, .bin .or (uE' k) (cw 1024)) (by simp [specTree])]
+      exact or1024_eval (uE' k) _ hul s hU
+    · simp only [NBhdr, forsFC, and_self, if_true]
       rw [r27]; congr 1; unfold FCtx.lo0 DCtx.fw; simp only
       have : d.idx / 2 ^ 32 < 4 := by omega
       omega
@@ -260,9 +276,9 @@ theorem stW0_mod (s : MachineState) (a : Nat) (v : E) (V : Nat) (hv : v.eval s =
   omega
 
 theorem topCheck_parts :
-    specB gkF (runAt dgK [] 31 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] = true ∧
-    specB gkF (runAt dgK [] 31 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] = true ∧
-    specB [] (runAt dgK [] 31 [.br false]) specDgRej [] [] = true := by
+    specB gkF (runAt dgK [] 27 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] = true ∧
+    specB gkF (runAt dgK [] 27 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] = true ∧
+    specB [] (runAt dgK [] 27 [.br false]) specDgRej [] [] = true := by
   have := topCheck_ok
   simp only [topCheck, Bool.and_eq_true] at this
   exact ⟨this.1.1.2, this.1.2, this.2⟩
@@ -270,7 +286,7 @@ theorem topCheck_parts :
 theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 6404) (s : MachineState) (hs : DigestOut d s) :
     (admissible (d.A % 2 ^ 184) = false → ∃ t, Steps image s 6 6 t ∧ fetch image t = some (.base .ECALL) ∧
         t.getReg .x5 = 1 ∧ t.getReg .x10 = 1) ∧
-    (admissible (d.A % 2 ^ 184) = true → ∃ u, Steps image s 34 34 u ∧ fetch image u = some (.base .ECALL) ∧
+    (admissible (d.A % 2 ^ 184) = true → ∃ u, Steps image s 32 32 u ∧ fetch image u = some (.base .ECALL) ∧
         u.getReg .x5 = 0 ∧ hashArgumentsValid u = true ∧
         hashInput u = pad64 (ftsLeafInput 0 d.idx (d.u 0) (witFtsSecret d.wl 0)) ∧
         ∀ ans, LeafF d 0 [] (answerBytes 16 ans) (writeHash u ans)) := by
@@ -318,7 +334,7 @@ theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 6404) (s : MachineState) (hs : D
       rw [hhi, BitVec.ofNat_add_ofNat]
     have hq : d.idx / 2 ^ 32 < 4 := by omega
     set b := d.u 0 % 2 with hb
-    have hsp : specB gkF (runAt dgK [] 31 [.br true, .br (b == 1)]) (specDgOk b) (fk true 0xC0 64) [] = true := by
+    have hsp : specB gkF (runAt dgK [] 27 [.br true, .br (b == 1)]) (specDgOk b) (fk true 0xC0 64) [] = true := by
       rcases Nat.mod_two_eq_zero_or_one (d.u 0) with h | h
       · rw [hb, h]; exact cOk0
       · rw [hb, h]; exact cOk1
@@ -326,7 +342,9 @@ theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 6404) (s : MachineState) (hs : D
       intro br hbr'
       simp only [specDgOk, List.mem_cons, List.not_mem_nil, or_false] at hbr'
       rcases hbr' with rfl | rfl
-      · obtain ⟨hlt, -⟩ := sll63_cmp u0E (d.u 0) (by omega) s hU
+      · obtain ⟨hlt, -⟩ := sll63_cmp _ (d.u 0 + 1024) (by omega) s (or1024_eval _ _ hul s hU)
+        have hpar : (d.u 0 + 1024) % 2 = d.u 0 % 2 := by omega
+        rw [hpar] at hlt
         simp only [Br.holds]; rw [hlt]
         rcases Nat.mod_two_eq_zero_or_one (d.u 0) with h | h <;> simp [hb, h]
       · exact (hbr true).mpr ha)
@@ -417,8 +435,8 @@ theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 6404) (s : MachineState) (hs : D
           (writeHash u ans).getReg x = e.eval s := fun x e hx => by
         rw [writeHash_getReg]; exact hu.regs (x, e) hx
       have hbit : bitOf (d.u 0) 0 = d.u 0 % 2 := by simp [bitOf]
-      have r27 : (writeHash u ans).getReg .x27 = BitVec.ofNat 64 (d.fw 0 + 256 + 2 ^ 32) := by
-        rw [rg .x27 (.bin .add hiE (cw 4294969857)) (by simp [specDgOk]), hadd]; congr 1; unfold DCtx.fw; omega
+      have r27 : (writeHash u ans).getReg .x27 = BitVec.ofNat 64 (d.fw 0 + 256) := by
+        rw [rg .x27 (.bin .add hiE (cw 2561)) (by simp [specDgOk]), hadd]; congr 1; unfold DCtx.fw; omega
       refine ⟨⟨Glob_writeHash gl ans _ h12 (by
           rcases Nat.mod_two_eq_zero_or_one (d.u 0) with h | h <;> rw [h] <;> decide),
         ?_, ?_, ?_, ?_, ?_, ?_, by simp, ⟨fun _ _ => rfl, fun _ _ _ => rfl⟩, ?_⟩,
@@ -426,8 +444,8 @@ theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 6404) (s : MachineState) (hs : D
           ?_, ?_⟩, rfl⟩
       · have := Known_writeHash hK' ans
         simpa [forsFC] using this
-      · rw [rg .x23 u0E (by simp [specDgOk])]; exact hU
-      · simp only [NBhdr, forsFC, if_true]
+      · rw [rg .x23 (.bin .or u0E (cw 1024)) (by simp [specDgOk])]; exact or1024_eval u0E _ hul s hU
+      · simp only [NBhdr, forsFC, and_self, if_true]
         rw [r27]; congr 1; unfold FCtx.lo0 DCtx.fw; simp only
         omega
       · rw [wf 0x1C8 (by omega) (by omega)]; exact mN8
@@ -504,6 +522,6 @@ theorem tree_end (d : DCtx) (k : Nat) (hk : k < 14) (roots : List Val) (t u : Ma
   · rw [wf 0x1C8 (by omega) (by omega)]; exact hN8
   · refine ⟨bitOf (forsFC d k).E ((forsFC d k).h - 1), by simp [bitOf]; omega, ?_⟩
     rw [writeHash_pc, hpc, pcOf_add4]
-    simp only [forsFC, tEnd, Nat.add_sub_cancel, show xp true (10 - 1) = 0 from rfl, Nat.add_zero]
+    simp only [forsFC, tEnd, Nat.add_sub_cancel]
 
 end SigGolfCandidate.Verify

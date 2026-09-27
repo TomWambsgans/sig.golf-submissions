@@ -26,7 +26,7 @@ def wLdE (i : Nat) : E := ldE (0x160 + 8 * i)
 def uE' (k : Nat) : E := uExprW wRegE k
 
 /-- After the last fold hash of FORS tree `k` in stream `t`. -/
-def tEnd (k t : Nat) : Nat := lvlPc (k / 7) t (10 * (k % 7)) 9 + 8
+def tEnd (k t : Nat) : Nat := lvlPc (k / 7) t (10 * (k % 7)) 9 + 7
 def fK (k : Nat) : List (Reg × Word) := fk true 0x1C0 64 ++ [(.x12, BitVec.ofNat 64 (0x240 + 16 * k))]
 
 /-- The branch direction into the X-block of stream `b` from stream `t`. -/
@@ -38,16 +38,16 @@ def tsh (k t : Nat) : Nat := if k = 7 then 0 else t
 def secAddr (k : Nat) : Nat := 0x800 + 16 + 176 * k
 def fwE' : E := .bin .add (.reg .x29) (.c 65536)
 
-def treeSteps (k : Nat) : Nat := 12 + uSteps k + (if k = 7 then 1 else 0)
+def treeSteps (k : Nat) : Nat := 13 + uSteps k + (if k = 7 then 1 else 0)
 
 /-- Tree `k ≥ 1`, from the end of tree `k - 1` (stream `t`) to the leaf hash in stream `b`. -/
 def specTree (k t b : Nat) : Spec :=
-  ⟨[(.x1, ldE (secAddr k)), (.x2, ldE (secAddr k + 8)), (.x12, cw (480 + 16 * b)), (.x23, uE' k),
+  ⟨[(.x1, ldE (secAddr k)), (.x2, ldE (secAddr k + 8)), (.x12, cw (480 + 16 * b)), (.x23, .bin .or (uE' k) (cw 1024)),
     (.x27, .bin .add (.reg .x27) (.c 65536)), (.x29, fwE')],
    [(⟨none, BitVec.ofNat 64 232⟩, ldE (secAddr k + 8)), (⟨none, BitVec.ofNat 64 224⟩, ldE (secAddr k)),
     (⟨none, BitVec.ofNat 64 200⟩, stW 200 (uE' k)), (⟨none, BitVec.ofNat 64 192⟩, stW0 192 fwE')],
    xPc (k / 7) b (10 * (k % 7)) + 1, true, treeSteps k,
-   [⟨if tsh k t = 0 then .lt else .ge, .bin .sll (uE' k) (cw 63), .c 0, dirOf (tsh k t) b⟩], none⟩
+   [⟨if tsh k t = 0 then .lt else .ge, .bin .sll (.bin .or (uE' k) (cw 1024)) (cw 63), .c 0, dirOf (tsh k t) b⟩], none⟩
 
 def forsKeep : List Reg := [.x16, .x17, .x22, .x25]
 
@@ -72,16 +72,16 @@ def k0 : List (Reg × Word) :=
    (.x30, 0), (.x31, 0)]
 
 /-- Digest phase: witness bases and the fold constants `P1 .. P10`. -/
-def gkD : List (Reg × Word) := baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10)]
-def dgK : List (Reg × Word) := gkD ++ [(.x10, 0), (.x11, 128), (.x12, 0x160)]
+def gkD : List (Reg × Word) := baseK
+def dgK : List (Reg × Word) := gkD ++ [(.x10, 0x20), (.x11, 64), (.x12, 0x160)]
 
 def ctrX : E := .bin .or (.bin .or (ldE 8432) (ldE 8440)) (.un (.ld .wu 0) (ldE 8448))
 def ctrE' : E := .bin .srl (.bin .or ctrX (.bin .sll ctrX (cw 32))) (cw 54)
 
 def specStartOk : Spec :=
-  ⟨[], [(⟨none, BitVec.ofNat 64 40⟩, ldE 2056), (⟨none, BitVec.ofNat 64 32⟩, ldE 2048),
-    (⟨none, BitVec.ofNat 64 0⟩, cw 3073)], 30, true, 30, [⟨.ne, ctrE', .c 0, false⟩], none⟩
-def specStartRej : Spec := ⟨rejK, [], 37, true, 23, [⟨.ne, ctrE', .c 0, true⟩], none⟩
+  ⟨[], [(⟨none, BitVec.ofNat 64 56⟩, ldE 2056), (⟨none, BitVec.ofNat 64 48⟩, ldE 2048),
+    (⟨none, BitVec.ofNat 64 32⟩, cw 3073)], 26, true, 26, [⟨.ne, ctrE', .c 0, false⟩], none⟩
+def specStartRej : Spec := ⟨rejK, [], 33, true, 18, [⟨.ne, ctrE', .c 0, true⟩], none⟩
 
 def idxE : E := .bin .srl (.bin .sll (wLdE 0) (cw 30)) (cw 30)
 def hiE : E := .bin .sll (.bin .srl idxE (cw 32)) (cw 24)
@@ -90,23 +90,23 @@ def admE : E := .bin .srl (.bin .sll (wLdE 2) (cw 8)) (cw 54)
 
 def specDgOk (b : Nat) : Spec :=
   ⟨[(.x1, ldE 2064), (.x2, ldE 2072), (.x12, cw (480 + 16 * b)), (.x16, wLdE 0), (.x17, wLdE 1),
-    (.x22, idxE), (.x23, u0E), (.x25, wLdE 2), (.x27, .bin .add hiE (cw 4294969857)),
+    (.x22, idxE), (.x23, .bin .or u0E (cw 1024)), (.x25, wLdE 2), (.x27, .bin .add hiE (cw 2561)),
     (.x29, .bin .add hiE (cw 2305))],
    [(⟨none, BitVec.ofNat 64 232⟩, ldE 2072), (⟨none, BitVec.ofNat 64 224⟩, ldE 2064),
     (⟨none, BitVec.ofNat 64 200⟩, .bin (.st .w 4) (stW0 200 idxE) u0E),
     (⟨none, BitVec.ofNat 64 192⟩, stW0 192 (.bin .add hiE (cw 2305))),
     (⟨none, BitVec.ofNat 64 544⟩, stW0 544 (.bin .add hiE (cw 2817))),
     (⟨none, BitVec.ofNat 64 552⟩, stW0 552 idxE), (⟨none, BitVec.ofNat 64 456⟩, stW0 456 idxE)],
-   xPc 0 b 0 + 1, true, 34,
-   [⟨.lt, .bin .sll u0E (cw 63), .c 0, b == 1⟩, ⟨.eq, admE, .c 0, true⟩], none⟩
+   xPc 0 b 0 + 1, true, 32,
+   [⟨.lt, .bin .sll (.bin .or u0E (cw 1024)) (cw 63), .c 0, b == 1⟩, ⟨.eq, admE, .c 0, true⟩], none⟩
 
-def specDgRej : Spec := ⟨rejK, [], 37, true, 6, [⟨.eq, admE, .c 0, false⟩], none⟩
+def specDgRej : Spec := ⟨rejK, [], 33, true, 6, [⟨.eq, admE, .c 0, false⟩], none⟩
 
 def topCheck : Bool :=
   specB gkD (runAt k0 [] 0 [.br false]) specStartOk dgK [] &&
   specB [] (runAt k0 [] 0 [.br true]) specStartRej [] [] &&
-  specB gkF (runAt dgK [] 31 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] &&
-  specB gkF (runAt dgK [] 31 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] &&
-  specB [] (runAt dgK [] 31 [.br false]) specDgRej [] []
+  specB gkF (runAt dgK [] 27 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] &&
+  specB gkF (runAt dgK [] 27 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] &&
+  specB [] (runAt dgK [] 27 [.br false]) specDgRej [] []
 
 end SigGolfCandidate.Verify

@@ -52,10 +52,6 @@ theorem fmt_encInput (lay tau e : Nat) (M : Val) (c : Nat) :
 theorem fmt_rndInput (S m : List Byte) (a : Nat) : fmt (rndInput S m a) = pad64 (rndInput S m a) :=
   fmt_eq_pad64 _ _ _ _ _ _ (by decide)
 
-theorem fmt_digestInput (rho m : List Byte) :
-    fmt (digestInput rho m) = pad64 (digestInput rho m) :=
-  fmt_eq_pad64 _ _ _ _ _ _ (by decide)
-
 theorem enc_inj (lay tau e : Nat) (M : Val) {c c' : Nat} (hc : c < 2 ^ 32) (hc' : c' < 2 ^ 32)
     (h : fmt (encInput lay tau e M c) = fmt (encInput lay tau e M c')) : c = c' := by
   rw [fmt_encInput, fmt_encInput] at h
@@ -83,7 +79,7 @@ theorem V_searchCounter (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
     rw [hash16_bind_eq, V_query,
       expectedValue_ro_fresh _ _ (hfresh c le_rfl (by omega))]
     have hbl : (fmt (encInput lay tau e M c)).blocks ≤ 1 :=
-      blocks_fmt_le _ 1 (by simp [encInput]; omega) le_rfl
+      blocksFmt_le _ 1 (by simp [encInput]; omega) le_rfl
     have hz1 : z ^ (fmt (encInput lay tau e M c)).blocks ≤ z := by
       calc z ^ (fmt (encInput lay tau e M c)).blocks ≤ z ^ 1 := pow_le_pow_right₀ hz hbl
         _ = z := pow_one z
@@ -120,13 +116,15 @@ theorem rnd_ne_dig (S m rho m' : List Byte) (a : Nat) :
   simp only [rndInput, digestInput, qbyte_tag] at this
   omega
 
-theorem dig_inj (m : List Byte) {rho rho' : List Byte} (hr : rho.length = 16)
+theorem dig_inj (m : List Byte) (hm : m.length = 32) {rho rho' : List Byte} (hr : rho.length = 16)
     (hr' : rho'.length = 16)
     (h : fmt (digestInput rho m) = fmt (digestInput rho' m)) : rho = rho' := by
-  rw [fmt_digestInput, fmt_digestInput] at h
-  have h2 := pad64_inj (by simp [digestInput, hr, hr']) h
-  simp only [digestInput, thInput, List.append_assoc, List.append_cancel_left_eq] at h2
-  exact List.append_inj_left' h2 rfl
+  rw [Ref.fmt_digestInput rho m hr hm, Ref.fmt_digestInput rho' m hr' hm] at h
+  have h1 := congrArg (fun q : Query => toList q.2) h
+  dsimp only at h1
+  rw [toList_ofList _ _ (by simp [hr, hm]), toList_ofList _ _ (by simp [hr', hm])] at h1
+  simp only [List.append_assoc, List.append_cancel_left_eq] at h1
+  exact List.append_inj_left' h1 rfl
 
 /-- The rejection probability of one fresh digest. -/
 noncomputable def rhoD : ℝ≥0∞ :=
@@ -137,7 +135,7 @@ noncomputable def rhoD : ℝ≥0∞ :=
 noncomputable def epsD : ℝ≥0∞ := (2 : ℝ≥0∞) ^ 20 / 2 ^ 128
 
 theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
-    (hstep : z ^ 4 * ((epsD + rhoD) * b + (1 - rhoD)) ≤ b)
+    (hstep : z ^ 3 * ((epsD + rhoD) * b + (1 - rhoD)) ≤ b)
     (S m : List Byte) (hS : S.length = 32) (hm : m.length = 32) :
     ∀ fuel a (cache : RCache) (R : Finset Val), a + fuel ≤ 2 ^ 20 → R.card ≤ a →
       (∀ a', a ≤ a' → a' < 2 ^ 32 → cache (fmt (rndInput S m a')) = none) →
@@ -153,13 +151,15 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
     obtain ⟨-, hb1⟩ := rnd_ok S m hS hm a
     have hz2 : ∀ q : Query, q.blocks ≤ 2 → z ^ q.blocks ≤ z ^ 2 := fun q hq =>
       pow_le_pow_right₀ hz hq
+    have hz1 : ∀ q : Query, q.blocks ≤ 1 → z ^ q.blocks ≤ z := fun q hq =>
+      (pow_le_pow_right₀ hz hq).trans_eq (pow_one z)
     -- the continuation after the randomizer `u`
     have hcont : ∀ u : BitVec 256,
         V z (digest (answerBytes 16 u) m >>= fun N =>
             if admissible N = true then pure (some (answerBytes 16 u, N))
             else searchDigest S m (a + 1) n)
           ((cache.cacheQuery (fmt (rndInput S m a)) u)) ≤
-        if answerBytes 16 u ∈ R then z ^ 2 * b else z ^ 2 * (rhoD * b + (1 - rhoD)) := by
+        if answerBytes 16 u ∈ R then z * b else z * (rhoD * b + (1 - rhoD)) := by
       intro u
       set rho := answerBytes 16 u with hrho_def
       have hrho : rho.length = 16 := by simp [rho]
@@ -186,7 +186,7 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
         · exact ih (a + 1) c2 R' (by omega) hR' h1 h2
       by_cases hmem : rho ∈ R
       · rw [if_pos hmem]
-        refine mul_le_mul' (hz2 _ hb2) ?_
+        refine mul_le_mul' (hz1 _ hb2) ?_
         refine expectedValue_le_of_support fun y hy => ?_
         refine (hk R y.2 (by omega) ?_ ?_ y.1).trans (by split <;> simp [hb])
         · rcases mem_support_ro _ _ y hy with ⟨_, h⟩ | ⟨_, h⟩
@@ -198,14 +198,14 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
         · rcases mem_support_ro _ _ y hy with ⟨_, h⟩ | ⟨_, h⟩
           · rw [h]; intro rho' hl hn; rw [hc1dig]; exact hdig rho' hl hn
           · rw [h]; intro rho' hl hn
-            rw [QueryCache.cacheQuery_of_ne _ _ (fun h' => hn (dig_inj m hl hrho h' ▸ hmem)),
+            rw [QueryCache.cacheQuery_of_ne _ _ (fun h' => hn (dig_inj m hm hl hrho h' ▸ hmem)),
               hc1dig]
             exact hdig rho' hl hn
       · rw [if_neg hmem]
         have hfresh : (cache.cacheQuery (fmt (rndInput S m a)) u) (fmt (digestInput rho m)) = none := by
           rw [hc1dig]; exact hdig rho hrho hmem
         rw [expectedValue_ro_fresh _ _ hfresh]
-        refine mul_le_mul' (hz2 _ hb2) ?_
+        refine mul_le_mul' (hz1 _ hb2) ?_
         refine (ev_ite_le (fun v : BitVec 256 => ¬ admissible (v.toNat % 2 ^ 184) = true) b 1 _
           fun v => ?_).trans ?_
         · refine (hk (insert rho R) _ ((Finset.card_insert_le _ _).trans (by omega)) ?_ ?_ v).trans
@@ -217,7 +217,7 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
           · intro rho' hl hn
             rw [Finset.mem_insert, not_or] at hn
             dsimp only
-            rw [QueryCache.cacheQuery_of_ne _ _ (fun h' => hn.1 (dig_inj m hl hrho h')), hc1dig]
+            rw [QueryCache.cacheQuery_of_ne _ _ (fun h' => hn.1 (dig_inj m hm hl hrho h')), hc1dig]
             exact hdig rho' hl hn.2
         · rw [probEvent_not_uniform (fun v : BitVec 256 => ¬ admissible (v.toNat % 2 ^ 184) = true),
             mul_one]
@@ -232,12 +232,12 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
       gcongr
       exact_mod_cast (show R.card ≤ 2 ^ 20 by omega)
     calc z ^ 2 * (Pr[fun u : BitVec 256 => answerBytes 16 u ∈ R |
-            ($ᵗ BitVec 256 : ProbComp (BitVec 256))] * (z ^ 2 * b) +
+            ($ᵗ BitVec 256 : ProbComp (BitVec 256))] * (z * b) +
           Pr[fun u : BitVec 256 => ¬ answerBytes 16 u ∈ R |
-            ($ᵗ BitVec 256 : ProbComp (BitVec 256))] * (z ^ 2 * (rhoD * b + (1 - rhoD))))
-        ≤ z ^ 2 * (epsD * (z ^ 2 * b) + 1 * (z ^ 2 * (rhoD * b + (1 - rhoD)))) := by
+            ($ᵗ BitVec 256 : ProbComp (BitVec 256))] * (z * (rhoD * b + (1 - rhoD))))
+        ≤ z ^ 2 * (epsD * (z * b) + 1 * (z * (rhoD * b + (1 - rhoD)))) := by
           gcongr; exact probEvent_le_one
-      _ = z ^ 4 * ((epsD + rhoD) * b + (1 - rhoD)) := by ring
+      _ = z ^ 3 * ((epsD + rhoD) * b + (1 - rhoD)) := by ring
       _ ≤ b := hstep
 
 end SigGolfCandidate.Budget

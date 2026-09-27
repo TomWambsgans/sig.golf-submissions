@@ -3,15 +3,16 @@ import SigGolf
 /-!
 # SPHINCS-golf reference specification: primitives
 
-Byte-level primitives of the reference specification (`work/py-opt5/ref.py`,
-`work/design/SPEC-v4.md`, `work/py-opt5/PROGRAMS.md`):
+Byte-level primitives of the reference specification (`work/py-opt7/ref.py`,
+`work/design/SPEC-v4.md`, `work/py-opt7/PROGRAMS.md`):
 
 * byte encodings (little endian) and conversions between `List Byte` and `Bytes n`;
 * the parameters;
 * the 16-byte tweak;
 * `pad64` (zero padding to whole 64-byte blocks), the oracle input format `fmt` (chain inputs
-  `tw || P || v` become `tw || 0^32 || v`, everything else `pad64`), and the hash wrappers `H`,
-  `hash16`, `th`;
+  `tw || P || v` become `tw' || 0^32 || v` with the split position `p'`; node inputs (tags 3, 10)
+  get the heap index `2^(h - lam) + j`; the digest input becomes `tw || rho || m`; everything else
+  `pad64`), and the hash wrappers `H`, `hash16`, `th`;
 * every per-hash input format (`*Input`), the exact byte list *before* padding;
 * digest split (`idxOf`, `uOf`, `admissible`), routing (`route`), digit decoding
   (`decodeDigits`).
@@ -148,13 +149,59 @@ def IsChainFmt (x : List Byte) : Prop := x.length = 48 ∧ x.getD 1 0 = byte 1
 instance (x : List Byte) : Decidable (IsChainFmt x) :=
   inferInstanceAs (Decidable (x.length = 48 ∧ x.getD 1 0 = byte 1))
 
-/-- The 64-byte block of a chain input `x = tw || P || v`: `tw || 0^32 || v` (value last). -/
-def chainBlock (x : List Byte) : List Byte := x.take 16 ++ zeros 32 ++ x.drop 32
+/-- Tree / FORS node inputs: 64 bytes with tag byte `3` or `10`. -/
+def IsNodeFmt (x : List Byte) : Prop :=
+  x.length = 64 ∧ (x.getD 1 0 = byte 3 ∨ x.getD 1 0 = byte 10)
 
-/-- **The oracle input format** `f` (`PROGRAMS.md`, FORMAT; `ref.f_query`): chain inputs become
-the block `tw || 0^32 || v`; every other input is zero padded (`pad64`). -/
+instance (x : List Byte) : Decidable (IsNodeFmt x) :=
+  inferInstanceAs (Decidable (x.length = 64 ∧ (x.getD 1 0 = byte 3 ∨ x.getD 1 0 = byte 10)))
+
+/-- Message digest inputs: 96 bytes with tag byte `12`. -/
+def IsDigestFmt (x : List Byte) : Prop := x.length = 96 ∧ x.getD 1 0 = byte 12
+
+instance (x : List Byte) : Decidable (IsDigestFmt x) :=
+  inferInstanceAs (Decidable (x.length = 96 ∧ x.getD 1 0 = byte 12))
+
+/-- The split chain position `p' = (p mod 8) | (p div 8) << 8` (byte 4 = `mu - 1`, byte 5 = `i`
+for `p = 8 i + mu - 1`). -/
+def splitP (p : Nat) : Nat := p % 8 + 256 * (p / 8)
+
+/-- The heap index `2^(h - lam) + j` of node `j` of level `lam` of a tree of height `h`. -/
+def heapIndex (h lam j : Nat) : Nat := 2 ^ (h - lam) + j
+
+/-- The height of the tree of a node input: `height lay` (tag 3, `lay` = byte 2) or `ftsA` (tag 10). -/
+def nodeHeight (x : List Byte) : Nat :=
+  if x.getD 1 0 = byte 3 then height (x.getD 2 0).toNat else ftsA
+
+/-- The 64-byte block of a chain input `x = tw || P || v`: `tw' || 0^32 || v`, `tw'` = `tw` with
+the `p` field (bytes 4..8) replaced by `splitP p`. -/
+def chainBlock (x : List Byte) : List Byte :=
+  x.take 4 ++ le32 (splitP (leNat (slice x 4 4))) ++ slice x 8 8 ++ zeros 32 ++ x.drop 32
+
+/-- The block of a node input `enc(t, lay, tau, lam, j) || P || L || R`:
+`enc(t, lay, tau, 0, heapIndex h lam j) || P || L || R`. -/
+def nodeBlock (x : List Byte) : List Byte :=
+  x.take 4 ++ le32 0 ++ slice x 8 4 ++
+    le32 (heapIndex (nodeHeight x) (leNat (slice x 4 4)) (leNat (slice x 12 4))) ++ x.drop 16
+
+/-- The block of a digest input `tw || P || rho || 0^16 || m`: `tw || rho || m`. -/
+def digestBlock (x : List Byte) : List Byte := x.take 16 ++ slice x 32 16 ++ x.drop 64
+
+/-- **The oracle input format** `f` (`PROGRAMS.md`, FORMAT; `ref.f_query`): chain inputs, node
+inputs (tags 3, 10) and digest inputs become the one-block `chainBlock`, `nodeBlock`,
+`digestBlock`; every other input is zero padded (`pad64`). -/
 def fmt (x : List Byte) : Query :=
-  if IsChainFmt x then ⟨0, ofList _ (chainBlock x)⟩ else pad64 x
+  if IsChainFmt x then ⟨0, ofList _ (chainBlock x)⟩
+  else if IsNodeFmt x then ⟨0, ofList _ (nodeBlock x)⟩
+  else if IsDigestFmt x then ⟨0, ofList _ (digestBlock x)⟩
+  else pad64 x
+
+/-- The bytes of `fmt x` (`toList_fmt`). -/
+def fmtList (x : List Byte) : List Byte :=
+  if IsChainFmt x then chainBlock x
+  else if IsNodeFmt x then nodeBlock x
+  else if IsDigestFmt x then digestBlock x
+  else padTo64 x
 
 /-- One oracle call on `fmt x`. -/
 def H (x : List Byte) : OracleComp HashSpec (BitVec 256) := HashSpec.query (fmt x)

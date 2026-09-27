@@ -29,6 +29,7 @@ structure TreeCtx (S : List Byte) (x : List Nat) (p : TreePar) (tt : MachineStat
   hh : p.h ≤ 6
   he : p.e < 2 ^ p.h
   hsigl : p.sigl = 0x900 + 856 * p.lay
+  hheight : p.h = height p.lay
   hx : ∀ i, x.getD i 0 < 8
   x5 : tt.getReg .x5 = 0
   x8 : tt.getReg .x8 = BitVec.ofNat 64 p.lay
@@ -54,14 +55,14 @@ def leavesW (p : TreePar) (a : Nat) : Prop :=
     (0x360 ≤ a ∧ a < 0x360 + 672) ∨ (p.sigl + 8 ≤ a ∧ a < p.sigl + 8 + 672) ∨
     (0x34100 ≤ a ∧ a < 0x34100 + 16 * 65)
 
-def leavesRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x20, .x21, .x23, .x24, .x25]
+def leavesRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x20, .x21, .x23, .x24, .x25, .x29]
 
 /-- Invariant after `j` leaves. -/
 def TLeafInv (p : TreePar) (tt : MachineState) (j : Nat) (st : List Val × List Val) (t : MachineState) :
     Prop :=
   j ≤ 2 ^ p.h ∧ st.1.length = j ∧ (∀ v ∈ st.1, v.length = 16) ∧ Slots t 0x34100 st.1 ∧
   (p.e < j → st.2.length = 42 ∧ (∀ v ∈ st.2, v.length = 16) ∧ Slots t (p.sigl + 8) st.2) ∧
-  t.pc = (if j < 2 ^ p.h then pcOf 477 else pcOf 542) ∧ t.getReg .x20 = BitVec.ofNat 64 j ∧
+  t.pc = (if j < 2 ^ p.h then pcOf 479 else pcOf 548) ∧ t.getReg .x20 = BitVec.ofNat 64 j ∧
   RegsEq tt t leavesRegs ∧ Frame tt t (leavesW p) ∧
   lo32 (t.getMem (BitVec.ofNat 64 0x6A0)) = lo32 (tt.getMem (BitVec.ofNat 64 0x6A0)) ∧
   lo32 (t.getMem (BitVec.ofNat 64 0xC0)) = lo32 (tt.getMem (BitVec.ofNat 64 0xC0))
@@ -84,7 +85,7 @@ theorem pow_le32 (h : Nat) (hh : h ≤ 6) : 2 ^ h ≤ 64 :=
 theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePar)
     (tt : MachineState) (ctx : TreeCtx S x p tt) (j : Nat) (hj : j < 2 ^ p.h)
     (st : List Val × List Val) (t : MachineState) (hinv : TLeafInv p tt j st t) :
-    Sim image t (7 + (21 * 424 + (4 + (88 + 2))))
+    Sim image t (7 + (21 * 480 + (4 + (88 + 2))))
       (do
         let (leaf, c) ← buildLeaf S p.lay p.tau j x
         pure (st.1 ++ [leaf], if j = p.e then c else st.2))
@@ -95,16 +96,16 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
   have htau := ctx.htau
   have h32 := pow_le32 p.h ctx.hh
   have he := ctx.he
-  have tpc' : t.pc = pcOf 477 := by rw [tpc, if_pos hj]
+  have tpc' : t.pc = pcOf 479 := by rw [tpc, if_pos hj]
   have tx30 : t.getReg .x30 = BitVec.ofNat 64 p.tau := by rw [tregs.get .x30, ctx.x30]
   -- block 510: leaf tweak words
-  have hs1 := symRun_sound blk477 codeAt_477 t tpc' (by simp only [blk477.res, rv_simp])
-  have hc1 : blk477.res.cycles = 7 := rfl
+  have hs1 := symRun_sound blk479 codeAt_479 t tpc' (by simp only [blk479.res, rv_simp])
+  have hc1 : blk479.res.cycles = 7 := rfl
   rw [hc1] at hs1
-  set tl := blk477.res.toState t with htl
+  set tl := blk479.res.toState t with htl
   have f1 : Frame t tl (fun x => x = 0x6A8 ∨ x = 0xC8 ∨ x = 0x348) := by
     apply frame_toState; intro x hx hW
-    simp only [blk477.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk479.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r1 : RegsEq t tl [.x3, .x21, .x24] := by
@@ -113,7 +114,7 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
   have hw : ∀ a, a = 0x6A8 ∨ a = 0xC8 ∨ a = 0x348 →
       tl.getMem (BitVec.ofNat 64 a) = BitVec.ofNat 64 (p.tau + 2 ^ 32 * j) := by
     intro a ha
-    simp only [htl, blk477.res, rv_simp]
+    simp only [htl, blk479.res, rv_simp]
     bvsimp [t20, tx30, ofNat_eq_iff]
     rw [ofNat_or_disjoint (j * 4294967296) p.tau 32 (by omega) (by omega) (by omega)]
     rcases ha with rfl | rfl | rfl <;> simp (disch := bvomega) only [if_pos, if_neg, if_true] <;>
@@ -126,7 +127,7 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
     · rw [rt1.get .x5, ctx.x5]
     · rw [rt1.get .x13, ctx.x13]
     · rw [rt1.get .x18, ctx.x18]
-    · simp only [htl, blk477.res, rv_simp, t20]
+    · simp only [htl, blk479.res, rv_simp, t20]
     · intro i hi
       rw [ft1.getMem (by omega) (by simp only [leavesW]; omega), ctx.dig i hi]
     · rw [f1.getMem (by norm_num) (by omega), tlo1, ctx.pb0]
@@ -138,32 +139,32 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
     · rw [ft1.readWords _ _ (by norm_num) (by intro i hi; simp only [leavesW]; omega), ctx.cbP]
   rw [buildLeaf_bind]
   refine Sim.steps hs1 (Sim.bind (chains_sim S hS x ⟨p.lay, p.tau, p.e, j, p.sigl⟩ tl cctx
-    (by simp only [htl, blk477.res, rv_simp]) (by simp only [htl, blk477.res, rv_simp])
-    (by simp only [htl, blk477.res, rv_simp])) (fun cs t2 h2 => ?_))
+    (by simp only [htl, blk479.res, rv_simp]) (by simp only [htl, blk479.res, rv_simp])
+    (by simp only [htl, blk479.res, rv_simp])) (fun cs t2 h2 => ?_))
   obtain ⟨-, hc1', hc2', hcv1, hcv2, hends, hcaps, pc2, -, -, cregs, cframe, clo1, clo2⟩ := h2
-  have pc2' : t2.pc = pcOf 535 := by rw [pc2]; rfl
+  have pc2' : t2.pc = pcOf 541 := by rw [pc2]; rfl
   have hcaps' : j = p.e → Slots t2 (p.sigl + 8) cs.2 := hcaps
   have rt2 : RegsEq tt t2 (leavesRegs ++ chainRegs) := rt1.trans cregs
   have x220 : t2.getReg .x20 = BitVec.ofNat 64 j := by
-    rw [cregs.get .x20]; simp only [htl, blk477.res, rv_simp, t20]
+    rw [cregs.get .x20]; simp only [htl, blk479.res, rv_simp, t20]
   have x219 : t2.getReg .x19 = BitVec.ofNat 64 0x34100 := by rw [rt2.get .x19, ctx.x19]
   -- block 557: leaf hash
-  have hs3 := symRun_sound blk535 codeAt_535 t2 pc2' (by simp only [blk535.res, rv_simp])
-  have hc3 : blk535.res.cycles = 4 := rfl
+  have hs3 := symRun_sound blk541 codeAt_541 t2 pc2' (by simp only [blk541.res, rv_simp])
+  have hc3 : blk541.res.cycles = 4 := rfl
   rw [hc3] at hs3
-  set t3 := blk535.res.toState t2 with ht3
+  set t3 := blk541.res.toState t2 with ht3
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk535.res]
+    apply frame_toState; intro x hx hW; simp [blk541.res]
   have r3 : RegsEq t2 t3 [.x3, .x10, .x11, .x12] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have e3 := symRun_ecall blk535 codeAt_535 t2 (by simp only [blk535.res, rv_simp]) rfl
-  have x10 : t3.getReg .x10 = BitVec.ofNat 64 0x340 := by simp only [ht3, blk535.res, rv_simp]
-  have x11 : t3.getReg .x11 = BitVec.ofNat 64 704 := by simp only [ht3, blk535.res, rv_simp]
+  have e3 := symRun_ecall blk541 codeAt_541 t2 (by simp only [blk541.res, rv_simp]) rfl
+  have x10 : t3.getReg .x10 = BitVec.ofNat 64 0x340 := by simp only [ht3, blk541.res, rv_simp]
+  have x11 : t3.getReg .x11 = BitVec.ofNat 64 704 := by simp only [ht3, blk541.res, rv_simp]
   have x12 : t3.getReg .x12 = BitVec.ofNat 64 (0x34100 + 16 * j) := by
-    simp only [ht3, blk535.res, rv_simp]; bvsimp [x220, x219]; congr 1; ring
+    simp only [ht3, blk541.res, rv_simp]; bvsimp [x220, x219]; congr 1; ring
   have x5 : t3.getReg .x5 = 0 := by rw [r3.get .x5, rt2.get .x5, ctx.x5]
-  have pc3 : t3.pc = pcOf 539 := by simp only [ht3, blk535.res, rv_simp]
+  have pc3 : t3.pc = pcOf 545 := by simp only [ht3, blk541.res, rv_simp]
   have fl3 : Frame tl t3 (chainW ⟨p.lay, p.tau, p.e, j, p.sigl⟩) := (cframe.trans f3).mono (by
     intro x hx; rcases hx with h | h; exact h; exact h.elim)
   have hq : hashInput t3 = pad64 (leafInput p.lay p.tau j cs.1) := by
@@ -194,13 +195,13 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
     frame_writeHash t3 a _ x12 (by omega)
   have v4 : t4.readWords (BitVec.ofNat 64 (0x34100 + 16 * j)) 2 = wordsOf (answerBytes 16 a) :=
     writeHash_readWords_val t3 a _ x12 (by omega)
-  have pc4 : t4.pc = pcOf 540 := by rw [ht4, writeHash_pc, pc3]; apply BitVec.eq_of_toNat_eq; simp
-  have hs5 := symRun_sound blk540 codeAt_540 t4 pc4 (by simp only [blk540.res, rv_simp])
-  have hc5 : blk540.res.cycles = 2 := rfl
+  have pc4 : t4.pc = pcOf 546 := by rw [ht4, writeHash_pc, pc3]; apply BitVec.eq_of_toNat_eq; simp
+  have hs5 := symRun_sound blk546 codeAt_546 t4 pc4 (by simp only [blk546.res, rv_simp])
+  have hc5 : blk546.res.cycles = 2 := rfl
   rw [hc5] at hs5
-  set t5 := blk540.res.toState t4 with ht5
+  set t5 := blk546.res.toState t4 with ht5
   have f5 : Frame t4 t5 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk540.res]
+    apply frame_toState; intro x hx hW; simp [blk546.res]
   have r5 : RegsEq t4 t5 [.x20] := by
     intro r hr; rw [ht5, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
@@ -233,11 +234,11 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
       obtain ⟨c1, c2, c3⟩ := hcap (by omega)
       refine ⟨c1, c2, c3.frame ftot (by omega) ?_⟩
       intro i hi; rw [c1] at hi; dsimp only [chainW, LeafPar.e, LeafPar.ep, LeafPar.sigl]; constructor <;> omega
-  · simp only [ht5, blk540.res, rv_simp, x420, x417, ofNat_add_ofNat, ofNat_bne_ofNat]
+  · simp only [ht5, blk546.res, rv_simp, x420, x417, ofNat_add_ofNat, ofNat_bne_ofNat]
     by_cases h : j + 1 < 2 ^ p.h
     · rw [if_pos h, if_pos (by rw [bne_cond _ _ (by omega) (by omega)]; omega)]
     · rw [if_neg h, if_neg (by rw [bne_cond _ _ (by omega) (by omega)]; omega)]
-  · simp only [ht5, blk540.res, rv_simp, x420, ofNat_add_ofNat]
+  · simp only [ht5, blk546.res, rv_simp, x420, ofNat_add_ofNat]
   · exact ((((rt2.trans r3).trans (regsEq_writeHash _ _ [])).trans r5)).mono (by decide)
   · exact (tframe.trans ftot).mono (by intro x hx; simp only [leavesW] at hx ⊢; dsimp only [chainW, LeafPar.e, LeafPar.ep, LeafPar.sigl] at hx; omega)
   · rw [f5.getMem (by norm_num) (by simp), f4.getMem (by norm_num) (by omega),
@@ -251,11 +252,11 @@ namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- Cycle bound of one leaf. -/
-def tleafCyc : Nat := 7 + (21 * 424 + (4 + (88 + 2)))
+def tleafCyc : Nat := 7 + (21 * 480 + (4 + (88 + 2)))
 
 /-- **Leaves** `0 .. 2^h - 1` of a tree (with capture of leaf `e`). -/
 theorem leaves_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : TreePar)
-    (tt : MachineState) (ctx : TreeCtx S x p tt) (hpc : tt.pc = pcOf 477)
+    (tt : MachineState) (ctx : TreeCtx S x p tt) (hpc : tt.pc = pcOf 479)
     (h20 : tt.getReg .x20 = BitVec.ofNat 64 0) :
     Sim image tt (2 ^ p.h * tleafCyc) (buildLeaves S p.lay p.tau p.h p.e x) (TLeafInv p tt (2 ^ p.h)) := by
   unfold buildLeaves

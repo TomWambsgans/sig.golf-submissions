@@ -57,33 +57,23 @@ theorem blocks_pad64_le (x : List Byte) (k : Nat) (h : x.length ≤ 64 * k) (hk 
 
 /-! ## The oracle input format -/
 
-theorem blocks_fmt_le (x : List Byte) (k : Nat) (h : x.length ≤ 64 * k) (hk : 1 ≤ k) :
-    (fmt x).blocks ≤ k := by
-  rw [blocks_fmt]; exact blocks_pad64_le x k h hk
+theorem blocksFmt_le (x : List Byte) (k : Nat) (h : x.length ≤ 64 * k) (hk : 1 ≤ k) :
+    (fmt x).blocks ≤ k :=
+  (Ref.blocks_fmt_le x).trans (blocks_pad64_le x k h hk)
 
-/-- The first 16 bytes (the tweak) of a formatted query are those of the input. -/
-theorem qbyte_fmt (x : List Byte) (i : Nat) (hi : i < 16) : qbyte (fmt x) i = (x.getD i 0).toNat := by
-  by_cases hc : IsChainFmt x
-  · rw [fmt_of_chain _ hc]
-    unfold qbyte ofList
-    simp only [BitVec.toNat_ofNat]
-    have hl : (chainBlock x).length = 64 := by
-      simp only [chainBlock, List.length_append, List.length_take, List.length_drop, hc.1, length_zeros]
-      omega
-    have hlt := leNat_lt (chainBlock x)
-    rw [hl] at hlt
-    rw [show (2 : Nat) ^ (8 * (64 * (0 + 1))) = 256 ^ 64 by rw [Nat.pow_mul], Nat.mod_eq_of_lt hlt,
-      leNat_div_mod]
-    unfold chainBlock
-    simp only [List.getD_eq_getElem?_getD, List.append_assoc]
-    rw [List.getElem?_append_left (by simp [hc.1]; omega), List.getElem?_take_of_lt hi]
-  · rw [fmt_of_not_chain _ hc, qbyte_pad64]
+/-- Bytes `0..4` (tag, layer) of a formatted query are those of the input. -/
+theorem qbyte_fmt (x : List Byte) (i : Nat) (hi : i < 4) : qbyte (fmt x) i = (x.getD i 0).toNat := by
+  unfold qbyte
+  rw [← leNat_toList, leNat_div_mod, getD_toList_fmt x i (Or.inl hi)]
 
-/-- Inputs of a tag other than `1` are zero padded. -/
-theorem fmt_eq_pad64 (t lay tau p j : Nat) (pl : List Byte) (ht : t % 256 ≠ 1) :
-    fmt (thInput (tweak t lay tau p j) pl) = pad64 (thInput (tweak t lay tau p j) pl) :=
-  fmt_thInput _ _ _ _ _ _ (fun h => ht (by
-    have := congrArg BitVec.toNat h; simpa [byte_toNat] using this))
+/-- Inputs of a tag other than `1, 3, 10, 12` are zero padded. -/
+theorem fmt_eq_pad64 (t lay tau p j : Nat) (pl : List Byte)
+    (ht : t % 256 ≠ 1 ∧ t % 256 ≠ 3 ∧ t % 256 ≠ 10 ∧ t % 256 ≠ 12) :
+    fmt (thInput (tweak t lay tau p j) pl) = pad64 (thInput (tweak t lay tau p j) pl) := by
+  refine fmt_thInput _ _ _ _ _ _ ?_
+  simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> intro h <;> have := congrArg BitVec.toNat h <;>
+    simp [byte_toNat] at this <;> omega
 
 /-! ## Tweak bytes -/
 

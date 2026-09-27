@@ -16,11 +16,11 @@ set_option linter.unnecessarySeqFocus false
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
-theorem seg209_eq : seg209 = nodeSegA := rfl
-theorem seg225_eq : seg225 = nodeSegB := rfl
+theorem seg210_eq : seg210 = nodeSegA := rfl
+theorem seg227_eq : seg227 = nodeSegB := rfl
 
-theorem codeAt_node209 : CodeAt image (pcOf 209) nodeSegA := seg209_eq ▸ codeAt_209
-theorem codeAt_node225 : CodeAt image (pcOf (209 + 16)) nodeSegB := seg225_eq ▸ codeAt_225
+theorem codeAt_node210 : CodeAt image (pcOf 210) nodeSegA := seg210_eq ▸ codeAt_210
+theorem codeAt_node227 : CodeAt image (pcOf (210 + 17)) nodeSegB := seg227_eq ▸ codeAt_227
 
 /-- Facts at the start of the level loop of tree `k`. -/
 structure LevCtx (k idx u : Nat) (t0 : MachineState) : Prop where
@@ -43,7 +43,7 @@ def levRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x15, .x16, .x17, .x
 def LevInv (k : Nat) (t0 : MachineState) (j : Nat) (st : List Val × List Val) (t : MachineState) : Prop :=
   j ≤ 10 ∧ st.1.length = 2 ^ (10 - j) ∧ (∀ v ∈ st.1, v.length = 16) ∧ Slots t 0x30000 st.1 ∧
   st.2.length = j ∧ (∀ v ∈ st.2, v.length = 16) ∧ Slots t (0x2650 + 176 * k + 32) st.2 ∧
-  t.pc = (if j < 10 then pcOf 190 else pcOf 230) ∧ t.getReg .x15 = BitVec.ofNat 64 (j + 1) ∧
+  t.pc = (if j < 10 then pcOf 193 else pcOf 232) ∧ t.getReg .x15 = BitVec.ofNat 64 (j + 1) ∧
   t.getReg .x17 = BitVec.ofNat 64 (2 ^ (10 - j)) ∧
   RegsEq t0 t levRegs ∧ Frame t0 t (levW k) ∧
   lo32 (t.getMem (BitVec.ofNat 64 0x1C8)) = lo32 (t0.getMem (BitVec.ofNat 64 0x1C8))
@@ -54,10 +54,10 @@ theorem xor1_lt (a n : Nat) (ha : a < 2 ^ n) (hn : 1 ≤ n) : a ^^^ 1 < 2 ^ n :=
 theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu : u < 1024)
     (t0 : MachineState) (ctx : LevCtx k idx u t0) (j : Nat) (hj : j < 10)
     (st : List Val × List Val) (t : MachineState) (hinv : LevInv k t0 j st t) :
-    Sim image t (19 + (2 ^ (9 - j) * 25 + 3))
+    Sim image t (17 + (2 ^ (9 - j) * 26 + 3))
       (levelStep (ftsNodeInput k idx) u st (1 + j)) (LevInv k t0 (j + 1)) := by
   obtain ⟨-, hlen, hvals, hslots, hplen, hpvals, hpath, tpc, t15, t17, tregs, tframe, tlo⟩ := hinv
-  have tpc' : t.pc = pcOf 190 := by rw [tpc, if_pos hj]
+  have tpc' : t.pc = pcOf 193 := by rw [tpc, if_pos hj]
   have tx5 : t.getReg .x5 = 0 := by rw [tregs.get .x5 (by decide), ctx.x5]
   have tx8 : t.getReg .x8 = BitVec.ofNat 64 k := by rw [tregs.get .x8 (by decide), ctx.x8]
   have tx13 : t.getReg .x13 = BitVec.ofNat 64 u := by rw [tregs.get .x13 (by decide), ctx.x13]
@@ -81,44 +81,43 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
       _ = 1024 := by norm_num)
   -- block 142: capture sibling, node tweak
   have hudiv : u / 2 ^ j ≤ u := Nat.div_le_self _ _
-  have hs1 := symRun_sound blk190 codeAt_190 t tpc' (by
-    simp only [blk190.res, rv_simp]
+  have hs1 := symRun_sound blk193 codeAt_193 t tpc' (by
+    simp only [blk193.res, rv_simp]
     bvsimp [t15, tx13, tx18, tx19, accessValid_ofNat]
     rw [← hsib]; omega)
-  have hc1 : blk190.res.cycles = 19 := rfl
+  have hc1 : blk193.res.cycles = 17 := rfl
   rw [hc1] at hs1
-  set t1 := blk190.res.toState t with ht1
+  set t1 := blk193.res.toState t with ht1
   have hP : 0x2650 + 176 * k + 32 + 16 * j + 8 < 2 ^ 64 := by omega
   have f1 : Frame t t1 (fun x => x = 0x1C0 ∨ x = 0x2650 + 176 * k + 32 + 16 * j ∨
       x = 0x2650 + 176 * k + 32 + 16 * j + 8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk190.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk193.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq]
     bvsimp [t15, tx18, ofNat_eq_iff]
     omega
   have r1 : RegsEq t t1 [.x1, .x2, .x3, .x16, .x17, .x29] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have pc1 : t1.pc = pcOf 209 := by simp only [ht1, blk190.res, rv_simp]
-  have y16 : t1.getReg .x16 = 0 := by simp only [ht1, blk190.res, rv_simp]
+  have pc1 : t1.pc = pcOf 210 := by simp only [ht1, blk193.res, rv_simp]
+  have y16 : t1.getReg .x16 = 0 := by simp only [ht1, blk193.res, rv_simp]
   have y17 : t1.getReg .x17 = BitVec.ofNat 64 (2 ^ (9 - j)) := by
-    simp only [ht1, blk190.res, rv_simp]
+    simp only [ht1, blk193.res, rv_simp]
     bvsimp [t17]
     congr 1; rw [hpow]; omega
   have y19 : t1.getReg .x19 = BitVec.ofNat 64 0x30000 := by rw [r1.get .x19, tx19]
   have y5 : t1.getReg .x5 = 0 := by rw [r1.get .x5, tx5]
-  have w448 : t1.getMem (BitVec.ofNat 64 448) = twWord0 10 k idx (1 + j) := by
-    simp only [ht1, blk190.res, rv_simp]
+  have w448 : t1.getMem (BitVec.ofNat 64 448) = twWord0 10 k idx 0 := by
+    simp only [ht1, blk193.res, rv_simp]
     bvsimp [t15, tx8, tx14, tx18, ofNat_eq_iff]
     unfold twWord0; congr 1
     have : idx / 2 ^ 32 < 4 := by omega
-    rw [Nat.mod_eq_of_lt (a := idx / 2 ^ 32) (by omega), Nat.mod_eq_of_lt (a := k) (by omega),
-      Nat.mod_eq_of_lt (a := 1 + j) (by omega)]
+    rw [Nat.mod_eq_of_lt (a := idx / 2 ^ 32) (by omega), Nat.mod_eq_of_lt (a := k) (by omega)]
     omega
   have hcap1 : t1.readWords (BitVec.ofNat 64 (0x2650 + 176 * k + 32 + 16 * j)) 2 =
       wordsOf (st.1.getD sib []) := by
     rw [← hslots.getD sib (by omega), readWords_ofNat_two, readWords_ofNat_two]
-    simp only [ht1, blk190.res, rv_simp]
+    simp only [ht1, blk193.res, rv_simp]
     bvsimp [t15, tx13, tx18, tx19, ofNat_eq_iff]
     simp (disch := bvomega) only [if_pos, if_neg]
     have e : (u / 2 ^ j ^^^ 1) * 16 = 16 * sib := by rw [hsib, Nat.mul_comm]
@@ -128,9 +127,17 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
   have hB : ∀ a, 0x2650 + 176 * k + 32 ≤ a → a < 0x2650 + 176 * k + 192 →
       ¬ ((c.B ≤ a ∧ a < c.B + 32 * c.m) ∨ a = 456 ∨ a = 480 ∨ a = 488 ∨ a = 496 ∨ a = 504) := by
     intro a h1 h2; simp only [c]; omega
-  have hnode := nodeLoop_sim codeAt_node209 codeAt_node225 c st.1 (by simp only [c]; rw [hlen, hpow])
+  have hnode := nodeLoop_sim codeAt_node210 codeAt_node227 c st.1 (by simp only [c]; rw [hlen, hpow])
     hvals (by simp only [c]; positivity) (by simp only [c]; norm_num) (by simp only [c])
-    (by simp only [c]; omega) t1 pc1 y16 y17 y19 y5 (by simp only [c]; decide) w448
+    (by simp only [c]; omega) t1 pc1 y16 y17 y19 y5 (by simp only [c]; omega)
+    (fun j' l r hj' hl hr => by
+      simp only [c] at hj' ⊢
+      show fmt (ftsNodeInput k idx (1 + j) j' l r) = pad64 (nodeFmt 10 k idx 0 (2 ^ (9 - j) + j') l r)
+      rw [fmt_ftsNodeInput _ _ _ _ _ _ hl hr (by omega) (by omega),
+        pad64_len64 _ (length_nodeFmt _ _ _ _ _ _ _ hl hr)]
+      unfold heapIndex ftsA nodeFmt
+      rw [show 10 - (1 + j) = 9 - j by omega])
+    w448
     (by rw [f1.getMem (by norm_num) (by omega), tlo, ctx.nb8])
     (by rw [f1.getMem (by norm_num) (by omega), tframe.getMem (by norm_num) (by simp only [levW]; omega)]
         have := ctx.nbP; rw [readWords_ofNat_two] at this; simp only [List.cons.injEq] at this
@@ -146,16 +153,16 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
   rw [hstep]
   refine Sim.steps hs1 (Sim.bind hnode (fun acc t2 hn => ?_))
   obtain ⟨-, hacc, haccv, haccs, -, pc2, x216, nregs, nframe⟩ := hn
-  have pc2' : t2.pc = pcOf 227 := by rw [pc2, if_neg (lt_irrefl _)]
-  have hs3 := symRun_sound blk227 codeAt_227 t2 pc2' (by simp only [blk227.res, rv_simp])
-  have hc3 : blk227.res.cycles = 3 := rfl
+  have pc2' : t2.pc = pcOf 229 := by rw [pc2, if_neg (lt_irrefl _)]
+  have hs3 := symRun_sound blk229 codeAt_229 t2 pc2' (by simp only [blk229.res, rv_simp])
+  have hc3 : blk229.res.cycles = 3 := rfl
   rw [hc3] at hs3
-  set t3 := blk227.res.toState t2 with ht3
+  set t3 := blk229.res.toState t2 with ht3
   have r3 : RegsEq t2 t3 [.x3, .x15] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk227.res]
+    apply frame_toState; intro x hx hW; simp [blk229.res]
   have x215 : t2.getReg .x15 = BitVec.ofNat 64 (j + 1) := by
     rw [nregs.toRegsEq.get .x15, r1.get .x15, t15]
   have ft13 : Frame t t3 (fun x => (x = 0x1C0 ∨ x = 0x2650 + 176 * k + 32 + 16 * j ∨
@@ -178,12 +185,12 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
         intro i hi; constructor <;> (simp only [c, or_false, not_or]; omega))
     · rw [hplen, f3.readWords _ _ (by omega) (by simp),
         nframe.toFrame.readWords _ _ (by omega) (by intro i hi; simp only [c]; omega), hcap1]
-  · simp only [ht3, blk227.res, rv_simp, x215, ofNat_add_ofNat]
+  · simp only [ht3, blk229.res, rv_simp, x215, ofNat_add_ofNat]
     rw [ofNat_slt_ofNat _ _ (by norm_num) (by omega)]
     by_cases h : j + 1 < 10
     · rw [if_pos h]; simp; omega
     · rw [if_neg h]; simp; omega
-  · simp only [ht3, blk227.res, rv_simp, x215, ofNat_add_ofNat]
+  · simp only [ht3, blk229.res, rv_simp, x215, ofNat_add_ofNat]
   · rw [r3.get .x17, nregs.toRegsEq.get .x17, y17, show 10 - (j + 1) = 9 - j by omega]
   · exact (((tregs.trans r1).trans nregs.toRegsEq).trans r3).mono (by decide)
   · exact (tframe.trans ft13).mono (by
@@ -199,11 +206,11 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.R
 theorem forsLevels_sim (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu : u < 1024)
     (t0 : MachineState) (ctx : LevCtx k idx u t0) (leaves : List Val) (hlen : leaves.length = 1024)
     (hvals : ∀ v ∈ leaves, v.length = 16) (hslots : Slots t0 0x30000 leaves)
-    (hpc : t0.pc = pcOf 190) (h15 : t0.getReg .x15 = BitVec.ofNat 64 1)
+    (hpc : t0.pc = pcOf 193) (h15 : t0.getReg .x15 = BitVec.ofNat 64 1)
     (h17 : t0.getReg .x17 = BitVec.ofNat 64 1024) :
-    Sim image t0 (10 * 12822) ((List.range' 1 10).foldlM (levelStep (ftsNodeInput k idx) u)
+    Sim image t0 (10 * 13334) ((List.range' 1 10).foldlM (levelStep (ftsNodeInput k idx) u)
       (leaves, [])) (LevInv k t0 10) := by
-  apply Sim.foldlM_range' 1 10 _ _ (LevInv k t0) 12822
+  apply Sim.foldlM_range' 1 10 _ _ (LevInv k t0) 13334
   · intro j hj st t h
     refine (forsLevel_body k idx u hk hidx hu t0 ctx j hj st t h).mono ?_ (fun _ _ h => h)
     have : 2 ^ (9 - j) ≤ 512 := by

@@ -99,7 +99,21 @@ def DigestOut (d : DCtx) (s : MachineState) : Prop :=
   (s.getMem (BitVec.ofNat 64 0xC0)).toNat < 2 ^ 32 ∧
   s.getMem (BitVec.ofNat 64 0xF0) = 0 ∧ s.getMem (BitVec.ofNat 64 0xF8) = 0 ∧
   (s.getMem (BitVec.ofNat 64 0x220)).toNat < 2 ^ 32 ∧ (s.getMem (BitVec.ofNat 64 0x228)).toNat < 2 ^ 32 ∧
-  s.pc = pcOf 31
+  s.pc = pcOf 27
+
+/-- The digest block `tw(12, 0, 0, 0, 0) || rho || m` as words. -/
+theorem fmt_digestInput_words (rho m : List Byte) (hr : rho.length = 16) (hm : m.length = 32) :
+    fmt (digestInput rho m) = queryOfWords 0
+      ([BitVec.ofNat 64 (twLo 12 0 0 0), BitVec.ofNat 64 (twHi 0 0), vw0 rho, vw1 rho] ++ wordsOfN 4 m) := by
+  rw [fmt_digestInput _ _ hr hm]
+  have hl : (tweak 12 0 0 0 0 ++ rho ++ m).length ≤ 8 * 8 := by simp [length_tweak, hr, hm]
+  have hw : wordsOfN 8 (tweak 12 0 0 0 0 ++ rho ++ m) =
+      [BitVec.ofNat 64 (twLo 12 0 0 0), BitVec.ofNat 64 (twHi 0 0), vw0 rho, vw1 rho] ++ wordsOfN 4 m := by
+    rw [List.append_assoc, show 8 = 2 + (2 + 4) from rfl,
+      wordsOfN_append 2 _ _ _ (by simp [length_tweak]), wordsOfN_val_append rho hr, wordsOfN_tweak]
+    rfl
+  unfold queryOfWords ofList
+  rw [← hw, wordsToNat_wordsOfN 8 _ hl]
 
 theorem init_glob (ml pkl wl : List Byte) (s : MachineState) (hs : InitOK ml pkl wl s) :
     Glob [] wl pkl s := by
@@ -111,11 +125,11 @@ theorem init_glob (ml pkl wl : List Byte) (s : MachineState) (hs : InitOK ml pkl
 
 theorem start_step (ml pkl wl : List Byte) (hml : ml.length = 32) (hwl : wl.length = 6404)
     (s : MachineState) (hs : InitOK ml pkl wl s) :
-    (countersOk wl = false → ∃ t, Steps image s 23 23 t ∧ fetch image t = some (.base .ECALL) ∧
+    (countersOk wl = false → ∃ t, Steps image s 18 18 t ∧ fetch image t = some (.base .ECALL) ∧
         t.getReg .x5 = 1 ∧ t.getReg .x10 = 1) ∧
-    (countersOk wl = true → ∃ t, Steps image s 30 30 t ∧ fetch image t = some (.base .ECALL) ∧
+    (countersOk wl = true → ∃ t, Steps image s 26 26 t ∧ fetch image t = some (.base .ECALL) ∧
         t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
-        hashInput t = pad64 (digestInput (witRho wl) ml) ∧
+        hashInput t = fmt (digestInput (witRho wl) ml) ∧
         ∀ a, DigestOut ⟨wl, pkl, a⟩ (writeHash t a)) := by
   have hG0 := init_glob ml pkl wl s hs
   obtain ⟨hK, hpc, hW, hPk, hM, hZ⟩ := hs
@@ -141,11 +155,11 @@ theorem start_step (ml pkl wl : List Byte) (hml : ml.length = 32) (hwl : wl.leng
       simp only [Br.holds, CmpOp.eval, E.eval]
       rw [bne_eq_false_iff_eq]; exact hctr.mpr hc)
     have hKd := hu.known
-    have h10 : u.getReg .x10 = BitVec.ofNat 64 0 := hKd (.x10, 0) (by simp [dgK])
-    have h11 : u.getReg .x11 = BitVec.ofNat 64 (64 * (1 + 1)) := hKd (.x11, 128) (by simp [dgK])
+    have h10 : u.getReg .x10 = BitVec.ofNat 64 0x20 := hKd (.x10, 0x20) (by simp [dgK])
+    have h11 : u.getReg .x11 = BitVec.ofNat 64 (64 * (0 + 1)) := hKd (.x11, 64) (by simp [dgK])
     have h12 : u.getReg .x12 = BitVec.ofNat 64 0x160 := hKd (.x12, 0x160) (by simp [dgK])
     have hmem := hu.mem
-    have mfr : ∀ A, A < 2 ^ 64 → A ≠ 40 → A ≠ 32 → A ≠ 0 →
+    have mfr : ∀ A, A < 2 ^ 64 → A ≠ 56 → A ≠ 48 → A ≠ 32 →
         u.getMem (BitVec.ofNat 64 A) = s.getMem (BitVec.ofNat 64 A) := by
       intro A hA h1 h2 h3
       rw [hmem, memEval_frame_ofNat _ _ _ hA (by
@@ -155,7 +169,7 @@ theorem start_step (ml pkl wl : List Byte) (hml : ml.length = 32) (hwl : wl.leng
     refine ⟨u, hu.steps, hu.ecall rfl, hKd (.x5, 0) (by simp [dgK, gkD, baseK]),
       hashArgs_ofNat _ _ _ _ h10 h11 h12 (by omega) (by omega) (by omega) (by decide), ?_, ?_⟩
     · have hrho : (witRho wl).length = 16 := by unfold witRho; apply length_slice16; omega
-      rw [hashInput_ofNat _ 0 1 h10 h11 (by decide) (by decide), pad64_digestInput _ _ hrho hml]
+      rw [hashInput_ofNat _ 0x20 0 h10 h11 (by decide) (by decide), fmt_digestInput_words _ _ hrho hml]
       congr 1
       simp only [List.range, List.range.loop, List.map, Nat.reduceAdd, Nat.reduceMul, Nat.add_zero,
         Nat.mul_zero, Nat.zero_add, wordsOfN, List.cons_append, List.nil_append, List.cons.injEq]
@@ -164,13 +178,11 @@ theorem start_step (ml pkl wl : List Byte) (hml : ml.length = 32) (hwl : wl.leng
       have m0 := hM 0 (by decide); have m1 := hM 1 (by decide); have m2 := hM 2 (by decide)
       have m3 := hM 3 (by decide)
       simp only [Nat.mul_zero, Nat.add_zero, Nat.mul_one, Nat.reduceAdd, Nat.reduceMul] at m0 m1 m2 m3
-      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, trivial⟩
+      refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, trivial⟩
       · rw [hmem]; simp only [specStartOk]
         rw [memEval_cons_ne _ _ _ _ _ (by decide), memEval_cons_ne _ _ _ _ _ (by decide),
           memEval_cons_eq _ _ _ _ _ rfl]; rfl
-      · rw [mfr 8 (by omega) (by omega) (by omega) (by omega), hZ 8 (by omega) (by omega)]; rfl
-      · rw [mfr 16 (by omega) (by omega) (by omega) (by omega), hZ 16 (by omega) (by omega)]
-      · rw [mfr 24 (by omega) (by omega) (by omega) (by omega), hZ 24 (by omega) (by omega)]
+      · rw [mfr 40 (by omega) (by omega) (by omega) (by omega), hZ 40 (by omega) (by omega)]; rfl
       · rw [hmem]; simp only [specStartOk]
         rw [memEval_cons_ne _ _ _ _ _ (by decide), memEval_cons_eq _ _ _ _ _ rfl]
         simp only [ldE, cw, Rv.E.eval]
@@ -179,16 +191,10 @@ theorem start_step (ml pkl wl : List Byte) (hml : ml.length = 32) (hwl : wl.leng
         rw [memEval_cons_eq _ _ _ _ _ rfl]
         simp only [ldE, cw, Rv.E.eval]
         rw [show (2056 : Nat) = 0x800 + 8 from rfl, w1, witRho, vw1_slice]
-      · rw [mfr 48 (by omega) (by omega) (by omega) (by omega), hZ 48 (by omega) (by omega)]
-      · rw [mfr 56 (by omega) (by omega) (by omega) (by omega), hZ 56 (by omega) (by omega)]
       · rw [mfr 64 (by omega) (by omega) (by omega) (by omega), m0]; rfl
       · rw [mfr 72 (by omega) (by omega) (by omega) (by omega), m1]; rfl
       · rw [mfr 80 (by omega) (by omega) (by omega) (by omega), m2]; simp [slice, List.drop_drop]
       · rw [mfr 88 (by omega) (by omega) (by omega) (by omega), m3]; simp [slice, List.drop_drop]
-      · rw [mfr 96 (by omega) (by omega) (by omega) (by omega), hZ 96 (by omega) (by omega)]
-      · rw [mfr 104 (by omega) (by omega) (by omega) (by omega), hZ 104 (by omega) (by omega)]
-      · rw [mfr 112 (by omega) (by omega) (by omega) (by omega), hZ 112 (by omega) (by omega)]
-      · rw [mfr 120 (by omega) (by omega) (by omega) (by omega), hZ 120 (by omega) (by omega)]
     · intro a
       have wf := fun A (hA : A < 2 ^ 64) (h : A + 8 ≤ 0x160 ∨ 0x160 + 32 ≤ A) =>
         writeHash_frame _ a 0x160 A h12 hA (by omega) h

@@ -178,6 +178,30 @@ theorem e_lt32 (lay idx : Nat) (hlay : lay < 5) : idx / 2 ^ layS lay % 2 ^ heigh
   have : 2 ^ heightL lay ≤ 2048 := by interval_cases lay <;> decide
   omega
 
+theorem uHE_eval (idx lay : Nat) (hlay : lay < 5) (hidx : idx < 2 ^ 34) (s : MachineState)
+    (h : s.getReg (routeReg lay) = BitVec.ofNat 64 (routeIn idx lay)) :
+    (uHE lay).eval s = BitVec.ofNat 64 (idx / 2 ^ layS lay % 2 ^ heightL lay + 2 ^ heightL lay) := by
+  have he := uEr_eval idx lay hlay hidx s h
+  have hm := Nat.mod_lt (idx / 2 ^ layS lay) (show 0 < 2 ^ heightL lay from Nat.two_pow_pos _)
+  have hh := heightL_le lay hlay
+  have hp : 2 ^ heightL lay ≤ 2 ^ 11 := Nat.pow_le_pow_right (by decide) hh.2
+  unfold uHE
+  split
+  · rename_i h0; subst h0
+    show (uEr 0).eval s + BitVec.ofNat 64 2048 = _
+    rw [he, BitVec.ofNat_add_ofNat]; rfl
+  · show (uEr lay).eval s ||| BitVec.ofNat 64 (2 ^ heightL lay) = _
+    rw [he]
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_or, BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (show idx / 2 ^ layS lay % 2 ^ heightL lay < 2 ^ 64 by omega),
+      Nat.mod_eq_of_lt (show 2 ^ heightL lay < 2 ^ 64 by omega),
+      Nat.mod_eq_of_lt (show idx / 2 ^ layS lay % 2 ^ heightL lay + 2 ^ heightL lay < 2 ^ 64 by omega),
+      Nat.or_comm]
+    have := Nat.two_pow_add_eq_or_of_lt hm 1
+    rw [Nat.mul_one] at this
+    omega
+
 theorem x31Er_eval (idx lay : Nat) (hlay : lay < 5) (hidx : idx < 2 ^ 34) (s : MachineState)
     (h : s.getReg (routeReg lay) = BitVec.ofNat 64 (routeIn idx lay)) :
     (x31Er lay).eval s = BitVec.ofNat 64 (idx / 2 ^ (layS lay + heightL lay) +

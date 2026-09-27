@@ -50,6 +50,9 @@ def FCtx.ok (fc : FCtx) : Prop :=
 
 def FCtx.lo0 (fc : FCtx) : Nat := 1 + 256 * fc.t + 65536 * fc.f2 + 2 ^ 24 * (fc.tau / 2 ^ 32 % 256)
 
+/-- The leaf index with the heap sentinel, `E + 2^h` (register `x23`). -/
+def FCtx.U (fc : FCtx) : Nat := fc.E + 2 ^ fc.h
+
 def FCtx.path (fc : FCtx) : List Val := (List.range fc.h).map fun l => slice fc.wl (fc.sibOff + 16 * l) 16
 
 def FCtx.node (fc : FCtx) : NodeFmt := nodeF fc.t fc.f2 fc.tau
@@ -62,17 +65,15 @@ def FrameOK (kind : Bool) (s0 s : MachineState) : Prop :=
   (∀ r ∈ fkeep kind, s.getReg r = s0.getReg r) ∧
   (∀ A, A < 2 ^ 64 → (A < 0x1C0 ∨ 0x210 ≤ A) → s.getMem (BitVec.ofNat 64 A) = s0.getMem (BitVec.ofNat 64 A))
 
-/-- Tweak word 0 of the node input at level 1 (before level 0) / its low half (later). -/
+/-- Tweak word 0 of the node inputs (`p = 0`): in `x27` before FORS level 0, else at NB. -/
 def NBhdr (fc : FCtx) (lam : Nat) (s : MachineState) : Prop :=
-  if lam = 0 then
-    (if fc.kind then s.getReg .x27 = BitVec.ofNat 64 (fc.lo0 + 2 ^ 32)
-     else s.getMem (BitVec.ofNat 64 0x1C0) = BitVec.ofNat 64 (fc.lo0 + 2 ^ 32))
-  else (s.getMem (BitVec.ofNat 64 0x1C0)).toNat % 2 ^ 32 = fc.lo0
+  if lam = 0 ∧ fc.kind = true then s.getReg .x27 = BitVec.ofNat 64 fc.lo0
+  else s.getMem (BitVec.ofNat 64 0x1C0) = BitVec.ofNat 64 fc.lo0
 
 def FoldInv (fc : FCtx) (s0 : MachineState) (lam : Nat) (v : Val) (s : MachineState) : Prop :=
   Glob fc.gk fc.wl fc.pk s ∧
   KnownOK (fk fc.kind (if lam = 0 then (if fc.kind then 0xC0 else 0x340) else 0x1C0) (if lam = 0 then fc.a1 else 64)) s ∧
-  s.getReg .x23 = BitVec.ofNat 64 fc.E ∧ NBhdr fc lam s ∧
+  s.getReg .x23 = BitVec.ofNat 64 fc.U ∧ NBhdr fc lam s ∧
   (s.getMem (BitVec.ofNat 64 0x1C8)).toNat % 2 ^ 32 = fc.tau % 2 ^ 32 ∧
   s.getMem (BitVec.ofNat 64 (0x1E0 + 16 * bitOf fc.E lam)) = vw0 v ∧
   s.getMem (BitVec.ofNat 64 (0x1E8 + 16 * bitOf fc.E lam)) = vw1 v ∧ v.length = 16 ∧
@@ -81,7 +82,7 @@ def FoldInv (fc : FCtx) (s0 : MachineState) (lam : Nat) (v : Val) (s : MachineSt
 def FoldEnd (fc : FCtx) (s0 : MachineState) (u : MachineState) : Prop :=
   Glob fc.gk fc.wl fc.pk u ∧ KnownOK (fk fc.kind 0x1C0 64 ++ [(.x12, BitVec.ofNat 64 fc.dst)]) u ∧
   FrameOK fc.kind s0 u ∧
-  u.pc = pcOf (lvlPc fc.rg (bitOf fc.E (fc.h - 1)) fc.j0 (fc.h - 1) + 7 + xp fc.kind (fc.h - 1)) ∧
+  u.pc = pcOf (lvlPc fc.rg (bitOf fc.E (fc.h - 1)) fc.j0 (fc.h - 1) + 6) ∧
   fetch image u = some (.base .ECALL) ∧
   (u.getMem (BitVec.ofNat 64 0x1C8)).toNat % 2 ^ 32 = fc.tau % 2 ^ 32
 
@@ -90,7 +91,7 @@ def FoldEnd (fc : FCtx) (s0 : MachineState) (u : MachineState) : Prop :=
 theorem land16 (n : Nat) : n &&& 16 = 16 * (n / 16 % 2) := by
   rw [show (16 : Nat) = 2 ^ 4 from rfl, Nat.and_two_pow, Nat.toNat_testBit, Nat.mul_comm]
 
-theorem srl_eval (u b : Nat) (hE : u < 2 ^ 11) (hb : b ≤ 11) (s : MachineState)
+theorem srl_eval (u b : Nat) (hE : u < 2 ^ 12) (hb : b ≤ 12) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     (Rv.E.bin .srl (.reg .x23) (cw b)).eval s = BitVec.ofNat 64 (u / 2 ^ b) := by
   apply BitVec.eq_of_toNat_eq
@@ -101,7 +102,7 @@ theorem srl_eval (u b : Nat) (hE : u < 2 ^ 11) (hb : b ≤ 11) (s : MachineState
     Nat.mod_eq_of_lt (show b < 64 by omega), Nat.mod_eq_of_lt (show u / 2 ^ b < 2 ^ 64 by omega)]
 
 /-- The branch point: `slli T, E, 62 - lam; blt/bge T, x0` tests bit `lam + 1` of `E`. -/
-theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 11) (hl : lam ≤ 9) (s : MachineState)
+theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 12) (hl : lam ≤ 9) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     CmpOp.lt.eval ((Rv.E.bin .sll (.reg .x23) (cw (62 - lam))).eval s) ((Rv.E.c 0).eval s) =
       decide (bitOf u (lam + 1) = 1) := by
@@ -113,7 +114,7 @@ theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 11) (hl : lam ≤ 9) (s : MachineStat
   apply decide_eq_decide.mpr
   interval_cases lam <;> simp only [Nat.reduceSub, Nat.reduceAdd, Nat.reducePow] <;> omega
 
-theorem sll_ge (u lam : Nat) (hu : u < 2 ^ 11) (hl : lam ≤ 9) (s : MachineState)
+theorem sll_ge (u lam : Nat) (hu : u < 2 ^ 12) (hl : lam ≤ 9) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     CmpOp.ge.eval ((Rv.E.bin .sll (.reg .x23) (cw (62 - lam))).eval s) ((Rv.E.c 0).eval s) =
       decide (bitOf u (lam + 1) = 0) := by
@@ -177,59 +178,110 @@ theorem length_sib (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam < fc.h) :
   obtain ⟨-, h10, -, -, -, hwl, h8, hsz, -⟩ := hfc
   unfold FCtx.sib; apply length_slice16; omega
 
-theorem pad64_input (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam < fc.h) (v : Val)
+/-- The heap index of the output node of level `lam`. -/
+def FCtx.heap (fc : FCtx) (lam : Nat) : Nat := 2 ^ (fc.h - (lam + 1)) + fc.E / 2 ^ (lam + 1)
+
+/-- The oracle block of level `lam` (`fmt`): the node tweak with `p = 0` and the heap index. -/
+def FCtx.hinput (fc : FCtx) (lam : Nat) (v : Val) : List Byte :=
+  if fc.E / 2 ^ lam % 2 = 1 then nodeF fc.t fc.f2 fc.tau 0 (fc.heap lam) (fc.sib lam) v
+  else nodeF fc.t fc.f2 fc.tau 0 (fc.heap lam) v (fc.sib lam)
+
+theorem blk_eq_pad64 (l : List Byte) (hl : l.length = 64) : (⟨0, ofList _ l⟩ : Query) = pad64 l := by
+  unfold pad64 padTo64 padBlocks
+  rw [hl]
+  simp [zeros]
+
+theorem heap_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam < fc.h) : fc.heap lam < 2 ^ 32 := by
+  have := hfc.2.1
+  have h1 : 2 ^ (fc.h - (lam + 1)) ≤ 2 ^ 11 := Nat.pow_le_pow_right (by decide) (by omega)
+  have h2 : fc.E / 2 ^ (lam + 1) ≤ fc.E := Nat.div_le_self _ _
+  have h3 : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+  unfold FCtx.heap; omega
+
+/-- A node's tree height as the oracle format reads it. -/
+def NodeH (fc : FCtx) : Prop := (fc.t = 3 ∧ fc.h = height (fc.f2 % 256)) ∨ (fc.t = 10 ∧ fc.h = ftsA)
+
+theorem fmt_input (fc : FCtx) (hfc : fc.ok) (hn : NodeH fc) (lam : Nat) (hlam : lam < fc.h) (v : Val)
+    (hv : v.length = 16) : fmt (fc.input lam v) = pad64 (fc.hinput lam v) := by
+  have hs := length_sib fc hfc lam hlam
+  have hj : fc.E / 2 ^ (lam + 1) < 2 ^ 32 := by
+    have h3 : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+    have := Nat.div_le_self fc.E (2 ^ (lam + 1)); omega
+  have ht : fc.t = 3 ∨ fc.t = 10 := by rcases hn with h | h <;> simp [h.1]
+  have hH : (if fc.t = 3 then height (fc.f2 % 256) else ftsA) = fc.h := by
+    rcases hn with h | h
+    · rw [if_pos h.1, h.2]
+    · rw [if_neg (by rw [h.1]; decide), h.2]
+  unfold FCtx.input FCtx.hinput FCtx.node nodeF
+  split
+  · rw [fmt_thInput_node _ _ _ _ _ _ ht (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, hH,
+      blk_eq_pad64 _ (by simp [hs, hv])]
+    rfl
+  · rw [fmt_thInput_node _ _ _ _ _ _ ht (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, hH,
+      blk_eq_pad64 _ (by simp [hs, hv])]
+    rfl
+
+theorem pad64_hinput (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam < fc.h) (v : Val)
     (hv : v.length = 16) :
-    pad64 (fc.input lam v) = queryOfWords 0
-      [BitVec.ofNat 64 (twLo fc.t fc.f2 fc.tau (lam + 1)),
-        BitVec.ofNat 64 (twHi fc.tau (fc.E / 2 ^ (lam + 1))), 0, 0,
+    pad64 (fc.hinput lam v) = queryOfWords 0
+      [BitVec.ofNat 64 (twLo fc.t fc.f2 fc.tau 0),
+        BitVec.ofNat 64 (twHi fc.tau (fc.heap lam)), 0, 0,
         if bitOf fc.E lam = 1 then vw0 (fc.sib lam) else vw0 v,
         if bitOf fc.E lam = 1 then vw1 (fc.sib lam) else vw1 v,
         if bitOf fc.E lam = 1 then vw0 v else vw0 (fc.sib lam),
         if bitOf fc.E lam = 1 then vw1 v else vw1 (fc.sib lam)] := by
-  unfold FCtx.input bitOf
+  unfold FCtx.hinput bitOf
   split
-  · rw [FCtx.node, pad64_nodeF _ _ _ _ _ _ _ (length_sib fc hfc lam hlam) hv]; try simp_all
-  · rw [FCtx.node, pad64_nodeF _ _ _ _ _ _ _ hv (length_sib fc hfc lam hlam)]; try simp_all
+  · rw [pad64_nodeF _ _ _ _ _ _ _ (length_sib fc hfc lam hlam) hv]; try simp_all
+  · rw [pad64_nodeF _ _ _ _ _ _ _ hv (length_sib fc hfc lam hlam)]; try simp_all
 
+theorem U_div (fc : FCtx) (lam : Nat) (hlam : lam + 1 ≤ fc.h) :
+    fc.U / 2 ^ (lam + 1) = fc.heap lam := by
+  unfold FCtx.U FCtx.heap
+  have e : 2 ^ fc.h = 2 ^ (fc.h - (lam + 1)) * 2 ^ (lam + 1) := by
+    rw [← Nat.pow_add]; congr 1; omega
+  rw [e, Nat.add_comm, Nat.mul_comm, Nat.mul_add_div (Nat.two_pow_pos _)]
+
+theorem bitOf_U (fc : FCtx) (lam : Nat) (hlam : lam + 1 < fc.h) :
+    bitOf fc.U (lam + 1) = bitOf fc.E (lam + 1) := by
+  unfold bitOf
+  rw [U_div fc lam (by omega)]
+  unfold FCtx.heap
+  have e : 2 ^ (fc.h - (lam + 1)) = 2 * 2 ^ (fc.h - (lam + 1) - 1) := by
+    rw [← Nat.pow_succ']; congr 1; omega
+  rw [e]; omega
+
+theorem U_lt (fc : FCtx) (hfc : fc.ok) : fc.U < 2 ^ 12 := by
+  have h1 := hfc.2.1
+  have h2 : 2 ^ fc.h ≤ 2 ^ 11 := Nat.pow_le_pow_right (by decide) h1
+  have h3 := hfc.2.2.1
+  unfold FCtx.U; omega
 
 /-- The word-0 header after level `lam`'s block. -/
-theorem lvl_hdr (fc : FCtx) (lam : Nat) (hlam : lam + 1 ≤ fc.h) (t t' : Nat) (ht : t < 2)
-    (s : MachineState) (hN0 : NBhdr fc lam s) (hlo : fc.lo0 < 2 ^ 32) (hl : lam < 2 ^ 20) :
+theorem lvl_hdr (fc : FCtx) (lam : Nat) (t t' : Nat) (ht : t < 2)
+    (s : MachineState) (hN0 : NBhdr fc lam s) :
     memEval s (lvlExp fc.kind (if lam = 0 then fc.a1 else 64) fc.rg t fc.j0 fc.h lam
       (0x800 + fc.sibOff + 16 * lam) fc.dst t').st.mem (BitVec.ofNat 64 0x1C0) =
-      BitVec.ofNat 64 (fc.lo0 + 2 ^ 32 * (lam + 1)) := by
+      BitVec.ofNat 64 fc.lo0 := by
   unfold NBhdr at hN0
-  by_cases h0 : lam = 0
-  · subst h0
-    rw [if_pos rfl] at hN0
-    cases hk : fc.kind
-    · rw [hk] at hN0; simp only [if_false, Bool.false_eq_true] at hN0
-      rw [memEval_frame_ofNat _ _ _ (by omega) (by
-        simp only [lvlExp, hk]
-        split <;> simp <;> omega), hN0]
-      simp
-    · rw [hk] at hN0; simp only [if_true] at hN0
-      simp only [lvlExp, hk]
-      split
-      · simp only [List.cons_append, List.nil_append, if_true, and_self]
-        rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_ne _ _ _ _ _ (by bvne),
-          memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl]
-        simp only [Rv.E.eval]; rw [hN0]; simp
-      · simp only [List.cons_append, List.nil_append, if_true, and_self]
-        rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_ne _ _ _ _ _ (by bvne),
-          memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl]
-        simp only [Rv.E.eval]; rw [hN0]; simp
-  · rw [if_neg h0] at hN0
-    simp only [lvlExp, h0, false_and, if_false]
+  by_cases hk : lam = 0 ∧ fc.kind = true
+  · obtain ⟨h0, hk⟩ := hk
+    subst h0
+    rw [if_pos ⟨rfl, hk⟩] at hN0
+    simp only [lvlExp, hk]
     split
-    · simp only [List.cons_append, List.nil_append, List.append_nil]
-      rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl, stW_eval]
-      simp only [Rv.E.eval, cw]
-      rw [stMerge_eval _ _ _ (by omega) hN0]
-    · simp only [List.cons_append, List.nil_append, List.append_nil]
-      rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl, stW_eval]
-      simp only [Rv.E.eval, cw]
-      rw [stMerge_eval _ _ _ (by omega) hN0]
+    · simp only [List.cons_append, List.nil_append, if_true, and_self]
+      rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_ne _ _ _ _ _ (by bvne),
+        memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl]
+      simp only [Rv.E.eval]; rw [hN0]
+    · simp only [List.cons_append, List.nil_append, if_true, and_self]
+      rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_ne _ _ _ _ _ (by bvne),
+        memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl]
+      simp only [Rv.E.eval]; rw [hN0]
+  · rw [if_neg hk] at hN0
+    rw [memEval_frame_ofNat _ _ _ (by omega) (by
+      simp only [lvlExp]
+      split_ifs <;> simp_all <;> omega), hN0]
 
 /-- Addresses not written by level `lam`'s block. -/
 theorem lvl_frame (fc : FCtx) (lam : Nat) (t t' : Nat) (ht : t < 2) (s : MachineState) (A : Nat)
@@ -299,7 +351,7 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
       KnownOK (lvlPost fc.kind fc.h lam fc.dst t') (r.toState s) ∧
       (∀ x ∈ fkeep fc.kind, (r.toState s).getReg x = s.getReg x) ∧
       Glob fc.gk fc.wl fc.pk (r.toState s) ∧
-      (r.toState s).getMem (BitVec.ofNat 64 0x1C0) = BitVec.ofNat 64 (fc.lo0 + 2 ^ 32 * (lam + 1)) ∧
+      (r.toState s).getMem (BitVec.ofNat 64 0x1C0) = BitVec.ofNat 64 fc.lo0 ∧
       (r.toState s).getMem (BitVec.ofNat 64 (0x1F0 - 16 * bitOf fc.E lam)) = vw0 (fc.sib lam) ∧
       (r.toState s).getMem (BitVec.ofNat 64 (0x1F0 - 16 * bitOf fc.E lam + 8)) = vw1 (fc.sib lam) ∧
       (∀ A, A < 2 ^ 64 → A ≠ 0x1C8 → A ≠ 0x1C0 → A ≠ 0x1F0 - 16 * bitOf fc.E lam + 8 →
@@ -309,7 +361,7 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
   intro t' r
   have hb2 := bitOf_lt fc.E lam
   have hlo := lo0_lt fc hfc
-  have hE : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+  have hU := U_lt fc hfc
   have ht' : t' < 2 := by simp only [t']; split; omega; exact bitOf_lt _ _
   obtain ⟨hrun, hok, hkn, hkeep⟩ := okFold_spec (foldCheck_at hchk lam (bitOf fc.E lam) t' (by omega) hb2 ht'
     (by simp only [t']; split <;> simp_all))
@@ -325,11 +377,12 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
       simp only [Br.holds]
       have hl8 : lam ≤ 9 := by have := hfc.2.1; omega
       have ht'v : t' = bitOf fc.E (lam + 1) := by simp only [t', if_neg hne]
+      have hbU := bitOf_U fc lam (by omega)
       rcases (show bitOf fc.E lam = 0 ∨ bitOf fc.E lam = 1 by omega) with h0 | h1
       · rw [h0]; simp only [if_true]
-        rw [sll_lt fc.E lam hE hl8 s h23, ht'v]
+        rw [sll_lt fc.U lam hU hl8 s h23, ht'v, hbU]
       · rw [h1]; simp only [one_ne_zero, if_false]
-        rw [sll_ge fc.E lam hE hl8 s h23, ht'v]
+        rw [sll_ge fc.U lam hU hl8 s h23, ht'v, hbU]
   obtain ⟨hst, hec, hglob⟩ := run_post hrun hok s hpc hK hbr
   have hK' := knownB_ok hkn s
   have hkeep' := keepB_ok hkeep s
@@ -338,7 +391,7 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
     by simp only [r, lvlExp]; split <;> rfl⟩
   · exact hK' (.x5, 0) (by simp [lvlPost, fk, gkOf, gkF, gkL, baseK]; split <;> simp)
   · rw [PRes.toState_getMem _ _]
-    exact lvl_hdr fc lam hlam _ t' hb2 s hN0 hlo (by have := hfc.2.1; omega)
+    exact lvl_hdr fc lam _ t' hb2 s hN0
   · rw [PRes.toState_getMem, (lvl_sib fc lam _ t' hb2 s).1]; exact hsib.1
   · rw [PRes.toState_getMem, (lvl_sib fc lam _ t' hb2 s).2]; exact hsib.2
   · intro A hA h1 h2 h3 h4
@@ -348,17 +401,16 @@ theorem lvl_nb8 (fc : FCtx) (lam t t' : Nat) (s : MachineState) :
     memEval s (lvlExp fc.kind (if lam = 0 then fc.a1 else 64) fc.rg t fc.j0 fc.h lam
       (0x800 + fc.sibOff + 16 * lam) fc.dst t').st.mem (BitVec.ofNat 64 0x1C8) =
       StoreKind.merge .w (s.getMem (BitVec.ofNat 64 0x1C8)) 4
-        ((if lam + 1 = fc.h then cw 0 else Rv.E.bin .srl (.reg .x23) (cw (lam + 1))).eval s) := by
+        ((if lam + 1 = fc.h then cw 1 else Rv.E.bin .srl (.reg .x23) (cw (lam + 1))).eval s) := by
   simp only [lvlExp]
   split <;> (simp only [List.cons_append]; rw [memEval_cons_eq _ _ _ _ _ rfl, stW_eval])
 
 theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true)
     (s0 : MachineState) (v : Val) (s : MachineState) (hs : FoldInv fc s0 lam v s) :
-    ∃ t, Steps image s ((if lam = 0 then 11 else 10) + xp fc.kind lam)
-      ((if lam = 0 then 11 else 10) + xp fc.kind lam) t ∧
+    ∃ t, Steps image s (if lam = 0 then 11 else 9) (if lam = 0 then 11 else 9) t ∧
       fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
-      hashInput t = pad64 (fc.input lam v) ∧
+      hashInput t = pad64 (fc.hinput lam v) ∧
       ∀ a, FoldInv fc s0 (lam + 1) (answerBytes 16 a) (writeHash t a) := by
   obtain ⟨hst, hec, h5, hK', hkeep', hglob, m1C0, msib0, msib1, mfr, hspc⟩ :=
     level_step fc hfc lam (by omega) hchk s0 v s hs
@@ -370,41 +422,41 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
   have hb2 := bitOf_lt fc.E lam
   have hb2' := bitOf_lt fc.E (lam + 1)
   have hlo := lo0_lt fc hfc
-  have hE : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+  have hU := U_lt fc hfc
+  have hhp := heap_lt fc hfc lam (by omega)
   obtain ⟨hG, hK, h23, hN0, hN8, hv0, hv1, hvl, hF, hpc⟩ := hs
   simp only [lvlPost, if_neg (show ¬ (lam + 1 = fc.h) by omega)] at hK'
   have h10 : (r.toState s).getReg .x10 = BitVec.ofNat 64 0x1C0 := hK' (.x10, _) (by simp [fk])
   have h11 : (r.toState s).getReg .x11 = BitVec.ofNat 64 (64 * (0 + 1)) := hK' (.x11, _) (by simp [fk])
   have h12 : (r.toState s).getReg .x12 = BitVec.ofNat 64 (0x1E0 + 16 * b') :=
     hK' (.x12, _) (List.mem_append_right _ (List.mem_singleton_self _))
-  have h23' : (r.toState s).getReg .x23 = BitVec.ofNat 64 fc.E :=
+  have h23' : (r.toState s).getReg .x23 = BitVec.ofNat 64 fc.U :=
     (hkeep' .x23 (by simp [fkeep]; split <;> simp)).trans h23
-  have hj : fc.E / 2 ^ (lam + 1) ≤ fc.E := Nat.div_le_self _ _
   have m1C8 : (r.toState s).getMem (BitVec.ofNat 64 0x1C8) =
-      BitVec.ofNat 64 (fc.tau % 2 ^ 32 + 2 ^ 32 * (fc.E / 2 ^ (lam + 1))) := by
-    rw [PRes.toState_getMem, lvl_nb8, if_neg (by omega), srl_eval fc.E (lam + 1) hE (by have := hfc.2.1; omega) s h23,
-      stMerge_eval _ _ _ (by omega) hN8]
+      BitVec.ofNat 64 (fc.tau % 2 ^ 32 + 2 ^ 32 * fc.heap lam) := by
+    rw [PRes.toState_getMem, lvl_nb8, if_neg (by omega), srl_eval fc.U (lam + 1) hU (by have := hfc.2.1; omega) s h23,
+      U_div fc lam (by omega), stMerge_eval _ _ _ hhp hN8]
   have hP : ∀ a ∈ pSlots, s.getMem (BitVec.ofNat 64 a) = 0 := hG.2.2.2
   have mv0 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E0 + 16 * b)) = vw0 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv0
   have mv1 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E8 + 16 * b)) = vw1 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv1
   refine ⟨r.toState s, ?_, hec, h5, ?_, ?_, ?_⟩
-  · have e1 : r.steps = (if lam = 0 then 11 else 10) + xp fc.kind lam := by
-      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> omega
-    have e2 : r.cycles = (if lam = 0 then 11 else 10) + xp fc.kind lam := by
-      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> omega
+  · have e1 : r.steps = if lam = 0 then 11 else 9 := by
+      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> rfl
+    have e2 : r.cycles = if lam = 0 then 11 else 9 := by
+      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> rfl
     rw [e1, e2] at hst; exact hst
   · exact hashArgs_ofNat _ _ _ _ h10 h11 h12 (by omega) (by omega) (by omega)
       (by simp only [hashArgsB, MEMORY_BYTES]; simp; omega)
   · rw [hashInput_ofNat _ 0x1C0 0 h10 h11 (by decide) (by decide),
-      pad64_input fc hfc lam (by omega) v hvl]
+      pad64_hinput fc hfc lam (by omega) v hvl]
     congr 1
     simp only [List.range, List.range.loop, List.map, Nat.reduceAdd, Nat.reduceMul, Nat.add_zero,
       Nat.mul_zero]
-    have hlo' : twLo fc.t fc.f2 fc.tau (lam + 1) = fc.lo0 + 2 ^ 32 * (lam + 1) := by
-      unfold twLo FCtx.lo0; have := hfc.2.1; have := hfc.2.2.2.1; have := hfc.2.2.2.2.1; omega
-    have hhi : twHi fc.tau (fc.E / 2 ^ (lam + 1)) = fc.tau % 2 ^ 32 + 2 ^ 32 * (fc.E / 2 ^ (lam + 1)) := by
+    have hlo' : twLo fc.t fc.f2 fc.tau 0 = fc.lo0 := by
+      unfold twLo FCtx.lo0; have := hfc.2.2.2.1; have := hfc.2.2.2.2.1; omega
+    have hhi : twHi fc.tau (fc.heap lam) = fc.tau % 2 ^ 32 + 2 ^ 32 * fc.heap lam := by
       unfold twHi; omega
     rw [hlo', hhi, m1C0, m1C8, mfr 0x1D0 (by omega) (by omega) (by omega) (by omega) (by omega),
       mfr 0x1D8 (by omega) (by omega) (by omega) (by omega) (by omega), hP 0x1D0 (by decide),
@@ -428,8 +480,8 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
       simp only [show lam + 1 ≠ 0 by omega, if_false] at hp
       exact hK' p (List.mem_append_left _ hp)
     · rw [writeHash_getReg]; exact h23'
-    · simp only [NBhdr, show lam + 1 ≠ 0 by omega, if_false]
-      rw [wf 0x1C0 (by omega) (by omega), m1C0, BitVec.toNat_ofNat]; omega
+    · simp only [NBhdr, show lam + 1 ≠ 0 by omega, false_and, if_false]
+      rw [wf 0x1C0 (by omega) (by omega), m1C0]
     · rw [wf 0x1C8 (by omega) (by omega), m1C8, BitVec.toNat_ofNat]; omega
     · rw [writeHash_at0 _ a _ h12 (by omega)]; simp [vw0_answer]
     · rw [show 0x1E8 + 16 * bitOf fc.E (lam + 1) = 0x1E0 + 16 * b' + 8 by omega,
@@ -444,8 +496,8 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
 theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true)
     (s0 : MachineState) (v : Val) (s : MachineState) (hs : FoldInv fc s0 lam v s) :
-    ∃ t, Steps image s (7 + xp fc.kind lam) (7 + xp fc.kind lam) t ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
-      hashInput t = pad64 (fc.input lam v) ∧ FoldEnd fc s0 t := by
+    ∃ t, Steps image s 6 6 t ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
+      hashInput t = pad64 (fc.hinput lam v) ∧ FoldEnd fc s0 t := by
   obtain ⟨hst, hec, h5, hK', hkeep', hglob, m1C0, msib0, msib1, mfr, hspc⟩ :=
     level_step fc hfc lam (by omega) hchk s0 v s hs
   simp only [if_pos hlam] at hst hec h5 hK' hkeep' hglob m1C0 msib0 msib1 mfr hspc
@@ -462,33 +514,33 @@ theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
   have h11 : (r.toState s).getReg .x11 = BitVec.ofNat 64 (64 * (0 + 1)) := hK' (.x11, _) (by simp [fk])
   have h12 : (r.toState s).getReg .x12 = BitVec.ofNat 64 fc.dst :=
     hK' (.x12, _) (List.mem_append_right _ (List.mem_singleton_self _))
-  have m1C8 : (r.toState s).getMem (BitVec.ofNat 64 0x1C8) = BitVec.ofNat 64 (fc.tau % 2 ^ 32) := by
+  have m1C8 : (r.toState s).getMem (BitVec.ofNat 64 0x1C8) = BitVec.ofNat 64 (fc.tau % 2 ^ 32 + 2 ^ 32 * 1) := by
     rw [PRes.toState_getMem, lvl_nb8, if_pos hlam]
     simp only [cw, Rv.E.eval]
-    rw [stMerge_eval _ _ _ (by omega) hN8, Nat.mul_zero, Nat.add_zero]
+    rw [stMerge_eval _ _ _ (by omega) hN8]
   have hP : ∀ a ∈ pSlots, s.getMem (BitVec.ofNat 64 a) = 0 := hG.2.2.2
   have mv0 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E0 + 16 * b)) = vw0 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv0
   have mv1 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E8 + 16 * b)) = vw1 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv1
   refine ⟨r.toState s, ?_, h5, ?_, ?_, ?_⟩
-  · have e1 : r.steps = 7 + xp fc.kind lam := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]; omega
-    have e2 : r.cycles = 7 + xp fc.kind lam := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]; omega
+  · have e1 : r.steps = 6 := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
+    have e2 : r.cycles = 6 := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
     rw [e1, e2] at hst; exact hst
   · have hs' := hsafe
     simp only [safeDest, Bool.and_eq_true, decide_eq_true_eq] at hs'
     exact hashArgs_ofNat _ _ _ _ h10 h11 h12 (by omega) (by omega) (by omega)
       (by simp only [hashArgsB, MEMORY_BYTES]; simp; omega)
   · rw [hashInput_ofNat _ 0x1C0 0 h10 h11 (by decide) (by decide),
-      pad64_input fc hfc lam (by omega) v hvl]
+      pad64_hinput fc hfc lam (by omega) v hvl]
     congr 1
     simp only [List.range, List.range.loop, List.map, Nat.reduceAdd, Nat.reduceMul, Nat.add_zero,
       Nat.mul_zero]
-    have hlo' : twLo fc.t fc.f2 fc.tau (lam + 1) = fc.lo0 + 2 ^ 32 * (lam + 1) := by
-      unfold twLo FCtx.lo0; have := hfc.2.1; have := hfc.2.2.2.1; have := hfc.2.2.2.2.1; omega
+    have hlo' : twLo fc.t fc.f2 fc.tau 0 = fc.lo0 := by
+      unfold twLo FCtx.lo0; have := hfc.2.2.2.1; have := hfc.2.2.2.2.1; omega
     have hj : fc.E / 2 ^ (lam + 1) = 0 := Nat.div_eq_of_lt (by rw [hlam]; exact hfc.2.2.1)
-    have hhi : twHi fc.tau (fc.E / 2 ^ (lam + 1)) = fc.tau % 2 ^ 32 := by
-      unfold twHi; rw [hj]; omega
+    have hhi : twHi fc.tau (fc.heap lam) = fc.tau % 2 ^ 32 + 2 ^ 32 * 1 := by
+      unfold twHi FCtx.heap; rw [hj, show fc.h - (lam + 1) = 0 by omega]; omega
     rw [hlo', hhi, m1C0, m1C8, mfr 0x1D0 (by omega) (by omega) (by omega) (by omega) (by omega),
       mfr 0x1D8 (by omega) (by omega) (by omega) (by omega) (by omega), hP 0x1D0 (by decide),
       hP 0x1D8 (by decide)]
@@ -506,7 +558,6 @@ theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
     · rw [PRes.toState_pc _ _ hspc]
       simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
       rw [show fc.h - 1 = lam by omega]
-      congr 1; rw [hbdef]; omega
 
 /-! ## The whole fold -/
 
@@ -530,19 +581,12 @@ theorem foldPath_eq (fc : FCtx) (v : Val) :
   rw [show fc.path.length = fc.h by simp [FCtx.path], List.range_eq_range']
   rfl
 
-theorem xp_le (kind : Bool) (lam : Nat) : xp kind lam ≤ 1 := by unfold xp; split <;> omega
-
 def levelCost (kind : Bool) (h lam : Nat) : Nat :=
-  (if lam + 1 = h then 15 else if lam = 0 then 19 else 18) + xp kind lam
+  if lam + 1 = h then 14 else if lam = 0 then 19 else 17
 
 def foldCost (kind : Bool) (h lam k : Nat) : Nat := ((List.range' lam k).map (levelCost kind h)).sum
 
-theorem fmt_input (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1) (lam : Nat) (v : Val) :
-    fmt (fc.input lam v) = pad64 (fc.input lam v) := by
-  unfold FCtx.input FCtx.node nodeF
-  split <;> exact fmt_th _ _ _ _ _ _ hfc.2.2.2.1 ht1
-
-theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
+theorem fold_good (fc : FCtx) (hfc : fc.ok) (hn : NodeH fc)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true) (s0 : MachineState)
     (K : Val → OracleComp HashSpec Obs) (N C : Nat)
     (hK : ∀ a u, FoldEnd fc s0 u → Good (writeHash u a) N C (K (answerBytes 16 a))) :
@@ -555,22 +599,22 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
   | succ k ih =>
     intro lam hk _ v s hs
     have hvl : v.length = 16 := hs.2.2.2.2.2.2.2.1
-    have hblk : (pad64 (fc.input lam v)).blocks = 1 := by
-      rw [pad64_input fc hfc lam (by omega) v hvl]; rfl
+    have hfm := fmt_input fc hfc hn lam (by omega) v hvl
+    have hblk : (fmt (fc.input lam v)).blocks = 1 := by
+      rw [hfm, pad64_hinput fc hfc lam (by omega) v hvl]; rfl
     rw [List.range'_succ, List.foldlM_cons, stepFn_eq fc lam (by omega), cc_bind]
-    have hxp := xp_le fc.kind lam
     by_cases hlast : lam + 1 = fc.h
     · obtain rfl : k = 0 := by omega
       obtain ⟨t, hst, h5, hv, hin, hend⟩ := level_last fc hfc lam hlast hchk s0 v s hs
       simp only [List.range'_zero, List.foldlM_nil, cc_pure]
-      have h3 := Good.hashP (K := K) (fmt_input fc hfc ht1 lam v) hend.2.2.2.2.1 h5 hv hin
+      have h3 := Good.hash (K := K) hend.2.2.2.2.1 h5 hv (hin.trans hfm.symm)
         (fun a => hK a t hend)
       rw [hblk] at h3
       refine Good.steps' hst h3 (by omega) ?_
-      simp [foldCost, levelCost, hlast]; omega
+      simp [foldCost, levelCost, hlast]
     · obtain ⟨t, hst, hf, h5, hv, hin, hpost⟩ := level_lt fc hfc lam (by omega) hchk s0 v s hs
-      have h3 := Good.hashP (K := fun v => cc ((List.range' (lam + 1) k).foldlM fc.stepFn v) K)
-        (fmt_input fc hfc ht1 lam v) hf h5 hv hin (fun a => ih (lam + 1) (by omega) (by omega) _ _ (hpost a))
+      have h3 := Good.hash (K := fun v => cc ((List.range' (lam + 1) k).foldlM fc.stepFn v) K)
+        hf h5 hv (hin.trans hfm.symm) (fun a => ih (lam + 1) (by omega) (by omega) _ _ (hpost a))
       rw [hblk] at h3
       refine Good.steps' hst h3 (by split <;> omega) ?_
       simp only [foldCost, List.range'_succ, List.map_cons, List.sum_cons, levelCost, if_neg hlast]

@@ -70,12 +70,13 @@ theorem layFC_check (L : LCtx) (hL : L.ok) :
 
 /-- Carried through the leaf and the fold of layer `lay` to the precode of layer `lay - 1`. -/
 def LeafCarry (L : LCtx) (s : MachineState) : Prop :=
-  s.getReg .x26 = BitVec.ofNat 64 (h3Word L.lay) ∧ s.getReg .x27 = BitVec.ofNat 64 (hWord L.lay) ∧
-  s.getReg .x15 = BitVec.ofNat 64 (bVal L.lay 41) ∧ s.getReg .x30 = BitVec.ofNat 64 L.tau ∧ CBZ s
+  s.getReg .x27 = BitVec.ofNat 64 (hWord L.lay) ∧
+  s.getReg .x15 = BitVec.ofNat 64 (bVal L.lay 41) ∧ s.getReg .x30 = BitVec.ofNat 64 L.tau ∧ CBZ s ∧
+  (s.getMem (BitVec.ofNat 64 0xC0)).toNat / 2 ^ 48 = 0
 
 theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s : MachineState)
     (hs : HeadInv (L.cctx a) 42 ends s) :
-    ∃ u, Steps image s 10 10 u ∧ fetch image u = some (.base .ECALL) ∧
+    ∃ u, Steps image s 11 11 u ∧ fetch image u = some (.base .ECALL) ∧
       u.getReg .x5 = 0 ∧ hashArgumentsValid u = true ∧
       hashInput u = pad64 (leafInput L.lay L.tau L.e ends) ∧
       ∀ ans, FoldInv (layFC L) (writeHash u ans) 0 (answerBytes 16 ans) (writeHash u ans) ∧
@@ -86,13 +87,19 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
   have hpc' : s.pc = pcOf (nextPc' L.lay 41) := by rw [hpc]; simp [headPc, LCtx.cctx]
   have he := e_lt L ⟨hlay, hidx, hwl⟩
   have htau : L.tau < 2 ^ 30 := tau_lt L.lay L.idx hlay hidx
+  have hh := heightL_le L.lay hlay
+  have hpar : (L.e + 2 ^ heightL L.lay) % 2 = L.e % 2 := by
+    have : 2 ^ heightL L.lay = 2 * 2 ^ (heightL L.lay - 1) := by
+      rw [← Nat.pow_succ']; congr 1; omega
+    omega
+  have hpw : 2 ^ heightL L.lay ≤ 2 ^ 11 := Nat.pow_le_pow_right (by decide) hh.2
   set d := decide (L.e % 2 = 1) with hd
   obtain ⟨u, hu⟩ := spec_run (lc_leaf hlay d) s hpc' hK (by
     intro b hb
     simp only [specLeaf, List.mem_cons, List.not_mem_nil, or_false] at hb
     subst hb
     simp only [Br.holds]
-    exact sll63_lt L.e (by omega) s h23)
+    rw [sll63_lt (L.e + 2 ^ heightL L.lay) (by omega) s h23, hpar])
   have hK' := hu.known
   have hdv : (if d then 1 else 0) = L.e % 2 := by
     rw [hd]; split <;> simp_all <;> omega
@@ -156,11 +163,11 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
     · have := Known_writeHash hK2.1 ans
       simpa [layFC] using this
     · rw [writeHash_getReg, hu.keep .x23 (by simp [leafKeep])]; exact h23
-    · simp only [NBhdr, layFC, if_true, Bool.false_eq_true, if_false]
+    · simp only [NBhdr, layFC, Bool.false_eq_true, and_false, if_false]
       rw [wf 0x1C0 (by omega) (by omega), hmem]; simp only [specLeaf]
       rw [memEval_cons_ne _ _ _ _ _ (by bvne), memEval_cons_eq _ _ _ _ _ rfl]
       simp only [Rv.E.eval, cw]
-      congr 1; unfold FCtx.lo0 h3Word; simp only; rw [Nat.div_eq_of_lt (by omega : L.tau < 2 ^ 32)]
+      congr 1; unfold FCtx.lo0 hWord; simp only; rw [Nat.div_eq_of_lt (by omega : L.tau < 2 ^ 32)]
       omega
     · rw [wf 0x1C8 (by omega) (by omega), hmem]; simp only [specLeaf, layFC]
       rw [memEval_cons_eq _ _ _ _ _ rfl]
@@ -175,7 +182,6 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
         writeHash_at8 _ ans _ h12 (by omega)]; exact (vw1_answer ans).symm
     · rw [writeHash_pc, hu.pc rfl, pcOf_add4]
       simp only [specLeaf, layFC, hbit, lvlPc, ← hdv, Nat.add_zero]
-    · rw [writeHash_getReg]; exact hK2.2 (.x26, BitVec.ofNat 64 (h3Word L.lay)) (by simp)
     · rw [writeHash_getReg]; exact hK2.2 (.x27, BitVec.ofNat 64 (hWord L.lay)) (by simp)
     · rw [writeHash_getReg]; exact hK2.2 (.x15, BitVec.ofNat 64 (bVal L.lay 41)) (by simp)
     · rw [writeHash_getReg, hu.keep .x30 (by simp [leafKeep])]; exact h30
@@ -183,5 +189,7 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
           (by omega)]; exact hZ.1,
         by rw [wf 0xE8 (by omega) (by omega), mfr 0xE8 (by omega) (by omega) (by omega) (by omega)
           (by omega)]; exact hZ.2⟩
+    · rw [wf 0xC0 (by omega) (by omega), mfr 0xC0 (by omega) (by omega) (by omega) (by omega)
+        (by omega)]; exact hCB.2.2
 
 end SigGolfCandidate.Verify

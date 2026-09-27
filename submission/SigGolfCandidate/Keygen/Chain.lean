@@ -91,18 +91,18 @@ theorem step_xsim (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends 
     (m x : Nat) (keep : Val) (hm : m < 7) (he : e < 2048) (hj : j < 42) (st : Val × Val)
     (t : MachineState) (h : SCtx W e leaves j ends m st.1 t) (hk : ValAt t 336 keep)
     (hpc : t.pc = pcOf 49) :
-    XSim image t 7 14 1 1
+    XSim image t 11 18 1 1
       (do let v ← Ref.hash16 (chainInput 0 0 e j (1 + m) st.1)
           pure (v, if 1 + m = x then v else st.2))
       (fun st' u => SCtx W e leaves j ends (m + 1) st'.1 u ∧ ValAt u 336 keep ∧
-        u.pc = if m + 1 < 7 then pcOf 49 else pcOf 56) := by
+        u.pc = if m + 1 < 7 then pcOf 49 else pcOf 60) := by
   obtain ⟨u, hst, upc, u23, u10, uun, u192, ufr⟩ :=
     spec_49 t hpc m (8 * j + m) (by omega) h.r23 h.r24 h.t2
-  have ux : ∀ r, r ≠ .x23 ∧ r ≠ .x10 → u.getReg r = t.getReg r :=
-    fun r hr => uun r hr.1 hr.2
+  have ux : ∀ r, r ≠ .x23 ∧ r ≠ .x10 ∧ r ≠ .x3 ∧ r ≠ .x29 → u.getReg r = t.getReg r :=
+    fun r hr => uun r hr.1 hr.2.1 hr.2.2.1 hr.2.2.2
   have u12 : u.getReg .x12 = BitVec.ofNat 64 240 := by rw [ux _ (by simp), h.r12]
   have hq : hashInput u = fmt (chainInput 0 0 e j (1 + m) st.1) := by
-    rw [fmt_chainInput _ _ _ _ _ _ h.vl]
+    rw [fmt_chainInput _ _ _ _ _ _ h.vl (by omega) (by omega) (by omega)]
     refine hashInput_eq_block u 192 _ (by rw [ux _ (by simp), h.r11]) u10 (by norm_num)
       (by norm_num) ?_
     rw [readWords8, u192]
@@ -128,12 +128,13 @@ theorem step_xsim (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends 
     simp [Query.blocks, pad64, padBlocks, chainInput, thInput, h.vl]
   refine (XSim.steps hst (XSim.hash16_bind (k := 3) (c := 3) (n := 0) (b := 0)
     (f := fun v => pure (v, if 1 + m = x then v else st.2))
-    ((codeAt_52.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
+    ((codeAt_56.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
     (hashArgs_const u 192 64 240 u10 (by rw [ux _ (by simp)]; exact h.r11) u12 (by norm_num)
-      (by norm_num) (by norm_num) (by norm_num) (by norm_num)) hq (fun a => ?_))).of_eq rfl
+      (by norm_num) (by norm_num) (by norm_num) (by norm_num)) hq
+      (not_digest_thInput _ _ _ _ _ _ (by decide)) (fun a => ?_))).of_eq rfl
     (by rfl) (by rw [hblk]) (by rfl) (by rw [hblk])
-  have wpc : (writeHash u a).pc = pcOf 53 := by rw [pc_writeHash, upc]; rfl
-  obtain ⟨v, vst, vpc, v24, vun, vfr⟩ := spec_53 (writeHash u a) wpc (m + 1) (8 * j + m)
+  have wpc : (writeHash u a).pc = pcOf 57 := by rw [pc_writeHash, upc]; rfl
+  obtain ⟨v, vst, vpc, v24, vun, vfr⟩ := spec_57 (writeHash u a) wpc (m + 1) (8 * j + m)
     (by omega) (by rw [getReg_writeHash, u23]) (by rw [getReg_writeHash, ux _ (by simp), h.r24])
   have fr := (ufr.trans (Frame.writeHash u a 240 u12 (by norm_num) (by norm_num))).trans vfr
   refine XSim.pure_steps vst ⟨⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, hk.frame fr (by norm_num) (fun k hk => by
@@ -176,10 +177,10 @@ theorem chain_xsim (W : List Word) (e : Nat) (leaves : List Val) (j x : Nat) (he
     (h : CCtx W e leaves j ends t) (h24 : t.getReg .x24 = BitVec.ofNat 64 (8 * j))
     (h11 : t.getReg .x11 = BitVec.ofNat 64 64)
     (hs : ValAt t (320 + 16 * (j % 2)) sv) (hk : ValAt t 336 keep) (hpc : t.pc = pcOf 40) :
-    XSim image t 67 116 7 7 (chainSteps 0 0 e j x sv)
+    XSim image t 95 144 7 7 (chainSteps 0 0 e j x sv)
       (fun p u => CCtx W e leaves (j + 1) (ends ++ [p.1]) u ∧
         u.getReg .x24 = BitVec.ofNat 64 (8 * (j + 1)) ∧ u.getReg .x11 = BitVec.ofNat 64 64 ∧
-        ValAt u 336 keep ∧ u.pc = if j + 1 < 42 then pcOf 32 else pcOf 65) := by
+        ValAt u 336 keep ∧ u.pc = if j + 1 < 42 then pcOf 32 else pcOf 69) := by
   obtain ⟨v, vst, vpc, v10, v12, v23, vun, v240, v248, vfr⟩ := spec_40 t hpc j h.r21
   have vx : ∀ r, r ≠ .x1 ∧ r ≠ .x2 ∧ r ≠ .x3 ∧ r ≠ .x10 ∧ r ≠ .x12 ∧ r ≠ .x23 →
       v.getReg r = t.getReg r :=
@@ -202,8 +203,8 @@ theorem chain_xsim (W : List Word) (e : Nat) (leaves : List Val) (j x : Nat) (he
       pure (v, if mu = x then v else st.2))
     (sv, sv)
     (fun m st' w => SCtx W e leaves j ends m st'.1 w ∧ ValAt w 336 keep ∧
-      w.pc = if m < 7 then pcOf 49 else pcOf 56)
-    (fun _ => 7) (fun _ => 14) (fun _ => 1) (fun _ => 1)
+      w.pc = if m < 7 then pcOf 49 else pcOf 60)
+    (fun _ => 11) (fun _ => 18) (fun _ => 1) (fun _ => 1)
     (fun m hm st' w hw => step_xsim W e leaves j ends m x keep hm he hj st' w hw.1 hw.2.1
       (by rw [hw.2.2, if_pos hm]))
     ⟨hv0, hk0, by rw [vpc]; rfl⟩
@@ -212,7 +213,7 @@ theorem chain_xsim (W : List Word) (e : Nat) (leaves : List Val) (j x : Nat) (he
     (fun p w hw => ?_))).of_eq (bind_pure _) (by rfl) (by rfl) (by rfl) (by rfl)
   obtain ⟨hs, hwk, hwpc⟩ := hw
   obtain ⟨y, yst, ypc, y21, y24, yun, y864, y872, yfr⟩ :=
-    spec_56 w (by rw [hwpc]; rfl) j (8 * j + 7) hj hs.r21 hs.r24
+    spec_60 w (by rw [hwpc]; rfl) j (8 * j + 7) hj hs.r21 hs.r24
   refine XSim.pure_steps yst ⟨?_, by rw [y24]; congr 1 <;> omega,
     by rw [yun _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hs.r11,
     hwk.frame yfr (by norm_num) (fun k hk => by simp at hk; omega), ?_⟩
@@ -247,14 +248,14 @@ theorem pair_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (lea
     (k : Nat) (he : e < 2048) (hk : k < 21) (st : List Val × List Val) (t : MachineState)
     (h : CCtx W e leaves (2 * k) st.1 t) (h24 : t.getReg .x24 = BitVec.ofNat 64 (8 * (2 * k)))
     (hpc : t.pc = pcOf 32) :
-    XSim image t 144 249 15 15
+    XSim image t 200 305 15 15
       (do let (s0, s1) ← prf2 (prfInput S 0 0 e k)
           let (v0, c0) ← chainSteps 0 0 e (2 * k) (([] : List Nat).getD (2 * k) 0) s0
           let (v1, c1) ← chainSteps 0 0 e (2 * k + 1) (([] : List Nat).getD (2 * k + 1) 0) s1
           pure (st.1 ++ [v0, v1], st.2 ++ [c0, c1]))
       (fun st' u => CCtx W e leaves (2 * (k + 1)) st'.1 u ∧
         u.getReg .x24 = BitVec.ofNat 64 (8 * (2 * (k + 1))) ∧
-        u.pc = if 2 * (k + 1) < 42 then pcOf 32 else pcOf 65) := by
+        u.pc = if 2 * (k + 1) < 42 then pcOf 32 else pcOf 69) := by
   obtain ⟨u, ust, upc, uun, ufr⟩ := spec_32 t hpc (2 * k) h.r21
   rw [if_pos (by omega)] at upc
   obtain ⟨u2, u2st, u2pc, u10, u11, u12, u2un, u1696, u2fr⟩ :=
@@ -287,11 +288,12 @@ theorem pair_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (lea
   have hblk : (pad64 (prfInput S 0 0 e k)).blocks = 1 := by
     simp [Query.blocks, pad64, padBlocks, prfInput, thInput, hS.1]
   refine (XSim.steps ust (XSim.steps u2st (XSim.prf2_bind (x := prfInput S 0 0 e k)
-    (k := 67 + (2 + (67 + 0))) (c := 116 + (2 + (116 + 0))) (n := 7 + (7 + 0)) (b := 7 + (7 + 0))
+    (k := 95 + (2 + (95 + 0))) (c := 144 + (2 + (144 + 0))) (n := 7 + (7 + 0)) (b := 7 + (7 + 0))
     ((codeAt_39.fetch u2 u2pc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5)
     (hashArgs_const u2 1696 64 320 u10 u11 u12 (by norm_num)
       (by norm_num) (by norm_num) (by norm_num) (by norm_num))
-    (hq.trans (fmt_thInput 0 0 0 k e S (by decide)).symm) (fun a => ?_)))).of_eq rfl
+    (hq.trans (fmt_thInput 0 0 0 k e S (by decide)).symm)
+    (not_digest_thInput 0 0 0 k e S (by decide)) (fun a => ?_)))).of_eq rfl
     (by rfl) (by rw [hblk]) (by rfl) (by rw [hblk])
   have hwf := Frame.writeHash u2 a 320 u12 (by norm_num) (by norm_num)
   have c0 : CCtx W e leaves (2 * k) st.1 (writeHash u2 a) := by
@@ -337,10 +339,10 @@ theorem Vals.nil (t : MachineState) (A : Nat) : Vals t A [] := ⟨by simp, by si
 /-- A whole leaf `e`: 21 chain pairs, the leaf hash into the tree array. -/
 theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he : e < 2048)
     (acc : List Val × List Val) (t : MachineState) (h : LCtx W e acc.1 t) (hpc : t.pc = pcOf 25) :
-    XSim image t 3038 5330 316 326
+    XSim image t 4214 6506 316 326
       (do let (leaf, c) ← buildLeaf S 0 0 e []
           pure (acc.1 ++ [leaf], if e = 0 then c else acc.2))
-      (fun acc' u => LCtx W (e + 1) acc'.1 u ∧ u.pc = if e + 1 < 2048 then pcOf 25 else pcOf 72) := by
+      (fun acc' u => LCtx W (e + 1) acc'.1 u ∧ u.pc = if e + 1 < 2048 then pcOf 25 else pcOf 76) := by
   obtain ⟨u, hst, upc, u21, u24, uun, u1704, u200, u840, ufr⟩ :=
     spec_25 t hpc e (by omega) h.r20 h.base.r30
   have h0 : CCtx W e acc.1 0 [] u := by
@@ -363,8 +365,8 @@ theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he 
       pure (st.1 ++ [v0, v1], st.2 ++ [c0, c1]))
     ([], [])
     (fun k st w => CCtx W e acc.1 (2 * k) st.1 w ∧ w.getReg .x24 = BitVec.ofNat 64 (8 * (2 * k)) ∧
-      w.pc = if 2 * k < 42 then pcOf 32 else pcOf 65)
-    (fun _ => 144) (fun _ => 249) (fun _ => 15) (fun _ => 15)
+      w.pc = if 2 * k < 42 then pcOf 32 else pcOf 69)
+    (fun _ => 200) (fun _ => 305) (fun _ => 15) (fun _ => 15)
     (fun k hk st w hw => pair_xsim W S hS e acc.1 k he hk st w hw.1 hw.2.1
       (by rw [hw.2.2, if_pos (by omega)]))
     ⟨h0, u24, by rw [upc]; rfl⟩
@@ -375,7 +377,7 @@ theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he 
   obtain ⟨hc, _, hpc57⟩ := hw
   have hl42 : st.1.length = 42 := hc.elen
   obtain ⟨x, xst, xpc, x10, x11, x12, xun, xfr⟩ :=
-    spec_65 w (by rw [hpc57]; rfl) e he hc.r20 hc.r19
+    spec_69 w (by rw [hpc57]; rfl) e he hc.r20 hc.r19
   have xm : ∀ A < 2 ^ 64, x.getMem (BitVec.ofNat 64 A) = w.getMem (BitVec.ofNat 64 A) :=
     fun A hA => xfr A hA (by simp)
   have hx : (leafInput 0 0 e st.1).length = 704 := by
@@ -401,13 +403,14 @@ theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he 
   have hblk : (pad64 (leafInput 0 0 e st.1)).blocks = 11 := by
     simp only [Query.blocks, pad64, padBlocks, hx]
   refine (XSim.steps xst (XSim.hash16_bind (x := leafInput 0 0 e st.1) (k := 2) (c := 2) (n := 0) (b := 0)
-    ((codeAt_69.fetch x xpc).trans rfl)
+    ((codeAt_73.fetch x xpc).trans rfl)
     (by rw [xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.base.r5)
     (hashArgs_const x 832 704 (REGION + 16 * e) x10 x11 x12 (by norm_num) (by norm_num) (by norm_num)
-      (by unfold REGION; omega) (by unfold REGION; omega)) (hq.trans (fmt_thInput 2 0 0 0 e _ (by decide)).symm) (fun a => ?_))).of_eq rfl (by rfl) (by rw [hblk])
+      (by unfold REGION; omega) (by unfold REGION; omega)) (hq.trans (fmt_thInput 2 0 0 0 e _ (by decide)).symm)
+    (not_digest_thInput 2 0 0 0 e _ (by decide)) (fun a => ?_))).of_eq rfl (by rfl) (by rw [hblk])
       (by rfl) (by rw [hblk])
-  have wpc : (writeHash x a).pc = pcOf 70 := by rw [pc_writeHash, xpc]; rfl
-  obtain ⟨y, yst, ypc, y20, yun, yfr⟩ := spec_70 (writeHash x a) wpc e he
+  have wpc : (writeHash x a).pc = pcOf 74 := by rw [pc_writeHash, xpc]; rfl
+  obtain ⟨y, yst, ypc, y20, yun, yfr⟩ := spec_74 (writeHash x a) wpc e he
     (by rw [getReg_writeHash, xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.r20)
     (by rw [getReg_writeHash, xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.r17)
   have hwf := Frame.writeHash x a (REGION + 16 * e) x12 (by unfold REGION; omega) (by unfold REGION; omega)
