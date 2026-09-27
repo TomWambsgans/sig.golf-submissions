@@ -9551,3 +9551,126 @@ theorem signer_secret_copy_code_shift_loop (location : Fin 5) :
 
 #print axioms signer_secret_copy_code_shift_loop
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem copy_loop_next_shift (delta : Word) (s : MachineState) :
+    LocalLoop.loopNext (SphincsMaskedSignOtsShift.shift delta s) =
+      SphincsMaskedSignOtsShift.shift delta (LocalLoop.loopNext s) := by
+  simp [LocalLoop.loopNext, LocalLoop.loopBody,
+    SphincsMaskedSignOtsShift.exec_shift,
+    SphincsMaskedSignOtsShift.Supported]
+
+#print axioms copy_loop_next_shift
+
+def copyLoopIter (n : Nat) (s : MachineState) : MachineState :=
+  (LocalLoop.loopNext)^[n] s
+
+theorem copyLoopIter_shift (delta : Word) (n : Nat) (s : MachineState) :
+    copyLoopIter n (SphincsMaskedSignOtsShift.shift delta s) =
+      SphincsMaskedSignOtsShift.shift delta (copyLoopIter n s) := by
+  have commute : Function.Commute (SphincsMaskedSignOtsShift.shift delta)
+      LocalLoop.loopNext := by
+    intro t
+    exact (copy_loop_next_shift delta t).symm
+  exact (commute.iterate_right n s).symm
+
+theorem copyLoopTrace (image : Image) (p : Word) (code : CopyCode image p)
+    (source destination total n : Nat) (s : MachineState)
+    (inv : CopyInvariant p source destination total n s)
+    (srcbound : source + 8 * total ≤ MEMORY_BYTES)
+    (dstbound : destination + 8 * total ≤ MEMORY_BYTES)
+    (srcalign : source % 8 = 0) (dstalign : destination % 8 = 0) :
+    OrdinarySteps image s (6 * n) (copyLoopIter n s) := by
+  induction n generalizing s with
+  | zero =>
+      change OrdinarySteps image s 0 s
+      exact OrdinarySteps.refl s
+  | succ n ih =>
+      have access := copy_accesses p source destination total n s inv
+        srcbound dstbound srcalign dstalign
+      have block := copy_block image p code s (by simpa using inv.2.2.1)
+        access.1 access.2
+      have tail := ih (LocalLoop.loopNext s)
+        (copy_invariant_next p source destination total n s inv)
+      have joined := ordinary_trans image s _ _ 6 (6 * n) block tail
+      change OrdinarySteps image s (6 * (n + 1))
+        ((LocalLoop.loopNext)^[n + 1] s)
+      rw [Function.iterate_succ_apply]
+      change OrdinarySteps image s (6 * (n + 1))
+        (copyLoopIter n (LocalLoop.loopNext s))
+      simpa only [Nat.mul_succ, Nat.mul_one, Nat.add_comm] using joined
+
+#print axioms copyLoopIter_shift
+#print axioms copyLoopTrace
+
+theorem signer_seed_copy_shift (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3b08)
+    (source : s.getReg .x6 = 0x20)
+    (destination : s.getReg .x7 = 0x40028)
+    (count : s.getReg .x10 = 4) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      24
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (copyLoopIter 4 s)) := by
+  let delta := signerShiftBytes location
+  have inv : CopyInvariant (0x3b08 + delta) 0x20 0x40028 4 4
+      (SphincsMaskedSignOtsShift.shift delta s) := by
+    refine ⟨by decide, by decide, ?_, ?_, ?_, ?_⟩
+    · simp only [SphincsMaskedSignOtsShift.shift_pc, pc]
+      rfl
+    · simpa [SphincsMaskedSignOtsShift.shift_reg] using source
+    · simpa [SphincsMaskedSignOtsShift.shift_reg] using destination
+    · simpa [SphincsMaskedSignOtsShift.shift_reg] using count
+  have run := copyLoopTrace SphincsMaskedImages.sign (0x3b08 + delta)
+    (signer_secret_copy_code_shift_loop location) 0x20 0x40028 4 4
+    (SphincsMaskedSignOtsShift.shift delta s) inv
+    (by decide) (by decide) (by decide) (by decide)
+  simpa only [delta, Nat.reduceMul, copyLoopIter_shift] using run
+
+#print axioms signer_seed_copy_shift
+
+theorem signer_seed_copy_endpoint (s t : MachineState)
+    (pc : s.pc = 0x3b08)
+    (source : s.getReg .x6 = 0x20)
+    (destination : s.getReg .x7 = 0x40028)
+    (count : s.getReg .x10 = 4)
+    (run : OrdinarySteps SphincsMaskedImages.sign s 24 t) :
+    t = copyLoopIter 4 s := by
+  have inv : CopyInvariant 0x3b08 0x20 0x40028 4 4 s := by
+    refine ⟨by decide, by decide, ?_, ?_, ?_, ?_⟩
+    · simpa using pc
+    · simpa using source
+    · simpa using destination
+    · simpa using count
+  have canonical := copyLoopTrace SphincsMaskedImages.sign 0x3b08
+    first_bottom_secret_copy_code 0x20 0x40028 4 4 s inv
+    (by decide) (by decide) (by decide) (by decide)
+  exact ordinarySteps_unique run (by simpa only [Nat.reduceMul] using canonical)
+
+#print axioms signer_seed_copy_endpoint
+
+theorem signer_interchain_shift (location : Fin 5) (s : MachineState)
+    (pc : s.pc = 0x3dec)
+    (nextPc : (firstBottomNext s).pc = 0x3ac8) :
+    OrdinarySteps SphincsMaskedImages.sign
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+      59
+      (SphincsMaskedSignOtsShift.shift (signerShiftBytes location)
+        (copyLoopIter 4 (firstBottomSecretRepeat (firstBottomNext s)))) := by
+  have next := signer_next_shift_loop location s pc
+  have repeatRun := signer_repeat_shift_loop location (firstBottomNext s) nextPc
+  obtain ⟨repeatPc, source, destination, count⟩ :=
+    first_bottom_secret_repeat_registers (firstBottomNext s) nextPc
+  have copied := signer_seed_copy_shift location
+    (firstBottomSecretRepeat (firstBottomNext s))
+    repeatPc source destination count
+  simpa only [Nat.reduceAdd] using (next.append repeatRun).append copied
+
+#print axioms signer_interchain_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
