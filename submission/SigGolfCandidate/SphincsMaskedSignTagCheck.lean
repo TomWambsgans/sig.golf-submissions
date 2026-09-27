@@ -79,7 +79,7 @@ theorem comparison_mem (s : MachineState) (address : Word) :
     (afterComparison s).getMem address = s.getMem address := by
   simp [afterComparison, runSchedule, compareSchedule, execInstrBr]
 
-theorem comparison_trace_hash (hash : SigGolf.Hash) (s : MachineState)
+theorem comparison_trace_hash (hash : Legacy.Hash) (s : MachineState)
     (pc : s.pc = 0x12cc)
     (equal : ∀ i : Fin 5,
       s.getWord32 (BitVec.ofNat 64 (0x84000 + 4 * i.val)) =
@@ -90,7 +90,7 @@ theorem comparison_trace_hash (hash : SigGolf.Hash) (s : MachineState)
 
 /-- The signer reaches the first post-authentication instruction whenever
     both its parameter and cache-tag checks succeed. -/
-theorem loaded_authenticated_trace (hash : SigGolf.Hash)
+theorem loaded_authenticated_trace (hash : Legacy.Hash)
     (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
     (message : SigGolf.Message)
     (parameterEqual : ∀ i : Fin 5,

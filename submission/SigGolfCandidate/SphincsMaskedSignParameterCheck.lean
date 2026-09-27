@@ -83,7 +83,7 @@ theorem comparison_mem (s : MachineState) (address : Word) :
 
 /-- The parameter check has no HASH service and costs only its 18 ordinary
     instructions on the success path. -/
-theorem comparison_trace_hash (hash : SigGolf.Hash) (s : MachineState)
+theorem comparison_trace_hash (hash : Legacy.Hash) (s : MachineState)
     (pc : s.pc = 0x10e8)
     (equal : ∀ i : Fin 5,
       s.getWord32 (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
@@ -94,7 +94,7 @@ theorem comparison_trace_hash (hash : SigGolf.Hash) (s : MachineState)
 
 /-- The parameter HASH answer is the five low 32-bit lanes of the oracle
     output used by the abstract key derivation. -/
-theorem afterHash_words32 (hash : SigGolf.Hash) (s : MachineState)
+theorem afterHash_words32 (hash : Legacy.Hash) (s : MachineState)
     (seed : SphincsSecurity.MasterSeed) (i : Fin 5) :
     (SphincsMaskedSignPrefix.afterHashState hash s seed).getWord32
       (BitVec.ofNat 64 (0x42000 + 4 * i.val)) =
@@ -110,7 +110,7 @@ theorem afterHash_words32 (hash : SigGolf.Hash) (s : MachineState)
 
 /-- Conditional exact trace of loader, parameter HASH, and successful cache
     parameter check. A later keygen/sign refinement supplies the equality. -/
-theorem loaded_comparison_trace (hash : SigGolf.Hash)
+theorem loaded_comparison_trace (hash : Legacy.Hash)
     (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
     (message : SigGolf.Message)
     (equal : ∀ i : Fin 5,
@@ -138,7 +138,7 @@ theorem loaded_comparison_trace (hash : SigGolf.Hash)
   exact first.trans (comparison_trace_hash hash s pc equal)
 
 /-- Conditional exact signer prefix through the authenticated-cache HASH. -/
-theorem loaded_mac_trace (hash : SigGolf.Hash)
+theorem loaded_mac_trace (hash : Legacy.Hash)
     (secretKey : SigGolf.SecretKey) (cache : SigGolf.Cache)
     (message : SigGolf.Message)
     (equal : ∀ i : Fin 5,

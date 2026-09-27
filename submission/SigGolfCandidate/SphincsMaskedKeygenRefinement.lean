@@ -276,26 +276,6 @@ theorem read_cache (hash : Hash) (seed : MasterSeed) (s : MachineState) (sem : F
   · rw [read_ciphertext]
     exact read_words20 s 131052 _ (by decide) (by decide) sem.tag
 
-/-- Organizer-level keygen refinement for any submission using this exact image and standard
-keygen input/output addresses. The returned cache fields and full ciphertext MAC are explicit. -/
-theorem keygen_runWith (submission : Submission) (hash : Hash) (seed : MasterSeed)
-    (image : submission.image .keygen=SphincsMaskedImages.keygen)
-    (valid : (submission.image .keygen).Valid submission.sizes submission.layout)
-    (secretAddress : submission.layout.secretKey=0x20)
-    (publicAddress : submission.layout.publicKey=0x40) (cacheAddress : submission.layout.cache=0x60) :
-    ∃ cache : SigGolf.Cache,
-      submission.runWith hash .keygen seed=⟨some (publicKey hash seed,cache),true,92369576,860161,1007616⟩ ∧
-      CacheSemantics hash seed cache := by
-  obtain ⟨final,run,sem⟩ := keygen_executes hash seed
-  have loaded := entry_loaded submission seed image valid secretAddress
-  have exactRun : Executes hash (submission.image .keygen) (entryState seed) 85168809
-      ⟨.success,final,92369576,860161,1007616⟩ := by rw [image];exact run
-  have result := runWith_of_executes submission hash .keygen seed (entryState seed) 85168809
-    ⟨.success,final,92369576,860161,1007616⟩ loaded exactRun (by decide)
-  refine ⟨readBuffer final 0x60 CACHE_BYTES,?_,read_cache hash seed final sem⟩
-  simpa [readOutput,publicAddress,cacheAddress,read_publicKey hash seed final sem,
-    show (Exit.success != Exit.unfinished)=true by decide] using result
-
 /-- info: 'SigGolfCandidate.SphincsMaskedKeygenRefinement.leavesEntry_context' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms leavesEntry_context
@@ -303,9 +283,5 @@ theorem keygen_runWith (submission : Submission) (hash : Hash) (seed : MasterSee
 /-- info: 'SigGolfCandidate.SphincsMaskedKeygenRefinement.keygen_executes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms keygen_executes
-
-/-- info: 'SigGolfCandidate.SphincsMaskedKeygenRefinement.keygen_runWith' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms keygen_runWith
 
 end SigGolfCandidate.SphincsMaskedKeygenRefinement
