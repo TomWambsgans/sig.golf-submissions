@@ -6556,4 +6556,155 @@ theorem upper_honest_final_accepts (hash : Hash)
 
 #print axioms upper_honest_final_accepts
 
+def upperRoot (hash : Hash) (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature) (index : Index)
+    (target : Fin 5) (encoding : Encoding) : Digest :=
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let tree := Concrete.treeIndexAt index lay
+  let leaf := Concrete.leafIndexAt index lay
+  Concrete.foldValue (adaptOracle hash) pk.parameter lay tree leaf
+    (Concrete.signaturePath signature lay)
+    (evalWithAnswerFn (adaptOracle hash)
+      (Concrete.leafHash pk.parameter lay tree leaf
+        (fun chain => evalWithAnswerFn (adaptOracle hash)
+          (Concrete.recoverChain pk.parameter lay tree leaf chain
+            (encoding chain) ((signature.layers lay).chainValues chain)))))
+    (layerHeight lay)
+
+structure UpperEntry (target : Fin 5) (initial state : MachineState)
+    (index : Index) (message : Digest) : Prop where
+  pc : state.pc = upperPrefixPc target
+  frame : ∀ address, address.toNat < 0x40000 →
+    state.getByte address = initial.getByte address
+  global : state.getMem 0x43078 = BitVec.ofNat 64 index.val
+  layer : state.getMem 0x43000 =
+    BitVec.ofNat 64 (SphincsVerifierXmssTransition.targetLayer target).val
+  zero : state.getMem 0x43010 = 0
+  tree : state.getMem 0x43008 =
+    BitVec.ofNat 64 (Concrete.treeIndexAt index
+      (SphincsVerifierXmssTransition.targetLayer target)).val
+  leaf : state.getMem 0x43018 =
+    BitVec.ofNat 64 (Concrete.leafIndexAt index
+      (SphincsVerifierXmssTransition.targetLayer target)).val
+  indexCell : state.getMem 0x43020 =
+    BitVec.ofNat 64 (Concrete.leafIndexAt index
+      (SphincsVerifierXmssTransition.targetLayer target)).val
+  payload : ∀ i, (hi : i < 20) →
+    state.getByte (BitVec.ofNat 64 (0x40028 + i)) =
+      message.extractLsb' (8 * i) 8
+
+theorem upper_small_from_loaded (target : Fin 5)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address) :
+    BitVec.setWidth 64 (state.getWord32 (upperCounterSource target)) >>> 20 = 0 := by
+  have counterWord := honest_upper_counter_word_after_frame target
+    publicKey inputMessage pk signature initial state loaded frame
+  rw [counterWord]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_ushiftRight]
+  rw [BitVec.toNat_setWidth_of_le (by decide)]
+  simp only [BitVec.toNat_ofNat]
+  have below :
+      (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat <
+        2 ^ 20 := (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter.isLt
+  rw [Nat.mod_eq_of_lt (by omega :
+    (signature.layers (SphincsVerifierXmssTransition.targetLayer target)).counter.toNat <
+      2 ^ 32)]
+  exact Nat.shiftRight_eq_zero _ 20 below
+
+theorem upper_honest_next_entry (target next : Fin 5) (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index) (message : Digest)
+    (encoding : Encoding)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : UpperEntry target initial state index message)
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer target)
+        (Concrete.treeIndexAt index
+          (SphincsVerifierXmssTransition.targetLayer target))
+        (Concrete.leafIndexAt index
+          (SphincsVerifierXmssTransition.targetLayer target)) message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter) =
+        some encoding)
+    (handoffLayer : SphincsVerifierXmssTransition.targetLayer target =
+      SphincsVerifierXmssTransition.previousLayer next) :
+    ∃ (final : MachineState) (steps cycles calls blocks : Nat),
+      let lay := SphincsVerifierXmssTransition.targetLayer target
+      let pathEnd := SphincsVerifierXmssPathControl.pathState hash lay
+        (layerHeight lay) final
+      let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+      UpperEntry next initial nextState index
+        (upperRoot hash pk signature index target encoding) ∧
+      Trace hash SphincsImages.verify state (61 + steps) (68 + cycles)
+        (1 + calls) (1 + blocks) final ∧
+      steps ≤ 507 + 728 * 52 + 856 ∧
+      cycles ≤ 507 + 777 * 52 + 991 ∧
+      SphincsVerifierXmssPathControl.pathCycles hash lay (layerHeight lay)
+        final ≤ 141 * layerHeight lay ∧
+      (∀ (tailSteps : Nat) (result : Execution),
+        Executes hash SphincsImages.verify nextState tailSteps result →
+          Executes hash SphincsImages.verify state
+            (61 + (steps + ((tailSteps + 43) +
+              SphincsVerifierXmssPathControl.pathInstructions hash lay
+                (layerHeight lay) final)))
+            (((result.charge 43 0 0).charge
+              (cycles + SphincsVerifierXmssPathControl.pathCycles hash lay
+                (layerHeight lay) final)
+              (calls + layerHeight lay)
+              (blocks + 2 * layerHeight lay)).charge 68 1 1)) := by
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let tree := Concrete.treeIndexAt index lay
+  let leaf := Concrete.leafIndexAt index lay
+  have small := upper_small_from_loaded target publicKey inputMessage pk
+    signature initial state loaded entry.frame
+  have witness := loaded_upper_prefix_after_frame publicKey inputMessage pk
+    signature initial state loaded entry.frame
+  have query := upper_encoding_query_after_frame target publicKey inputMessage
+    pk signature initial state loaded entry.frame lay tree leaf message
+    entry.pc entry.layer entry.zero entry.tree entry.leaf witness entry.payload
+  obtain ⟨final, steps, cycles, calls, blocks, run, stepsBound,
+    cyclesBound, _callsBound, _blocksBound, pathCycleBound,
+    _handoff, nextPc, rootBytes, lowFrame, nextGlobal, continuation⟩ :=
+      upper_honest_layer_step target next hash publicKey inputMessage pk
+        signature initial state loaded entry.frame tree leaf message encoding
+        entry.pc small entry.layer entry.tree entry.leaf entry.indexCell
+        query honest handoffLayer
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash lay
+    (layerHeight lay) final
+  let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+  have pathGlobal : pathEnd.getMem 0x43078 = BitVec.ofNat 64 index.val := by
+    exact (upper_handoff_global_index_cell next pathEnd).symm.trans
+      (nextGlobal.trans entry.global)
+  have controls := upper_handoff_control_cells next pathEnd
+  have indexCells := upper_handoff_index_cells next pathEnd index pathGlobal
+  have nextZero := upper_handoff_position_zero next pathEnd
+  have nextFrame (address : Word) (low : address.toNat < 0x40000) :
+      nextState.getByte address = initial.getByte address :=
+    (lowFrame address low).trans (entry.frame address low)
+  have nextEntry : UpperEntry next initial nextState index
+      (upperRoot hash pk signature index target encoding) := by
+    refine ⟨nextPc, nextFrame, nextGlobal.trans entry.global,
+      controls.1, nextZero, indexCells.1, indexCells.2,
+      ?_, ?_⟩
+    · exact controls.2.2.2.symm.trans indexCells.2
+    · intro i hi
+      simpa only [upperRoot, lay, tree, leaf] using rootBytes i hi
+  exact ⟨final, steps, cycles, calls, blocks, nextEntry, run,
+    stepsBound, cyclesBound, pathCycleBound, continuation⟩
+
+#print axioms upper_small_from_loaded
+#print axioms upper_honest_next_entry
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
