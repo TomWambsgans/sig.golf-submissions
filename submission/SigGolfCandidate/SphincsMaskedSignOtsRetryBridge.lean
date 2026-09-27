@@ -9998,3 +9998,138 @@ theorem signer_wots_layer_shift (location : Fin 5) (hash : Hash)
 
 #print axioms signer_wots_layer_shift
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_all_chains_counter_shift_at (location : Fin 5)
+    (outputBase : Nat) (hash : Hash) (s : MachineState)
+    (lowBase : 0x100 ≤ outputBase)
+    (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopStateAt outputBase hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩) :
+    ∃ v, Trace hash SphincsMaskedImages.sign
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+        (firstBottomPrefixInstructions digits 52 - 59)
+        (firstBottomPrefixCycles digits 52 - 59)
+        (firstBottomPrefixCalls digits 52)
+        (firstBottomPrefixCompressions digits 52)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) v) ∧
+      v.getMem 0x43050 = BitVec.ofNat 64 51 := by
+  let lastChain : ChainIndex := ⟨51, by decide⟩
+  obtain ⟨mid, prefixRun, state⟩ := signer_loop_prefix_shift_at
+    location outputBase hash s lowBase baseAligned baseBound parameter seed
+      lay treeIdx leaf digits initial 51 (by decide)
+  obtain ⟨pc, ctx, selected, chainControl, pointer, digitInvariant, _⟩ := state
+  let digit := digits 51
+  have digitByte := digitInvariant lastChain
+  have body := signer_signed_chain_body hash mid outputBase baseAligned baseBound
+    parameter seed lay treeIdx leaf lastChain digit pc ctx chainControl pointer digitByte
+  have retained := first_bottom_signed_chain_retained_base hash mid outputBase
+    lowBase baseAligned baseBound parameter seed lay treeIdx leaf lastChain digit
+    pc ctx selected chainControl pointer digitByte
+  let v := firstBottomSignedChain hash mid digit
+  have counter : v.getMem 0x43050 = BitVec.ofNat 64 51 := by
+    simpa [v, lastChain] using retained.2.2.2.2.1
+  refine ⟨v, ?_, counter⟩
+  have joined := prefixRun.trans (SignerBodyTrace.shifted location body)
+  convert joined using 1 <;>
+    simp [firstBottomPrefixInstructions, firstBottomPrefixCycles,
+      firstBottomPrefixCalls, firstBottomPrefixCompressions,
+      Finset.sum_range_succ] <;> omega
+
+#print axioms signer_all_chains_counter_shift_at
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_next_word_low (s : MachineState) (a : Word)
+    (low : a.toNat < 0x40000) :
+    (firstBottomNext s).getWord32 a = s.getWord32 a := by
+  have alignedLow : (alignToDword a).toNat < 0x40000 := by
+    unfold alignToDword
+    rw [BitVec.toNat_and]
+    exact Nat.lt_of_le_of_lt Nat.and_le_left low
+  simp only [MachineState.getWord32]
+  rw [first_bottom_next_mem_frame s (alignToDword a)]
+  · intro eq
+    have h := congrArg BitVec.toNat eq
+    have high : (0x430a0 : Word).toNat = 0x430a0 := by decide
+    rw [high] at h
+    omega
+  · intro eq
+    have h := congrArg BitVec.toNat eq
+    have high : (0x43050 : Word).toNat = 0x43050 := by decide
+    rw [high] at h
+    omega
+
+#print axioms signer_next_word_low
+
+theorem signer_all_chains_terminal_shift_at (location : Fin 5)
+    (outputBase : Nat) (hash : Hash) (s : MachineState)
+    (lowBase : 0x100 ≤ outputBase)
+    (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (initial : FirstBottomLoopStateAt outputBase hash s parameter seed lay treeIdx leaf digits
+      ⟨0, by decide⟩) :
+    ∃ w, Trace hash SphincsMaskedImages.sign
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+        ((firstBottomPrefixInstructions digits 52 - 59) + 19)
+        ((firstBottomPrefixCycles digits 52 - 59) + 19)
+        (firstBottomPrefixCalls digits 52)
+        (firstBottomPrefixCompressions digits 52)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) w) ∧
+      w.pc = 0x3e38 ∧
+      (∀ j : ChainIndex,
+        Words20 w (outputBase + 20 * j.val)
+          (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)) := by
+  obtain ⟨v, run, pc, words⟩ := signer_all_chains_shift_at location
+    outputBase hash s lowBase baseAligned baseBound parameter seed lay treeIdx
+    leaf digits initial
+  obtain ⟨u, runU, counterU⟩ := signer_all_chains_counter_shift_at
+    location outputBase hash s lowBase baseAligned baseBound parameter seed
+      lay treeIdx leaf digits initial
+  have same := signer_trace_unique run runU
+  have counter : v.getMem 0x43050 = BitVec.ofNat 64 51 := by
+    have h : (SphincsMaskedSignOtsShift.shift
+        (signerShiftBytes location) v).getMem 0x43050 =
+        BitVec.ofNat 64 51 := by
+      rw [same]
+      simpa only [SphincsMaskedSignOtsShift.shift_mem] using counterU
+    simpa only [SphincsMaskedSignOtsShift.shift_mem] using h
+  have controls := first_bottom_next_controls v pc
+  have nextPc : (firstBottomNext v).pc = 0x3e38 := by
+    rw [controls.2.2, counter]
+    decide
+  have nextWords : ∀ j : ChainIndex,
+      Words20 (firstBottomNext v) (outputBase + 20 * j.val)
+        (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j) := by
+    intro j i
+    let a := BitVec.ofNat 64 (outputBase + 20 * j.val + 4 * i.val)
+    have low : a.toNat < 0x40000 := by
+      have hj : j.val < 52 := by simpa [numChains] using j.isLt
+      have hi := i.isLt
+      dsimp [a]
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+      omega
+    exact (signer_next_word_low v a low).trans (words j i)
+  have tail := signer_next_shift_loop location v pc
+  refine ⟨firstBottomNext v, ?_, nextPc, nextWords⟩
+  simpa only [Nat.add_zero] using run.trans (tail.trace (hash := hash))
+
+#print axioms signer_all_chains_terminal_shift_at
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
