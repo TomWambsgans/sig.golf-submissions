@@ -9674,3 +9674,131 @@ theorem signer_interchain_shift (location : Fin 5) (s : MachineState)
 
 #print axioms signer_interchain_shift
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_interchain_original (s : MachineState)
+    (pc : s.pc = 0x3dec)
+    (nextPc : (firstBottomNext s).pc = 0x3ac8) :
+    OrdinarySteps SphincsMaskedImages.sign s 59
+      (copyLoopIter 4 (firstBottomSecretRepeat (firstBottomNext s))) := by
+  have next := first_bottom_next_trace s pc
+  have repeatRun := first_bottom_secret_repeat_trace (firstBottomNext s) nextPc
+  obtain ⟨repeatPc, source, destination, count⟩ :=
+    first_bottom_secret_repeat_registers (firstBottomNext s) nextPc
+  have inv : CopyInvariant 0x3b08 0x20 0x40028 4 4
+      (firstBottomSecretRepeat (firstBottomNext s)) := by
+    refine ⟨by decide, by decide, ?_, ?_, ?_, ?_⟩
+    · simpa using repeatPc
+    · simpa using source
+    · simpa using destination
+    · simpa using count
+  have copied := copyLoopTrace SphincsMaskedImages.sign 0x3b08
+    first_bottom_secret_copy_code 0x20 0x40028 4 4
+    (firstBottomSecretRepeat (firstBottomNext s)) inv
+    (by decide) (by decide) (by decide) (by decide)
+  simpa only [Nat.reduceAdd, Nat.reduceMul] using
+    (next.append repeatRun).append copied
+
+theorem signer_next_pc_general (s : MachineState) (chain : Fin 52)
+    (pc : s.pc = 0x3dec) (last : chain.val < 51)
+    (control : s.getMem 0x43050 = BitVec.ofNat 64 chain.val) :
+    (firstBottomNext s).pc = 0x3ac8 := by
+  have controls := first_bottom_next_controls s pc
+  rw [controls.2.2, control]
+  have small := chain.isLt
+  simp
+  bv_omega
+
+#print axioms signer_interchain_original
+#print axioms signer_next_pc_general
+
+theorem signer_trace_unique {hash : Hash} {image : Image}
+    {s t u : MachineState}
+    {steps cycles calls blocks cycles' calls' blocks' : Nat}
+    (left : Trace hash image s steps cycles calls blocks t)
+    (right : Trace hash image s steps cycles' calls' blocks' u) : t = u := by
+  induction left generalizing u cycles' calls' blocks' with
+  | refl state => cases right; rfl
+  | ordinary state next final instruction steps cycles calls blocks hf hs tail ih =>
+    cases right with
+    | ordinary _ next' _ instruction' _ _ _ _ hf' hs' tail' =>
+      have instr : instruction = instruction' := Option.some.inj (hf.symm.trans hf')
+      subst instruction'
+      have states : next = next' := Option.some.inj (hs.symm.trans hs')
+      subst next'
+      exact ih tail'
+    | hash _ _ _ _ _ _ hf' hs' hv' tail' =>
+      have instr : instruction = .base .ECALL := Option.some.inj (hf.symm.trans hf')
+      simp [instr, ordinaryStep] at hs
+  | hash state final steps cycles calls blocks hf hs hv tail ih =>
+    cases right with
+    | ordinary _ next' _ instruction' _ _ _ _ hf' hs' tail' =>
+      have instr : instruction' = .base .ECALL := Option.some.inj (hf'.symm.trans hf)
+      simp [instr, ordinaryStep] at hs'
+    | hash _ _ _ _ _ _ hf' hs' hv' tail' => exact ih tail'
+
+#print axioms signer_trace_unique
+
+theorem signer_loop_step_shift_at (location : Fin 5) (outputBase : Nat)
+    (hash : Hash) (s : MachineState)
+    (lowBase : 0x100 ≤ outputBase)
+    (baseAligned : outputBase % 4 = 0)
+    (baseBound : outputBase + 20 * 52 ≤ 0x40000)
+    (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer)
+    (treeIdx : TreeIndex) (leaf : LeafIndex) (digits : Nat → Digit)
+    (chain : ChainIndex) (last : chain.val < 51)
+    (state : FirstBottomLoopStateAt outputBase hash s parameter seed lay treeIdx leaf digits chain) :
+    let nextChain : ChainIndex := ⟨chain.val + 1, by
+      have := chain.isLt
+      simpa [numChains] using (show chain.val + 1 < 52 by omega)⟩
+    ∃ v, Trace hash SphincsMaskedImages.sign
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) s)
+        (150 + 95 * (digits chain.val).val)
+        (165 + 102 * (digits chain.val).val)
+        (1 + (digits chain.val).val)
+        (2 + (digits chain.val).val)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) v) ∧
+      FirstBottomLoopStateAt outputBase hash v parameter seed lay treeIdx leaf
+        digits nextChain := by
+  have stateCopy := state
+  obtain ⟨pc, ctx, selected, chainControl, pointer, digitInvariant, _⟩ := state
+  let d := digits chain.val
+  let signed := firstBottomSignedChain hash s d
+  have digitByte := digitInvariant chain
+  have body := signer_signed_chain_body hash s outputBase baseAligned baseBound
+    parameter seed lay treeIdx leaf chain d pc ctx chainControl pointer digitByte
+  obtain ⟨signedPc, _, _, _, signedChain, _, _, _, _⟩ :=
+    first_bottom_signed_chain_retained_base hash s outputBase lowBase
+      baseAligned baseBound parameter seed lay treeIdx leaf chain d pc ctx
+      selected chainControl pointer digitByte
+  have nextPc := signer_next_pc_general signed chain signedPc last signedChain
+  have tailOld := signer_interchain_original signed signedPc nextPc
+  have tailNew := signer_interchain_shift location signed signedPc nextPc
+  have oldDirect := (SignerBodyTrace.base body).trans
+    (tailOld.trace (hash := hash))
+  have newDirect := (SignerBodyTrace.shifted location body).trans
+    (tailNew.trace (hash := hash))
+  obtain ⟨v, oldTrace, vState⟩ := first_bottom_loop_step_at outputBase hash s
+    lowBase baseAligned baseBound parameter seed lay treeIdx leaf digits
+    chain last stateCopy
+  have oldComparable : Trace hash SphincsMaskedImages.sign s
+      (150 + 95 * (digits chain.val).val)
+      (165 + 102 * (digits chain.val).val)
+      (1 + (digits chain.val).val)
+      (2 + (digits chain.val).val)
+      (copyLoopIter 4 (firstBottomSecretRepeat (firstBottomNext signed))) := by
+    convert oldDirect using 1 <;> omega
+  have same : v = copyLoopIter 4 (firstBottomSecretRepeat (firstBottomNext signed)) :=
+    signer_trace_unique oldTrace oldComparable
+  refine ⟨v, ?_, vState⟩
+  rw [same]
+  convert newDirect using 1 <;> omega
+
+#print axioms signer_loop_step_shift_at
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
