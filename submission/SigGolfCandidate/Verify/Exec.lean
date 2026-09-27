@@ -34,23 +34,41 @@ structure PRes where
   steps : Nat
   cycles : Nat
   brs : List Br
+  /-- stopped after a jump with a symbolic target (the final pc is this expression) -/
+  spc : Option E := none
   deriving Repr
 
-def PRes.toState (r : PRes) (s : MachineState) : MachineState := r.st.toState s r.pc
+def PRes.finalPc (r : PRes) (s : MachineState) : Word :=
+  match r.spc with
+  | some e => e.eval s
+  | none => r.pc
 
-/-- Next pc of a micro-op, resolving a symbolic branch with `dirs`. -/
-def nextSym (pc : Word) (ctl : Option E) (dirs : List Bool) : Option (Word × List Bool × List Br) :=
+def PRes.toState (r : PRes) (s : MachineState) : MachineState := r.st.toState s (r.finalPc s)
+
+/-- Guidance for data-dependent control flow: a branch direction, or "stop at a symbolic jump". -/
+inductive Dir where
+  | br (d : Bool)
+  | jmp
+  deriving Repr
+
+/-- Next pc of a micro-op, resolving a symbolic branch with `dirs`. `inr e` = stop at the
+symbolic target `e`. -/
+def nextSym (pc : Word) (ctl : Option E) (dirs : List Dir) :
+    Option ((Word × List Dir × List Br) ⊕ E) :=
   match ctl with
-  | none => some (pc + 4, dirs, [])
-  | some (.c t) => some (t, dirs, [])
+  | none => some (.inl (pc + 4, dirs, []))
+  | some (.c t) => some (.inl (t, dirs, []))
   | some (.ite op x y (.c a) (.c b)) =>
     match dirs with
-    | [] => none
-    | d :: ds => some (if d then a else b, ds, [⟨op, x, y, d⟩])
-  | some _ => none
+    | .br d :: ds => some (.inl (if d then a else b, ds, [⟨op, x, y, d⟩]))
+    | _ => none
+  | some e =>
+    match dirs with
+    | .jmp :: _ => some (.inr e)
+    | _ => none
 
 def pathAux (cfg : Config) (look : Nat → Option (BitVec 32)) (stops : List Word) :
-    Nat → Word → List Bool → SymState → List Br → Option PRes
+    Nat → Word → List Dir → SymState → List Br → Option PRes
   | 0, _, _, _, _ => none
   | f + 1, pc, dirs, σ, brs =>
     if pc.toNat < 0x1000 || pc.toNat % 4 != 0 then none else
@@ -60,7 +78,7 @@ def pathAux (cfg : Config) (look : Nat → Option (BitVec 32)) (stops : List Wor
       match decodeInstruction w with
       | none => none
       | some i =>
-        if isEcall i then some ⟨σ, pc, true, 0, 0, brs⟩ else
+        if isEcall i then some ⟨σ, pc, true, 0, 0, brs, none⟩ else
         match classify i with
         | none => none
         | some m =>
@@ -69,8 +87,9 @@ def pathAux (cfg : Config) (look : Nat → Option (BitVec 32)) (stops : List Wor
           | some (σ', ctl) =>
             match nextSym pc ctl dirs with
             | none => none
-            | some (pc', dirs', nb) =>
-              if stops.contains pc' then some ⟨σ', pc', false, 1, instructionCycles i, nb ++ brs⟩
+            | some (.inr e) => some ⟨σ', 0, false, 1, instructionCycles i, brs, some e⟩
+            | some (.inl (pc', dirs', nb)) =>
+              if stops.contains pc' then some ⟨σ', pc', false, 1, instructionCycles i, nb ++ brs, none⟩
               else
                 match pathAux cfg look stops f pc' dirs' σ' (nb ++ brs) with
                 | none => none
@@ -82,24 +101,39 @@ def pathAux (cfg : Config) (look : Nat → Option (BitVec 32)) (stops : List Wor
 def LookOK (image : Image) (look : Nat → Option (BitVec 32)) : Prop :=
   ∀ n w, look n = some w → image.code[n]? = some w
 
-theorem nextSym_sound {pc pc' : Word} {ctl : Option E} {dirs ds : List Bool} {nb : List Br}
-    (h : nextSym pc ctl dirs = some (pc', ds, nb)) (s : MachineState) (hb : ∀ b ∈ nb, b.holds s) :
+theorem nextSym_sound {pc pc' : Word} {ctl : Option E} {dirs ds : List Dir} {nb : List Br}
+    (h : nextSym pc ctl dirs = some (.inl (pc', ds, nb))) (s : MachineState) (hb : ∀ b ∈ nb, b.holds s) :
     nextPc s pc ctl = pc' := by
   unfold nextSym at h
   split at h
-  · simp only [Option.some.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -, -⟩ := h; rfl
-  · simp only [Option.some.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -, -⟩ := h; rfl
+  · simp only [Option.some.injEq, Sum.inl.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -, -⟩ := h; rfl
+  · simp only [Option.some.injEq, Sum.inl.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -, -⟩ := h; rfl
   · rename_i op x y a b
     split at h
-    · cases h
     · rename_i d ds'
-      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      simp only [Option.some.injEq, Sum.inl.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, -, rfl⟩ := h
       have := hb _ (List.mem_singleton_self _)
       simp only [Br.holds] at this
       simp only [nextPc, E.eval, this]
+    · cases h
+  · split at h
+    · cases h
+    · cases h
 
+theorem nextSym_sound_jmp {pc : Word} {ctl : Option E} {dirs : List Dir} {e : E}
+    (h : nextSym pc ctl dirs = some (.inr e)) (s : MachineState) :
+    nextPc s pc ctl = e.eval s := by
+  unfold nextSym at h
+  split at h
   · cases h
+  · cases h
+  · split at h <;> cases h
+  · split at h
+    · rename_i e' _ _ _ _ _
+      simp only [Option.some.injEq, Sum.inr.injEq] at h
+      subst h; rfl
+    · cases h
 
 theorem fetch_of_look {image : Image} {look : Nat → Option (BitVec 32)} (hl : LookOK image look)
     {pc : Word} {w : BitVec 32} (hpc : (pc.toNat < 0x1000 || pc.toNat % 4 != 0) = false)
@@ -112,7 +146,7 @@ theorem fetch_of_look {image : Image} {look : Nat → Option (BitVec 32)} (hl : 
 
 theorem pathAux_sound (cfg : Config) (image : Image) (look : Nat → Option (BitVec 32))
     (stops : List Word) (hl : LookOK image look) (s : MachineState) :
-    ∀ (fuel : Nat) (pc : Word) (dirs : List Bool) (σ : SymState) (brs : List Br) (r : PRes),
+    ∀ (fuel : Nat) (pc : Word) (dirs : List Dir) (σ : SymState) (brs : List Br) (r : PRes),
       pathAux cfg look stops fuel pc dirs σ brs = some r →
       (∀ o ∈ r.st.obl, o.holds s) → (∀ b ∈ r.brs, b.holds s) →
       Steps image (σ.toState s pc) r.steps r.cycles (r.toState s) ∧ σ.obl ⊆ r.st.obl ∧
@@ -148,6 +182,12 @@ theorem pathAux_sound (cfg : Config) (image : Image) (look : Nat → Option (Bit
               · rename_i σ' ctl hm
                 split at h
                 · cases h
+                · rename_i e hns
+                  simp only [Option.some.injEq] at h; subst h
+                  obtain ⟨hsub', hexec⟩ := symMicro_sound hm s hobl
+                  refine ⟨?_, hsub', List.Subset.refl _, fun h => by cases h⟩
+                  refine Steps.step (i := i) (hfetch _ rfl) ?_ (Steps.refl _)
+                  rw [classify_sound hcl, hexec, nextSym_sound_jmp hns s]; rfl
                 · rename_i pc' dirs' nb hns
                   split at h
                   · simp only [Option.some.injEq] at h; subst h
@@ -214,7 +254,7 @@ theorem σK_toState (s : MachineState) (known : List (Reg × Word))
 
 /-- Soundness of a path run from `σK known`. -/
 theorem pathRun_sound {cfg : Config} {image : Image} {look : Nat → Option (BitVec 32)}
-    {stops : List Word} {fuel : Nat} {pc : Word} {dirs : List Bool} {known : List (Reg × Word)}
+    {stops : List Word} {fuel : Nat} {pc : Word} {dirs : List Dir} {known : List (Reg × Word)}
     {r : PRes} (h : pathAux cfg look stops fuel pc dirs (σK known) [] = some r)
     (hl : LookOK image look) (s : MachineState) (hpc : s.pc = pc)
     (hk : ∀ p ∈ known, s.getReg p.1 = p.2) (hobl : ∀ o ∈ r.st.obl, o.holds s)
@@ -280,15 +320,25 @@ theorem Br.beq_eq {a b : Br} (h : Br.beq a b = true) : a = b := by
   obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := h
   rw [h1, E.beq_eq h2, E.beq_eq h3, h4]
 
+def optEBeq : Option E → Option E → Bool
+  | none, none => true
+  | some a, some b => E.beq a b
+  | _, _ => false
+
+theorem optEBeq_eq {a b : Option E} (h : optEBeq a b = true) : a = b := by
+  cases a <;> cases b <;> simp [optEBeq] at h ⊢
+  exact E.beq_eq h
+
 def PRes.beq (a b : PRes) : Bool :=
   SymState.beq a.st b.st && a.pc.toNat == b.pc.toNat && a.ecall == b.ecall &&
-    a.steps == b.steps && a.cycles == b.cycles && listBeq Br.beq a.brs b.brs
+    a.steps == b.steps && a.cycles == b.cycles && listBeq Br.beq a.brs b.brs && optEBeq a.spc b.spc
 
 theorem PRes.beq_eq {a b : PRes} (h : PRes.beq a b = true) : a = b := by
-  obtain ⟨a1, a2, a3, a4, a5, a6⟩ := a; obtain ⟨b1, b2, b3, b4, b5, b6⟩ := b
+  obtain ⟨a1, a2, a3, a4, a5, a6, a7⟩ := a; obtain ⟨b1, b2, b3, b4, b5, b6, b7⟩ := b
   simp only [PRes.beq, Bool.and_eq_true, beq_iff_eq] at h
-  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := h
-  rw [SymState.beq_eq h1, BitVec.eq_of_toNat_eq h2, h3, h4, h5, listBeq_eq (fun _ _ => Br.beq_eq) h6]
+  obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩ := h
+  rw [SymState.beq_eq h1, BitVec.eq_of_toNat_eq h2, h3, h4, h5, listBeq_eq (fun _ _ => Br.beq_eq) h6,
+    optEBeq_eq h7]
 
 /-- `o = some r`, as a Boolean check. -/
 def optBeq (o : Option PRes) (r : PRes) : Bool :=

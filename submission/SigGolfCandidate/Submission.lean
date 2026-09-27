@@ -59,6 +59,7 @@ theorem submission_expand_valid :
     (submission.image .expand).Valid submission.sizes submission.layout := by
   image_valid Images.expandCode
 
+set_option maxRecDepth 200000 in
 theorem submission_verify_valid :
     (submission.image .verify).Valid submission.sizes submission.layout := by
   image_valid Images.verifyCode

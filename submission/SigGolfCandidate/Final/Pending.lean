@@ -1,4 +1,5 @@
 import SigGolfCandidate.Submission
+import SigGolfCandidate.Final.Params
 import SigGolfCandidate.Ref
 import SigGolfCandidate.Sign.Sim
 import SigGolfCandidate.Bridge.Setup
@@ -19,7 +20,7 @@ compression bounds, per-seed completeness) is already proved.
 | `SignTerminationStatement` | sign | termination |
 | `VerifyRefinementStatement` | verify | completeness, security |
 | `VerifyTerminationStatement` | verify | termination |
-| `VerifyCyclesStatement` | verify | verification bound `18388` |
+| `VerifyCyclesStatement` | verify | verification bound `claimedC` |
 | `EventSecurityStatement` | abstract security | security |
 
 Plugging in: once `theorem … : XStatement` exist for all six, `Solution.lean` defines
@@ -68,11 +69,11 @@ def VerifyTerminationStatement : Prop :=
       (submission.runWith hash .verify (m, pk, w)).cycles < CYCLE_LIMIT
 
 /-- **Verify cycles** (verify agent). Under every fixed oracle, every *accepting* verify run takes
-at most `18357` cycles (`18357 + ⌈7756 / 256⌉ = 18357 + 31 = 18388`). -/
+at most `verifyCycleBound` cycles (`claimedC = verifyCycleBound + ⌈7756 / 256⌉`). -/
 def VerifyCyclesStatement : Prop :=
   ∀ (hash : Hash) (m : Message) (pk : PublicKey) (w : Bytes 7756),
     (submission.runWith hash .verify (m, pk, w)).value.isSome = true →
-      (submission.runWith hash .verify (m, pk, w)).cycles ≤ 18357
+      (submission.runWith hash .verify (m, pk, w)).cycles ≤ verifyCycleBound
 
 /-- **(A) Abstract event-form security** (security agent): every adversary against the abstract
 SUF-CMA experiment wins *and* uses at most `q` hash calls with probability at most `q / 2^127`.

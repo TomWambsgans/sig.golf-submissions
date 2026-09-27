@@ -87,11 +87,19 @@ theorem writeWords_regs : ∀ (ws : List Word) (s : MachineState) (base : Word),
 def M1w : Word := 0x71c71c71c71c71c7#64
 def M2w : Word := 0xf03f03f03f03f03f#64
 
-/-- Registers that are constant after the prologue. -/
-def globK : List (Reg × Word) :=
-  [(.x5, 0), (.x6, 1 <<< 61), (.x7, 2 <<< 61), (.x8, 3 <<< 61), (.x9, 4 <<< 61),
-   (.x13, 5 <<< 61), (.x14, 6 <<< 61), (.x15, 7 <<< 61), (.x18, 0x800), (.x19, 0x1000),
-   (.x20, 0x1800), (.x21, 0x2000), (.x26, M1w), (.x27, M2w)]
+/-- Registers constant in all phases after the prologue. -/
+def baseK : List (Reg × Word) :=
+  [(.x5, 0), (.x18, 0x1000), (.x19, 0x2000), (.x6, 1), (.x7, 2), (.x8, 3), (.x9, 4), (.x13, 5)]
+
+/-- FORS phase: also P6..P10 and `K16`. -/
+def gkF : List (Reg × Word) :=
+  baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10), (.x24, 0x10000)]
+
+def K170 : Word := BitVec.ofNat 64 (170 * 2 ^ 52)
+
+/-- Layer phase: masks, `K16`, `K170`. -/
+def gkL : List (Reg × Word) :=
+  baseK ++ [(.x20, M1w), (.x21, M2w), (.x24, 0x10000), (.x29, K170)]
 
 /-- The `P` slots (`+16 .. +32`) of the hash buffers DB, CB, EB, NB, RB2, LB. -/
 def pSlots : List Nat := [0x10, 0x18, 0xD0, 0xD8, 0x110, 0x118, 0x1D0, 0x1D8, 0x230, 0x238,
@@ -105,8 +113,8 @@ def PkOK (pk : List Byte) (s : MachineState) : Prop :=
 
 def PZero (s : MachineState) : Prop := ∀ a ∈ pSlots, s.getMem (BitVec.ofNat 64 a) = 0
 
-def Glob (wl pk : List Byte) (s : MachineState) : Prop :=
-  (∀ p ∈ globK, s.getReg p.1 = p.2) ∧ WitOK wl s ∧ PkOK pk s ∧ PZero s
+def Glob (gk : List (Reg × Word)) (wl pk : List Byte) (s : MachineState) : Prop :=
+  (∀ p ∈ gk, s.getReg p.1 = p.2) ∧ WitOK wl s ∧ PkOK pk s ∧ PZero s
 
 /-- A doubleword address that no block may write. -/
 def safeAddr (n : Nat) : Bool :=
@@ -115,7 +123,7 @@ def safeAddr (n : Nat) : Bool :=
 def memOK (ws : SymMem) : Bool :=
   ws.all fun p => p.1.base.isNone && safeAddr p.1.off.toNat
 
-def regsOK (rf : RegFile) : Bool := globK.all fun p => E.beq (rf.get p.1) (.c p.2)
+def regsOK (gk : List (Reg × Word)) (rf : RegFile) : Bool := gk.all fun p => E.beq (rf.get p.1) (.c p.2)
 
 def safeDest (d : Nat) : Bool :=
   decide (d % 8 = 0) && decide (d + 32 ≤ 0x800) && pSlots.all (fun q => decide (q + 8 ≤ d ∨ d + 32 ≤ q)) &&
@@ -142,9 +150,10 @@ theorem memOK_ne {ws : SymMem} (h : memOK ws = true) (s : MachineState) (A : Nat
     · exact h4 h
   · simp at this
 
-theorem Glob_toState {wl pk : List Byte} {s : MachineState} (hG : Glob wl pk s) (σ : SymState)
-    (pc : Word) (hm : memOK σ.mem = true) (hr : regsOK σ.regs = true) :
-    Glob wl pk (σ.toState s pc) := by
+theorem Glob_toState {gk : List (Reg × Word)} {wl pk : List Byte} {s : MachineState}
+    (hG : Glob gk wl pk s) (σ : SymState)
+    (pc : Word) (hm : memOK σ.mem = true) (hr : regsOK gk σ.regs = true) :
+    Glob gk wl pk (σ.toState s pc) := by
   obtain ⟨h1, h2, h3, h4⟩ := hG
   have fr : ∀ A, A < 2 ^ 64 → (0x800 ≤ A ∨ A ∈ pSlots ∨ A = 0xA0 ∨ A = 0xA8) →
       (σ.toState s pc).getMem (BitVec.ofNat 64 A) = s.getMem (BitVec.ofNat 64 A) := by
@@ -162,9 +171,10 @@ theorem Glob_toState {wl pk : List Byte} {s : MachineState} (hG : Glob wl pk s) 
     have : a < 2 ^ 64 := by simp [pSlots] at ha; omega
     rw [fr a this (Or.inr (Or.inl ha))]; exact h4 a ha
 
-theorem Glob_writeHash {wl pk : List Byte} {s : MachineState} (hG : Glob wl pk s)
+theorem Glob_writeHash {gk : List (Reg × Word)} {wl pk : List Byte} {s : MachineState}
+    (hG : Glob gk wl pk s)
     (ans : BitVec 256) (d : Nat) (hd : s.getReg .x12 = BitVec.ofNat 64 d)
-    (hsafe : safeDest d = true) : Glob wl pk (writeHash s ans) := by
+    (hsafe : safeDest d = true) : Glob gk wl pk (writeHash s ans) := by
   obtain ⟨h1, h2, h3, h4⟩ := hG
   simp only [safeDest, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hsafe
   obtain ⟨⟨⟨-, hd1⟩, hd2⟩, hd3⟩ := hsafe

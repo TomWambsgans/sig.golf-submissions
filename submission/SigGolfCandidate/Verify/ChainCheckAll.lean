@@ -1,17 +1,7 @@
-import SigGolfCandidate.Verify.ChainCheck0a
-import SigGolfCandidate.Verify.ChainCheck0b
-import SigGolfCandidate.Verify.ChainCheck1a
-import SigGolfCandidate.Verify.ChainCheck1b
-import SigGolfCandidate.Verify.ChainCheck2a
-import SigGolfCandidate.Verify.ChainCheck2b
-import SigGolfCandidate.Verify.ChainCheck3a
-import SigGolfCandidate.Verify.ChainCheck3b
-import SigGolfCandidate.Verify.ChainCheck4a
-import SigGolfCandidate.Verify.ChainCheck4b
-import SigGolfCandidate.Verify.ChainCheck5a
-import SigGolfCandidate.Verify.ChainCheck5b
-import SigGolfCandidate.Verify.ChainCheck6a
-import SigGolfCandidate.Verify.ChainCheck6b
+import SigGolfCandidate.Verify.ChainCheckA14
+import SigGolfCandidate.Verify.ChainCheckB14
+
+/-! All chain blocks. -/
 
 namespace SigGolfCandidate.Verify
 
@@ -330,7 +320,7 @@ theorem chainCheck_6 (i : Nat) (hi : i < 42) : chainCheck 6 i = true := by
   · exact chainCheck_6_40
   · exact chainCheck_6_41
 
-theorem chainCheck_at (lay i : Nat) (hlay : lay < 7) (hi : i < 42) : chainCheck lay i = true := by
+theorem chainCheck_at (lay i : Nat) (hl : lay < 7) (hi : i < 42) : chainCheck lay i = true := by
   interval_cases lay
   · exact chainCheck_0 i hi
   · exact chainCheck_1 i hi

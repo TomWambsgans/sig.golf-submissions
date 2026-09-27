@@ -1,12 +1,10 @@
-import SigGolfCandidate.Verify.FoldCheckA
 import SigGolfCandidate.Verify.FoldCheckB
 
-/-! All 174 Merkle fold levels. -/
+/-! All Merkle fold levels. -/
 
 namespace SigGolfCandidate.Verify
 
-theorem forsFoldOk_all : ((List.range 14).all forsFoldOk) = true := by
-  rw [List.all_eq_true]; intro k hk; simp only [List.mem_range] at hk
+theorem forsFoldOk_at (k : Nat) (hk : k < 14) : forsFoldOk k = true := by
   interval_cases k
   · exact forsFoldOk_0
   · exact forsFoldOk_1
@@ -23,8 +21,7 @@ theorem forsFoldOk_all : ((List.range 14).all forsFoldOk) = true := by
   · exact forsFoldOk_12
   · exact forsFoldOk_13
 
-theorem layFoldOk_all : ((List.range 7).all layFoldOk) = true := by
-  rw [List.all_eq_true]; intro k hk; simp only [List.mem_range] at hk
+theorem layFoldOk_at (k : Nat) (hk : k < 7) : layFoldOk k = true := by
   interval_cases k
   · exact layFoldOk_0
   · exact layFoldOk_1

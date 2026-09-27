@@ -33,8 +33,8 @@ theorem verifyCycles : VerifyCyclesStatement := fun hash m pk w h =>
 theorem eventSecurity : EventSecurityStatement := fun q hq adversary =>
   SphincsSecurity.security127_event q hq adversary
 
-/-- The competition certificate for `SigGolfCandidate.submission` with `C = 18388`. -/
-theorem certificate : SigGolf.Certificate submission 18388 :=
+/-- The competition certificate for `SigGolfCandidate.submission` with `C = claimedC`. -/
+theorem certificate : SigGolf.Certificate submission claimedC :=
   certificate_of ⟨signRefinement, signTermination, verifyRefinement, verifyTermination,
     verifyCycles, eventSecurity⟩
 

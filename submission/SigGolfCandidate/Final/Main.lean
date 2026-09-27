@@ -4,7 +4,7 @@ import SigGolfCandidate.Budget.Bridge
 /-!
 # The certificate
 
-`certificate_of : Pending → SigGolf.Certificate submission 18388`: every organizer requirement,
+`certificate_of : Pending → SigGolf.Certificate submission claimedC`: every organizer requirement,
 from the pending sign / verify / abstract-security statements (`Pending.lean`).
 
 | field | proof |
@@ -14,7 +14,7 @@ from the pending sign / verify / abstract-security statements (`Pending.lean`).
 | `completeness` | `submission_complete` (this directory) |
 | `compressionBounds` | `Budget.submission_compressionBounds_of_counts` |
 | `security` | `Equiv.submission_secure` (with `signatureLimit = 2^32 = LIFETIME`) |
-| `verificationBound` | `honest_success_verify` + `VerifyCyclesStatement` (`18357 + 31`) |
+| `verificationBound` | `honest_success_verify` + `VerifyCyclesStatement` (`verifyCycleBound + 31`) |
 -/
 
 open OracleComp OracleSpec
@@ -52,15 +52,16 @@ theorem witnessCycles_eq : witnessCycles submission.sizes.witness = 31 := by
   rw [submission_sizes]
   rfl
 
-/-- **Verification bound** `18388 = 18357 + ⌈7756 / 256⌉`. -/
+/-- **Verification bound** `claimedC = verifyCycleBound + ⌈7756 / 256⌉`. -/
 theorem submission_verificationBound (hC : VerifyCyclesStatement) :
-    submission.VerificationBound 18388 := by
+    submission.VerificationBound claimedC := by
   intro hash sk m
   dsimp only
   intro h
   obtain ⟨⟨m', pk, w⟩, hacc, hcyc⟩ := honest_success_verify submission hash sk m h
   rw [hcyc, witnessCycles_eq]
   have := hC hash m' pk w hacc
+  unfold claimedC witnessCharge
   omega
 
 /-- **Compression bounds**, from the sign refinement (keygen and expand proved). -/
@@ -81,7 +82,7 @@ theorem submission_secure (hS : SignRefinementStatement) (hV : VerifyRefinementS
   Equiv.submission_secure (eventSecurity_of hA) lifetime_le (refinements hS hV)
 
 /-- **The competition certificate**, from the pending component statements. -/
-theorem certificate_of (P : Pending) : Certificate submission 18388 where
+theorem certificate_of (P : Pending) : Certificate submission claimedC where
   admissible := submission_admissible
   termination := submission_terminates P.signTermination P.verifyTermination
   completeness := submission_complete P.signRefinement P.verifyRefinement

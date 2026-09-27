@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. The 14 FORS roots form the FORS key; seven layers of WOTS target-sum signatures (42 chains, digit sum 170) and Merkle paths (heights 5,5,5,5,5,5,4) authenticate it to the 16-byte public root. Honest verification costs a constant 18,357 cycles.",
+  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. The 14 FORS roots form the FORS key; seven layers of WOTS target-sum signatures (42 chains, digit sum 170) and Merkle paths (heights 5,5,5,5,5,5,4) authenticate it to the 16-byte public root. Honest verification costs a constant 17,270 cycles.",
   "diagram": true,
   "facts": [
     {
@@ -33,31 +33,33 @@
     },
     {
       "label": "Verification cost",
-      "value": "18,357 cycles on every accepting run + ⌈7,756 / 256⌉ = 31 → C = 18,388; 1,072 HASH calls, 1,146 blocks"
+      "value": "17,270 cycles on every accepting run + ⌈7,756 / 256⌉ = 31 → C = 17,301; 1,072 HASH calls, 1,146 blocks"
     }
   ],
   "profile": {
     "samples": 16,
-    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen+sign, expand on the emulator, verify traced on vm.py; all 16 accepted at 18,357 cycles each",
+    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen+sign, expand on the emulator, verify traced on vm.py; all 16 accepted at 17,270 cycles each",
     "instructions": {
-      "SD": 37696,
-      "ADDI": 32463,
-      "SW": 20752,
-      "BGEU": 15948,
+      "SD": 36552,
+      "ADDI": 26736,
+      "SW": 19856,
       "LD": 15840,
-      "SRLI": 5728,
-      "SLLI": 5488,
-      "JAL": 4213,
-      "ANDI": 3216,
-      "XORI": 2784,
-      "ADD": 1008,
-      "LUI": 560,
+      "SRLI": 5744,
+      "JAL": 4712,
+      "JALR": 4704,
+      "ADD": 3840,
+      "SLLI": 3648,
+      "ANDI": 2560,
+      "BLT": 1565,
+      "BGE": 1331,
+      "LUI": 1216,
       "AND": 560,
-      "OR": 336,
+      "OR": 240,
+      "SUB": 192,
       "BNE": 160,
       "LWU": 128,
-      "BLT": 112,
       "BEQ": 16,
+      "XOR": 16,
       "HALT": 16
     },
     "hashes": {

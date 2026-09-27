@@ -74,7 +74,7 @@ theorem hdiv4096 (c R : Nat) (h : c < 4096) : (c + 4096 * R) / 4096 = R := by om
 
 theorem swarTail (P0 P1 P2 P3 P4 P5 : Nat) (h0 : P0 ≤ 56) (h1 : P1 ≤ 56) (h2 : P2 ≤ 56) (h3 : P3 ≤ 56)
     (h4 : P4 ≤ 56) (h5 : P5 ≤ 14) :
-    m6 (P0 + 4096 * (P1 + 4096 * (P2 + 4096 * (P3 + 4096 * (P4 + 4096 * P5))))) % 2048 =
+    m6 (P0 + 4096 * (P1 + 4096 * (P2 + 4096 * (P3 + 4096 * (P4 + 4096 * P5))))) % 4096 =
       P0 + P1 + P2 + P3 + P4 + P5 := by
   have d1 : (P0 + 4096 * (P1 + 4096 * (P2 + 4096 * (P3 + 4096 * (P4 + 4096 * P5))))) / 4096 =
       P1 + 4096 * (P2 + 4096 * (P3 + 4096 * (P4 + 4096 * P5))) := hdiv4096 _ _ (by omega)
@@ -95,13 +95,13 @@ theorem swarTail (P0 P1 P2 P3 P4 P5 : Nat) (h0 : P0 ≤ 56) (h1 : P1 ≤ 56) (h2
       hdiv4096 _ _ (by omega), hdiv4096 _ _ (by omega), hdiv4096 _ _ (by omega)]
   unfold m6; rw [e5]; unfold m6'; rw [d3]
   generalize hY : (P0 + P1 + P2 + P3) + 4096 * ((P1 + P2 + P3 + P4) + 4096 * ((P2 + P3 + P4 + P5) + 4096 * ((P3 + P4 + P5) + 4096 * ((P4 + P5) + 4096 * P5)))) + ((P4 + P5) + 4096 * P5) = Y
-  have hY' : Y = (P0 + P1 + P2 + P3 + P4 + P5) + 2048 * (2 * ((P1 + P2 + P3 + P4 + P5) + 4096 * ((P2 + P3 + P4 + P5) + 4096 * ((P3 + P4 + P5) + 4096 * ((P4 + P5) + 4096 * P5))))) := by omega
+  have hY' : Y = (P0 + P1 + P2 + P3 + P4 + P5) + 4096 * ((P1 + P2 + P3 + P4 + P5) + 4096 * ((P2 + P3 + P4 + P5) + 4096 * ((P3 + P4 + P5) + 4096 * ((P4 + P5) + 4096 * P5)))) := by omega
   have hlt : Y < 18446744073709551616 := by omega
   rw [Nat.mod_eq_of_lt hlt, hY', Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt (by omega)]
 
 theorem swarLanes (L0 L1 L2 L3 L4 L5 L6 L7 L8 L9 L10 : Nat) (h0 : L0 ≤ 28) (h1 : L1 ≤ 28) (h2 : L2 ≤ 28) (h3 : L3 ≤ 28) (h4 : L4 ≤ 28) (h5 : L5 ≤ 28) (h6 : L6 ≤ 28) (h7 : L7 ≤ 28) (h8 : L8 ≤ 28) (h9 : L9 ≤ 28) (h10 : L10 ≤ 14)
     (X : Nat) (hX : X = L0 + 64 * (L1 + 64 * (L2 + 64 * (L3 + 64 * (L4 + 64 * (L5 + 64 * (L6 + 64 * (L7 + 64 * (L8 + 64 * (L9 + 64 * (L10))))))))))) :
-    m6 (m3 ((X + X / 64) % 18446744073709551616)) % 2048 = L0 + L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8 + L9 + L10 := by
+    m6 (m3 ((X + X / 64) % 18446744073709551616)) % 4096 = L0 + L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8 + L9 + L10 := by
   have e1 : X / 64 = L1 + 64 * (L2 + 64 * (L3 + 64 * (L4 + 64 * (L5 + 64 * (L6 + 64 * (L7 + 64 * (L8 + 64 * (L9 + 64 * (L10))))))))) := by rw [hX]; exact hdiv64 _ _ (by omega)
   have e2 : X + X / 64 = (L0 + L1) + 64 * ((L1 + L2) + 64 * ((L2 + L3) + 64 * ((L3 + L4) + 64 * ((L4 + L5) + 64 * ((L5 + L6) + 64 * ((L6 + L7) + 64 * ((L7 + L8) + 64 * ((L8 + L9) + 64 * ((L9 + L10) + 64 * (L10)))))))))) := by
     omega
@@ -121,7 +121,7 @@ def sw1 (a b : Nat) : Nat :=
     (b / 8 &&& 8198552921648689607)) % 18446744073709551616 + (b &&& 8198552921648689607)) % 18446744073709551616
 
 theorem swar_nat (a b : Nat) (ha : a < 2 ^ 63) (hb : b < 2 ^ 63) :
-    m6 (m3 ((sw1 a b + sw1 a b / 64) % 18446744073709551616)) % 2048 =
+    m6 (m3 ((sw1 a b + sw1 a b / 64) % 18446744073709551616)) % 4096 =
       (digitsOfWord a ++ digitsOfWord b).sum := by
   generalize hX : sw1 a b = X
   unfold sw1 at hX

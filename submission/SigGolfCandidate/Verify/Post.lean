@@ -11,13 +11,25 @@ def pcOf (n : Nat) : Word := BitVec.ofNat 64 (0x1000 + 4 * n)
 
 def cfg0 : Config := {}
 
-def runAt (known : List (Reg × Word)) (stops : List Nat) (n : Nat) (dirs : List Bool) : Option PRes :=
+theorem codeAt_from (i : Nat) (hi : i < 2 ^ 40) : CodeAt image (pcOf i) (Images.verifyCode.drop i) := by
+  have hl := verifyCode_length
+  have hp : (pcOf i).toNat = 0x1000 + 4 * i := by
+    simp only [pcOf, BitVec.toNat_ofNat]; omega
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [hp]; omega
+  · rw [hp]; omega
+  · rw [hp, List.length_drop]; omega
+  · rw [hp, show (0x1000 + 4 * i - 0x1000) / 4 = i by omega]
+    exact List.prefix_refl _
+
+def runAt (known : List (Reg × Word)) (stops : List Nat) (n : Nat) (dirs : List Dir) : Option PRes :=
   pathAux cfg0 vlook (stops.map pcOf) 400 (pcOf n) dirs (σK known) []
 
 def KnownOK (known : List (Reg × Word)) (s : MachineState) : Prop := ∀ p ∈ known, s.getReg p.1 = p.2
 
 /-- Side-condition-free, preserves the global invariant. -/
-def resOK (r : PRes) : Bool := memOK r.st.mem && regsOK r.st.regs && r.st.obl.isEmpty
+def resOK (gk : List (Reg × Word)) (r : PRes) : Bool :=
+  memOK r.st.mem && regsOK gk r.st.regs && r.st.obl.isEmpty
 
 def knownB (known : List (Reg × Word)) (r : PRes) : Bool :=
   known.all fun p => E.beq (r.st.regs.get p.1) (.c p.2)
@@ -30,7 +42,9 @@ theorem PRes.toState_getReg (r : PRes) (s : MachineState) (x : Reg) :
 theorem PRes.toState_getMem (r : PRes) (s : MachineState) (a : Word) :
     (r.toState s).getMem a = memEval s r.st.mem a := rfl
 
-theorem PRes.toState_pc (r : PRes) (s : MachineState) : (r.toState s).pc = r.pc := rfl
+theorem PRes.toState_pc (r : PRes) (s : MachineState) (h : r.spc = none := by rfl) :
+    (r.toState s).pc = r.pc := by
+  simp [PRes.toState, PRes.finalPc, h]
 
 theorem knownB_ok {known : List (Reg × Word)} {r : PRes} (h : knownB known r = true)
     (s : MachineState) : KnownOK known (r.toState s) := by
@@ -44,19 +58,20 @@ theorem keepB_ok {rs : List Reg} {r : PRes} (h : keepB rs r = true) (s : Machine
   have := List.all_eq_true.mp h x hx
   rw [PRes.toState_getReg, E.beq_eq this]; rfl
 
-theorem run_post {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs : List Bool}
-    {r : PRes} (hrun : runAt known stops n dirs = some r) (hok : resOK r = true)
+theorem run_post {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs : List Dir}
+    {r : PRes} {gk : List (Reg × Word)} (hrun : runAt known stops n dirs = some r)
+    (hok : resOK gk r = true)
     (s : MachineState) (hpc : s.pc = pcOf n) (hk : KnownOK known s)
     (hbr : ∀ b ∈ r.brs, b.holds s) :
     Steps image s r.steps r.cycles (r.toState s) ∧
       (r.ecall = true → fetch image (r.toState s) = some (.base .ECALL)) ∧
-      (∀ wl pk, Glob wl pk s → Glob wl pk (r.toState s)) := by
+      (∀ wl pk, Glob gk wl pk s → Glob gk wl pk (r.toState s)) := by
   simp only [resOK, Bool.and_eq_true, List.isEmpty_iff] at hok
   obtain ⟨⟨hm, hr⟩, ho⟩ := hok
   obtain ⟨h1, h2⟩ := pathRun_sound hrun vlook_ok s hpc hk (by rw [ho]; simp) hbr
-  exact ⟨h1, h2, fun wl pk hG => Glob_toState hG r.st r.pc hm hr⟩
+  exact ⟨h1, h2, fun wl pk hG => Glob_toState hG r.st _ hm hr⟩
 
-theorem run_post' {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs : List Bool}
+theorem run_post' {known : List (Reg × Word)} {stops : List Nat} {n : Nat} {dirs : List Dir}
     {r : PRes} (hrun : runAt known stops n dirs = some r) (hobl : r.st.obl = [])
     (s : MachineState) (hpc : s.pc = pcOf n) (hk : KnownOK known s)
     (hbr : ∀ b ∈ r.brs, b.holds s) :

@@ -1,4 +1,5 @@
-import SigGolfCandidate.Verify.ForsGood
+import SigGolfCandidate.Verify.ForsRuns
+import SigGolfCandidate.Verify.Common
 
 /-! # The initial state of the verify phase -/
 
