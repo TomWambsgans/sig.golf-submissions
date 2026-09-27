@@ -196,7 +196,7 @@ def instructionTarget : Instruction → Option Reg
   | .word _ rd _ _ => some rd
   | .sraiw rd _ _ => some rd
 
-def scratchRegs : List Reg := [.x16, .x17, .x18, .x19, .x20, .x21, .x22]
+def scratchRegs : List Reg := [.x16, .x17, .x18, .x19, .x20, .x21, .x22, .x30]
 
 def decodedWritesScratch (word : BitVec 32) : Bool :=
   match decodeInstruction word with
