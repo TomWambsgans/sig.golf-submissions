@@ -6707,4 +6707,202 @@ theorem upper_honest_next_entry (target next : Fin 5) (hash : Hash)
 #print axioms upper_small_from_loaded
 #print axioms upper_honest_next_entry
 
+theorem upper_honest_final_of_entry (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index) (message : Digest)
+    (encoding : Encoding)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : UpperEntry 0 initial state index message)
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer 0)
+        (Concrete.treeIndexAt index (SphincsVerifierXmssTransition.targetLayer 0))
+        (Concrete.leafIndexAt index (SphincsVerifierXmssTransition.targetLayer 0))
+        message (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer 0)).counter) = some encoding)
+    (rootEq : upperRoot hash pk signature index 0 encoding = pk.root) :
+    ∃ (totalSteps : Nat) (result : Execution),
+      Executes hash SphincsImages.verify state totalSteps result ∧
+      result.exit = .success ∧ totalSteps ≤ 50000 ∧ result.cycles ≤ 50000 := by
+  let target : Fin 5 := 0
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let tree := Concrete.treeIndexAt index lay
+  let leaf := Concrete.leafIndexAt index lay
+  have small := upper_small_from_loaded target publicKey inputMessage pk
+    signature initial state loaded entry.frame
+  have witness := loaded_upper_prefix_after_frame publicKey inputMessage pk
+    signature initial state loaded entry.frame
+  have query := upper_encoding_query_after_frame target publicKey inputMessage
+    pk signature initial state loaded entry.frame lay tree leaf message
+    entry.pc entry.layer entry.zero entry.tree entry.leaf witness entry.payload
+  have rootEq' : Concrete.foldValue (adaptOracle hash) pk.parameter lay tree leaf
+      (Concrete.signaturePath signature lay)
+      (evalWithAnswerFn (adaptOracle hash)
+        (Concrete.leafHash pk.parameter lay tree leaf
+          (fun chain => evalWithAnswerFn (adaptOracle hash)
+            (Concrete.recoverChain pk.parameter lay tree leaf chain
+              (encoding chain) ((signature.layers lay).chainValues chain)))))
+      (layerHeight lay) = pk.root := by
+    simpa only [upperRoot, target, lay, tree, leaf] using rootEq
+  exact upper_honest_final_accepts hash publicKey inputMessage pk signature
+    initial state loaded entry.frame tree leaf message encoding entry.pc
+    small entry.layer entry.tree entry.leaf entry.indexCell query honest rootEq'
+
+#print axioms upper_honest_final_of_entry
+
+theorem upper_honest_next_of_success (target next : Fin 5) (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index) (message : Digest)
+    (encoding : Encoding) (bound : Nat)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : UpperEntry target initial state index message)
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer target)
+        (Concrete.treeIndexAt index
+          (SphincsVerifierXmssTransition.targetLayer target))
+        (Concrete.leafIndexAt index
+          (SphincsVerifierXmssTransition.targetLayer target)) message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer target)).counter) =
+          some encoding)
+    (handoffLayer : SphincsVerifierXmssTransition.targetLayer target =
+      SphincsVerifierXmssTransition.previousLayer next)
+    (finish : ∀ nextState,
+      UpperEntry next initial nextState index
+        (upperRoot hash pk signature index target encoding) →
+      ∃ (tailSteps : Nat) (tailResult : Execution),
+        Executes hash SphincsImages.verify nextState tailSteps tailResult ∧
+        tailResult.exit = .success ∧ tailSteps ≤ bound ∧
+        tailResult.cycles ≤ bound) :
+    ∃ (totalSteps : Nat) (result : Execution),
+      Executes hash SphincsImages.verify state totalSteps result ∧
+      result.exit = .success ∧ totalSteps ≤ bound + 50000 ∧
+      result.cycles ≤ bound + 50000 := by
+  obtain ⟨final, steps, cycles, calls, blocks, nextEntry, _run,
+    stepsBound, cyclesBound, pathCyclesBound, continuation⟩ :=
+      upper_honest_next_entry target next hash publicKey inputMessage pk
+        signature initial state index message encoding loaded entry honest
+        handoffLayer
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash lay
+    (layerHeight lay) final
+  let nextState := SphincsVerifierXmssTransitionMessage.handoffState next pathEnd
+  obtain ⟨tailSteps, tailResult, tailRun, tailExit, tailStepsBound,
+    tailCyclesBound⟩ := finish nextState nextEntry
+  have run := continuation tailSteps tailResult tailRun
+  let totalSteps := 61 + (steps + ((tailSteps + 43) +
+    SphincsVerifierXmssPathControl.pathInstructions hash lay
+      (layerHeight lay) final))
+  let result := ((tailResult.charge 43 0 0).charge
+    (cycles + SphincsVerifierXmssPathControl.pathCycles hash lay
+      (layerHeight lay) final)
+    (calls + layerHeight lay)
+    (blocks + 2 * layerHeight lay)).charge 68 1 1
+  refine ⟨totalSteps, result, run, ?_, ?_, ?_⟩
+  · simpa only [result, Execution.charge] using tailExit
+  · have pathSteps := SphincsVerifierXmssPathControl.pathInstructions_le
+      hash lay (layerHeight lay) final
+    have height : layerHeight lay ≤ 11 := by
+      dsimp [lay]
+      fin_cases target <;> decide
+    dsimp [totalSteps]
+    omega
+  · have height : layerHeight lay ≤ 11 := by
+      dsimp [lay]
+      fin_cases target <;> decide
+    dsimp [result, Execution.charge, lay] at *
+    omega
+
+#print axioms upper_honest_next_of_success
+
+theorem upper_honest_five_layers (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState) (index : Index)
+    (messages : Fin 5 → Digest) (encodings : Fin 5 → Encoding)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (entry : UpperEntry 4 initial state index (messages 4))
+    (honest : ∀ target : Fin 5,
+      evalWithAnswerFn (adaptOracle hash)
+        (Concrete.encodeAttempt pk.parameter
+          (SphincsVerifierXmssTransition.targetLayer target)
+          (Concrete.treeIndexAt index
+            (SphincsVerifierXmssTransition.targetLayer target))
+          (Concrete.leafIndexAt index
+            (SphincsVerifierXmssTransition.targetLayer target))
+          (messages target)
+          (signature.layers
+            (SphincsVerifierXmssTransition.targetLayer target)).counter) =
+            some (encodings target))
+    (link : ∀ target next : Fin 5,
+      SphincsVerifierXmssTransition.targetLayer target =
+        SphincsVerifierXmssTransition.previousLayer next →
+      messages next = upperRoot hash pk signature index target (encodings target))
+    (rootEq : upperRoot hash pk signature index 0 (encodings 0) = pk.root) :
+    ∃ (totalSteps : Nat) (result : Execution),
+      Executes hash SphincsImages.verify state totalSteps result ∧
+      result.exit = .success ∧ totalSteps ≤ 250000 ∧
+      result.cycles ≤ 250000 := by
+  have finish0 (s : MachineState)
+      (e : UpperEntry 0 initial s index (messages 0)) :
+      ∃ (n : Nat) (r : Execution),
+        Executes hash SphincsImages.verify s n r ∧
+        r.exit = .success ∧ n ≤ 50000 ∧ r.cycles ≤ 50000 :=
+    upper_honest_final_of_entry hash publicKey inputMessage pk signature
+      initial s index (messages 0) (encodings 0) loaded e (honest 0) rootEq
+  have finish1 (s : MachineState)
+      (e : UpperEntry 1 initial s index (messages 1)) :
+      ∃ (n : Nat) (r : Execution),
+        Executes hash SphincsImages.verify s n r ∧
+        r.exit = .success ∧ n ≤ 100000 ∧ r.cycles ≤ 100000 := by
+    apply upper_honest_next_of_success 1 0 hash publicKey inputMessage pk
+      signature initial s index (messages 1) (encodings 1) 50000 loaded e
+      (honest 1) (by decide)
+    intro nextState nextEntry
+    apply finish0 nextState
+    rw [link 1 0 (by decide)]
+    exact nextEntry
+  have finish2 (s : MachineState)
+      (e : UpperEntry 2 initial s index (messages 2)) :
+      ∃ (n : Nat) (r : Execution),
+        Executes hash SphincsImages.verify s n r ∧
+        r.exit = .success ∧ n ≤ 150000 ∧ r.cycles ≤ 150000 := by
+    apply upper_honest_next_of_success 2 1 hash publicKey inputMessage pk
+      signature initial s index (messages 2) (encodings 2) 100000 loaded e
+      (honest 2) (by decide)
+    intro nextState nextEntry
+    apply finish1 nextState
+    rw [link 2 1 (by decide)]
+    exact nextEntry
+  have finish3 (s : MachineState)
+      (e : UpperEntry 3 initial s index (messages 3)) :
+      ∃ (n : Nat) (r : Execution),
+        Executes hash SphincsImages.verify s n r ∧
+        r.exit = .success ∧ n ≤ 200000 ∧ r.cycles ≤ 200000 := by
+    apply upper_honest_next_of_success 3 2 hash publicKey inputMessage pk
+      signature initial s index (messages 3) (encodings 3) 150000 loaded e
+      (honest 3) (by decide)
+    intro nextState nextEntry
+    apply finish2 nextState
+    rw [link 3 2 (by decide)]
+    exact nextEntry
+  apply upper_honest_next_of_success 4 3 hash publicKey inputMessage pk
+    signature initial state index (messages 4) (encodings 4) 200000 loaded entry
+    (honest 4) (by decide)
+  intro nextState nextEntry
+  apply finish3 nextState
+  rw [link 4 3 (by decide)]
+  exact nextEntry
+
+#print axioms upper_honest_five_layers
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
