@@ -137,8 +137,10 @@ theorem allSucceed_eq_relabel (hK : KeygenRefinementStatement) (hS : SignRefinem
   rw [success_honest_eq_game hK hS hV, ← relabel_val_gameHD, relabel_relabel]
   rfl
 
-theorem failure_eq : FAILURE = ((2 ^ 256 : Nat) : ENNReal)⁻¹ := by
+/-- The proved per-key failure bound `2^-256` is at most the organizer's `FAILURE`. -/
+theorem failure_ge : ((2 ^ 256 : Nat) : ENNReal)⁻¹ ≤ FAILURE := by
   rw [FAILURE, one_div, Nat.cast_pow, Nat.cast_ofNat]
+  exact ENNReal.inv_le_inv.mpr (pow_le_pow_right₀ (by norm_num) (by norm_num))
 
 /-- **Completeness** of the submission, given the keygen, sign and verify refinements. -/
 theorem submission_complete (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
@@ -160,7 +162,8 @@ theorem submission_complete (hK : KeygenRefinementStatement) (hS : SignRefinemen
   have hF : Pr[= false | (simulateQ randomOracle F).run' ∅] ≤ FAILURE := by
     refine (probOutput_false_foldAll_le L (gameHD sk)).trans ?_
     simp_rw [probOutput_gameHD]
-    rw [Finset.sum_map_toList, failure_eq]
+    rw [Finset.sum_map_toList]
+    refine le_trans ?_ failure_ge
     rw [← tsum_fintype (L := SummationFilter.unconditional Message)]
     exact SphincsSecurity.Completeness.complete_seeded sk
   have h1 : Pr[= true | (simulateQ randomOracle F).run' ∅] +
