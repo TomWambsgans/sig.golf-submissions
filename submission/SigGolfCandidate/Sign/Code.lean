@@ -80,7 +80,7 @@ def seg302 : List (BitVec 32) := [0x12603823#32, 0x10000513#32, 0x04000593#32, 0
 /-- instructions 307 .. 310: ld ra, 320(x0); ld sp, 328(x0); or gp, ra, sp; blt gp, x0, +92 -/
 def seg307 : List (BitVec 32) := [0x14003083#32, 0x14803103#32, 0x0020e1b3#32, 0x0401ce63#32]
 /-- instructions 311 .. 331: srli t3, ra, 3; and t3, t3, s10; and t4, ra, s10; add t3, t3, t4; srli t4, sp, 3; and t4, t4, s10 ... -/
-def seg311 : List (BitVec 32) := [0x0030de13#32, 0x01ae7e33#32, 0x01a0feb3#32, 0x01de0e33#32, 0x00315e93#32, 0x01aefeb3#32, 0x01de0e33#32, 0x01a17eb3#32, 0x01de0e33#32, 0x006e5e93#32, 0x01de0e33#32, 0x01be7e33#32, 0x00ce5e93#32, 0x01de0e33#32, 0x018e5e93#32, 0x01de0e33#32, 0x030e5e93#32, 0x01de0e33#32, 0x7ffe7e13#32, 0xf49e0e13#32, 0x000e1463#32]
+def seg311 : List (BitVec 32) := [0x0030de13#32, 0x01ae7e33#32, 0x01a0feb3#32, 0x01de0e33#32, 0x00315e93#32, 0x01aefeb3#32, 0x01de0e33#32, 0x01a17eb3#32, 0x01de0e33#32, 0x006e5e93#32, 0x01de0e33#32, 0x01be7e33#32, 0x00ce5e93#32, 0x01de0e33#32, 0x018e5e93#32, 0x01de0e33#32, 0x030e5e93#32, 0x01de0e33#32, 0x7ffe7e13#32, 0xf48e0e13#32, 0x000e1463#32]
 /-- instructions 332 .. 332: jal x0, +24 -/
 def seg332 : List (BitVec 32) := [0x0180006f#32]
 /-- instructions 333 .. 334 (enc_next): addi t1, t1, 1; bne t1, t2, -128 -/

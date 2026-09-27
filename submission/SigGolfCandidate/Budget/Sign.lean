@@ -7,12 +7,12 @@ From any random-oracle cache without tweak types `4`, `7`, `12` (e.g. after keyg
 queries types `0..3`, `13`, `14`), and for **every** cache argument, the expectation of
 `z ^ (compressions of signRef sk cache m)` is at most
 
-  `z ^ 1025 * (bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215))))`,
+  `z ^ 1025 * (bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 216))))`,
 
 where `bD` bounds the digest search and `bC` each of the 5 counter searches (`V_signRef`). The
-deterministic part (v5: paired PRF secrets, 5 layers (11,6,6,6,5), T = 183) is MAC 1025 + FORS
-35830 + layers 1..4 73244 + top layer 215 = 110314 blocks (top layer: 21 paired secret queries,
-`targetSum = 183` chain steps, 11 masks).
+deterministic part (v5: paired PRF secrets, 5 layers (11,6,6,6,5), T = 184 since iteration 7) is MAC 1025 + FORS
+35830 + layers 1..4 73244 + top layer 216 = 110315 blocks (top layer: 21 paired secret queries,
+`targetSum = 184` chain steps, 11 masks).
 -/
 
 namespace SigGolfCandidate.Budget
@@ -68,7 +68,7 @@ theorem spec_topPath (S cache : List Byte) (hS : S.length = 32) (e : Nat) :
   exact spec_hash16_bind _ trivial (mask_ok S hS l _).2 (fun _ _ => Spec.pure _ 0 trivial) le_rfl
 
 /-- Compressions of the top layer after its counter search. -/
-def topCost : Nat := 21 + 183 + 11
+def topCost : Nat := 21 + 184 + 11
 
 theorem V_signTop (z bC : ℝ≥0∞) (hz : 1 ≤ z) (hbC : 1 ≤ bC)
     (hstepC : z * (rhoC * bC + (1 - rhoC)) ≤ bC) (S cache : List Byte) (hS : S.length = 32)
@@ -191,7 +191,7 @@ theorem mac_ok (S cache : List Byte) (hS : S.length = 32) :
 
 /-- The signing bound without the MAC check. -/
 noncomputable abbrev signBound (z bD bC : ℝ≥0∞) : ℝ≥0∞ :=
-  bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215)))
+  bD * (z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 216)))
 
 set_option maxRecDepth 100000 in
 /-- The expectation bound for the part of `signList` after the MAC check, from `Inv0`. -/
@@ -209,7 +209,7 @@ theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
         match ← signLayers S cache (idxOf N) (nLayers - 1) M with
         | none => pure none
         | some lays => pure (some (serialize rho fors lays))) c ≤ signBound z bD bC := by
-  have hbig : 1 ≤ z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 215)) :=
+  have hbig : 1 ≤ z ^ (14 * 2559 + 4) * (bC ^ 5 * z ^ (73244 + 216)) :=
     one_le_mul (one_le_pow₀ hz) (one_le_mul (one_le_pow₀ hbC) (one_le_pow₀ hz))
   refine (V_bind_le z _ _ c _ fun x hx => ?_).trans (mul_le_mul' ?_ le_rfl)
   · have hx' := (spec_searchDigest S m hS hm aMax 0).support
@@ -219,20 +219,20 @@ theorem V_signBody (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
     rcases o with _ | ⟨rho, N⟩
     · simpa using hbig
     · dsimp only
-      refine (V_bind_le z _ _ c1 (z ^ 4 * (bC ^ 5 * z ^ (73244 + 215))) fun y hy => ?_).trans ?_
+      refine (V_bind_le z _ _ c1 (z ^ 4 * (bC ^ 5 * z ^ (73244 + 216))) fun y hy => ?_).trans ?_
       · have hy' := (spec_signFors S hS N).support (I := fun q => qbyte q 1 ≠ 4)
           (fun q hq => by unfold PF at hq; omega) c1 hx'.2 y hy
         obtain ⟨⟨fors, roots⟩, c2⟩ := y
         dsimp only
         obtain ⟨hp1, hp2⟩ := roots_ok (idxOf N) roots hy'.1.1 hy'.1.2
-        refine (V_bind_le z _ _ c2 (bC ^ 5 * z ^ (73244 + 215)) fun w hw => ?_).trans ?_
+        refine (V_bind_le z _ _ c2 (bC ^ 5 * z ^ (73244 + 216)) fun w hw => ?_).trans ?_
         · have hw' := (spec_hash16 (P := PF) (rootsInput (idxOf N) roots) 4 hp1 hp2).support
             (I := fun q => qbyte q 1 ≠ 4) (fun q hq => by unfold PF at hq; omega) c2 hy'.2 w hw
           obtain ⟨M, c3⟩ := w
           refine (V_bind_le z _ _ c3 1 fun r _ => ?_).trans ?_
           · obtain ⟨r, _⟩ := r
             rcases r with _ | lays <;> simp
-          · rw [mul_one, ← layerCost_4, show (215 : Nat) = topCost from rfl]
+          · rw [mul_one, ← layerCost_4, show (216 : Nat) = topCost from rfl]
             refine V_signLayers z bC hz hbC hstepC S cache hS (idxOf N) (nLayers - 1) M c3
               (by decide) (by rw [hw'.1]) ?_
             exact hw'.2.mono fun q h h4 => absurd h4 h

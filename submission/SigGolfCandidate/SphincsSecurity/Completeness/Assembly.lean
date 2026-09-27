@@ -20,8 +20,8 @@ holds for every seed (`complete_seeded`), and averaging over the seed gives `com
 
 The numbers: a randomizer trial fails with probability at most `1 - 2⁻¹⁰ + 2²⁰/2¹²⁸`, which leaves
 room for `1/1025`, so `2²⁰ ≥ 1025 · 1023` trials all fail with probability at most `2⁻¹⁰²³`. A
-counter trial accepts at least one in `codeShare = 2821` of the `2¹²⁸` digests, so
-`2²² ≥ 2821 · 1486` counters all fail with probability at most `2⁻¹⁴⁸⁶`. Over `2²⁵⁶` messages,
+counter trial accepts at least one in `codeShare = 3338` of the `2¹²⁸` digests, so
+`2²² ≥ 3338 · 1256` counters all fail with probability at most `2⁻¹⁴⁸⁶`. Over `2²⁵⁶` messages,
 `2²⁵⁶ · (2⁻¹⁰²³ + 5 · 2⁻¹⁴⁸⁶) ≤ 2⁻²⁵⁶`.
 -/
 
@@ -41,18 +41,18 @@ theorem digestFactor_pow_le : digestFactor ^ digestAttemptLimit ≤ (2⁻¹ : �
     _ = (digestFactor ^ 1025) ^ 1023 := pow_mul _ _ _
     _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 := pow_le_pow_left₀ (by positivity) hhalf _
 
-theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ 1486 := by
+theorem encoding_pow_le : encodingBound ≤ (2⁻¹ : ℝ≥0∞) ^ 1256 := by
   have hroom := failMass_encoding_add_le
   have hhalf := pow_le_half_ennreal codeShare (by decide) _ hroom
   have hone : failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ≤ 1 :=
     le_trans le_self_add hroom
   rw [encodingBound]
   calc failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ encodingAttemptLimit
-        ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ (codeShare * 1486) :=
+        ≤ failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ (codeShare * 1256) :=
           pow_le_pow_right_of_le_one' hone (by rw [encodingAttemptLimit, codeShare]; norm_num)
-    _ = (failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ codeShare) ^ 1486 :=
+    _ = (failMass (fun out => TargetSum.decodeDigest (truncateHash out)) ^ codeShare) ^ 1256 :=
           pow_mul _ _ _
-    _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1486 := pow_le_pow_left₀ (by positivity) hhalf _
+    _ ≤ (2⁻¹ : ℝ≥0∞) ^ 1256 := pow_le_pow_left₀ (by positivity) hhalf _
 
 /-- Key generation then signing fails only if one of signing's six searches does. -/
 theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
@@ -73,7 +73,7 @@ theorem probEvent_signedWithKeys_none (seed : MasterSeed) (message : Message) :
 /-- One message fails from a fixed seed with probability at most `2⁻¹⁰²³ + 5 · 2⁻¹⁴⁸⁶`. -/
 theorem seeded_failure_le (seed : MasterSeed) (message : Message) :
     Pr[= false | seededExperiment seed message]
-      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486 := by
+      ≤ (2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1256 := by
   rw [seededExperiment_eq, ← probEvent_eq_eq_probOutput, probEvent_map]
   refine ((probEvent_honest_false_le seed message).trans
     (probEvent_signedWithKeys_none seed message)).trans ?_
@@ -86,9 +86,9 @@ theorem complete_seeded : SphincsSeededCompletenessStatement := by
   intro seed
   calc
     ∑' message : Message, Pr[= false | seededExperiment seed message]
-        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486) :=
+        ≤ ∑' _message : Message, ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1256) :=
           ENNReal.tsum_le_tsum fun message => seeded_failure_le seed message
-    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1486) := by
+    _ = (2 : ℝ≥0∞) ^ 256 * ((2⁻¹ : ℝ≥0∞) ^ 1023 + 5 * (2⁻¹ : ℝ≥0∞) ^ 1256) := by
           rw [tsum_fintype, Finset.sum_const, nsmul_eq_mul, Finset.card_univ,
             show Fintype.card Message = 2 ^ 256 by simp [messageBits], Nat.cast_pow, Nat.cast_ofNat]
     _ ≤ ((2 ^ 256 : Nat) : ℝ≥0∞)⁻¹ := closing_sum

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. Five layers of WOTS target-sum signatures (42 chains, digit sum 183) and Merkle paths (heights 11,6,6,6,5) authenticate the FORS key to the 16-byte root. Keygen caches the height-11 top tree as masked nodes under a 256-bit MAC; each PRF call yields two 16-byte secrets. Verification: a constant 11,592 cycles.",
+  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. Five layers of WOTS target-sum signatures (42 chains, digit sum 184) and Merkle paths (heights 11,6,6,6,5) authenticate the FORS key to the 16-byte root. Keygen caches the height-11 top tree as masked nodes under a 256-bit MAC; each PRF call yields two 16-byte secrets. Verification: a constant 11,547 cycles.",
   "diagram": true,
   "facts": [
     {
@@ -17,7 +17,7 @@
     },
     {
       "label": "WOTS encoding",
-      "value": "Target sum, w = 3: H(tw ‖ P ‖ M ‖ LE32 c) → 42 digits of 3 bits summing to 183; c < 2²², no checksum"
+      "value": "Target sum, w = 3: H(tw ‖ P ‖ M ‖ LE32 c) → 42 digits of 3 bits summing to 184; c < 2²², no checksum"
     },
     {
       "label": "Keygen cache",
@@ -33,17 +33,17 @@
     },
     {
       "label": "Verification cost",
-      "value": "11,592 cycles on every accepting run + ⌈6,404 / 256⌉ = 26 → C = 11,618; 755 HASH calls, 808 blocks"
+      "value": "11,547 cycles on every accepting run + ⌈6,404 / 256⌉ = 26 → C = 11,573; 750 HASH calls, 803 blocks"
     }
   ],
   "profile": {
     "samples": 16,
-    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen (pk + cache), sign with the cache, expand on the emulator, verify traced on vm.py; all accepted at 11,592 cycles",
+    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen (pk + cache), sign with the cache, expand on the emulator, verify traced on vm.py; all accepted at 11,547 cycles",
     "instructions": {
       "ADDI": 14821,
       "SD": 13680,
       "LD": 13072,
-      "SB": 12240,
+      "SB": 12160,
       "SRLI": 4912,
       "SW": 3456,
       "SLLI": 3424,
@@ -65,7 +65,7 @@
       "HALT": 16
     },
     "hashes": {
-      "512": 11984,
+      "512": 11904,
       "2048": 16,
       "5632": 80
     }

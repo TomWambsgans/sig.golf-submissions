@@ -64,7 +64,7 @@ def slice (l : List Byte) (off len : Nat) : List Byte := (l.drop off).take len
 
 def nChains : Nat := 42
 /-- The WOTS target sum (the 42 3-bit digits of an accepted encoding sum to it). -/
-def targetSum : Nat := 183
+def targetSum : Nat := 184
 /-- Old name of `targetSum`. -/
 abbrev target : Nat := targetSum
 /-- The number of hypertree layers `d`. -/
