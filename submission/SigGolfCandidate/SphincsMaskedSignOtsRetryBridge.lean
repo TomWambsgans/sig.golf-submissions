@@ -9911,3 +9911,90 @@ theorem signer_all_chains_shift_at (location : Fin 5) (outputBase : Nat)
 
 #print axioms signer_all_chains_shift_at
 end SigGolfCandidate.SphincsMaskedSignOtsPathValue
+
+namespace SigGolfCandidate.SphincsMaskedSignOtsPathValue
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SphincsVerifierFtsRootCopy
+open SphincsSecurity SphincsBridge SphincsMaskedChainDomain
+set_option maxRecDepth 65536
+set_option maxHeartbeats 6000000
+
+theorem signer_prelude_loop_state (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (digits : Nat → Digit)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed)
+    (digitInput : ∀ j : ChainIndex,
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+        BitVec.ofNat 8 (digits j.val).val) :
+    ∃ u, OrdinarySteps SphincsMaskedImages.sign s 55
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) u) ∧
+      FirstBottomLoopStateAt (signerOutputBase location) hash u parameter seed
+        lay treeIdx leaf digits ⟨0, by decide⟩ := by
+  obtain ⟨t, run, done, ctx, selectedT, counterT, pointerT, digitFrame⟩ :=
+    signerPrelude_entry_digits location s parameter seed lay treeIdx leaf
+      pc layer tree selected par key
+  let u := t.setPC 0x3b20
+  have shifted : SphincsMaskedSignOtsShift.shift (signerShiftBytes location) u = t := by
+    change t.setPC (0x3b20 + signerShiftBytes location) = t
+    rw [← done]
+    cases t
+    rfl
+  refine ⟨u, by rw [shifted]; exact run, ?_⟩
+  refine ⟨rfl, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa [u, FirstBottomSecretContext, Words20,
+      SphincsMaskedSecretDomain.Words32, MachineState.getWord32,
+      MachineState.getMem_setPC] using ctx
+  · simpa [u] using selectedT
+  · simpa [u] using counterT
+  · simpa [u, signerOutputBase] using pointerT
+  · intro j
+    simpa [u] using (digitFrame j).trans (digitInput j)
+  · intro j hj
+    have absurd : ¬ j.val < (0 : Nat) := Nat.not_lt_zero _
+    exact (absurd hj).elim
+
+#print axioms signer_prelude_loop_state
+
+theorem signer_wots_layer_shift (location : Fin 5) (hash : Hash)
+    (s : MachineState) (parameter : PublicParameter) (seed : MasterSeed)
+    (lay : Layer) (treeIdx : TreeIndex) (leaf : LeafIndex)
+    (digits : Nat → Digit)
+    (pc : s.pc = 0x3a8c + signerShiftBytes location)
+    (layer : s.getMem 0x43000 = BitVec.ofNat 64 lay.val)
+    (tree : s.getMem 0x43008 = BitVec.ofNat 64 treeIdx.val)
+    (selected : s.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (par : Words20 s 0x74 parameter)
+    (key : SphincsMaskedSecretDomain.Words32 s seed)
+    (digitInput : ∀ j : ChainIndex,
+      s.getByte (BitVec.ofNat 64 (0x44000 + j.val)) =
+        BitVec.ofNat 8 (digits j.val).val) :
+    ∃ v, Trace hash SphincsMaskedImages.sign s
+        (55 + (firstBottomPrefixInstructions digits 52 - 59))
+        (55 + (firstBottomPrefixCycles digits 52 - 59))
+        (firstBottomPrefixCalls digits 52)
+        (firstBottomPrefixCompressions digits 52)
+        (SphincsMaskedSignOtsShift.shift (signerShiftBytes location) v) ∧
+      v.pc = 0x3dec ∧
+      (∀ j : ChainIndex,
+        Words20 v (signerOutputBase location + 20 * j.val)
+          (firstBottomExpectedChain hash parameter seed lay treeIdx leaf digits j)) := by
+  obtain ⟨u, setup, initial⟩ := signer_prelude_loop_state location hash s
+    parameter seed lay treeIdx leaf digits pc layer tree selected par key digitInput
+  obtain ⟨v, run, endPc, emitted⟩ := signer_all_chains_shift_at
+    location (signerOutputBase location) hash u
+    (signerOutputBase_low location)
+    (signerOutputBase_aligned location)
+    (signerOutputBase_bound location)
+    parameter seed lay treeIdx leaf digits initial
+  refine ⟨v, ?_, endPc, emitted⟩
+  simpa only [Nat.zero_add, Nat.add_zero] using
+    (setup.trace (hash := hash)).trans run
+
+#print axioms signer_wots_layer_shift
+end SigGolfCandidate.SphincsMaskedSignOtsPathValue
