@@ -24,7 +24,7 @@ theorem jointDisclosureSequenceState_candidate {inputs : Finset HashInput}
       exact Function.update_of_ne (hne 0) _ _
 
 theorem hiddenCandidateBound_disclose {inputs : Finset HashInput} (words : OtsReferenceWords) (routing : Routing)
-    (view : FewTimeView) (secrets : FtsTree → Digest) (state : State inputs)
+    (view : FewTimeView) (secrets : Fin ftsOpenings → Digest) (state : State inputs)
     (hbound : HiddenCandidateBound words routing.disclosed state) :
     HiddenCandidateBound words (routing.disclose view secrets).disclosed state := by
   intro coordinate hhidden
@@ -51,12 +51,12 @@ theorem completedWork_hiddenCandidateBound (actual : Labels) (work : PublicSigni
   all_goals try exact hbound
   rename_i plan view
   intro coordinate hhidden
-  have hbefore := hiddenCandidateBound_disclose words routing view (fun tree => actual (.ftsStart view.1 tree (view.2 tree))) state hbound
+  have hbefore := hiddenCandidateBound_disclose words routing view _ state hbound
     coordinate hhidden
-  have hne : ∀ tree, coordinate ≠ .ftsStart view.1 tree (view.2 tree) := by
-    intro tree heq
+  have hne : ∀ slot, coordinate ≠ .ftsStart view.1 porsTree (view.2 slot) := by
+    intro slot heq
     subst coordinate
-    exact hhidden (Or.inr ⟨rfl, rfl⟩)
+    exact hhidden (Or.inr ⟨rfl, InterleavedResidual.exists_slotLeaf view slot⟩)
   change 2 ^ digestBits ≤ _
   rw [jointDisclosureSequenceState_candidate _ actual _ _ coordinate hne,
     jointDisclosureSequenceState_memory]

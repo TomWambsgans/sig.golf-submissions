@@ -15,7 +15,7 @@ variable (parameter : PublicParameter) (root : Digest)
   (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
   (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
   (selections : ReferenceFamily) (rows : CanonicalEncodingRows) (dummy : OtsReferenceWords) (slot : Nat)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitorView_fst (state : MonitoredState) : (monitorView state).1 = state.1.1 := rfl
 
@@ -124,7 +124,7 @@ theorem publicSigningWork_bank_digest (key : SecretKey) (known : CanonicalProbeR
 
 theorem expected_publicSigningWork_bank_le (key : SecretKey) (known : CanonicalProbeRouting.Labels) (words : OtsReferenceWords)
     (selections : ReferenceFamily) (actual : CanonicalProbeRouting.Labels) (message : Message) (reuse : ENNReal)
-    (budget signatures : Nat) (required : Finset FtsTree) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
+    (budget signatures : Nat) (required : Finset IndexGroup) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
     (bank : HashInput → Bool) (hsigned : SigningDigestsCached key.parameter cache key.root log)
     (hreuse : exactDigestReuseWeight key message cache ≤ reuse) :
     (∑' result, Pr[= result | 𝒮[(simulateQ romImpl (Prod.fst <$> ResidualByteFrontend.publicSigningWork key.parameter key.root known words

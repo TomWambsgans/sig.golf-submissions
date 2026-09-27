@@ -12,7 +12,7 @@ open _root_.OracleComp OracleSpec
 attribute [local instance] Classical.propDecidable
 
 theorem certificateLength_run_prefixOverflow {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState)
     (hstop : state.2.stopped = true)
     (hbad : ProposalPrefixExceptional state.2.proposals state.2.log.length)
@@ -52,7 +52,7 @@ theorem withSigningLog_run_length_le {σ α : Type}
       omega
 
 theorem certificateCacheLength_run_prefixOverflow {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateCacheMonitorState)
     (hstop : state.2.1.stopped = true)
     (hbad : ProposalPrefixExceptional state.2.1.proposals state.2.1.log.length)
@@ -65,7 +65,7 @@ theorem certificateCacheLength_run_prefixOverflow {α : Type} (key : SecretKey) 
     (certificateCacheMonitorProject state) hstop hbad _ hm).2
 
 theorem certificateCacheLength_withSigningLog_clean {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 127)
+    (required : Finset IndexGroup) (hbudget : budget ≤ 2 ^ 127)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (q : Nat)
     (state : CertificateCacheMonitorState)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key) computation) state.1 q)

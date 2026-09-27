@@ -152,15 +152,15 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
     XSim image t 27 8226 1 1025 (H (macInput S masked.flatten))
       (fun a w => fetch image w = some (.base .ECALL) ∧ w.getReg .x5 = 1 ∧ w.getReg .x10 = 0 ∧
         ValAt w 160 root ∧ Vals w REGION masked ∧
-        (∀ k < 4, w.getMem (BitVec.ofNat 64 (0x44A0 + 8 * k)) = a.extractLsb' (64 * k) 64) ∧
-        ∀ A, 0x144A0 ≤ A → A < 0x244A0 → A % 8 = 0 → w.getMem (BitVec.ofNat 64 A) = 0) := by
+        (∀ k < 4, w.getMem (BitVec.ofNat 64 (0x4B00 + 8 * k)) = a.extractLsb' (64 * k) 64) ∧
+        ∀ A, 0x14B00 ≤ A → A < 0x24B00 → A % 8 = 0 → w.getMem (BitVec.ofNat 64 A) = 0) := by
   have hml : masked.length = 4094 := by rw [h.mlen, lvOff_11]
   have hs := h.shape
   have hvm : Vals t REGION masked := by
     have := h.lv
     rw [lvOff_11, List.drop_eq_nil_of_le (by rw [nodes_length levels hs]), List.append_nil] at this
     exact this
-  obtain ⟨u, hst, upc, u10, u11, u12, uun, u4480, u44A0, u44A8, u44B0, u44B8, uz0, uz1, uz2, uz3, ufr⟩ :=
+  obtain ⟨u, hst, upc, u10, u11, u12, uun, u4AE0, u4B00, u4B08, u4B10, u4B18, uz0, uz1, uz2, uz3, ufr⟩ :=
     spec_147 t hpc
   have ux : ∀ r, r ≠ .x1 ∧ r ≠ .x3 ∧ r ≠ .x10 ∧ r ≠ .x11 ∧ r ≠ .x12 ∧ r ≠ .x29 → u.getReg r = t.getReg r :=
     fun r hr => uun r hr.1 hr.2.1 hr.2.2.1 hr.2.2.2.1 hr.2.2.2.2.1 hr.2.2.2.2.2
@@ -170,30 +170,30 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
   have hxl : (macInput S masked.flatten).length = 65568 := by
     simp [macInput, thInput, hS.1, hfl]
   have hq : hashInput u = pad64 (macInput S masked.flatten) := by
-    refine hashInput_eq_pad64 u 1024 0x4480 _ (by rw [u11]) (by norm_num) u10
+    refine hashInput_eq_pad64 u 1024 0x4AE0 _ (by rw [u11]) (by norm_num) u10
       (by norm_num) (by norm_num) (by omega) (by omega) ?_
     rw [show 8 * (1024 + 1) = 2 + (2 + (4 + (2 * masked.length + 4))) by rw [hml],
       readWords_add, readWords_add, readWords_add, readWords_add, wordsToNat_append, wordsToNat_append,
       wordsToNat_append, wordsToNat_append, readWords_length, readWords_length, readWords_length,
       readWords_length]
-    have hg : ∀ A ∈ [0x4488, 0x4490, 0x4498],
+    have hg : ∀ A ∈ [0x4AE8, 0x4AF0, 0x4AF8],
         u.getMem (BitVec.ofNat 64 A) = 0 := by
       intro A hA
       rw [getMem_frame ufr (by simp at hA; omega) (by simp at hA ⊢; omega)]
       exact h.base.zero A (by simp [zeroKeys] at hA ⊢; omega)
-    have p1 : wordsToNat (u.readWords (BitVec.ofNat 64 0x4480) 2) = 3585 := by
-      rw [readWords_two, u4480, hg 0x4488 (by simp)]; rfl
-    have p2 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4480 + 8 * 2)) 2) = 0 := by
-      rw [readWords_two, hg 0x4490 (by simp), hg 0x4498 (by simp)]; rfl
-    have p3 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4480 + 8 * 2 + 8 * 2)) 4) = leNat S := by
+    have p1 : wordsToNat (u.readWords (BitVec.ofNat 64 0x4AE0) 2) = 3585 := by
+      rw [readWords_two, u4AE0, hg 0x4AE8 (by simp)]; rfl
+    have p2 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4AE0 + 8 * 2)) 2) = 0 := by
+      rw [readWords_two, hg 0x4AF0 (by simp), hg 0x4AF8 (by simp)]; rfl
+    have p3 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4AE0 + 8 * 2 + 8 * 2)) 4) = leNat S := by
       rw [← hS.2]
       simp only [MachineState.readWords, ofNat_add8, Nat.reduceAdd, Nat.reduceMul, wordsToNat]
-      rw [u44A0, u44A8, u44B0, u44B8, h.base.skIn 0 (by norm_num), h.base.skIn 1 (by norm_num),
+      rw [u4B00, u4B08, u4B10, u4B18, h.base.skIn 0 (by norm_num), h.base.skIn 1 (by norm_num),
         h.base.skIn 2 (by norm_num), h.base.skIn 3 (by norm_num)]
       ring
-    have p4 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4480 + 8 * 2 + 8 * 2 + 8 * 4))
+    have p4 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4AE0 + 8 * 2 + 8 * 2 + 8 * 4))
         (2 * masked.length)) = leNat masked.flatten := wordsToNat_vals u _ masked hvu.1 hvu.2
-    have p5 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4480 + 8 * 2 + 8 * 2 + 8 * 4 +
+    have p5 : wordsToNat (u.readWords (BitVec.ofNat 64 (0x4AE0 + 8 * 2 + 8 * 2 + 8 * 4 +
         8 * (2 * masked.length))) 4) = 0 := by
       rw [hml]
       simp only [MachineState.readWords, ofNat_add8, Nat.reduceAdd, Nat.reduceMul, wordsToNat]
@@ -210,7 +210,7 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
   have hq' : hashInput u = fmt (macInput S masked.flatten) :=
     hq.trans (fmt_thInput 14 0 0 0 0 _ (by decide)).symm
   have hv : hashArgumentsValid u = true :=
-    hashArgs_const u 0x4480 65600 0x44A0 u10 u11 u12 (by norm_num) (by norm_num) (by norm_num)
+    hashArgs_const u 0x4AE0 65600 0x4B00 u10 u11 u12 (by norm_num) (by norm_num) (by norm_num)
       (by norm_num) (by norm_num)
   refine (XSim.steps hst (XSim.bind (k₂ := 2) (c₂ := 2) (n₂ := 0) (b₂ := 0)
     (XSim.query ((codeAt_171.fetch u upc).trans rfl) (by rw [ux _ (by simp)]; exact h.base.r5) hv hq')
@@ -219,7 +219,7 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
   subst hw
   have wpc : (writeHash u a).pc = pcOf 172 := by rw [pc_writeHash, upc]; rfl
   obtain ⟨x, xst, xpc, x5, x10, xfr⟩ := spec_172 (writeHash u a) wpc
-  have hwf := Frame.writeHash u a 0x44A0 u12 (by norm_num) (by norm_num)
+  have hwf := Frame.writeHash u a 0x4B00 u12 (by norm_num) (by norm_num)
   have xm : ∀ A < 2 ^ 64, x.getMem (BitVec.ofNat 64 A) = (writeHash u a).getMem (BitVec.ofNat 64 A) :=
     fun A hA => xfr A hA (by simp)
   refine XSim.pure_steps xst ⟨(codeAt_174.fetch x xpc).trans rfl, x5, x10, ?_, ?_, ?_, ?_⟩
@@ -229,13 +229,13 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
       (fun k hk => by simp at hk; unfold REGION; omega)).frame xfr
       (by rw [hml] at hi; unfold REGION; omega) (by simp)⟩
   · intro k hk
-    rw [xm _ (by omega), getMem_writeHash u a 0x44A0 _ u12 (by norm_num) (by omega)]
+    rw [xm _ (by omega), getMem_writeHash u a 0x4B00 _ u12 (by norm_num) (by omega)]
     interval_cases k <;> simp
   · intro A h1 h2 h8
-    rw [xm _ (by omega), getMem_writeHash u a 0x44A0 _ u12 (by norm_num) (by omega), if_neg (by omega),
+    rw [xm _ (by omega), getMem_writeHash u a 0x4B00 _ u12 (by norm_num) (by omega), if_neg (by omega),
       if_neg (by omega), if_neg (by omega), if_neg (by omega)]
-    by_cases hA : A < 0x144C0
-    · have : A = 0x144A0 ∨ A = 0x144A8 ∨ A = 0x144B0 ∨ A = 0x144B8 := by omega
+    by_cases hA : A < 0x14B20
+    · have : A = 0x14B00 ∨ A = 0x14B08 ∨ A = 0x14B10 ∨ A = 0x14B18 := by omega
       rcases this with rfl | rfl | rfl | rfl
       · exact uz0
       · exact uz1
@@ -248,7 +248,7 @@ theorem mac_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels : List 
 theorem keygenList_xsim (sk : SecretKey) :
     XSim image (kInit sk) 8755412 13500614 653310 674814 (keygenList (toList sk))
       (fun r t => fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 1 ∧ t.getReg .x10 = 0 ∧
-        ValAt t 160 r.1 ∧ r.1.length = 16 ∧ readBuffer t 0x44A0 CACHE_BYTES = ofList CACHE_BYTES r.2) := by
+        ValAt t 160 r.1 ∧ r.1.length = 16 ∧ readBuffer t 0x4B00 CACHE_BYTES = ofList CACHE_BYTES r.2) := by
   have hS := kW_skOk sk
   unfold keygenList
   refine (XSim.bind (k₂ := 39015 + (8 + (86065 + 27))) (c₂ := 53344 + (8 + (114723 + 8226)))
@@ -265,7 +265,7 @@ theorem keygenList_xsim (sk : SecretKey) :
   obtain ⟨hvc, vpc⟩ := hv
   have hs := hvc.shape
   have hfl := flatten_length 11 levels hs
-  have h19 : v.getReg .x19 = BitVec.ofNat 64 0x144A0 := by rw [hvc.r19, lvOff_11]
+  have h19 : v.getReg .x19 = BitVec.ofNat 64 0x14B00 := by rw [hvc.r19, lvOff_11]
   obtain ⟨w, wst, wpc, wun, w160, w168, wz0, wz1, wz2, wz3, wfr⟩ := spec_107 v vpc h19
   set root := (levels.getD 11 []).getD 0 [] with hroot
   have hrv : ValAt v (REGION + 16 * lvOff 11) root := by
@@ -274,8 +274,8 @@ theorem keygenList_xsim (sk : SecretKey) :
   have hrl : root.length = 16 := hs.getD_len 11 0 le_rfl (by norm_num)
   have hout : Out root w := by
     refine ⟨⟨?_, ?_⟩, fun A hA => ?_⟩
-    · rw [w160, show (0x144A0 : Nat) = REGION + 16 * lvOff 11 by rw [lvOff_11]]; exact hrv.1
-    · rw [w168, show (0x144A8 : Nat) = REGION + 16 * lvOff 11 + 8 by rw [lvOff_11]]; exact hrv.2
+    · rw [w160, show (0x14B00 : Nat) = REGION + 16 * lvOff 11 by rw [lvOff_11]]; exact hrv.1
+    · rw [w168, show (0x14B08 : Nat) = REGION + 16 * lvOff 11 + 8 by rw [lvOff_11]]; exact hrv.2
     · simp at hA; rcases hA with rfl | rfl | rfl | rfl
       · exact wz0
       · exact wz1
@@ -316,7 +316,7 @@ theorem keygen_xsim (sk : SecretKey) :
   obtain ⟨root, cache⟩ := r
   obtain ⟨t1, t5, t10, tpk, trl, tc⟩ := ht
   refine XSim.pure ⟨t1, t5, t10, ?_⟩
-  show (readBuffer t 160 16, readBuffer t 0x44A0 CACHE_BYTES) = (ofList 16 root, ofList CACHE_BYTES cache)
+  show (readBuffer t 160 16, readBuffer t 0x4B00 CACHE_BYTES) = (ofList 16 root, ofList CACHE_BYTES cache)
   rw [readBuffer_val t 160 root trl (by norm_num) (by norm_num) tpk, tc]
 
 /-- **keygen**: for every secret key, one run makes exactly the oracle queries of

@@ -66,13 +66,13 @@ theorem qbyte_fmt (x : List Byte) (i : Nat) (hi : i < 4) : qbyte (fmt x) i = (x.
   unfold qbyte
   rw [← leNat_toList, leNat_div_mod, getD_toList_fmt x i (Or.inl hi)]
 
-/-- Inputs of a tag other than `1, 3, 10, 12` are zero padded. -/
+/-- Inputs of a tag other than `1, 3, 12` are zero padded. -/
 theorem fmt_eq_pad64 (t lay tau p j : Nat) (pl : List Byte)
-    (ht : t % 256 ≠ 1 ∧ t % 256 ≠ 3 ∧ t % 256 ≠ 10 ∧ t % 256 ≠ 12) :
+    (ht : t % 256 ≠ 1 ∧ t % 256 ≠ 3 ∧ t % 256 ≠ 12) :
     fmt (thInput (tweak t lay tau p j) pl) = pad64 (thInput (tweak t lay tau p j) pl) := by
   refine fmt_thInput _ _ _ _ _ _ ?_
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or]
-  refine ⟨?_, ?_, ?_, ?_⟩ <;> intro h <;> have := congrArg BitVec.toNat h <;>
+  refine ⟨?_, ?_, ?_⟩ <;> intro h <;> have := congrArg BitVec.toNat h <;>
     simp [byte_toNat] at this <;> omega
 
 /-! ## Tweak bytes -/

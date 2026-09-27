@@ -102,11 +102,22 @@ theorem encHD_injective : Function.Injective encHD := by
 /-- The abstract honest game on the honest domain. -/
 noncomputable def gameHD (sk : SecretKey) (m : Message) :
     OracleComp (HD →ₒ SphincsSecurity.HashOutput) Bool :=
+  relabel toHD (gameX sk m)
+
+/-- The abstract honest game without the expansion, on the honest domain. -/
+noncomputable def gameHD0 (sk : SecretKey) (m : Message) :
+    OracleComp (HD →ₒ SphincsSecurity.HashOutput) Bool :=
   relabel toHD (game sk m)
 
 theorem relabel_val_gameHD (sk : SecretKey) (m : Message) :
-    relabel Subtype.val (gameHD sk m) = game sk m := by
+    relabel Subtype.val (gameHD sk m) = gameX sk m := by
   unfold gameHD
+  rw [relabel_relabel]
+  exact Bridge.relabel_eq_self_of_allQ Equiv.Honest _ (fun x hx => val_toHD x hx) (hq_gameX sk m)
+
+theorem relabel_val_gameHD0 (sk : SecretKey) (m : Message) :
+    relabel Subtype.val (gameHD0 sk m) = game sk m := by
+  unfold gameHD0
   rw [relabel_relabel]
   exact Bridge.relabel_eq_self_of_allQ Equiv.Honest _ (fun x hx => val_toHD x hx) (hq_game sk m)
 
@@ -118,11 +129,27 @@ theorem withRandomOracle_map {α β : Type} (f : α → β) (oa : OracleComp Has
   rw [simulateQ_map, StateT.run'_eq, StateT.run'_eq, StateT.run_map, Functor.map_map,
     Functor.map_map]
 
+theorem probOutput_gameHD0 (sk : SecretKey) (m : Message) (b : Bool) :
+    Pr[= b | (simulateQ randomOracle (gameHD0 sk m)).run' ∅] =
+      Pr[= b | SphincsSecurity.Completeness.seededExperiment sk m] := by
+  rw [seededExperiment_eq, run'_relabel Subtype.val Subtype.val_injective (gameHD0 sk m) ∅ ∅
+    (fun _ => rfl), relabel_val_gameHD0]
+
+/-- The expansion does not change the failure law: under every table the games agree
+(`eval_gameX`). -/
 theorem probOutput_gameHD (sk : SecretKey) (m : Message) (b : Bool) :
     Pr[= b | (simulateQ randomOracle (gameHD sk m)).run' ∅] =
       Pr[= b | SphincsSecurity.Completeness.seededExperiment sk m] := by
-  rw [seededExperiment_eq, run'_relabel Subtype.val Subtype.val_injective (gameHD sk m) ∅ ∅
-    (fun _ => rfl), relabel_val_gameHD]
+  rw [← probOutput_gameHD0, probOutput_run'_eq_eager (D := HD) (R := SphincsSecurity.HashOutput),
+    probOutput_run'_eq_eager (D := HD) (R := SphincsSecurity.HashOutput)]
+  have hfun : (fun g : HD → SphincsSecurity.HashOutput =>
+        evalWithAnswerFn (QueryImpl.ofFn g) (gameHD sk m) = b) =
+      (fun g : HD → SphincsSecurity.HashOutput =>
+        evalWithAnswerFn (QueryImpl.ofFn g) (gameHD0 sk m) = b) := by
+    funext g
+    unfold gameHD gameHD0
+    rw [evalWithAnswerFn_relabel, evalWithAnswerFn_relabel, eval_gameX]
+  rw [hfun]
 
 /-! ## Completeness -/
 

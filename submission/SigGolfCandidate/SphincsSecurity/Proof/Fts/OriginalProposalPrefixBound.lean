@@ -7,7 +7,7 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 attribute [local irreducible] scheme certificateLengthImpl certificateProposalImpl certificateCacheProposalImpl proposalPrefixWeight
 
-private theorem certificateMonitorUpdate_log_cap (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+private theorem certificateMonitorUpdate_log_cap (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) (hcap : state.2.log.length ≤ signatureLimit) :
     (certificateMonitorUpdate key budget required stopAfter input state length record).log.length ≤ signatureLimit := by
@@ -19,7 +19,7 @@ private theorem certificateMonitorUpdate_log_cap (key : SecretKey) (budget : Nat
         ValidSigningStep] at hvalid ⊢ <;> omega
   · simpa only [certificateMonitorUpdate, if_neg hactive] using hcap
 
-private theorem certificateMonitorUpdate_world_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+private theorem certificateMonitorUpdate_world_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain) (state : CertificateMonitorState)
     (record : ProposalExecutionRecord (.inl input)) :
     proposalPrefixWeight (certificateMonitorUpdate key budget required stopAfter (.inl input) state 0 record).proposals
@@ -28,7 +28,7 @@ private theorem certificateMonitorUpdate_world_prefixWeight (key : SecretKey) (b
   rw [certificateMonitorUpdate]
   split <;> simp only [proposalRecordLogState, signingLogFragment, List.append_nil, Nat.add_zero]
 
-private theorem certificateMonitorUpdate_sign_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+private theorem certificateMonitorUpdate_sign_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (message : Message) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord (.inr message))
     (hactive : CertificateMonitorActive key budget (.inr message) state) :
@@ -38,7 +38,7 @@ private theorem certificateMonitorUpdate_sign_prefixWeight (key : SecretKey) (bu
   simp only [certificateMonitorUpdate, if_pos hactive, proposalRecordLogState, signingLogFragment,
     List.length_append, List.length_singleton]
 
-theorem expected_certificateLengthImpl_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem expected_certificateLengthImpl_prefixWeight (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateLengthImpl key budget required stopAfter input).run state] *
       proposalPrefixWeight result.2.2.proposals result.2.2.log.length) = proposalPrefixWeight state.2.proposals state.2.log.length := by
@@ -64,7 +64,7 @@ theorem expected_certificateLengthImpl_prefixWeight (key : SecretKey) (budget : 
         simp only [ENNReal.tsum_mul_right, tsum_probOutput_of_liftM_PMF, one_mul]
 
 theorem expected_certificateLength_prefixWeight {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] *
       proposalPrefixWeight result.2.2.proposals result.2.2.log.length) = proposalPrefixWeight state.2.proposals state.2.log.length := by
@@ -75,7 +75,7 @@ theorem expected_certificateLength_prefixWeight {Result : Type} (key : SecretKey
       simp only [ih]
       exact expected_certificateLengthImpl_prefixWeight key budget required stopAfter input state
 
-theorem certificateLength_log_cap {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateLength_log_cap {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : CertificateMonitorState) (hcap : state.2.log.length ≤ signatureLimit) (result : Result × CertificateMonitorState)
     (hr : result ∈ ((simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state).support) :
@@ -91,7 +91,7 @@ theorem certificateLength_log_cap {Result : Type} (key : SecretKey) (budget : Na
       obtain ⟨length, record, _, rfl⟩ := certificateLengthImpl_support key budget required stopAfter input state middle hm
       exact ih record.output _ (certificateMonitorUpdate_log_cap key budget required stopAfter input state length record hcap) result hr
 
-theorem certificateLength_prefix_le {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateLength_prefix_le {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : CertificateMonitorState) (hcap : state.2.log.length ≤ signatureLimit) :
     Pr[fun result => ProposalPrefixExceptional result.2.2.proposals result.2.2.log.length |
@@ -112,7 +112,7 @@ theorem certificateLength_prefix_le {Result : Type} (key : SecretKey) (budget : 
       simpa only [PMF.mem_support_iff, not_not] using hr
     simp only [PMF.probOutput_eq_apply, hz, ite_self, zero_mul, le_refl]
 
-theorem certificateCacheProposal_prefix_le {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateCacheProposal_prefix_le {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : List Index × CertificateCacheMonitorState) (hcap : state.2.2.1.log.length ≤ signatureLimit) :
     Pr[fun result => ProposalPrefixExceptional result.2.2.2.1.proposals result.2.2.2.1.log.length |
@@ -124,7 +124,7 @@ theorem certificateCacheProposal_prefix_le {Result : Type} (key : SecretKey) (bu
   rw [← simulateQ_certificateCacheProposalImpl_project key budget required stopAfter computation state, probEvent_map] at h
   exact h
 
-theorem certificateContextGame_prefix_le (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateContextGame_prefix_le (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     Pr[fun result => ProposalPrefixExceptional result.2.2.2.2.1.proposals result.2.2.2.2.1.log.length |
       certificateContextGame adversary budget required stopAfter stopped] ≤ proposalPrefixExceptionBound := by

@@ -13,7 +13,7 @@ theorem message_not_probe (parameter : PublicParameter) (input : HashInput)
   rw [FtsProbeSimulation.decodeProbe?_eq_none_iff]
   obtain ⟨payload, rfl⟩ := hmessage
   intro probe heq
-  have hdomain := (tweakableHashInput_injective parameter (by trivial) (by trivial) heq).1
+  have hdomain := (tweakableHashInput_injective parameter (HashDomain.ftsLeaf_inRange _ _ _) (by trivial) heq).1
   exact HashDomain.noConfusion hdomain
 
 theorem knownEncodingCell_not_message (parameter : PublicParameter) (inputs : Finset HashInput)

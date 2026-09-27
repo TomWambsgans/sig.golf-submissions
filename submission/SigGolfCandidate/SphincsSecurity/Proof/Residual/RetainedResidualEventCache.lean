@@ -129,7 +129,7 @@ theorem expected_lazySigning_truncated_le (message : Message) (state : State inp
   exact expected_publicSigningWork_truncated_le key words selections state.memory.routing.known message
     state.memory.external.cache hfinite budget state.memory.external.hashCalls
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_hashCalls_mono (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hvalid : MonitoredValid inputs state) (hinputs : requestInputs key input ⊆ inputs)

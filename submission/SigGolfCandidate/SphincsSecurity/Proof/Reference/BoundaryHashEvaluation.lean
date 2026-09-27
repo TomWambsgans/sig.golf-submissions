@@ -198,7 +198,7 @@ theorem boundaryEval_ftsNode (parameter : PublicParameter) (f : QueryImpl HashSp
   | succ level ih =>
       rw [ftsNode_succ_eq, boundaryEval_bind]
       simp only [boundaryEval_bind, ih,
-        boundaryEval_tweakableHash parameter f (.ftsNode index tree (level + 1) nodeIdx) _
+        boundaryEval_tweakableHash parameter f (.ftsNode index tree (ftsHeapIndex (level + 1) nodeIdx)) _
           (by simp [hashDomainFields, tweakFields])]
       rw [← pow_succ, ← pow_add]
       congr 1
@@ -210,13 +210,7 @@ theorem boundaryEval_ftsKey (parameter : PublicParameter) (f : QueryImpl HashSpe
     (index : Index) (secret : FtsTree → FtsLeaf → Digest) :
     boundaryEval parameter f (ftsKey parameter index secret) =
       (evalWithAnswerFn f (ftsKey parameter index secret), (FreeMonoid.of none) ^ ftsKeyHashCost) := by
-  have hroots := boundaryEval_sequenceFin parameter f
-    (fun tree => ftsNode parameter index tree (secret tree) ftsTreeHeight 0)
-    (fun _ => 2 ^ (ftsTreeHeight + 1) - 1)
-    (fun tree => by rw [boundaryEval_ftsNode])
-  apply boundaryEval_eq_of_snd
-  rw [ftsKey, boundaryEval_bind, hroots,
-    boundaryEval_tweakableHash _ _ _ _ (by simp [hashDomainFields, tweakFields]), ← pow_succ, ftsKeyHashCost_def]
+  rw [ftsKey, boundaryEval_ftsNode, ftsKeyHashCost_def]
 
 theorem boundaryEval_layerMessage (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index) (lay : Layer) :
     boundaryEval key.parameter f (layerMessage key index lay) =
@@ -240,8 +234,8 @@ theorem boundaryEval_node_hash (parameter : PublicParameter) (f : QueryImpl Hash
   rw [boundaryEval_tweakableHash _ _ _ _ (by simp [hashDomainFields, tweakFields])]
 
 theorem boundaryEval_ftsNode_hash (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
-    (index : Index) (tree : FtsTree) (level nodeIdx : Nat) (left right : Digest) :
-    (boundaryEval parameter f (tweakableHash parameter (.ftsNode index tree level nodeIdx)
+    (index : Index) (tree : FtsTree) (heapIdx : Nat) (left right : Digest) :
+    (boundaryEval parameter f (tweakableHash parameter (.ftsNode index tree heapIdx)
       (nodePayload left right))).2 = FreeMonoid.of none := by
   rw [boundaryEval_tweakableHash _ _ _ _ (by simp [hashDomainFields, tweakFields])]
 
@@ -382,9 +376,9 @@ theorem boundaryEval_keygenRoot (parameter : PublicParameter) (f : QueryImpl Has
   split
   simp only [boundaryEval_pure, mul_one]
 
-theorem boundaryEval_buildFtsTree_pure (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
-    (index : Index) (tree : FtsTree) (secret : FtsLeaf → Digest) (leaf : FtsLeaf) :
-    (boundaryEval parameter f (buildFtsTree parameter index tree (fun leaf => pure (secret leaf)) leaf)).2 =
+theorem boundaryEval_buildFtsTree_pure_snd (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (secret : FtsLeaf → Digest) :
+    (boundaryEval parameter f (buildFtsTree parameter index (fun leaf => pure (secret leaf)))).2 =
       (FreeMonoid.of none) ^ (2 ^ (ftsTreeHeight + 1) - 1) := by
   unfold buildFtsTree
   rw [boundaryEval_bind, boundaryEval_sequenceFin parameter f _ (fun _ => 1)
@@ -393,23 +387,19 @@ theorem boundaryEval_buildFtsTree_pure (parameter : PublicParameter) (f : QueryI
         boundaryEval_tweakableHash _ _ _ _ (by simp [hashDomainFields, tweakFields])]
       simp only [boundaryEval_pure, mul_one, pow_one])]
   rw [boundaryEval_bind, boundaryEval_buildLevels _ _ _
-    (fun _ _ _ _ => boundaryEval_ftsNode_hash _ _ _ _ _ _ _ _), levelsHashCost_self]
+    (fun _ _ _ _ => boundaryEval_ftsNode_hash _ _ _ _ _ _ _), levelsHashCost_self]
   simp only [boundaryEval_pure, mul_one, Finset.sum_const, Finset.card_univ, Fintype.card_fin,
     smul_eq_mul, ← pow_add]
   congr 1
 
-/-- **The forest built once from table secrets costs exactly `ftsOpenHashCost`.** -/
-theorem boundaryEval_buildForest_pure (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
-    (index : Index) (secret : FtsTree → FtsLeaf → Digest) (leaves : IndexGroup → FtsLeaf) :
-    boundaryEval parameter f (buildForest parameter index (fun tree leaf => pure (secret tree leaf)) leaves) =
-      (evalWithAnswerFn f (buildForest parameter index (fun tree leaf => pure (secret tree leaf)) leaves),
+/-- **The PORS tree built once from table secrets costs exactly `ftsOpenHashCost`** (its `2^14` leaves and
+`2^14 - 1` nodes). -/
+theorem boundaryEval_buildFtsTree_pure (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (index : Index) (secret : FtsLeaf → Digest) :
+    boundaryEval parameter f (buildFtsTree parameter index (fun leaf => pure (secret leaf))) =
+      (evalWithAnswerFn f (buildFtsTree parameter index (fun leaf => pure (secret leaf))),
         (FreeMonoid.of none) ^ ftsOpenHashCost) := by
   apply boundaryEval_eq_of_snd
-  unfold buildForest
-  rw [boundaryEval_bind, boundaryEval_sequenceFin parameter f _ (fun _ => 2 ^ (ftsTreeHeight + 1) - 1)
-    (fun tree => boundaryEval_buildFtsTree_pure _ _ _ _ _ _)]
-  rw [boundaryEval_bind, boundaryEval_tweakableHash _ _ _ _ (by simp [hashDomainFields, tweakFields]),
-    ftsOpenHashCost_def]
-  simp only [boundaryEval_pure, mul_one, pow_succ]
+  rw [boundaryEval_buildFtsTree_pure_snd, ftsOpenHashCost_def]
 
 end SphincsSecurity.Concrete

@@ -278,13 +278,13 @@ theorem words_prfInput (S : List Byte) (hS : S.length = 32) (lay tau e i : Nat) 
   rw [h2, prfInput, wordsOf_thInput_pad]
   simp [hS, zeros]
 
-theorem words_ftsPrfInput (S : List Byte) (hS : S.length = 32) (k idx j : Nat) :
-    padBlocks (ftsPrfInput S k idx j).length = 0 ∧
-    wordsOf (padTo64 (ftsPrfInput S k idx j)) = twWords 8 k idx 0 j ++ [0, 0] ++ wordsOf S := by
-  obtain ⟨h1, h2⟩ := padTo64_eq (ftsPrfInput S k idx j) 0 (by simp [ftsPrfInput, hS])
-    (by simp [ftsPrfInput, hS])
+theorem words_porsPrfInput (S : List Byte) (hS : S.length = 32) (idx q : Nat) :
+    padBlocks (porsPrfInput S idx q).length = 0 ∧
+    wordsOf (padTo64 (porsPrfInput S idx q)) = twWords 8 0 idx 0 q ++ [0, 0] ++ wordsOf S := by
+  obtain ⟨h1, h2⟩ := padTo64_eq (porsPrfInput S idx q) 0 (by simp [porsPrfInput, hS])
+    (by simp [porsPrfInput, hS])
   refine ⟨h1, ?_⟩
-  rw [h2, ftsPrfInput, wordsOf_thInput_pad]
+  rw [h2, porsPrfInput, wordsOf_thInput_pad]
   simp [hS, zeros]
 
 /-- A 48-byte input `tw | P | v` (chain step, FORS leaf). -/
@@ -325,7 +325,7 @@ theorem hashInput_eq_digest (t : MachineState) (rho m : List Byte) (hr : rho.len
     wordsOf_append _ _ (by simp [hr]), wordsOf_append _ _ (by simp), wordsOf_tweak]
 
 theorem blocks_fmt_th (t lay tau p j : Nat) (payload : List Byte)
-    (ht : byte t ∉ [byte 1, byte 3, byte 10, byte 12]) :
+    (ht : byte t ∉ [byte 1, byte 3, byte 12]) :
     (fmt (thInput (tweak t lay tau p j) payload)).blocks = (pad64 (thInput (tweak t lay tau p j) payload)).blocks := by
   rw [fmt_thInput _ _ _ _ _ _ ht]
 

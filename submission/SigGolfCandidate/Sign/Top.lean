@@ -83,7 +83,7 @@ structure TopCtx (S cache : List Byte) (x : List Nat) (tau e : Nat) (t : Machine
   pbS : t.readWords (BitVec.ofNat 64 0x6C0) 4 = wordsOf S
   cbP : t.readWords (BitVec.ofNat 64 0xD0) 2 = [0, 0]
   node : ∀ l j, l < 11 → j < 2 ^ (11 - l) →
-    t.readWords (BitVec.ofNat 64 (0x44A0 + cacheNodeOff l j)) 2 = wordsOf (cacheNode cache l j)
+    t.readWords (BitVec.ofNat 64 (0x4B00 + cacheNodeOff l j)) 2 = wordsOf (cacheNode cache l j)
   nodeLen : ∀ l j, l < 11 → j < 2 ^ (11 - l) → (cacheNode cache l j).length = 16
 
 /-- Addresses written by the top layer. -/
@@ -149,7 +149,7 @@ theorem mem_top_frame {S : List Byte} {x : List Nat} {tau e : Nat} {s t : Machin
 /-- Step-loop invariant of chain `i` after `j` steps (value `v` at `CB+48`). -/
 def TStepInv (S : List Byte) (x : List Nat) (tau e i : Nat) (ts : MachineState) (j : Nat) (v : Val)
     (t : MachineState) : Prop :=
-  j ≤ x.getD i 0 ∧ v.length = 16 ∧ t.pc = pcOf 622 ∧ t.readWords (BitVec.ofNat 64 0xF0) 2 = wordsOf v ∧
+  j ≤ x.getD i 0 ∧ v.length = 16 ∧ t.pc = pcOf 665 ∧ t.readWords (BitVec.ofNat 64 0xF0) 2 = wordsOf v ∧
   t.getReg .x23 = BitVec.ofNat 64 j ∧ t.getReg .x24 = BitVec.ofNat 64 (8 * i + j) ∧
   t.getReg .x25 = BitVec.ofNat 64 (x.getD i 0) ∧
   t.getReg .x11 = BitVec.ofNat 64 64 ∧ t.getReg .x12 = BitVec.ofNat 64 0xF0 ∧
@@ -165,39 +165,39 @@ theorem tstep_body (S : List Byte) (x : List Nat) (tau e i : Nat) (hi : i < 42) 
   have he := hm.he
   have hxi := hm.hx i
   -- block 590: loop test
-  have hs0 := symRun_sound blk622 codeAt_622 t tpc (by simp only [blk622.res, rv_simp])
-  have hc0 : blk622.res.cycles = 1 := rfl
+  have hs0 := symRun_sound blk665 codeAt_665 t tpc (by simp only [blk665.res, rv_simp])
+  have hc0 : blk665.res.cycles = 1 := rfl
   rw [hc0] at hs0
-  set t0 := blk622.res.toState t with ht0
-  have pc0 : t0.pc = pcOf 623 := by
-    simp only [ht0, blk622.res, rv_simp, t23, t25, ofNat_beq_ofNat]
+  set t0 := blk665.res.toState t with ht0
+  have pc0 : t0.pc = pcOf 666 := by
+    simp only [ht0, blk665.res, rv_simp, t23, t25, ofNat_beq_ofNat]
     rw [if_neg (by rw [decide_eq_true_eq, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]; omega)]
   have m0 : ∀ z, t0.getMem z = t.getMem z := fun z => by
-    rw [ht0, Result.toState_getMem, show blk622.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht0, Result.toState_getMem, show blk665.res.st.mem = [] from rfl, memEval_nil]
   have r0 : RegsEq t t0 [] := by
     intro r hr; rw [ht0, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   -- block 591: step tweak, HASH
-  have hs1 := symRun_sound blk623 codeAt_623 t0 pc0 (by simp only [blk623.res, rv_simp])
-  have hc1 : blk623.res.cycles = 6 := rfl
+  have hs1 := symRun_sound blk666 codeAt_666 t0 pc0 (by simp only [blk666.res, rv_simp])
+  have hc1 : blk666.res.cycles = 6 := rfl
   rw [hc1] at hs1
-  set t1 := blk623.res.toState t0 with ht1
+  set t1 := blk666.res.toState t0 with ht1
   have f1 : Frame t0 t1 (fun x => x = 0xC0) := by
     apply frame_toState; intro x hx hW
-    simp only [blk623.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk666.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r1 : RegsEq t0 t1 [.x3, .x10, .x29] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have e1 := symRun_ecall blk623 codeAt_623 t0 (by simp only [blk623.res, rv_simp]) rfl
-  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0xC0 := by simp only [ht1, blk623.res, rv_simp]
+  have e1 := symRun_ecall blk666 codeAt_666 t0 (by simp only [blk666.res, rv_simp]) rfl
+  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0xC0 := by simp only [ht1, blk666.res, rv_simp]
   have x11 : t1.getReg .x11 = BitVec.ofNat 64 64 := by rw [r1.get .x11, r0.get .x11, t11]
   have x12 : t1.getReg .x12 = BitVec.ofNat 64 0xF0 := by rw [r1.get .x12, r0.get .x12, t12]
   have x5 : t1.getReg .x5 = 0 := by rw [r1.get .x5, r0.get .x5, tregs.get .x5, hm.x5]
-  have pc1 : t1.pc = pcOf 629 := by simp only [ht1, blk623.res, rv_simp]
+  have pc1 : t1.pc = pcOf 672 := by simp only [ht1, blk666.res, rv_simp]
   have mC0 : t1.getMem (BitVec.ofNat 64 0xC0) = twWord0 1 0 tau (j + 256 * i) := by
-    simp only [ht1, blk623.res, rv_simp, r0.get .x24, t24, splitP_word i j (by omega) (by omega)]
+    simp only [ht1, blk666.res, rv_simp, r0.get .x24, t24, splitP_word i j (by omega) (by omega)]
     bvsimp []
     rw [twWord0_top _ _ _ (by omega)]
     refine (word_of_halves _ 0x101 (j + 256 * i) (by rw [lo32_replace1, m0, tlo])
@@ -230,27 +230,27 @@ theorem tstep_body (S : List Byte) (x : List Nat) (tau e i : Nat) (hi : i < 42) 
   set t2 := writeHash t1 a with ht2
   have f2 : Frame t1 t2 (fun x => 0xF0 ≤ x ∧ x < 0xF0 + 32) := frame_writeHash t1 a _ x12 (by norm_num)
   have v2 : t2.readWords (BitVec.ofNat 64 0xF0) 2 = wordsOf w := writeHash_readWords_val t1 a _ x12 (by norm_num)
-  have pc2 : t2.pc = pcOf 630 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
+  have pc2 : t2.pc = pcOf 673 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
   have r2 : ∀ q, t2.getReg q = t1.getReg q := fun q => by rw [ht2, writeHash_getReg]
   have r2' : RegsEq t1 t2 [] := fun q _ => r2 q
   -- block 594: counters, back to the loop test
-  have hs3 := symRun_sound blk630 codeAt_630 t2 pc2 (by simp only [blk630.res, rv_simp])
-  have hc3 : blk630.res.cycles = 3 := rfl
+  have hs3 := symRun_sound blk673 codeAt_673 t2 pc2 (by simp only [blk673.res, rv_simp])
+  have hc3 : blk673.res.cycles = 3 := rfl
   rw [hc3] at hs3
-  set t3 := blk630.res.toState t2 with ht3
+  set t3 := blk673.res.toState t2 with ht3
   have m3 : ∀ z, t3.getMem z = t2.getMem z := fun z => by
-    rw [ht3, Result.toState_getMem, show blk630.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht3, Result.toState_getMem, show blk673.res.st.mem = [] from rfl, memEval_nil]
   have r3 : RegsEq t2 t3 [.x23, .x24] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have ft3 : Frame t t3 (fun a => a = 0xC0 ∨ (0xF0 ≤ a ∧ a < 0x110)) := by
     intro z hz hW
     rw [m3, f2.getMem hz (by omega), f1.getMem hz (by omega), m0]
-  refine Sim.pure_steps hs3 ⟨by omega, hwl, by simp only [ht3, blk630.res, rv_simp],
+  refine Sim.pure_steps hs3 ⟨by omega, hwl, by simp only [ht3, blk673.res, rv_simp],
     by rw [readWords_congr _ _ 0xF0 2 (fun k hk => m3 _), v2], ?_, ?_, ?_, ?_, ?_, ?_,
     (tframe.trans ft3).mono (by intro z hz; omega), ?_⟩
-  · simp only [ht3, blk630.res, rv_simp, r2, r1.get .x23, r0.get .x23, t23, ofNat_add_ofNat]
-  · simp only [ht3, blk630.res, rv_simp, r2, r1.get .x24, r0.get .x24, t24, ofNat_add_ofNat]
+  · simp only [ht3, blk673.res, rv_simp, r2, r1.get .x23, r0.get .x23, t23, ofNat_add_ofNat]
+  · simp only [ht3, blk673.res, rv_simp, r2, r1.get .x24, r0.get .x24, t24, ofNat_add_ofNat]
     exact ofNat_congr (by omega)
   · rw [r3.get .x25, r2, r1.get .x25, r0.get .x25, t25]
   · rw [r3.get .x11, r2, x11]
@@ -266,7 +266,7 @@ def topRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x21, .x23, .x24, .x
 def TChainInv (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState) (i : Nat) (acc : List Val)
     (t : MachineState) : Prop :=
   i ≤ 42 ∧ acc.length = i ∧ (∀ v ∈ acc, v.length = 16) ∧ Slots t 0x908 acc ∧
-  t.pc = (if i < 42 then pcOf 603 else pcOf 642) ∧ t.getReg .x21 = BitVec.ofNat 64 i ∧
+  t.pc = (if i < 42 then pcOf 646 else pcOf 685) ∧ t.getReg .x21 = BitVec.ofNat 64 i ∧
   TopMem S x tau e t ∧ RegsEq tm t topRegs ∧ Frame tm t tchainW
 
 /-- `SEC` untouched. -/
@@ -277,7 +277,7 @@ def TSec (s t : MachineState) : Prop :=
 theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState)
     (i : Nat) (hi : i < 42) (s : Val) (hs : s.length = 16) (acc : List Val) (hl1 : acc.length = i)
     (hv1 : ∀ v ∈ acc, v.length = 16) (t : MachineState) (hsl : Slots t 0x908 acc)
-    (tpc : t.pc = pcOf 611) (t21 : t.getReg .x21 = BitVec.ofNat 64 i) (t11 : t.getReg .x11 = BitVec.ofNat 64 64)
+    (tpc : t.pc = pcOf 654) (t21 : t.getReg .x21 = BitVec.ofNat 64 i) (t11 : t.getReg .x11 = BitVec.ofNat 64 64)
     (tsec : t.readWords (BitVec.ofNat 64 (0x140 + 16 * (i % 2))) 2 = wordsOf s)
     (hm : TopMem S x tau e t) (tregs : RegsEq tm t topRegs) (tframe : Frame tm t tchainW) :
     Sim image t 150 (chainTo 0 tau e i (x.getD i 0) s >>= fun v => pure (acc ++ [v]))
@@ -287,16 +287,16 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
   have hxi := hm.hx i
   have hi2 : i % 2 < 2 := Nat.mod_lt _ (by norm_num)
   -- block 606: secret → CB+48, digit, step counters
-  have hs3 := symRun_sound blk611 codeAt_611 t tpc (by
-    simp only [blk611.res, rv_simp]
+  have hs3 := symRun_sound blk654 codeAt_654 t tpc (by
+    simp only [blk654.res, rv_simp]
     rw [t21, secAddr i (by omega) 328 (by norm_num), secAddr i (by omega) 320 (by norm_num)]
     bvsimp [accessValid_ofNat, ne_eq, ofNat_eq_iff]; omega)
-  have hc3 : blk611.res.cycles = 11 := rfl
+  have hc3 : blk654.res.cycles = 11 := rfl
   rw [hc3] at hs3
-  set t3 := blk611.res.toState t with ht3
+  set t3 := blk654.res.toState t with ht3
   have f3 : Frame t t3 (fun x => x = 0xF0 ∨ x = 0xF8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk611.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk654.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r3 : RegsEq t t3 [.x1, .x2, .x3, .x12, .x23, .x24, .x25] := by
@@ -304,7 +304,7 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
     cases r <;> first | exact absurd (by decide) hr | rfl
   have v3 : t3.readWords (BitVec.ofNat 64 0xF0) 2 = wordsOf s := by
     rw [← tsec, readWords_ofNat_two, readWords_ofNat_two]
-    simp only [ht3, blk611.res, rv_simp, t21]
+    simp only [ht3, blk654.res, rv_simp, t21]
     rw [secAddr i (by omega) 328 (by norm_num), secAddr i (by omega) 320 (by norm_num)]
     simp (config := { decide := true }) only [↓reduceIte]
     rw [show 328 + 16 * (i % 2) = 0x140 + 16 * (i % 2) + 8 by omega]
@@ -314,15 +314,15 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
     (by rw [ft3.getMem (by norm_num) (by omega), hm.pb0])
     (by rw [ft3.getMem (by norm_num) (by omega), hm.cb0])
   have x325 : t3.getReg .x25 = BitVec.ofNat 64 (x.getD i 0) := by
-    simp only [ht3, blk611.res, rv_simp, t21]; bvsimp []
+    simp only [ht3, blk654.res, rv_simp, t21]; bvsimp []
     rw [show i * 8 + 1920 = 0x780 + 8 * i by ring, hm.dig i hi]
   have h0 : TStepInv S x tau e i t3 0 s t3 := by
-    refine ⟨by omega, hs, by simp only [ht3, blk611.res, rv_simp], v3, ?_, ?_, x325, ?_, ?_,
+    refine ⟨by omega, hs, by simp only [ht3, blk654.res, rv_simp], v3, ?_, ?_, x325, ?_, ?_,
       RegsEq.refl _ _, Frame.refl _ _, hm3.cb0⟩
-    · simp only [ht3, blk611.res, rv_simp]
-    · simp only [ht3, blk611.res, rv_simp, t21]; bvsimp []; exact ofNat_congr (by omega)
+    · simp only [ht3, blk654.res, rv_simp]
+    · simp only [ht3, blk654.res, rv_simp, t21]; bvsimp []; exact ofNat_congr (by omega)
     · rw [r3.get .x11, t11]
-    · simp only [ht3, blk611.res, rv_simp]
+    · simp only [ht3, blk654.res, rv_simp]
   have hsteps := Sim.foldlM_range' 1 (x.getD i 0) (fun v mu => hash16 (chainInput 0 tau e i mu v)) s
     (TStepInv S x tau e i t3) 18 (fun j hj v t h => tstep_body S x tau e i hi t3 hm3 j hj v t h) h0
   unfold chainTo
@@ -330,15 +330,15 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
     (by have := Nat.mul_le_mul_right 18 (show x.getD i 0 ≤ 7 by omega); omega) (fun _ _ h => h)
   obtain ⟨-, hvl, pc4, v4, x423, x424, x425, x411, x412, r4, f4, lo4⟩ := h4
   -- block 617: exit
-  have hs5 := symRun_sound blk622 codeAt_622 t4 pc4 (by simp only [blk622.res, rv_simp])
-  have hc5 : blk622.res.cycles = 1 := rfl
+  have hs5 := symRun_sound blk665 codeAt_665 t4 pc4 (by simp only [blk665.res, rv_simp])
+  have hc5 : blk665.res.cycles = 1 := rfl
   rw [hc5] at hs5
-  set t5 := blk622.res.toState t4 with ht5
-  have pc5 : t5.pc = pcOf 633 := by
-    simp only [ht5, blk622.res, rv_simp, x423, x425, ofNat_beq_ofNat]
+  set t5 := blk665.res.toState t4 with ht5
+  have pc5 : t5.pc = pcOf 676 := by
+    simp only [ht5, blk665.res, rv_simp, x423, x425, ofNat_beq_ofNat]
     rw [if_pos (by simp)]
   have m5 : ∀ z, t5.getMem z = t4.getMem z := fun z => by
-    rw [ht5, Result.toState_getMem, show blk622.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht5, Result.toState_getMem, show blk665.res.st.mem = [] from rfl, memEval_nil]
   have r5 : RegsEq t4 t5 [] := by
     intro r hr; rw [ht5, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
@@ -347,14 +347,14 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
     (r3.trans r4).trans r5
   have y21 : t5.getReg .x21 = BitVec.ofNat 64 i := by rw [rt5.get .x21, t21]
   have y18 : t5.getReg .x18 = BitVec.ofNat 64 0x900 := by rw [rt5.get .x18, hm.x18]
-  have hs6 := symRun_sound blk633 codeAt_633 t5 pc5 (by
-    simp only [blk633.res, rv_simp]; bvsimp [y21, y18, accessValid_ofNat]; omega)
-  have hc6 : blk633.res.cycles = 9 := rfl
+  have hs6 := symRun_sound blk676 codeAt_676 t5 pc5 (by
+    simp only [blk676.res, rv_simp]; bvsimp [y21, y18, accessValid_ofNat]; omega)
+  have hc6 : blk676.res.cycles = 9 := rfl
   rw [hc6] at hs6
-  set t6 := blk633.res.toState t5 with ht6
+  set t6 := blk676.res.toState t5 with ht6
   have f6 : Frame t5 t6 (fun z => z = 0x908 + 16 * i ∨ z = 0x908 + 16 * i + 8) := by
     apply frame_toState; intro z hz hW
-    simp only [blk633.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk676.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq]
     bvsimp [y21, y18, ofNat_eq_iff]
     omega
@@ -378,14 +378,14 @@ theorem tchain_B (S : List Byte) (x : List Nat) (tau e : Nat) (tm : MachineState
     · exact hsl.frame (ft5.trans f6) (by omega) (by intro k hk; constructor <;> omega)
     · rw [hl1, readWords_ofNat_two, show 0x908 + 16 * i + 8 = 0x908 + 16 * i + 8 from rfl]
       rw [← v4, readWords_ofNat_two]
-      simp only [ht6, blk633.res, rv_simp, m5]
+      simp only [ht6, blk676.res, rv_simp, m5]
       bvsimp [y21, y18, ofNat_eq_iff]
       simp (disch := bvomega) only [if_pos, if_neg]
-  · simp only [ht6, blk633.res, rv_simp, y21, ofNat_add_ofNat, ofNat_bne_ofNat]
+  · simp only [ht6, blk676.res, rv_simp, y21, ofNat_add_ofNat, ofNat_bne_ofNat]
     by_cases h : i + 1 < 42
     · rw [if_pos h, if_pos (by rw [bne_cond _ _ (by omega) (by norm_num)]; omega)]
     · rw [if_neg h, if_neg (by rw [bne_cond _ _ (by omega) (by norm_num)]; omega)]
-  · simp only [ht6, blk633.res, rv_simp, y21, ofNat_add_ofNat]
+  · simp only [ht6, blk676.res, rv_simp, y21, ofNat_add_ofNat]
   · exact mem_top_frame hm ft6 (by rw [r6.get .x5, rt5.get .x5, hm.x5]) (by rw [r6.get .x18, y18])
       (by rw [f6.getMem (by norm_num) (by omega), m5, f4.getMem (by norm_num) (by omega),
             ft3.getMem (by norm_num) (by omega)]; exact hm.pb0)
@@ -415,42 +415,42 @@ theorem tchain_pair (S : List Byte) (hS : S.length = 32) (x : List Nat) (tau e :
   obtain ⟨-, hl1, hv1, hsl, tpc, t21, hm, tregs, tframe⟩ := hinv
   have htau := hm.htau
   have he := hm.he
-  have tpc' : t.pc = pcOf 603 := by rw [tpc, if_pos (by omega)]
+  have tpc' : t.pc = pcOf 646 := by rw [tpc, if_pos (by omega)]
   -- block 598: even
-  have hs0 := symRun_sound blk603 codeAt_603 t tpc' (by simp only [blk603.res, rv_simp])
-  have hc0 : blk603.res.cycles = 2 := rfl
+  have hs0 := symRun_sound blk646 codeAt_646 t tpc' (by simp only [blk646.res, rv_simp])
+  have hc0 : blk646.res.cycles = 2 := rfl
   rw [hc0] at hs0
-  set t1 := blk603.res.toState t with ht1
+  set t1 := blk646.res.toState t with ht1
   have m1 : ∀ z, t1.getMem z = t.getMem z := fun z => by
-    rw [ht1, Result.toState_getMem, show blk603.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht1, Result.toState_getMem, show blk646.res.st.mem = [] from rfl, memEval_nil]
   have r1 : RegsEq t t1 [.x3] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have pc1 : t1.pc = pcOf 605 := by
-    simp only [ht1, blk603.res, rv_simp, t21]
+  have pc1 : t1.pc = pcOf 648 := by
+    simp only [ht1, blk646.res, rv_simp, t21]
     rw [and_one_ofNat _ (by omega), if_neg (by rw [ofNat_bne_ofNat]; simp)]
   -- block 600: the paired prf query
-  have hs2 := symRun_sound blk605 codeAt_605 t1 pc1 (by simp only [blk605.res, rv_simp])
-  have hc2 : blk605.res.cycles = 5 := rfl
+  have hs2 := symRun_sound blk648 codeAt_648 t1 pc1 (by simp only [blk648.res, rv_simp])
+  have hc2 : blk648.res.cycles = 5 := rfl
   rw [hc2] at hs2
-  set t2 := blk605.res.toState t1 with ht2
+  set t2 := blk648.res.toState t1 with ht2
   have f2 : Frame t1 t2 (fun x => x = 0x6A0) := by
     apply frame_toState; intro x hx hW
-    simp only [blk605.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk648.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r2 : RegsEq t1 t2 [.x3, .x10, .x11, .x12] := by
     intro r hr; rw [ht2, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have e2 := symRun_ecall blk605 codeAt_605 t1 (by simp only [blk605.res, rv_simp]) rfl
-  have x10 : t2.getReg .x10 = BitVec.ofNat 64 0x6A0 := by simp only [ht2, blk605.res, rv_simp]
-  have x11 : t2.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht2, blk605.res, rv_simp]
-  have x12 : t2.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht2, blk605.res, rv_simp]
+  have e2 := symRun_ecall blk648 codeAt_648 t1 (by simp only [blk648.res, rv_simp]) rfl
+  have x10 : t2.getReg .x10 = BitVec.ofNat 64 0x6A0 := by simp only [ht2, blk648.res, rv_simp]
+  have x11 : t2.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht2, blk648.res, rv_simp]
+  have x12 : t2.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht2, blk648.res, rv_simp]
   have x5 : t2.getReg .x5 = 0 := by rw [r2.get .x5, r1.get .x5, hm.x5]
-  have pc2 : t2.pc = pcOf 610 := by simp only [ht2, blk605.res, rv_simp]
+  have pc2 : t2.pc = pcOf 653 := by simp only [ht2, blk648.res, rv_simp]
   have t121 : t1.getReg .x21 = BitVec.ofNat 64 (2 * k) := by rw [r1.get .x21, t21]
   have m6A0 : t2.getMem (BitVec.ofNat 64 0x6A0) = twWord0 0 0 tau k := by
-    simp only [ht2, blk605.res, rv_simp, t121]
+    simp only [ht2, blk648.res, rv_simp, t121]
     bvsimp []
     rw [show 2 * k / 2 = k by omega, twWord0_top _ _ _ (by omega)]
     refine (word_of_halves _ 1 k (by rw [lo32_replace1, m1, hm.pb0]) (by rw [hi32_replace1])).trans ?_
@@ -477,7 +477,7 @@ theorem tchain_pair (S : List Byte) (hS : S.length = 32) (x : List Nat) (tau e :
     (fun _ _ h => h)
   set t3 := writeHash t2 a with ht3
   have f3 : Frame t2 t3 (fun x => 0x140 ≤ x ∧ x < 0x140 + 32) := frame_writeHash t2 a _ x12 (by norm_num)
-  have pc3 : t3.pc = pcOf 611 := by rw [ht3, writeHash_pc, pc2]; apply BitVec.eq_of_toNat_eq; simp
+  have pc3 : t3.pc = pcOf 654 := by rw [ht3, writeHash_pc, pc2]; apply BitVec.eq_of_toNat_eq; simp
   have g3 : ∀ q, t3.getReg q = t2.getReg q := fun q => by rw [ht3, writeHash_getReg]
   have ft3 : Frame t t3 (fun x => x = 0x6A0 ∨ (0x140 ≤ x ∧ x < 0x140 + 32)) := ft2.trans f3
   have rt3 : RegsEq tm t3 topRegs := ((tregs.trans r1).trans r2 |>.trans
@@ -495,18 +495,18 @@ theorem tchain_pair (S : List Byte) (hS : S.length = 32) (x : List Nat) (tau e :
   refine Sim.bind hA (fun r t4 h4 => ?_)
   obtain ⟨⟨-, hl14, hv14, hsl4, tpc4, t421, hm4, tregs4, tframe4⟩, x411, sec4⟩ := h4
   -- block 598: odd
-  have hs5 := symRun_sound blk603 codeAt_603 t4 (by rw [tpc4, if_pos (by omega)])
-    (by simp only [blk603.res, rv_simp])
-  have hc5 : blk603.res.cycles = 2 := rfl
+  have hs5 := symRun_sound blk646 codeAt_646 t4 (by rw [tpc4, if_pos (by omega)])
+    (by simp only [blk646.res, rv_simp])
+  have hc5 : blk646.res.cycles = 2 := rfl
   rw [hc5] at hs5
-  set t5 := blk603.res.toState t4 with ht5
+  set t5 := blk646.res.toState t4 with ht5
   have m5 : ∀ z, t5.getMem z = t4.getMem z := fun z => by
-    rw [ht5, Result.toState_getMem, show blk603.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht5, Result.toState_getMem, show blk646.res.st.mem = [] from rfl, memEval_nil]
   have r5 : RegsEq t4 t5 [.x3] := by
     intro r hr; rw [ht5, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have pc5 : t5.pc = pcOf 611 := by
-    simp only [ht5, blk603.res, rv_simp, t421]
+  have pc5 : t5.pc = pcOf 654 := by
+    simp only [ht5, blk646.res, rv_simp, t421]
     rw [and_one_ofNat _ (by omega), if_pos (by rw [ofNat_bne_ofNat]; simp)]
   have fr5 : Frame t4 t5 (fun _ => False) := fun z _ _ => m5 _
   have hB := tchain_B S x tau e tm (2 * k + 1) (by omega) (hiVal a) (by simp) r hl14 hv14 t5
@@ -537,38 +537,38 @@ theorem topChains_sim (S : List Byte) (hS : S.length = 32) (x : List Nat) (tau e
 
 /-- The entry block of the top layer (572 .. 580): PB / CB tweaks, `CB+32..48` cleared. -/
 theorem top_entry (S cache : List Byte) (x : List Nat) (tau e : Nat) (t : MachineState)
-    (hc : TopCtx S cache x tau e t) (tpc : t.pc = pcOf 594) :
+    (hc : TopCtx S cache x tau e t) (tpc : t.pc = pcOf 637) :
     ∃ u, Steps image t 9 9 u ∧ TChainInv S x tau e u 0 [] u ∧
       RegsEq t u [.x3, .x21] ∧
       Frame t u (fun a => a = 0x6A0 ∨ a = 0x6A8 ∨ a = 0xC0 ∨ a = 0xC8 ∨ a = 0xE0 ∨ a = 0xE8) := by
-  have hs := symRun_sound blk594 codeAt_594 t tpc (by simp only [blk594.res, rv_simp])
-  have hk : blk594.res.cycles = 9 := rfl
-  have hk' : blk594.res.steps = 9 := rfl
+  have hs := symRun_sound blk637 codeAt_637 t tpc (by simp only [blk637.res, rv_simp])
+  have hk : blk637.res.cycles = 9 := rfl
+  have hk' : blk637.res.steps = 9 := rfl
   rw [hk, hk'] at hs
-  set u := blk594.res.toState t with hu
+  set u := blk637.res.toState t with hu
   have f : Frame t u (fun a => a = 0x6A0 ∨ a = 0x6A8 ∨ a = 0xC0 ∨ a = 0xC8 ∨ a = 0xE0 ∨ a = 0xE8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk594.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk637.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r : RegsEq t u [.x3, .x21] := by
     intro r hr; rw [hu, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  refine ⟨u, hs, ⟨by norm_num, rfl, by simp, Slots.nil _ _, by rw [if_pos (by norm_num)]; simp only [hu, blk594.res, rv_simp],
-    by simp only [hu, blk594.res, rv_simp], ?_, RegsEq.refl _ _, Frame.refl _ _⟩, r, f⟩
+  refine ⟨u, hs, ⟨by norm_num, rfl, by simp, Slots.nil _ _, by rw [if_pos (by norm_num)]; simp only [hu, blk637.res, rv_simp],
+    by simp only [hu, blk637.res, rv_simp], ?_, RegsEq.refl _ _, Frame.refl _ _⟩, r, f⟩
   refine ⟨hc.htau, hc.he, hc.hx, by rw [r.get .x5, hc.x5], by rw [r.get .x18, hc.x18], fun i hi => ?_,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · rw [f.getMem (by omega) (by omega), hc.dig i hi]
-  · simp (config := { decide := true }) only [hu, blk594.res, rv_simp, ↓reduceIte]
-  · simp (config := { decide := true }) only [hu, blk594.res, rv_simp, hc.x31, ↓reduceIte]
+  · simp (config := { decide := true }) only [hu, blk637.res, rv_simp, ↓reduceIte]
+  · simp (config := { decide := true }) only [hu, blk637.res, rv_simp, hc.x31, ↓reduceIte]
   · rw [f.readWords _ _ (by norm_num) (by intro i hi; omega), hc.pbP]
   · rw [f.readWords _ _ (by norm_num) (by intro i hi; omega), hc.pbS]
-  · simp (config := { decide := true }) only [hu, blk594.res, rv_simp, ↓reduceIte, Nat.zero_div]
+  · simp (config := { decide := true }) only [hu, blk637.res, rv_simp, ↓reduceIte, Nat.zero_div]
     rw [lo32_replace0]; rfl
-  · simp (config := { decide := true }) only [hu, blk594.res, rv_simp, hc.x31, ↓reduceIte]
+  · simp (config := { decide := true }) only [hu, blk637.res, rv_simp, hc.x31, ↓reduceIte]
   · rw [show (4 : Nat) = 2 + 2 from rfl, readWords_ofNat_add,
       f.readWords _ _ (by norm_num) (by intro i hi; omega), hc.cbP, readWords_ofNat_two]
-    simp only [hu, blk594.res, rv_simp]; rfl
+    simp only [hu, blk637.res, rv_simp]; rfl
 
 /-! ## The path from the cache -/
 
@@ -590,8 +590,8 @@ def pathRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x15, .x16, .x17, .
 def TPathInv (S cache : List Byte) (e : Nat) (tp : MachineState) (l : Nat) (acc : List Val)
     (t : MachineState) : Prop :=
   l ≤ 11 ∧ acc.length = l ∧ (∀ v ∈ acc, v.length = 16) ∧ Slots t 0xBA8 acc ∧
-  t.pc = (if l < 11 then pcOf 646 else pcOf 675) ∧ t.getReg .x15 = BitVec.ofNat 64 l ∧
-  t.getReg .x19 = BitVec.ofNat 64 (0x44C0 + 16 * topN l) ∧
+  t.pc = (if l < 11 then pcOf 689 else pcOf 718) ∧ t.getReg .x15 = BitVec.ofNat 64 l ∧
+  t.getReg .x19 = BitVec.ofNat 64 (0x4B20 + 16 * topN l) ∧
   t.getReg .x17 = BitVec.ofNat 64 (16 * 2 ^ (11 - l)) ∧
   RegsEq tp t pathRegs ∧ Frame tp t tpathW
 
@@ -604,7 +604,7 @@ structure PathCtx (S cache : List Byte) (e : Nat) (t : MachineState) : Prop wher
   pbP : t.readWords (BitVec.ofNat 64 0x6B0) 2 = [0, 0]
   pbS : t.readWords (BitVec.ofNat 64 0x6C0) 4 = wordsOf S
   node : ∀ l j, l < 11 → j < 2 ^ (11 - l) →
-    t.readWords (BitVec.ofNat 64 (0x44A0 + cacheNodeOff l j)) 2 = wordsOf (cacheNode cache l j)
+    t.readWords (BitVec.ofNat 64 (0x4B00 + cacheNodeOff l j)) 2 = wordsOf (cacheNode cache l j)
   nodeLen : ∀ l j, l < 11 → j < 2 ^ (11 - l) → (cacheNode cache l j).length = 16
 
 theorem sib_lt (e l : Nat) (he : e < 2048) (hl : l < 11) : (e / 2 ^ l) ^^^ 1 < 2 ^ (11 - l) := by
@@ -626,27 +626,27 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
   have hp11 : 2 ^ (11 - l) ≤ 2048 := by
     calc 2 ^ (11 - l) ≤ 2 ^ 11 := Nat.pow_le_pow_right (by norm_num) (by omega)
       _ = 2048 := by norm_num
-  have tpc' : t.pc = pcOf 646 := by rw [tpc, if_pos hl]
+  have tpc' : t.pc = pcOf 689 := by rw [tpc, if_pos hl]
   have t13 : t.getReg .x13 = BitVec.ofNat 64 e := by rw [tregs.get .x13, pc.x13]
   -- block 610: mask tweak, HASH
-  have hs1 := symRun_sound blk646 codeAt_646 t tpc' (by simp only [blk646.res, rv_simp])
-  have hc1 : blk646.res.cycles = 11 := rfl
+  have hs1 := symRun_sound blk689 codeAt_689 t tpc' (by simp only [blk689.res, rv_simp])
+  have hc1 : blk689.res.cycles = 11 := rfl
   rw [hc1] at hs1
-  set t1 := blk646.res.toState t with ht1
+  set t1 := blk689.res.toState t with ht1
   have f1 : Frame t t1 (fun x => x = 0x6A0 ∨ x = 0x6A8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk646.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk689.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r1 : RegsEq t t1 [.x3, .x10, .x11, .x12, .x16] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have e1 := symRun_ecall blk646 codeAt_646 t (by simp only [blk646.res, rv_simp]) rfl
-  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0x6A0 := by simp only [ht1, blk646.res, rv_simp]
-  have x11 : t1.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht1, blk646.res, rv_simp]
-  have x12 : t1.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht1, blk646.res, rv_simp]
+  have e1 := symRun_ecall blk689 codeAt_689 t (by simp only [blk689.res, rv_simp]) rfl
+  have x10 : t1.getReg .x10 = BitVec.ofNat 64 0x6A0 := by simp only [ht1, blk689.res, rv_simp]
+  have x11 : t1.getReg .x11 = BitVec.ofNat 64 64 := by simp only [ht1, blk689.res, rv_simp]
+  have x12 : t1.getReg .x12 = BitVec.ofNat 64 0x140 := by simp only [ht1, blk689.res, rv_simp]
   have x5 : t1.getReg .x5 = 0 := by rw [r1.get .x5, tregs.get .x5, pc.x5]
-  have pc1 : t1.pc = pcOf 657 := by simp only [ht1, blk646.res, rv_simp]
+  have pc1 : t1.pc = pcOf 700 := by simp only [ht1, blk689.res, rv_simp]
   have hsbw : (t.getReg .x13 >>> ((BitVec.ofNat 64 l).toNat % 64) ^^^ 1#64) = BitVec.ofNat 64 sb := by
     rw [t13]
     apply BitVec.eq_of_toNat_eq
@@ -655,7 +655,7 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
     rw [Nat.mod_eq_of_lt (a := e) (by omega), Nat.mod_eq_of_lt (a := l) (by omega),
       Nat.mod_eq_of_lt (a := l) (by omega), Nat.mod_eq_of_lt (a := sb) (by omega)]
   have x16 : t1.getReg .x16 = BitVec.ofNat 64 sb := by
-    simp only [ht1, blk646.res, rv_simp, t15, hsbw]
+    simp only [ht1, blk689.res, rv_simp, t15, hsbw]
   have hq : hashInput t1 = pad64 (maskInput S l sb) := by
     obtain ⟨hn, hw⟩ := words_maskInput S hS l sb
     refine hashInput_eq_pad64 t1 _ 0 hn (by rw [x11]) (by norm_num) (by rw [x10]; decide) ?_
@@ -667,7 +667,7 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
       f1.readWords _ _ (by norm_num) (by intro i hi; omega),
       tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [tpathW]; omega),
       tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [tpathW]; omega), pc.pbP, pc.pbS]
-    simp (config := { decide := true }) only [ht1, blk646.res, rv_simp, t15, twWords_eq, twWord0,
+    simp (config := { decide := true }) only [ht1, blk689.res, rv_simp, t15, twWords_eq, twWord0,
       ↓reduceIte, hsbw]
     simp only [List.cons_append, List.nil_append, List.cons.injEq, and_true]
     bvsimp []
@@ -684,7 +684,7 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
   set mk := answerBytes 16 a with hmk
   set t2 := writeHash t1 a with ht2
   have f2 : Frame t1 t2 (fun x => 0x140 ≤ x ∧ x < 0x140 + 32) := frame_writeHash t1 a _ x12 (by norm_num)
-  have pc2 : t2.pc = pcOf 658 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
+  have pc2 : t2.pc = pcOf 701 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp
   have r2 : RegsEq t1 t2 [] := fun q _ => by rw [ht2, writeHash_getReg]
   have w0 : t2.getMem (BitVec.ofNat 64 0x140) = a.extractLsb' 0 64 := by
     rw [ht2, writeHash_getMem_ofNat t1 a 0x140 0x140 x12 (by norm_num) (by norm_num)]; simp
@@ -693,7 +693,7 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
   have ft2 : Frame t t2 (fun x => x = 0x6A0 ∨ x = 0x6A8 ∨ (0x140 ≤ x ∧ x < 0x160)) :=
     (f1.trans f2).mono (by intro x hx; omega)
   -- the node words (region untouched)
-  have nw : t2.readWords (BitVec.ofNat 64 (0x44A0 + cacheNodeOff l sb)) 2 = wordsOf (cacheNode cache l sb) := by
+  have nw : t2.readWords (BitVec.ofNat 64 (0x4B00 + cacheNodeOff l sb)) 2 = wordsOf (cacheNode cache l sb) := by
     rw [ft2.readWords _ _ (by unfold cacheNodeOff; omega) (by intro i hi; unfold cacheNodeOff; omega),
       tframe.readWords _ _ (by unfold cacheNodeOff; omega) (by intro i hi; simp only [tpathW]; unfold cacheNodeOff; omega),
       hnode]
@@ -707,17 +707,17 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
   have y15 : t2.getReg .x15 = BitVec.ofNat 64 l := by rw [r2.get .x15, r1.get .x15, t15]
   have y16 : t2.getReg .x16 = BitVec.ofNat 64 sb := by rw [r2.get .x16, x16]
   have y18 : t2.getReg .x18 = BitVec.ofNat 64 0x900 := by rw [r2.get .x18, r1.get .x18, tregs.get .x18, pc.x18]
-  have y19 : t2.getReg .x19 = BitVec.ofNat 64 (0x44C0 + 16 * topN l) := by rw [r2.get .x19, r1.get .x19, t19]
+  have y19 : t2.getReg .x19 = BitVec.ofNat 64 (0x4B20 + 16 * topN l) := by rw [r2.get .x19, r1.get .x19, t19]
   have y17 : t2.getReg .x17 = BitVec.ofNat 64 (16 * 2 ^ (11 - l)) := by rw [r2.get .x17, r1.get .x17, t17]
-  have hs3 := symRun_sound blk658 codeAt_658 t2 pc2 (by
-    simp only [blk658.res, rv_simp]; bvsimp [y15, y16, y18, y19, accessValid_ofNat, ne_eq, ofNat_eq_iff]
+  have hs3 := symRun_sound blk701 codeAt_701 t2 pc2 (by
+    simp only [blk701.res, rv_simp]; bvsimp [y15, y16, y18, y19, accessValid_ofNat, ne_eq, ofNat_eq_iff]
     omega)
-  have hc3 : blk658.res.cycles = 17 := rfl
+  have hc3 : blk701.res.cycles = 17 := rfl
   rw [hc3] at hs3
-  set t3 := blk658.res.toState t2 with ht3
+  set t3 := blk701.res.toState t2 with ht3
   have f3 : Frame t2 t3 (fun z => z = 0xBA8 + 16 * l ∨ z = 0xBA8 + 16 * l + 8) := by
     apply frame_toState; intro z hz hW
-    simp only [blk658.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk701.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq]
     bvsimp [y15, y18, ofNat_eq_iff]
     omega
@@ -734,21 +734,21 @@ theorem tpath_body (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : Ma
   · apply Slots.snoc
     · exact hsl.frame (ft2.trans f3) (by omega) (by intro k hk; constructor <;> omega)
     · rw [hl1, hxor, readWords_ofNat_two]
-      simp only [ht3, blk658.res, rv_simp]
+      simp only [ht3, blk701.res, rv_simp]
       bvsimp [y15, y16, y18, y19, ofNat_eq_iff]
       simp (disch := bvomega) only [if_pos, if_neg]
-      rw [show sb * 16 + (17600 + 16 * topN l) = 0x44A0 + cacheNodeOff l sb by unfold cacheNodeOff; ring,
-        show 0x44A0 + cacheNodeOff l sb + 8 = 0x44A0 + cacheNodeOff l sb + 8 from rfl, nw0, nw1,
+      rw [show sb * 16 + (19232 + 16 * topN l) = 0x4B00 + cacheNodeOff l sb by unfold cacheNodeOff; ring,
+        show 0x4B00 + cacheNodeOff l sb + 8 = 0x4B00 + cacheNodeOff l sb + 8 from rfl, nw0, nw1,
         show (320#64 : Word) = BitVec.ofNat 64 0x140 from rfl, show (328#64 : Word) = BitVec.ofNat 64 0x148 from rfl,
         w0, w1]
-  · simp only [ht3, blk658.res, rv_simp, y15, ofNat_add_ofNat, ofNat_bne_ofNat]
+  · simp only [ht3, blk701.res, rv_simp, y15, ofNat_add_ofNat, ofNat_bne_ofNat]
     by_cases h : l + 1 < 11
     · rw [if_pos h, if_pos (by rw [bne_cond _ _ (by omega) (by norm_num)]; omega)]
     · rw [if_neg h, if_neg (by rw [bne_cond _ _ (by omega) (by norm_num)]; omega)]
-  · simp only [ht3, blk658.res, rv_simp, y15, ofNat_add_ofNat]
-  · simp only [ht3, blk658.res, rv_simp, y19, y17, ofNat_add_ofNat]
+  · simp only [ht3, blk701.res, rv_simp, y15, ofNat_add_ofNat]
+  · simp only [ht3, blk701.res, rv_simp, y19, y17, ofNat_add_ofNat]
     rw [topN_succ l hl]; exact ofNat_congr (by ring_nf)
-  · simp only [ht3, blk658.res, rv_simp, y17]; bvsimp []
+  · simp only [ht3, blk701.res, rv_simp, y17]; bvsimp []
     exact ofNat_congr (by
       rw [show 11 - l = (11 - (l + 1)) + 1 by omega, Nat.pow_succ]; omega)
   · exact (((tregs.trans r1).trans r2).trans r3).mono (by decide)
@@ -768,11 +768,11 @@ theorem topPath_sim (S cache : List Byte) (hS : S.length = 32) (e : Nat) (tp : M
 def TopPost (t0 : MachineState) (r : List Val × List Val) (t : MachineState) : Prop :=
   r.1.length = 42 ∧ (∀ v ∈ r.1, v.length = 16) ∧ Slots t 0x908 r.1 ∧
   r.2.length = 11 ∧ (∀ v ∈ r.2, v.length = 16) ∧ Slots t 0xBA8 r.2 ∧
-  t.pc = pcOf 675 ∧ t.getReg .x5 = 0 ∧ Frame t0 t topW
+  t.pc = pcOf 718 ∧ t.getReg .x5 = 0 ∧ Frame t0 t topW
 
 /-- **The top layer** (chains up to `x_i`, path from the cache). -/
 theorem top_sim (S cache : List Byte) (hS : S.length = 32) (x : List Nat) (tau e : Nat) (t : MachineState)
-    (hc : TopCtx S cache x tau e t) (tpc : t.pc = pcOf 594) :
+    (hc : TopCtx S cache x tau e t) (tpc : t.pc = pcOf 637) :
     Sim image t (9 + (21 * 320 + (4 + 11 * 36)))
       ((List.range (nChains / 2)).foldlM (fun (acc : List Val) k => do
         let (s0, s1) ← prf2 (prfInput S 0 tau e k)
@@ -783,14 +783,14 @@ theorem top_sim (S cache : List Byte) (hS : S.length = 32) (x : List Nat) (tau e
   obtain ⟨u, hsu, hu0, ru, fu⟩ := top_entry S cache x tau e t hc tpc
   refine Sim.steps hsu (Sim.bind (topChains_sim S hS x tau e u hu0) (fun vals t1 h1 => ?_))
   obtain ⟨-, hl1, hv1, hsl1, pc1, -, hm1, r1, f1⟩ := h1
-  have pc1' : t1.pc = pcOf 642 := by rw [pc1]; rfl
+  have pc1' : t1.pc = pcOf 685 := by rw [pc1]; rfl
   -- block 606: path loop setup
-  have hs2 := symRun_sound blk642 codeAt_642 t1 pc1' (by simp only [blk642.res, rv_simp])
-  have hc2 : blk642.res.cycles = 4 := rfl
+  have hs2 := symRun_sound blk685 codeAt_685 t1 pc1' (by simp only [blk685.res, rv_simp])
+  have hc2 : blk685.res.cycles = 4 := rfl
   rw [hc2] at hs2
-  set t2 := blk642.res.toState t1 with ht2
+  set t2 := blk685.res.toState t1 with ht2
   have m2 : ∀ z, t2.getMem z = t1.getMem z := fun z => by
-    rw [ht2, Result.toState_getMem, show blk642.res.st.mem = [] from rfl, memEval_nil]
+    rw [ht2, Result.toState_getMem, show blk685.res.st.mem = [] from rfl, memEval_nil]
   have r2 : RegsEq t1 t2 [.x15, .x17, .x19] := by
     intro r hr; rw [ht2, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
@@ -807,10 +807,10 @@ theorem top_sim (S cache : List Byte) (hS : S.length = 32) (x : List Nat) (tau e
       rw [ft2.readWords _ _ (by omega) (by intro i hi; simp only [tchainW]; omega), hc.node l j hl hj]
   have h0 : TPathInv S cache e t2 0 [] t2 := by
     refine ⟨by norm_num, rfl, by simp, Slots.nil _ _,
-      by rw [if_pos (by norm_num)]; simp only [ht2, blk642.res, rv_simp],
-      by simp only [ht2, blk642.res, rv_simp], ?_, ?_, RegsEq.refl _ _, Frame.refl _ _⟩
-    · simp only [ht2, blk642.res, rv_simp]; rfl
-    · simp only [ht2, blk642.res, rv_simp]; rfl
+      by rw [if_pos (by norm_num)]; simp only [ht2, blk685.res, rv_simp],
+      by simp only [ht2, blk685.res, rv_simp], ?_, ?_, RegsEq.refl _ _, Frame.refl _ _⟩
+    · simp only [ht2, blk685.res, rv_simp]; rfl
+    · simp only [ht2, blk685.res, rv_simp]; rfl
   refine Sim.steps hs2 (Sim.bind (W₂ := 0) (topPath_sim S cache hS e t2 pc h0) (fun path t3 h3 => ?_))
   obtain ⟨-, hl3, hv3, hsl3, pc3, -, -, -, r3, f3⟩ := h3
   refine Sim.pure ⟨hl1, hv1, ?_, hl3, hv3, hsl3, by rw [pc3]; rfl, ?_, ?_⟩

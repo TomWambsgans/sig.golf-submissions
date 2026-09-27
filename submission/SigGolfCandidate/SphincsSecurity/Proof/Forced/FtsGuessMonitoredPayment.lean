@@ -14,7 +14,7 @@ variable (parameter : PublicParameter) (root : Digest)
   (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
   (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
   (selections : ReferenceFamily) (rows : CanonicalEncodingRows) (dummy : OtsReferenceWords) (slot : Nat)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
   (hauxiliary : ∀ seed : inputs → HashOutput,
     (⟨selections, rows, seed⟩ : ReferenceAuxiliary inputs) ∈ (referenceAuxiliarySample inputs).support)
 

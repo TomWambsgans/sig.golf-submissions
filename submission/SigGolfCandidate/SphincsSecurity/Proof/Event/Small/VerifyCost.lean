@@ -169,31 +169,101 @@ theorem evenBound_verifyLayers (parameter : PublicParameter) (index : Index) (si
           omega
       · exact evenBound_pure _ _
 
-theorem evenBound_ftsFold (parameter : PublicParameter) (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
-    (path : Fin ftsTreeHeight → Digest) (levels : Nat) (value : Digest) :
-    EvenBound (ftsFold parameter index tree leaf path levels value : OracleComp HashSpec Digest) levels := by
-  induction levels with
-  | zero => exact evenBound_pure _ _
-  | succ levels ih =>
-      rw [ftsFold]
-      refine evenBound_bind ih fun current => ?_
-      dsimp only
-      split_ifs <;> exact evenBound_tweakableHash _ _ _ (even_length_nodePayload _ _)
+theorem even_length_foldPayload (right : Bool) (sibling current : Digest) :
+    Even (foldPayload right sibling current).length := by
+  unfold foldPayload
+  cases right
+  · exact even_length_nodePayload _ _
+  · exact even_length_nodePayload _ _
 
-theorem evenBound_ftsRecover (parameter : PublicParameter) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest) :
-    EvenBound (ftsRecover parameter index leaves secrets paths : OracleComp HashSpec Digest)
-      (Fintype.card FtsTree * (1 + ftsTreeHeight) + 1) := by
+theorem evenBound_foldSegment (parameter : PublicParameter) (index : Index) (segment : Segment)
+    (remaining position : Nat) (current : Digest) (heap : Nat) :
+    EvenBound (foldSegment parameter index segment remaining position current heap :
+      OracleComp HashSpec (Digest × Nat)) remaining := by
+  induction remaining generalizing position current heap with
+  | zero => exact evenBound_pure _ _
+  | succ remaining ih =>
+      rw [foldSegment]
+      exact (evenBound_bind (evenBound_tweakableHash _ _ _ (even_length_foldPayload _ _ _))
+        fun parent => ih _ _ _).mono (by omega)
+
+/-- The hash queries of one segment: the pending hash and at most `14` folds. -/
+def segmentVerifyBound : Nat := 1 + ftsTreeHeight
+
+theorem evenBound_recoverSegments (parameter : PublicParameter) (index : Index)
+    (segments : Fin ftsSegments → Segment) (fuel : Nat) : ∀ (pending : PendingHash) (state : RecoverState),
+    EvenBound (recoverSegments parameter index segments fuel pending state :
+      OracleComp HashSpec (Option RecoverState)) (fuel * segmentVerifyBound) := by
+  induction fuel with
+  | zero => intro pending state; exact evenBound_pure _ _
+  | succ fuel ih =>
+      intro pending state
+      rw [recoverSegments]
+      split
+      · rename_i hsegment
+        dsimp only
+        split
+        · exact evenBound_pure _ _
+        · rename_i hfolds
+          split
+          · exact evenBound_pure _ _
+          cases pending <;>
+          · refine (evenBound_bind (budget := 1) ?_ fun start => evenBound_bind
+              ((evenBound_foldSegment parameter index _ _ 0 start state.heap).mono (Nat.le_of_not_lt hfolds))
+              fun folded => ?_ : EvenBound _ (1 + (ftsTreeHeight + fuel * segmentVerifyBound))).mono ?_
+            · first
+                | exact evenBound_tweakableHash _ _ _ (even_length_bytesLE 16 _ (by decide))
+                | exact evenBound_tweakableHash _ _ _ (even_length_nodePayload _ _)
+            · split <;> (try split) <;> (try split) <;> first | exact evenBound_pure _ _ | exact ih _ _
+            · rw [Nat.succ_mul, segmentVerifyBound]
+              omega
+      · exact evenBound_pure _ _
+
+/-- The hash queries of one opened leaf: at most `29` segments. -/
+def leafVerifyBound : Nat := ftsSegments * segmentVerifyBound
+
+theorem evenBound_recoverLeaves (parameter : PublicParameter) (index : Index) (values : SlotCode → Nat)
+    (fts : FtsSignature) (remaining position previous : Nat) (state : RecoverState) :
+    EvenBound (recoverLeaves parameter index values fts remaining position previous state :
+      OracleComp HashSpec (Option RecoverState)) (remaining * leafVerifyBound) := by
+  induction remaining generalizing position previous state with
+  | zero => exact evenBound_pure _ _
+  | succ remaining ih =>
+      rw [recoverLeaves]
+      split
+      · dsimp only
+        split
+        · exact evenBound_pure _ _
+        · split
+          · exact evenBound_pure _ _
+          · refine (evenBound_bind (evenBound_recoverSegments _ _ _ _ _ _) fun result => ?_ :
+              EvenBound _ (ftsSegments * segmentVerifyBound + remaining * leafVerifyBound)).mono ?_
+            · cases result with
+              | none => exact evenBound_pure _ _
+              | some state' => exact ih _ _ _
+            · rw [Nat.succ_mul, leafVerifyBound]
+              omega
+      · exact evenBound_pure _ _
+
+/-- The hash queries of the PORS stack machine: `15` leaves of at most `29` segments each (a crude bound;
+the segments of all leaves together are at most `29`). -/
+def ftsVerifyBound : Nat := ftsOpenings * leafVerifyBound
+
+theorem evenBound_ftsRecover (parameter : PublicParameter) (index : Index) (values : SlotCode → Nat)
+    (fts : FtsSignature) :
+    EvenBound (ftsRecover parameter index values fts : OracleComp HashSpec (Option Digest)) ftsVerifyBound := by
   rw [ftsRecover]
-  refine evenBound_bind ?_ fun roots => evenBound_tweakableHash _ _ _ (even_length_flatMap_bytes _)
-  rw [Fintype.card_fin]
-  refine evenBound_sequenceFin _ _ fun tree => ?_
-  exact evenBound_bind (evenBound_tweakableHash _ _ _ (even_length_bytesLE 16 _ (by decide)))
-    fun value => evenBound_ftsFold _ _ _ _ _ _ _
+  refine (evenBound_bind (evenBound_recoverLeaves _ _ _ _ _ _ _ _) fun result => ?_ :
+    EvenBound _ (ftsOpenings * leafVerifyBound + 0)).mono (by rw [ftsVerifyBound]; omega)
+  cases result with
+  | none => exact evenBound_pure _ _
+  | some state =>
+      dsimp only
+      split <;> exact evenBound_pure _ _
 
 /-- The hash queries of one verification. -/
 def verifyHashBound : Nat :=
-  1 + (Fintype.card FtsTree * (1 + ftsTreeHeight) + 1 + numLayers * layerVerifyBound)
+  1 + (ftsVerifyBound + numLayers * layerVerifyBound)
 
 theorem evenBound_verify (publicKey : PublicKey) (message : Message) (signature : Signature) :
     EvenBound (verify publicKey message signature : OracleComp HashSpec Bool) verifyHashBound := by
@@ -209,23 +279,18 @@ theorem evenBound_verify (publicKey : PublicKey) (message : Message) (signature 
       refine ⟨⟨?_, by decide⟩, fun _ => trivial⟩
       simp only [messageDigestPayload, List.length_append, bytesLE, List.length_ofFn]
       decide
-    have hrest : ∀ digest : MessageDigest, EvenBound (if ¬ Admissible digest then (pure false : OracleComp HashSpec Bool) else do
-        let ftsPublicKey ← ftsRecover publicKey.parameter (digestIndex digest) (digestLeaves digest)
-          signature.ftsSecret signature.ftsPath
-        let some root ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers ftsPublicKey | return false
-        return decide (root = publicKey.root))
-        (Fintype.card FtsTree * (1 + ftsTreeHeight) + 1 + (numLayers * layerVerifyBound + 0)) := by
-      intro digest
-      split
-      · exact evenBound_pure _ _
-      · refine evenBound_bind (evenBound_ftsRecover _ _ _ _ _) fun key => ?_
-        refine evenBound_bind (evenBound_verifyLayers _ _ _ _ _) fun root => ?_
+    refine evenBound_bind hdigest fun digest => ?_
+    refine evenBound_bind (evenBound_ftsRecover _ _ _ _) fun key => ?_
+    cases key with
+    | none => exact (evenBound_pure _ _)
+    | some key =>
+        refine (evenBound_bind (evenBound_verifyLayers _ _ _ _ _) fun root => ?_ :
+          EvenBound _ (numLayers * layerVerifyBound + 0))
         cases root <;> exact evenBound_pure _ _
-    exact evenBound_bind hdigest hrest
   · exact evenBound_pure _ _
 
-theorem verifyHashBound_eq : verifyHashBound = 1691 := by
-  simp only [verifyHashBound, layerVerifyBound, Fintype.card_fin]
+theorem verifyHashBound_eq : verifyHashBound = 8061 := by
+  simp only [verifyHashBound, ftsVerifyBound, leafVerifyBound, segmentVerifyBound, layerVerifyBound]
   decide
 
 end SphincsSecurity.Concrete.EventSmall

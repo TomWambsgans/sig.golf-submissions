@@ -190,6 +190,6 @@ theorem referenceEncodingAuxiliary_select (encoding : ReferenceEncodingAuxiliary
 
 variable (key : SecretKey) (adversary : Adversary) (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
   (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-  (q : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+  (q : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
 
 end SphincsSecurity.Concrete.RetainedResidual

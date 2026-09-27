@@ -113,11 +113,11 @@ theorem fixed_completedRun_tracking (environment : Environment Auxiliary Coordin
 
 theorem Tracking.uncovered_guess {key : SecretKey} {f : QueryImpl HashSpec Id} {before after : State Coordinate Digest Memory}
     {log : QueryLog SigningSpec} {trace : Trace} (tracking : Tracking key f before after log trace)
-    (target : FewTimeView) (tree : FtsTree) (hinitial : (target.1, tree, target.2 tree) ∉ before.retired)
+    (target : FewTimeView) (tree : IndexGroup) (hinitial : (target.1, porsTree, target.2 tree) ∉ before.retired)
     (hcovered : ¬ReferenceFtsCoverage.CoveredByLog key f log target tree)
-    (hquery : FtsVerifierWitness.TrueSecretQuery f key target.1 tree (target.2 tree) trace) :
-    (target.1, tree, target.2 tree) ∈ after.guesses := by
-  rcases tracking.origin (target.1, tree, target.2 tree) (tracking.queried _ hquery) with h | h | h
+    (hquery : FtsVerifierWitness.TrueSecretQuery f key target.1 (target.2 tree) trace) :
+    (target.1, porsTree, target.2 tree) ∈ after.guesses := by
+  rcases tracking.origin (target.1, porsTree, target.2 tree) (tracking.queried _ hquery) with h | h | h
   · exact (hinitial h).elim
   · exact h
   · exact (hcovered h).elim
@@ -126,11 +126,12 @@ theorem Tracking.two_guesses {key : SecretKey} {f : QueryImpl HashSpec Id} {befo
     {log : QueryLog SigningSpec} {trace : Trace} (tracking : Tracking key f before after log trace)
     (hinitial : before.retired = ∅) (forgery : Forgery) (h : ReferenceFtsCoverage.TwoGuesses key f log trace forgery) :
     2 ≤ after.guesses.card := by
-  obtain ⟨first, second, hne, hf, hqf, hs, hqs⟩ := h
+  obtain ⟨hadmissible, first, second, hne, hf, hqf, hs, hqs⟩ := h
   let target := RetainedResidual.signingView key f forgery.message forgery.signature
   have hf := tracking.uncovered_guess target first (by rw [hinitial]; exact Finset.notMem_empty _) hf hqf
   have hs := tracking.uncovered_guess target second (by rw [hinitial]; exact Finset.notMem_empty _) hs hqs
-  exact Finset.one_lt_card.mpr ⟨_, hf, _, hs, fun he => hne (congrArg (fun c : Coordinate => c.2.1) he)⟩
+  exact Finset.one_lt_card.mpr ⟨_, hf, _, hs, fun he =>
+    FtsVerifierWitness.slot_leaf_ne hadmissible hne (congrArg (fun c : Coordinate => c.2.2) he)⟩
 
 theorem Tracking.near_guess {key : SecretKey} {f : QueryImpl HashSpec Id} {before after : State Coordinate Digest Memory}
     {log : QueryLog SigningSpec} {trace : Trace} (tracking : Tracking key f before after log trace)
@@ -139,7 +140,7 @@ theorem Tracking.near_guess {key : SecretKey} {f : QueryImpl HashSpec Id} {befor
     let target := RetainedResidual.signingView key f forgery.message forgery.signature
     ∃ omitted, TargetCertificateAt key (Finset.univ.erase omitted)
       (ReferenceFtsCoverage.transcriptCache f boundary trace, log) (RetainedResidual.signingInput key forgery.message forgery.signature) ∧
-      (target.1, omitted, target.2 omitted) ∈ after.guesses := by
+      (target.1, porsTree, target.2 omitted) ∈ after.guesses := by
   obtain ⟨_, omitted, hcertificate, hcovered, hquery⟩ := h
   exact ⟨omitted, hcertificate, tracking.uncovered_guess _ omitted
     (by rw [hinitial]; exact Finset.notMem_empty _) hcovered hquery⟩

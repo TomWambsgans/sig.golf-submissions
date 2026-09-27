@@ -77,7 +77,7 @@ theorem originalProposalRecord_slots_le (key : SecretKey)
       · exact le_rfl
 
 theorem certificateProposalImpl_world_run (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (state : List Index × CertificateMonitorState) :
     (certificateProposalImpl key budget required stopAfter (.inl input)).run state =
       (originalProposalRecord key (.inl input) state.2.1).map (fun record =>
@@ -87,7 +87,7 @@ theorem certificateProposalImpl_world_run (key : SecretKey) (budget : Nat)
     StateT.run_mk, Bool.false_eq_true, if_false]
 
 theorem certificateProposalImpl_sign_run (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message)
     (state : List Index × CertificateMonitorState) :
     (certificateProposalImpl key budget required stopAfter (.inr message)).run state =
       if CertificateMonitorActive key budget (.inr message) state.2 then
@@ -128,7 +128,7 @@ theorem certificateProposalInvariant_initial (key : SecretKey) (total spent : Na
     exact bot_le
 
 theorem certificateProposalInvariant_advance (key : SecretKey) (budget total : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState)
     (suffix : List Index) (length : Nat) (record : ProposalExecutionRecord input)
     (hinv : CertificateProposalInvariant key total state)
@@ -178,7 +178,7 @@ theorem certificateProposalInvariant_advance (key : SecretKey) (budget total : N
   · exact hbefore.total_le
 
 theorem certificateProposalImpl_invariant (key : SecretKey) (budget total : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState)
     (hinv : CertificateProposalInvariant key total state)
     (result : (OracleWorld + SigningSpec).Range input × (List Index × CertificateMonitorState))
@@ -234,7 +234,7 @@ theorem certificateProposalImpl_invariant (key : SecretKey) (budget total : Nat)
         simp only [originalProposalAdvance, certificateMonitorUpdate, if_neg hactive, Bool.true_eq_false] at hpost
 
 theorem certificateMonitorCharge_le_terminalPrice_of_invariant (key : SecretKey) (budget total : Nat)
-    (required : Finset FtsTree) (input : (OracleWorld + SigningSpec).Domain)
+    (required : Finset IndexGroup) (input : (OracleWorld + SigningSpec).Domain)
     (state : List Index × CertificateMonitorState) (hbudget : budget ≤ 2 ^ 127)
     (hinv : CertificateProposalInvariant key total state) :
     certificateMonitorCharge key budget required input state.2 ≤

@@ -135,8 +135,8 @@ theorem targetIndexEnvelope_power_query_shift_le {rate : ENNReal} (hrate : rate 
 
 theorem targetShapeEnvelope_sum_indexPower {α : Type} [Fintype α]
     (uniform reuse arrival : ENNReal) (queries signatures : Nat) (cache signings : α → ENNReal)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
-    targetShapeEnvelope uniform reuse arrival queries signatures
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
+    targetShapeEnvelope (constRate uniform) reuse (constRate arrival) queries signatures
       (fun G R => ∑ i, indexPowerVector (cache i) (signings i) G.card R.card) groups remaining =
       ∑ i, targetIndexEnvelope uniform reuse arrival queries signatures
         (indexPowerVector (cache i) (signings i)) groups.card remaining.card := by
@@ -152,25 +152,21 @@ theorem targetShapeEnvelope_sum_indexPower {α : Type} [Fintype α]
 
 theorem reuseRawEnvelope_query_shift_le (key : SecretKey) (reuse : ENNReal)
     (queries signatures bound : Nat) (state : CoverLogState)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree)
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup)
     (hvalid : TargetShapeValid groups remaining) (hdegree : groups.card + remaining.card ≤ bound) :
     reuseRawEnvelope key reuse queries signatures state groups remaining ≤
       ∑ index : Index, (targetIndexSigning (Fintype.card Index : ENNReal)⁻¹ reuse)^[signatures]
         (indexPowerVector
           (cachedIndexMultiplicity key.parameter state.1 index +
-            (queries : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + bound)
+            (queries : ENNReal) * cachedIndexRate + bound)
           ((signingSlotsAtIndex (observedOptionalSigningViews
             (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2) index).card : ENNReal))
         groups.card remaining.card := by
-  have harrival : (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) =
-      ((2 ^ 44 : Nat) : ENNReal)⁻¹ := by
-    rw [← ENNReal.mul_inv (Or.inr (by finiteness)) (Or.inl (by finiteness))]
-    norm_num [ftsTreeHeight, Index, totalHeight]
-  have hrate : (((2 ^ 44 : Nat) : ENNReal)⁻¹) ≤ 1 := by norm_num
+  have hrate : cachedIndexRate ≤ 1 := cachedIndexRate_le_one
   unfold reuseRawEnvelope observedRawIndexShapeVector liftTargetIndexVector targetIndexMoments
   change targetShapeEnvelope _ _ _ queries signatures
     (fun G R => ∑ index : Index, indexPowerVector _ _ G.card R.card) groups remaining ≤ _
-  rw [targetShapeEnvelope_sum_indexPower _ _ _ _ _ _ _ groups remaining hvalid, harrival]
+  rw [targetShapeEnvelope_sum_indexPower _ _ _ _ _ _ _ groups remaining hvalid]
   apply Finset.sum_le_sum
   intro index _
   exact targetIndexEnvelope_power_query_shift_le hrate _ _ _ _ queries signatures bound _ _ hdegree

@@ -4,7 +4,7 @@ namespace SphincsSecurity.Concrete
 open _root_.OracleComp OracleSpec ENNReal
 
 private theorem largeRangeClosing (x : ℝ) (hx : 3 / 16384 ≤ x) :
-    2 * x - x ^ 2 + (11 / 65536) * x + (x / 2 ^ 25 + 1 / 2 ^ 700) ≤ 2 * x := by
+    2 * x - x ^ 2 + (1 / 65536) * x + (x / 2 ^ 25 + 1 / 2 ^ 700) ≤ 2 * x := by
   have hn : 0 ≤ x := le_trans (by norm_num) hx
   have hs := mul_nonneg (sub_nonneg.mpr hx) hn
   have he : (1 : ℝ) / 2 ^ 700 ≤ 1 / 1099511627776 := by
@@ -41,7 +41,7 @@ theorem native_bound_le_security127 (q : Nat) (hlarge : budgetSplit ≤ q) (hsma
   apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
   repeat rw [ENNReal.toReal_add (by finiteness) (by finiteness)]
   rw [ENNReal.toReal_ofReal hp]
-  simp only [ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat]
+  simp only [ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat, ENNReal.toReal_one]
   convert largeRangeClosing x hx using 1 <;> generalize (2 : ℝ) ^ 700 = tailDenominator <;> dsimp only [x, digestBits] <;> ring
 
 theorem security127_of_large_budget (q : Nat) (hlarge : budgetSplit ≤ q) (adversary : Adversary)

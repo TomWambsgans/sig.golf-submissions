@@ -12,9 +12,9 @@ set_option backward.isDefEq.respectTransparency false
 noncomputable def transcriptCache (f : QueryImpl HashSpec Id) (boundary : SigningBoundaryTrace) (trace : Trace) : QueryCache HashSpec :=
   recordedCache f (FreeMonoid.ofList boundary.messageCalls * trace)
 
-def CoveredByLog (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec) (target : FewTimeView) (tree : FtsTree) : Prop :=
+def CoveredByLog (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec) (target : FewTimeView) (tree : IndexGroup) : Prop :=
   ∃ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log ∧
-    (signingView key f message signature).1 = target.1 ∧ (signingView key f message signature).2 tree = target.2 tree
+    (signingView key f message signature).1 = target.1 ∧ target.2 tree ∈ Set.range (signingView key f message signature).2
 
 theorem cache_trace (f : QueryImpl HashSpec Id) (boundary : SigningBoundaryTrace) (trace : Trace) (input : HashInput)
     (h : (input, f input) ∈ trace.toList) : transcriptCache f boundary trace input = some (f input) := by
@@ -33,9 +33,9 @@ theorem covered_witness (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Que
       ReferenceSigningWitness.SignatureOrigin key f message signature boundary)
     (hnew : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log →
       messageDigestPayload key.root message signature.randomness ≠ messageDigestPayload key.root forgery.message forgery.signature.randomness)
-    (target : FewTimeView) (tree : FtsTree) (hcovered : CoveredByLog key f log target tree) :
+    (target : FewTimeView) (tree : IndexGroup) (hcovered : CoveredByLog key f log target tree) :
     ∃ slot view, fixedSigningViews key.parameter (transcriptCache f boundary trace) key.root log
-      (signingInput key forgery.message forgery.signature) slot = some view ∧ view.1 = target.1 ∧ view.2 tree = target.2 tree := by
+      (signingInput key forgery.message forgery.signature) slot = some view ∧ view.1 = target.1 ∧ target.2 tree ∈ Set.range view.2 := by
   obtain ⟨message, signature, hentry, hi, hl⟩ := hcovered
   obtain ⟨slot, hslot⟩ := List.mem_iff_get.mp hentry
   refine ⟨slot, signingView key f message signature, ?_, hi, hl⟩
@@ -48,7 +48,7 @@ theorem covered_witness (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Que
   rfl
 
 theorem certificate_of_covered (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
-    (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) (required : Finset FtsTree)
+    (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) (required : Finset IndexGroup)
     (horigin : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log →
       ReferenceSigningWitness.SignatureOrigin key f message signature boundary)
     (hnew : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log →
@@ -70,15 +70,15 @@ theorem certificate_of_covered (key : SecretKey) (f : QueryImpl HashSpec Id) (lo
 def NearGuess (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
     (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) : Prop :=
   let target := signingView key f forgery.message forgery.signature
-  CountersInRange forgery.signature ∧ ∃ omitted : FtsTree,
+  CountersInRange forgery.signature ∧ ∃ omitted : IndexGroup,
     TargetCertificateAt key (Finset.univ.erase omitted) (transcriptCache f boundary trace, log) (signingInput key forgery.message forgery.signature) ∧
-    ¬CoveredByLog key f log target omitted ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 omitted (target.2 omitted) trace
+    ¬CoveredByLog key f log target omitted ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 (target.2 omitted) trace
 
 def TwoGuesses (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec) (trace : Trace) (forgery : Forgery) : Prop :=
   let target := signingView key f forgery.message forgery.signature
-  ∃ first second : FtsTree, first ≠ second ∧
-    ¬CoveredByLog key f log target first ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 first (target.2 first) trace ∧
-    ¬CoveredByLog key f log target second ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 second (target.2 second) trace
+  AdmissibleLeaves target.2 ∧ ∃ first second : IndexGroup, first ≠ second ∧
+    ¬CoveredByLog key f log target first ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 (target.2 first) trace ∧
+    ¬CoveredByLog key f log target second ∧ FtsVerifierWitness.TrueSecretQuery f key target.1 (target.2 second) trace
 
 def Outcome (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec)
     (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) : Prop :=
@@ -96,7 +96,7 @@ theorem classification (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Quer
     (hrun : ContainsRun f trace (messageDigest key.parameter key.root forgery.message forgery.signature.randomness))
     (hadmissible : Admissible (truncateMessageDigest (f (signingInput key forgery.message forgery.signature))))
     (hqueries : let target := signingView key f forgery.message forgery.signature
-      ∀ tree, FtsVerifierWitness.TrueSecretQuery f key target.1 tree (target.2 tree) trace) : Outcome key f log boundary trace forgery := by
+      ∀ tree, FtsVerifierWitness.TrueSecretQuery f key target.1 (target.2 tree) trace) : Outcome key f log boundary trace forgery := by
   by_cases hall : ∀ tree, CoveredByLog key f log (signingView key f forgery.message forgery.signature) tree
   · exact Or.inl ⟨hcounters, certificate_of_covered key f log boundary trace forgery Finset.univ horigin hnew hrun hadmissible (fun tree _ => hall tree)⟩
   · push Not at hall
@@ -107,7 +107,7 @@ theorem classification (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Quer
         (fun tree ht => hrest tree (Finset.mem_erase.mp ht).1)
     · push Not at hrest
       obtain ⟨second, hne, hsecond⟩ := hrest
-      exact Or.inr (Or.inr ⟨first, second, hne.symm, hfirst, hqueries first, hsecond, hqueries second⟩)
+      exact Or.inr (Or.inr ⟨hadmissible, first, second, hne.symm, hfirst, hqueries first, hsecond, hqueries second⟩)
 
 /-! The few-time events do not read the key's top-tree table. -/
 

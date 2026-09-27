@@ -130,7 +130,7 @@ def markerInput (parameter : PublicParameter) (count : Nat) : HashInput :=
 
 /-- A forgery returned when the cap fires. -/
 def dummyForgery : Forgery :=
-  ⟨0, ⟨0, fun _ => 0, fun _ _ => 0, fun _ => ⟨0, fun _ => 0, fun _ => 0⟩⟩⟩
+  ⟨0, ⟨0, ⟨fun _ => 0, fun _ => 0, fun _ => default⟩, fun _ => ⟨0, fun _ => 0, fun _ => 0⟩⟩⟩
 
 /-- The capped adversary for total budget `budget`: key generation takes `keygenHashCost`, the marker
 one call, and the cap covers the rest. -/

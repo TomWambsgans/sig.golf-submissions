@@ -18,19 +18,15 @@ theorem initialCertificateMonitor_ready (key : SecretKey) (budget spent : Nat)
     (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input → cache input = none) :
     CertificateMonitorReady key budget (cache, initialCertificateMonitor spent stopped) := by
   have hfinite := Finite.of_enncard_le hcache
-  have hclean : ¬ CertificateCacheExceptional key cache := by
-    intro hbad
-    have hzero := certificateCacheExceptionPotential_initial_le key 0 (by omega) cache hnone
-    have hone := certificateCacheExceptionPotential_bad key 0 cache hfinite hbad
-    simp only [Nat.cast_zero, ENNReal.zero_div, add_zero] at hzero
-    exact (not_le_of_gt (by norm_num : (0 : ENNReal) < 1)) (hone.trans hzero)
+  have hclean : ¬ CertificateCacheExceptional key cache :=
+    not_certificateCacheExceptional_of_no_message key cache hnone
   refine ⟨?_, proposalCacheBound_of_no_cache_exception key cache hfinite spent
     (hspent.trans hbudget) hcache hclean, hspent⟩
   intro entry hentry
   simp only [initialCertificateMonitor, List.not_mem_nil] at hentry
 
 theorem certificateCacheProposal_withSigningLog_clean {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 127)
+    (required : Finset IndexGroup) (hbudget : budget ≤ 2 ^ 127)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (q : Nat)
     (state : List Index × CertificateCacheMonitorState)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key) computation) state.2.1 q)
@@ -49,7 +45,7 @@ theorem certificateCacheProposal_withSigningLog_clean {α : Type} (key : SecretK
     state.2 hbound hready halive hroom _ hm hvalid hhit hprefix
 
 theorem certificateCacheProposal_rest_clean (adversary : Adversary) (publicKey : PublicKey)
-    (key : SecretKey) (budget q : Nat) (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 127)
+    (key : SecretKey) (budget q : Nat) (required : Finset IndexGroup) (hbudget : budget ≤ 2 ^ 127)
     (state : List Index × CertificateCacheMonitorState)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key)
       (retainedGameRestComputation adversary publicKey)) state.2.1 q)

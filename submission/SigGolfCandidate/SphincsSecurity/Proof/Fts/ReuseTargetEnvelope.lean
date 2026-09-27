@@ -24,20 +24,19 @@ open _root_.OracleComp OracleSpec ENNReal
 
 noncomputable def reuseTargetEnvelope (key : SecretKey) (reuse : ENNReal) (budget : Nat) (payload : HashInput) (target : FewTimeView)
     (signatures : Nat) (state : CoverLogState) : TargetShapeVector :=
-  targetShapeEnvelope (Fintype.card Index : ENNReal)⁻¹ reuse
-    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) budget signatures
+  targetShapeEnvelope (signerRate target) reuse (arrivalRate target) budget signatures
     (observedTargetShapeVector key payload target state)
 
 theorem reuseTargetEnvelope_budget_mono (key : SecretKey) (reuse : ENNReal) (payload : HashInput) (target : FewTimeView)
     (signatures : Nat) (state : CoverLogState) {smaller larger : Nat} (hbudget : smaller ≤ larger)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     reuseTargetEnvelope key reuse smaller payload target signatures state groups remaining ≤
       reuseTargetEnvelope key reuse larger payload target signatures state groups remaining :=
   targetShapeEnvelope_queries_mono _ _ _ signatures _ hbudget groups remaining hvalid
 
 theorem expected_randomOracle_reuseTarget_le (key : SecretKey) (reuse : ENNReal) (budget : Nat) (payload : HashInput) (target : FewTimeView)
     (signatures : Nat) (state : CoverLogState) (input : HashInput) (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (randomOracle input).run state.1] *
       reuseTargetEnvelope key reuse budget payload target signatures (result.2, state.2) groups remaining) ≤
       reuseTargetEnvelope key reuse (budget + 1) payload target signatures state groups remaining := by
@@ -54,7 +53,7 @@ theorem expected_randomOracle_reuseTarget_le (key : SecretKey) (reuse : ENNReal)
 
 theorem expected_logTraced_world_reuseTarget_le (key : SecretKey) (reuse : ENNReal) (budget : Nat) (payload : HashInput) (target : FewTimeView)
     (signatures : Nat) (state : CoverLogState) (input : OracleWorld.Domain) (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (logTracedMappedAdversaryImpl key (.inl input)).run state] *
       reuseTargetEnvelope key reuse budget payload target signatures result.2 groups remaining) ≤
       reuseTargetEnvelope key reuse (budget + signingExecutionHashCost (.inl input)) payload target signatures state groups remaining := by
@@ -78,7 +77,7 @@ theorem expected_logTraced_sign_reuseTarget_le (key : SecretKey) (reuse : ENNRea
     (signatures : Nat) (state : CoverLogState)
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2) (message : Message)
     (hreuse : exactDigestReuseWeight key message state.1 ≤ reuse)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (logTracedMappedAdversaryImpl key (.inr message)).run state] *
       reuseTargetEnvelope key reuse budget payload target signatures result.2 groups remaining) ≤
       reuseTargetEnvelope key reuse budget payload target (signatures + 1) state groups remaining := by

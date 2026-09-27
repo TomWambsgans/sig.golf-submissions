@@ -23,8 +23,7 @@ attribute [local instance] Classical.propDecidable
 
 noncomputable def reuseRawEnvelope (key : SecretKey) (reuse : ENNReal) (queries signatures : Nat)
     (state : CoverLogState) : TargetShapeVector :=
-  targetShapeEnvelope (Fintype.card Index : ENNReal)⁻¹ reuse
-    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) queries signatures
+  targetShapeEnvelope (constRate (Fintype.card Index : ENNReal)⁻¹) reuse (constRate cachedIndexRate) queries signatures
     (observedRawIndexShapeVector key state)
 
 end SphincsSecurity.Concrete

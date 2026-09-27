@@ -3,19 +3,19 @@ import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeWitness
 /-!
 # Probability of a fixed few-time coverage pattern
 
-The relevant part of an admissible digest is its 26-bit index and its fourteen opened 10-bit leaf
-coordinates.  For a fixed assignment of trees to distinct signing results, the successful tuples
-are in bijection with one free index and one free leaf vector per signing result.
+The relevant part of a digest is its 34-bit index and its fifteen 14-bit leaf indices (the digest
+slots). A signing on the digest opens the leaves in its slots; a slot `i` of a target is covered by a
+view on the same index whose opened leaf set contains the target's leaf `t_i`.
 -/
 
 namespace SphincsSecurity.Concrete
 
 open OracleComp OracleSpec ENNReal
 
-abbrev FewTimeView := Index × (FtsTree → FtsLeaf)
+abbrev FewTimeView := Index × (IndexGroup → FtsLeaf)
 
 theorem fewTimeView_card : Fintype.card FewTimeView =
-    2 ^ (totalHeight + ftsTreeHeight * (ftsTrees - 1)) := by
+    2 ^ (totalHeight + ftsTreeHeight * ftsOpenings) := by
   simp only [Fintype.card_prod, Fintype.card_fin, Fintype.card_fun, ← pow_mul, ← pow_add]
 
 noncomputable local instance instSampleableTypeOfFintypeOfNonempty_sphincsSecurity {R : Type} [Fintype R] [Nonempty R] : SampleableType R :=

@@ -8,7 +8,7 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 theorem simulateQ_certificateProposalImpl_complete {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (total : Nat)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (total : Nat)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : List Index × CertificateMonitorState) :
     ((simulateQ (certificateProposalImpl key budget required stopAfter) computation).run state).bind
         (fun result => completeProposalWord (PMF.uniformOfFintype Index) total result.2.1) =
@@ -17,7 +17,7 @@ theorem simulateQ_certificateProposalImpl_complete {α : Type} (key : SecretKey)
     (certificateMonitorUpdate key budget required stopAfter) total computation state
 
 theorem expected_certificateProposalImpl_terminalPotential (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (total : Nat) (payoff : List Index → ENNReal)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (total : Nat) (payoff : List Index → ENNReal)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateProposalImpl key budget required stopAfter input).run state] *
         terminalProposalPotential (PMF.uniformOfFintype Index) total payoff result.2.1) =
@@ -25,7 +25,7 @@ theorem expected_certificateProposalImpl_terminalPotential (key : SecretKey) (bu
   expected_originalProposalImpl_terminalPotential key (fun current : CertificateMonitorState => current.2.spent) (certificateMonitorEnabled key budget)
     (certificateMonitorUpdate key budget required stopAfter) total payoff input state
 
-theorem certificateGame_complete (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateGame_complete (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
     (certificateGame adversary budget required stopAfter stopped).bind
         (fun result => completeProposalWord (PMF.uniformOfFintype Index) total result.2.1) =
@@ -34,13 +34,13 @@ theorem certificateGame_complete (adversary : Adversary) (budget : Nat) (require
   simp_rw [simulateQ_certificateProposalImpl_complete, completeProposalWord_nil]
   exact PMF.bind_const _ _
 
-noncomputable def certificateTerminalGame (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+noncomputable def certificateTerminalGame (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
     PMF (CertificateGameResult × List Index) :=
   (certificateGame adversary budget required stopAfter stopped).bind fun result =>
     (completeProposalWord (PMF.uniformOfFintype Index) total result.2.1).map (fun word => (result, word))
 
-theorem certificateTerminalGame_game (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateTerminalGame_game (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
     (certificateTerminalGame adversary budget required stopAfter stopped total).map Prod.fst =
       certificateGame adversary budget required stopAfter stopped := by
@@ -50,7 +50,7 @@ theorem certificateTerminalGame_game (adversary : Adversary) (budget : Nat) (req
     (completeProposalWord (PMF.uniformOfFintype Index) total result.2.1).map (Function.const _ result)) = _
   simp only [PMF.map_const, PMF.bind_pure]
 
-theorem certificateTerminalGame_word (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateTerminalGame_word (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat) :
     (certificateTerminalGame adversary budget required stopAfter stopped total).map Prod.snd =
       independentProposalWord (PMF.uniformOfFintype Index) total := by
@@ -61,7 +61,7 @@ theorem certificateTerminalGame_word (adversary : Adversary) (budget : Nat) (req
   simp only [PMF.map_id]
   exact certificateGame_complete adversary budget required stopAfter stopped total
 
-theorem certificateTerminalGame_cost_le (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+theorem certificateTerminalGame_cost_le (adversary : Adversary) (q : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
     (hbound : HasHashQueryBound scheme adversary q) (result : CertificateGameResult × List Index)
     (hr : result ∈ (certificateTerminalGame adversary q required stopAfter stopped total).support) :
@@ -71,7 +71,7 @@ theorem certificateTerminalGame_cost_le (adversary : Adversary) (q : Nat) (requi
   exact certificateGame_cost_le adversary q required stopAfter stopped hbound result.1 hm
 
 theorem expected_certificateTerminalGame_mass_payoff_le (adversary : Adversary) (q : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
     (hbound : HasHashQueryBound scheme adversary q) (payoff : List Index → ENNReal) :
     (∑' result, Pr[= result | certificateTerminalGame adversary q required stopAfter stopped total] *
         (result.1.2.2.2.creationMass * payoff result.2)) ≤

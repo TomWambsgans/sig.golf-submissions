@@ -2,6 +2,7 @@ import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.AdaptiveProposalWords
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.DigestSelectionIndex
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.ProposalBridgeKernel
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.BoundaryTrace
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
@@ -111,7 +112,7 @@ theorem completedSigningRecord_index_le {ω : Type} [Monoid ω]
     (spent : Nat) (hspent : spent ≤ 2 ^ 127) (hcache : QueryCache.enncard cache ≤ spent)
     (hclean : ¬ MessageDeficitExceptional key cache)
     (hindex : ∀ index, cachedIndexMultiplicity key.parameter cache index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)) (index : Index) :
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal)) (index : Index) :
     ((completedSigningRecord trace key message cache).map Prod.snd) index ≤ targetProposalIndexRate := by
   rw [completedSigningRecord_index, probCompLift_apply, probOutput_tracedSigningIndex_eq_loop]
   exact probOutput_completeSelectedLoopIndex_le_proposalRate key message cache spent hspent hcache hclean hindex index
@@ -130,30 +131,12 @@ theorem completedSigningRecord_selected_index {ω : Type} [Monoid ω]
   simpa only [hview, completeSelectedIndex, Option.elim_some, liftM_pure,
     PMF.monad_pure_eq_pure, PMF.support_pure, Set.mem_singleton_iff] using hselected
 
-abbrev SigningBoundaryTrace := FreeMonoid (Option (HashInput × HashOutput))
-
-noncomputable def signingBoundaryTrace (parameter : PublicParameter) :
-    (input : OracleWorld.Domain) → OracleWorld.Range input → SigningBoundaryTrace
-  | .inl _, _ => 1
-  | .inr input, output => FreeMonoid.of
-      (if FtsProbeSimulation.MessageHashInput parameter input then some (input, output) else none)
-
-def SigningBoundaryTrace.hashCalls (trace : SigningBoundaryTrace) : Nat := trace.toList.length
-
-def SigningBoundaryTrace.messageCalls (trace : SigningBoundaryTrace) : List (HashInput × HashOutput) :=
-  trace.toList.filterMap id
-
-theorem signingBoundaryTrace_nonmessage (parameter : PublicParameter) (input : HashInput) (output : HashOutput)
-    (hinput : ¬ FtsProbeSimulation.MessageHashInput parameter input) :
-    signingBoundaryTrace parameter (.inr input) output = FreeMonoid.of none := by
-  simp only [signingBoundaryTrace, if_neg hinput]
-
 structure ProposalCacheBound (key : SecretKey) (cache : QueryCache HashSpec) (spent : Nat) : Prop where
   spent_le : spent ≤ 2 ^ 127
   cache_le : QueryCache.enncard cache ≤ spent
   no_deficit : ¬ MessageDeficitExceptional key cache
   index_le : ∀ index, cachedIndexMultiplicity key.parameter cache index ≤
-    (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)
+    (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal)
 
 theorem completedSigningRecord_acceptance_cap {ω : Type} [Monoid ω]
     (trace : (input : OracleWorld.Domain) → OracleWorld.Range input → ω)

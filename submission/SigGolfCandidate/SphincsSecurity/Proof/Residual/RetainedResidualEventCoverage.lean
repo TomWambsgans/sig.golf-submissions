@@ -19,7 +19,7 @@ set_option backward.isDefEq.respectTransparency false
 theorem initialMonitoredSource_creationMass_le_budget
     (key : SecretKey) (adversary : Adversary) (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
     (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-    (q : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+    (q : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
     (result : Option (Forgery × Bool) × MonitoredState (gameInputs adversary))
     (hresult : initialMonitoredSource key adversary encoding dummy exposed high q required stopAfter stopped result ≠ 0) :
     result.2.2.creationMass ≤ (q : ENNReal) :=

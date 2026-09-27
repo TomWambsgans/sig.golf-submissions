@@ -4,7 +4,7 @@ import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeFresh
 # Completing an optional fresh signer target
 
 A signer may produce no fresh selected digest. Completing that absent selection with an independent
-uniform view keeps the result uniform. This is the optional-candidate form needed by the target
+sample of the signer's view law keeps the result below that law. This is the optional-candidate form needed by the target
 monitor.
 -/
 
@@ -30,7 +30,7 @@ noncomputable def completeFreshSelectedLoopView
       QueryCache HashSpec) : ProbComp FewTimeView :=
   match freshSelectedLoopView? referenceCache secretKey message result with
   | some view => pure view
-  | none => $ᵗ FewTimeView
+  | none => signerViewSample
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 1000000 in
@@ -41,7 +41,8 @@ theorem probEvent_completeFreshSelectedLoopView_le_uniform
     (hinvariant : OnlyRejectedNewMessageEntries referenceCache workingCache secretKey message) :
     Pr[P | (simulateQ romImpl (signDigestLoop attempts secretKey message)).run workingCache >>=
       completeFreshSelectedLoopView referenceCache secretKey message] ≤
-      Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] := by
+      Pr[P | signerViewSample] := by
+  classical
   induction attempts generalizing workingCache with
   | zero =>
       simp only [signDigestLoop, simulateQ_pure, StateT.run_pure, pure_bind, completeFreshSelectedLoopView,
@@ -88,9 +89,8 @@ theorem probEvent_completeFreshSelectedLoopView_le_uniform
                   completeFreshSelectedLoopView referenceCache secretKey message)
           rw [probEvent_congr' (fun _ _ => Iff.rfl) hreorder]
           refine probEvent_bind_le_of_forall_le fun rest _hrest => ?_
-          by_cases hadmissible : rest.1 = 0
-          · refine (probEvent_bind_le_probEvent (p := P) (q := P) ?_).trans le_rfl
-            intro view _hview hnotP
+          apply probEvent_uniformFewTimeView_bind_le _ P P _ le_rfl
+          · intro view hadmissible
             let coordinates : HashOutputCoordinates := ((view, rest.1), rest.2)
             let output := hashOutputCoordinatesEquiv.symm coordinates
             have hsuccessful : signAttemptResultOfOutput output ≠ none := by
@@ -112,8 +112,8 @@ theorem probEvent_completeFreshSelectedLoopView_le_uniform
                 (tweakableHashInput secretKey.parameter .message
                   (messageDigestPayload secretKey.root message randomness)) = none := by
               simpa only [input] using hreference
-            simp [hreference', hviewEq, hnotP]
-          · refine probEvent_bind_le_of_forall_le fun view _hview => ?_
+            simp [hreference', hviewEq]
+          · intro view hadmissible
             let coordinates : HashOutputCoordinates := ((view, rest.1), rest.2)
             let output := hashOutputCoordinatesEquiv.symm coordinates
             have hrejected : signAttemptResultOfOutput output = none := by

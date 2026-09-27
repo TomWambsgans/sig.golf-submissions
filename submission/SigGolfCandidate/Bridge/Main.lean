@@ -21,7 +21,7 @@ by the organizer. -/
 def Inv (T : Transcript sub.sizes) (k : ℕ) (lg : QueryLog RequestSpec) (c : ℕ) : Prop :=
   T.hashCalls = c ∧ T.signingRequests = k ∧ lg.length = k ∧ k ≤ LIFETIME ∧
     ∀ e ∈ lg, ∀ σ, e.2 = some σ →
-      ∃ mo, B.msgOf mo = e.1.message ∧ (mo, B.sigCodec.symm σ) ∈ T.signed
+      ∃ mo, B.msgOf mo = e.1.message ∧ (mo, B.compress σ) ∈ T.signed
 
 /-- An organizer win transfers to an abstract win with the same number of hash calls. -/
 def RFin (r : AttackResult) (b : Bool × ℕ) : Prop :=
@@ -50,15 +50,19 @@ lemma not_contains_witness {T : Transcript sub.sizes} {k : ℕ} {lg : QueryLog R
   simp only [Bool.not_eq_true', List.any_eq_false, beq_iff_eq] at hfresh
   exact hfresh _ hmem rfl
 
+/-- Strong freshness transfers through the witness decoder: a logged abstract signature `Σ` was
+answered to the organizer adversary as `compress Σ`, so if `compress (witDec w) = σ` and
+`(m, σ)` is fresh, `(msgOf m, witDec w)` is not in the abstract transcript. -/
 lemma not_contains_signature {T : Transcript sub.sizes} {k : ℕ} {lg : QueryLog RequestSpec}
     {c : ℕ} (hI : Inv B T k lg c) {m : Message} {σ : Bytes sub.sizes.signature}
+    {w : Bytes sub.sizes.witness} (hw : B.compress (B.witDec w) = σ)
     (hfresh : T.freshSignature m σ = true) :
-    ¬SphincsSecurity.RequestTranscript.Contains lg ⟨B.msgOf m, B.sigCodec σ⟩ := by
+    ¬SphincsSecurity.RequestTranscript.Contains lg ⟨B.msgOf m, B.witDec w⟩ := by
   rintro ⟨e, he, h1, h2⟩
   obtain ⟨mo, hmo, hmem⟩ := hI.2.2.2.2 e he _ h2
   have : mo = m := B.msgOf_injective (hmo.trans h1)
   subst this
-  rw [Equiv.symm_apply_apply] at hmem
+  rw [hw] at hmem
   unfold Transcript.freshSignature at hfresh
   simp only [Bool.not_eq_true'] at hfresh
   have : T.signed.contains (mo, σ) = true := List.contains_iff_mem.mpr hmem
@@ -68,7 +72,7 @@ lemma not_contains_signature {T : Transcript sub.sizes} {k : ℕ} {lg : QueryLog
 lemma inv_record {T : Transcript sub.sizes} {k : ℕ} {lg : QueryLog RequestSpec} {c : ℕ}
     (hI : Inv B T k lg c) (hk : k < LIFETIME) (m : Message) (cache : SphincsSecurity.TopCache)
     (r : Option SphincsSecurity.Signature) (calls : ℕ) :
-    Inv B (recordVC T m (r.map B.sigCodec.symm) calls) (k + 1)
+    Inv B (recordVC T m (r.map B.compress) calls) (k + 1)
       (lg ++ [⟨⟨B.msgOf m, cache⟩, r⟩]) (c + calls) := by
   obtain ⟨hc, hs, hlen, -, hent⟩ := hI
   refine ⟨by simp [recordVC, hc], by simp [recordVC, hs], by simp [hlen], hk, ?_⟩
@@ -84,6 +88,14 @@ lemma inv_record {T : Transcript sub.sizes} {k : ℕ} {lg : QueryLog RequestSpec
     change r = some σ at hσ
     subst hσ
     simp [recordVC]
+
+lemma mem_support_liftM_countFrom {α : Type} {X : OracleComp AHash α} {a : α × ℕ}
+    (ha : a ∈ support (liftM (countFrom (fun _ => 1) X 0) : OracleComp AW _)) : a.1 ∈ support X := by
+  have h1 : a ∈ support (countFrom (fun _ => 1) X 0) := by
+    rw [← liftComp_eq_liftM, support_liftComp] at ha
+    exact ha
+  rw [← fst_map_countFrom (fun _ => 1) X 0, support_map]
+  exact ⟨a, h1, rfl⟩
 
 variable (B) (A : Adversary sub.sizes)
 
@@ -116,15 +128,23 @@ theorem rel_main {sk : SecretKey} {pk : SphincsSecurity.PublicKey}
         · simp [hI.1]
       | signature m σ =>
         rw [orgK_submit_signature B hkey hstep, absK_submit_signature hstep, countFrom_shift,
-          liftM_map, liftM_map, Functor.map_map]
+          liftM_map, bind_map_left]
         unfold countCalls
-        refine Rel.of_map _ _ _ fun z => ?_
-        intro hwon
-        simp only [Bool.and_eq_true] at hwon
-        refine ⟨?_, ?_⟩
-        · simp only [Bool.and_eq_true, decide_eq_true_eq]
-          exact ⟨⟨valid_of_inv hI, not_contains_signature hI hwon.2⟩, hwon.1⟩
-        · simp [hI.1]
+        refine Rel.bind_eq_of_support _ fun p hp => ?_
+        rcases p with ⟨_ | w, e⟩
+        · exact Rel.pure_left _ _ (rfin_false _)
+        · have hw : B.compress (B.witDec w) = σ :=
+            B.expand_compress _ pk cache' sk' hkey _ σ w (mem_support_liftM_countFrom hp)
+          simp only [sigForgery]
+          rw [countFrom_shift _ _ (c + e), liftM_map, liftM_map, Functor.map_map]
+          refine Rel.of_map _ _ _ fun z => ?_
+          intro hwon
+          simp only [Bool.and_eq_true] at hwon
+          refine ⟨?_, ?_⟩
+          · show (decide _ && z.1) = true
+            rw [hwon.1, Bool.and_true]
+            exact decide_eq_true ⟨valid_of_inv hI, not_contains_signature hI hw hwon.2⟩
+          · simp [hI.1, Nat.add_assoc]
     | hash y resume =>
       rw [orgK_hash B hstep, absK_hash hstep]
       refine Rel.bind_eq _ fun a => ih _ _ _ _ _ ?_
@@ -146,14 +166,6 @@ theorem rel_main {sk : SecretKey} {pk : SphincsSecurity.PublicKey}
         exact inv_record hI hk' req.message _ p.1 p.2
       · rw [orgK_sign_ge B hstep hk]
         exact Rel.pure_left _ _ (rfin_false _)
-
-lemma mem_support_liftM_countFrom {α : Type} {X : OracleComp AHash α} {a : α × ℕ}
-    (ha : a ∈ support (liftM (countFrom (fun _ => 1) X 0) : OracleComp AW _)) : a.1 ∈ support X := by
-  have h1 : a ∈ support (countFrom (fun _ => 1) X 0) := by
-    rw [← liftComp_eq_liftM, support_liftComp] at ha
-    exact ha
-  rw [← fst_map_countFrom (fun _ => 1) X 0, support_map]
-  exact ⟨a, h1, rfl⟩
 
 lemma probEvent_bind_le {α β γ : Type} (mx : ProbComp α) {f : α → ProbComp β}
     {g : α → ProbComp γ} {E₁ : β → Prop} {E₂ : γ → Prop}

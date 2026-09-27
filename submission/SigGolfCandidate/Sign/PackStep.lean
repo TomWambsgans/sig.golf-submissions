@@ -9,7 +9,7 @@ The pack (instructions 614 .. 3394) is split into chunks (`PackC*.lean`, one sym
 one file each, to keep the kernel's memory per file small). `PackStep a b f c n` says: from pc
 `a`, `n` straight-line steps reach pc `b`, write the signature dwords `f .. f + c - 1`
 (`packD + 8 j`) as `packDW t` of the table entries, and nothing else. `packStep_of` builds it
-from a symbolic block, `PackStep.comp` chains chunks (the sources, below `0x2650`, are not
+from a symbolic block, `PackStep.comp` chains chunks (the sources, below `0x3300`, are not
 written by the pack).
 -/
 
@@ -20,13 +20,13 @@ namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Mem
 
 /-- Destination of the pack: `SIG + 2480`. -/
-abbrev packD : Nat := 0x2650 + 2480
+abbrev packD : Nat := 0x3300 + 2176
 
 /-- All sources lie below the signature buffer (checked by the kernel). -/
-theorem packTab_src_ok : packTab.all (fun e => decide (e.2.1 < 0x2650 ∧ e.2.2 < 0x2650)) = true := by
+theorem packTab_src_ok : packTab.all (fun e => decide (e.2.1 < 0x3300 ∧ e.2.2 < 0x3300)) = true := by
   decide +kernel
 
-theorem packTab_src (e : Nat × Nat × Nat) (he : e ∈ packTab) : e.2.1 < 0x2650 ∧ e.2.2 < 0x2650 := by
+theorem packTab_src (e : Nat × Nat × Nat) (he : e ∈ packTab) : e.2.1 < 0x3300 ∧ e.2.2 < 0x3300 := by
   have := List.all_eq_true.mp packTab_src_ok e he
   simpa using this
 
@@ -70,7 +70,7 @@ theorem getMem_align_frame {t u : MachineState} {W : Nat → Prop} (h : Frame t 
   rw [this]; exact h.getMem (by omega) hW
 
 theorem packDW_frame {t u : MachineState} {W : Nat → Prop} (h : Frame t u W)
-    (hW : ∀ x, x < 0x2650 → ¬ W x) (e : Nat × Nat × Nat) (he : e ∈ packTab) :
+    (hW : ∀ x, x < 0x3300 → ¬ W x) (e : Nat × Nat × Nat) (he : e ∈ packTab) :
     packDW u e = packDW t e := by
   obtain ⟨h1, h2⟩ := packTab_src e he
   obtain ⟨k, lo, hi⟩ := e

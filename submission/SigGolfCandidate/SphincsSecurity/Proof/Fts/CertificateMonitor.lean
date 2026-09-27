@@ -52,7 +52,7 @@ noncomputable def certificateMonitorEnabled (key : SecretKey) (budget : Nat)
   decide (CertificateMonitorActive key budget (.inr message) state)
 
 noncomputable def certificateMonitorUpdate (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) : CertificateMonitor :=
   if CertificateMonitorActive key budget input state then
@@ -72,24 +72,24 @@ noncomputable def certificateMonitorUpdate (key : SecretKey) (budget : Nat)
   else { state.2 with stopped := true }
 
 noncomputable def certificateLengthImpl (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) :
     QueryImpl (OracleWorld + SigningSpec) (StateT CertificateMonitorState PMF) :=
   originalLengthImpl key (fun state => state.2.spent) (certificateMonitorEnabled key budget)
     (certificateMonitorUpdate key budget required stopAfter)
 
 noncomputable def certificateProposalImpl (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) :
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) :
     QueryImpl (OracleWorld + SigningSpec) (StateT (List Index × CertificateMonitorState) PMF) :=
   originalProposalImpl key (fun state => state.2.spent) (certificateMonitorEnabled key budget)
     (certificateMonitorUpdate key budget required stopAfter)
 
 noncomputable def certificateMonitorPotential (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (state : CertificateMonitorState) : ENNReal :=
+    (required : Finset IndexGroup) (state : CertificateMonitorState) : ENNReal :=
   bankedTargetEnvelope key nearUniformDigestReuseWeight (budget - state.2.spent)
     (signatureLimit - state.2.log.length) required (certificateMonitorCoverState state) state.2.bank state.2.stopped
 
 noncomputable def certificateMonitorCharge (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (input : (OracleWorld + SigningSpec).Domain)
+    (required : Finset IndexGroup) (input : (OracleWorld + SigningSpec).Domain)
     (state : CertificateMonitorState) : ENNReal :=
   if CertificateMonitorActive key budget input state then
     targetCreationMultiplier key state.1 input * targetCreationPrice key nearUniformDigestReuseWeight
@@ -111,7 +111,7 @@ def initialCertificateMonitor (spent : Nat) (stopped : Bool := false) : Certific
     stopped := stopped }
 
 theorem certificateMonitorUpdate_creationCost (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) :
     (certificateMonitorUpdate key budget required stopAfter input state length record).creationCost =
@@ -120,7 +120,7 @@ theorem certificateMonitorUpdate_creationCost (key : SecretKey) (budget : Nat)
     simp only [certificateMonitorUpdate, certificateMonitorCharge, hactive, if_true, if_false, add_zero]
 
 theorem certificateMonitorUpdate_creationMass (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) :
     (certificateMonitorUpdate key budget required stopAfter input state length record).creationMass =
@@ -129,7 +129,7 @@ theorem certificateMonitorUpdate_creationMass (key : SecretKey) (budget : Nat)
     simp only [certificateMonitorUpdate, certificateMonitorMass, hactive, if_true, if_false, add_zero]
 
 theorem certificateMonitorPotential_initial (key : SecretKey) (budget spent : Nat)
-    (required : Finset FtsTree) (cache : QueryCache HashSpec) (stopped : Bool)
+    (required : Finset IndexGroup) (cache : QueryCache HashSpec) (stopped : Bool)
     (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input → cache input = none) :
     certificateMonitorPotential key budget required (cache, initialCertificateMonitor spent stopped) = 0 := by
   cases stopped with
@@ -137,7 +137,7 @@ theorem certificateMonitorPotential_initial (key : SecretKey) (budget spent : Na
   | true => simp only [certificateMonitorPotential, initialCertificateMonitor, bankedTargetEnvelope_stopped, certificateBankCount_empty]
 
 theorem certificateMonitorUpdate_inactive (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : ¬ CertificateMonitorActive key budget input state) :
@@ -145,7 +145,7 @@ theorem certificateMonitorUpdate_inactive (key : SecretKey) (budget : Nat)
   rw [certificateMonitorUpdate, if_neg hactive]
 
 theorem certificateMonitorUpdate_spent (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state) :
@@ -154,7 +154,7 @@ theorem certificateMonitorUpdate_spent (key : SecretKey) (budget : Nat)
   simp only [certificateMonitorUpdate, if_pos hactive]
 
 theorem certificateMonitorUpdate_messageCalls (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state) :
@@ -163,7 +163,7 @@ theorem certificateMonitorUpdate_messageCalls (key : SecretKey) (budget : Nat)
   simp only [certificateMonitorUpdate, if_pos hactive]
 
 theorem certificateMonitorPotential_advance_active (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state) :
@@ -177,7 +177,7 @@ theorem certificateMonitorPotential_advance_active (key : SecretKey) (budget : N
     bankedProposalRecordValue, proposalRecordLogState, certificateMonitorCoverState, Nat.sub_sub]
 
 theorem certificateMonitorPotential_advance_inactive (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : ¬ CertificateMonitorActive key budget input state) :
@@ -198,7 +198,7 @@ theorem certificateMonitor_sign_proposals_active (key : SecretKey) (budget : Nat
   · simp only [originalProposalActive, certificateMonitorEnabled, hactive, decide_false, Bool.false_and]
 
 theorem certificateLengthImpl_world_run (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (state : CertificateMonitorState) :
     (certificateLengthImpl key budget required stopAfter (.inl input)).run state =
       (originalProposalRecord key (.inl input) state.1).map (fun record =>
@@ -208,7 +208,7 @@ theorem certificateLengthImpl_world_run (key : SecretKey) (budget : Nat)
     StateT.run_mk, Bool.false_eq_true, if_false]
 
 theorem certificateLengthImpl_sign_run (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message)
     (state : CertificateMonitorState) :
     (certificateLengthImpl key budget required stopAfter (.inr message)).run state =
       if CertificateMonitorActive key budget (.inr message) state then
@@ -223,7 +223,7 @@ theorem certificateLengthImpl_sign_run (key : SecretKey) (budget : Nat)
     certificateMonitor_sign_proposals_active, decide_eq_true_eq]
 
 theorem certificateLengthImpl_inactive_run (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (hactive : ¬ CertificateMonitorActive key budget input state) :
     (certificateLengthImpl key budget required stopAfter input).run state =
@@ -238,7 +238,7 @@ theorem certificateLengthImpl_inactive_run (key : SecretKey) (budget : Nat)
         certificateMonitorUpdate_inactive key budget required stopAfter (.inr message) state 0 _ hactive]
 
 theorem simulateQ_certificateProposalImpl_length {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : List Index × CertificateMonitorState) :
     Prod.map id Prod.snd <$> (simulateQ (certificateProposalImpl key budget required stopAfter) computation).run state =
       (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state.2 :=

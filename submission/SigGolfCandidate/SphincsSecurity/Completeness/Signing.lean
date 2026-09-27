@@ -6,15 +6,15 @@ import SigGolfCandidate.SphincsSecurity.Completeness.Encoding
 # When signing fails
 
 `sign` first checks the cache's MAC; for the cache key generation wrote, that query is a cache hit
-returning the stored tag, so the check passes. Then it runs the randomizer search, builds the few-time
-forest, and signs the five layers from the bottom up: layers `4, ..., 1` each a counter search followed
+returning the stored tag, so the check passes. Then it runs the randomizer search, builds the PORS tree
+(one tree, secrets derived in pairs), and signs the five layers from the bottom up: layers `4, ..., 1` each a counter search followed
 by its tree built once, and the top layer a counter search followed by its chains and the path read
 from the cache. It returns `none` as soon as a search runs out. A union bound through that structure
 charges the failure to the six searches. The tree builds and cache reads never fail and do not matter
 for the probability except through what they cache.
 
 Each counter search needs its own inputs uncached when it starts; `EncodingFresh` carries that from
-the start of signing, past the digest loop and the forest, and past each layer below it: a layer's
+the start of signing, past the digest loop and the PORS tree, and past each layer below it: a layer's
 own search hashes under a different layer field, and its tree hashes under structural tweaks only.
 -/
 
@@ -24,7 +24,7 @@ namespace SphincsSecurity.Completeness
 
 open Concrete
 
-attribute [local irreducible] Seeded.signDigestLoop Concrete.buildLayerTreePaired Concrete.buildForestPaired
+attribute [local irreducible] Seeded.signDigestLoop Concrete.buildLayerTreePaired Concrete.buildFtsTreePaired
   Concrete.encodingSearch digestAttemptLimit encodingAttemptLimit SphincsSecurity.deriveKey
   Seeded.signChecked
 
@@ -115,7 +115,7 @@ theorem probEvent_signLayers_none (sk : Seeded.SecretKey) (index : Index)
             _ = ((r + 1 : Nat) : ℝ≥0∞) * encodingBound := by push_cast; ring
       next hlayer => exact absurd (Nat.lt_of_succ_le hrem) hlayer
 
-/-- After the digest loop: the forest never fails, and the five layers fail only through their
+/-- After the digest loop: the PORS tree never fails, and the five layers fail only through their
 counter searches. -/
 theorem probEvent_signFrom_none (sk : Seeded.SecretKey) (index : Index)
     (topNode : Nat → Nat → OracleComp HashSpec Digest) (randomness : Randomness)
@@ -127,18 +127,18 @@ theorem probEvent_signFrom_none (sk : Seeded.SecretKey) (index : Index)
         : OracleComp HashSpec (Option Signature))).run cache]
       ≤ (numLayers : ℝ≥0∞) * encodingBound := by
   rw [signFromPaired]
-  refine probEvent_bind_le _ _ _ cache _ (fun forest hforest => ?_)
-  have h1 := hfresh.step _ forest hforest (fun f l _ tree leaf payload =>
-    Avoids.buildForestPaired_of_structural f _ _ _ _ _
-      (structural_encoding sk.parameter sk.seed l tree leaf payload))
-  obtain ⟨⟨secrets, ftsPath, ftsPublicKey⟩, c1⟩ := forest
+  refine probEvent_bind_le _ _ _ cache _ (fun tree htree => ?_)
+  have h1 := hfresh.step _ tree htree (fun f l _ t leaf payload =>
+    Avoids.buildFtsTreePaired_of_structural f _ _ _ _
+      (structural_encoding sk.parameter sk.seed l t leaf payload))
+  obtain ⟨⟨secrets, table⟩, c1⟩ := tree
   dsimp only
   refine le_trans (probEvent_bind_le_add _ _ (fun r => r.1 = none) _ c1 0 ?_) ?_
   · rintro ⟨result, c2⟩ _ hsome
     obtain ⟨parts, rfl⟩ := Option.ne_none_iff_exists'.mp hsome
     simp
   · rw [add_zero]
-    exact probEvent_signLayers_none sk index topNode numLayers le_rfl ftsPublicKey c1
+    exact probEvent_signLayers_none sk index topNode numLayers le_rfl (table ftsTreeHeight 0) c1
       (h1.mono fun _ _ => trivial)
 
 /-- After the MAC check, signing fails only if the randomizer search or one of the five counter

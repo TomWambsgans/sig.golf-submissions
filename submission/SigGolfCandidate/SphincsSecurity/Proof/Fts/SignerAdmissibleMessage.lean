@@ -35,7 +35,7 @@ theorem signWithView_successful_cached_output (key : SecretKey) (message : Messa
   refine ⟨output, ?_, hdigest ▸ hadmissible, ?_⟩
   · rw [hrandomness]
     exact houtput
-  · simpa only [selectedFewTimeView, hindex, hleaves, hdigest, hashOutputFewTimeView] using hview
+  · simpa only [selectedFewTimeView, hindex, hleaves, hdigest, hashOutputFewTimeView, fullDigestView] using hview
 
 theorem signDigestLoop_new_admissible_selected (attempts : Nat) (key : SecretKey) (message : Message)
     (before after : QueryCache HashSpec) (result : Option (Randomness × Index × (IndexGroup → FtsLeaf)))

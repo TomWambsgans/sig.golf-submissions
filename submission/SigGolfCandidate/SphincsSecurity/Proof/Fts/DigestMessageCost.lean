@@ -91,18 +91,15 @@ theorem expectedQueryCharge_signDigestLoop_message (attempts : Nat) (key : Secre
 
 theorem freshDigestSelection_mass_le_messageCharge (key : SecretKey) (message : Message)
     (cache : QueryCache HashSpec) :
-    (Fintype.card FtsLeaf : ENNReal) * freshDigestSelectionProbability key message cache ≤
+    admissibleProbability⁻¹ * freshDigestSelectionProbability key message cache ≤
       expectedQueryCharge (messageHashCharge key.parameter) (signWithView key message) cache := by
   have h := probEvent_signDigestLoop_fresh_le_attempts_mul_admissibility digestAttemptLimit key message cache cache
     (onlyRejectedNewMessageEntries_self cache key message)
-  have hscaled := mul_le_mul' (le_refl (Fintype.card FtsLeaf : ENNReal)) h
-  have hscalar : (Fintype.card FtsLeaf : ENNReal) *
-      (digestAttemptExpectation digestAttemptLimit key message cache * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹) =
+  have hscaled := mul_le_mul' (le_refl admissibleProbability⁻¹) h
+  have hscalar : admissibleProbability⁻¹ *
+      (digestAttemptExpectation digestAttemptLimit key message cache * admissibleProbability) =
       digestAttemptExpectation digestAttemptLimit key message cache := by
-    have hcard : (Fintype.card FtsLeaf : ENNReal) = ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by
-      simp [FtsLeaf]
-    rw [mul_left_comm, hcard,
-      ENNReal.mul_inv_cancel (by norm_num [ftsTreeHeight]) (by finiteness), mul_one]
+    rw [mul_left_comm, ENNReal.inv_mul_cancel admissibleProbability_pos admissibleProbability_ne_top, mul_one]
   rw [hscalar] at hscaled
   apply hscaled.trans
   rw [signWithView, expectedQueryCharge_bind, expectedQueryCharge_signDigestLoop_message]

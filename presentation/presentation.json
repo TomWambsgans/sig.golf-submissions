@@ -1,72 +1,75 @@
 {
   "version": 1,
-  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. Five layers of WOTS target-sum signatures (42 chains, digit sum 184) and Merkle paths (heights 11,6,6,6,5) authenticate the FORS key to the 16-byte root. Keygen caches the height-11 top tree as masked nodes under a 256-bit MAC; each PRF call yields two 16-byte secrets. Verification: a constant 11,547 cycles.",
+  "summary": "SPHINCS+ variant with PORS+FP, a forced-pruning single-tree few-time signature: the full 256-bit digest gives a 34-bit index and 15 leaves of one height-14 tree; the signer grinds ρ until they are distinct with an octopus of ≤ 120 nodes. 5 layers (heights 11,6,6,6,5) of target-sum WOTS (42 chains, T = 182), cached height-11 top tree under a MAC, paired PRF secrets. Verify runs a stack machine on the expanded witness. S = 6,100, W = 6,348, K = 131,072 B, C = 11,907.",
   "diagram": true,
   "facts": [
     {
       "label": "Signature layout",
-      "value": "ρ 16 B + FORS 14 × 176 = 2,464 B + 5 layers × (4 B counter + 42 × 16 B + h × 16 B) = 3,924 B → 6,404 B"
+      "value": "ρ 16 B + 15 sorted secrets 240 B + 120 auth slots 1,920 B + 5 layers 3,924 B = 6,100 B"
     },
     {
-      "label": "Digest and FORS+C",
-      "value": "184-bit digest = idx (34 b) ‖ u₀…u₁₃ (10 b each) ‖ 10 zero bits; 14 trees of height 10, 176 B each"
+      "label": "Message digest split",
+      "value": "Full 256-bit H(tw ‖ P ‖ ρ ‖ 0¹²⁸ ‖ m): idx 34 b ‖ 15 leaf indices × 14 b ‖ 12 unused bits"
     },
     {
-      "label": "Hypertree",
-      "value": "5 layers, heights 11,6,6,6,5 = 34-bit index; layer 4 signs the FORS key; layer 0 = cached top tree, root = pk"
+      "label": "PORS+FP admissibility",
+      "value": "Signer grinds ρ until the 15 indices are distinct and their octopus ≤ 120 nodes: p ≈ 2⁻⁹·⁷⁶, ≈ 870 tries"
     },
     {
-      "label": "WOTS encoding",
-      "value": "Target sum, w = 3: H(tw ‖ P ‖ M ‖ LE32 c) → 42 digits of 3 bits summing to 184; c < 2²², no checksum"
+      "label": "PORS tree",
+      "value": "One height-14 tree (16,384 leaves) per idx; octopus = pruned auth set, read order, zero padded to 120"
     },
     {
-      "label": "Keygen cache",
-      "value": "128 KiB: 4,094 top-tree nodes (levels 0–10) each ⊕ a PRF mask + 256-bit MAC keyed by the seed"
+      "label": "Hypertree and WOTS",
+      "value": "5 layers, heights 11,6,6,6,5; target-sum WOTS, 42 chains of w = 3 bits, digit sum 182, counter c < 2²²"
     },
     {
-      "label": "Paired PRF secrets",
-      "value": "One H(tw ‖ P ‖ S) call → 32 B = two 16 B secrets: WOTS chains 2k, 2k+1 and FORS leaves 2k, 2k+1"
+      "label": "Keygen cache (K = 131,072 B)",
+      "value": "Height-11 top tree: 4,094 nodes each ⊕ a PRF mask + 256-bit MAC; one PRF call yields two secrets"
     },
     {
-      "label": "Witness expansion",
-      "value": "Fixed byte permutation, W = 6,404 B: the 5 counters move to bytes 6,384–6,403 so all 16-byte items are 8-aligned"
+      "label": "Witness (W = 6,348 B)",
+      "value": "ρ ‖ π (slot codes) ‖ 15 secrets ‖ 29 segments: 8 B header a | 16·merge | 32·t + a nodes ‖ layers ‖ counters"
     },
     {
       "label": "Verification cost",
-      "value": "11,547 cycles on every accepting run + ⌈6,404 / 256⌉ = 26 → C = 11,573; 750 HASH calls, 803 blocks"
+      "value": "9,784 + 17·folds + 2·(segments with folds) ≤ 11,882 proved, + 25 → C = 11,907; measured avg 11,834"
     }
   ],
   "profile": {
     "samples": 16,
-    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen (pk + cache), sign with the cache, expand on the emulator, verify traced on vm.py; all accepted at 11,547 cycles",
+    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen + sign, expand on the emulator, verify traced on vm.py; all accepted, 11,764–11,870 cycles, octopus 114–120",
     "instructions": {
-      "ADDI": 14821,
-      "SD": 13680,
-      "LD": 13072,
-      "SB": 12160,
-      "SRLI": 4912,
-      "SW": 3456,
-      "SLLI": 3424,
-      "JAL": 3371,
-      "JALR": 3360,
-      "ADD": 2848,
-      "ANDI": 1888,
-      "BLT": 1493,
-      "BGE": 1371,
-      "LUI": 896,
-      "AND": 400,
-      "ORI": 288,
-      "OR": 192,
-      "BNE": 128,
+      "ADDI": 16572,
+      "SD": 13542,
+      "LD": 12886,
+      "SB": 12320,
+      "SRLI": 5043,
+      "JAL": 4169,
+      "JALR": 4048,
+      "SW": 3315,
+      "SLLI": 3226,
+      "ADD": 2880,
+      "ANDI": 2249,
+      "BLT": 1146,
+      "BGE": 1040,
+      "LUI": 976,
+      "LBU": 704,
+      "AND": 640,
+      "BNE": 579,
+      "OR": 464,
+      "XORI": 224,
+      "BGEU": 224,
+      "BEQ": 150,
       "LWU": 96,
+      "ORI": 64,
       "SUB": 64,
-      "BEQ": 16,
+      "BLTU": 16,
       "XOR": 16,
       "HALT": 16
     },
     "hashes": {
-      "512": 11904,
-      "2048": 16,
+      "512": 11955,
       "5632": 80
     }
   }

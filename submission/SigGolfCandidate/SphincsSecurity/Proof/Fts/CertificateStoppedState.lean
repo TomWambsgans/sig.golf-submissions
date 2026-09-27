@@ -5,7 +5,7 @@ namespace SphincsSecurity.Concrete
 open _root_.OracleComp OracleSpec
 
 theorem certificateMonitorUpdate_stopped (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) (hstop : state.2.stopped = true) :
     certificateMonitorUpdate key budget required stopAfter input state length record = state.2 := by
@@ -21,7 +21,7 @@ theorem certificateMonitorUpdate_stopped (key : SecretKey) (budget : Nat)
   rfl
 
 theorem certificateLength_run_stopped {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState)
     (hstop : state.2.stopped = true) (result : α × CertificateMonitorState)
     (hr : result ∈ ((simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state).support) :

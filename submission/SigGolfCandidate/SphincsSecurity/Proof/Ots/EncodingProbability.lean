@@ -1,5 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeUniform
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.HashOutputSplit
 /-!
 # Encoding acceptance probability
 

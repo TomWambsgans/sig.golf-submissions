@@ -8,11 +8,11 @@ namespace SigGolfCandidate.Keygen
 open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- The masked-node region of the cache (`CACHE + 32`): the top tree is built here. -/
-abbrev REGION : Nat := 0x44C0
+abbrev REGION : Nat := 0x4B20
 
 /-- Doublewords kept at zero: the `P` parts of the PRF, chain, leaf and node buffers, and the
 zero half `CB+32 .. CB+48` of the value-last chain block (cleared once by the first block). -/
-def zeroKeys : List Nat := [1712, 1720, 208, 216, 224, 232, 848, 856, 464, 472, 0x4488, 0x4490, 0x4498]
+def zeroKeys : List Nat := [1712, 1720, 208, 216, 224, 232, 848, 856, 464, 472, 0x4AE8, 0x4AF0, 0x4AF8]
 
 /-- Facts that hold from the end of the first block until the final block. -/
 structure Base (W : List Word) (t : MachineState) : Prop where
@@ -24,11 +24,11 @@ structure Base (W : List Word) (t : MachineState) : Prop where
   skIn : ∀ k < 4, t.getMem (BitVec.ofNat 64 (128 + 8 * k)) = W.getD k 0
   zero : ∀ A ∈ zeroKeys, t.getMem (BitVec.ofNat 64 A) = 0
   w832 : t.getMem (BitVec.ofNat 64 832) = BitVec.ofNat 64 513
-  tail : ∀ A, 0x144C0 ≤ A → A < 0x244A0 → t.getMem (BitVec.ofNat 64 A) = 0
+  tail : ∀ A, 0x14B20 ≤ A → A < 0x24B00 → t.getMem (BitVec.ofNat 64 A) = 0
 
 /-- A doubleword key that does not touch `Base`. -/
 def BaseSafe (k : Nat) : Prop :=
-  k < 2 ^ 64 ∧ k ∉ [1728, 1736, 1744, 1752, 832, 128, 136, 144, 152] ∧ k ∉ zeroKeys ∧ (k < 0x144C0 ∨ 0x244A0 ≤ k)
+  k < 2 ^ 64 ∧ k ∉ [1728, 1736, 1744, 1752, 832, 128, 136, 144, 152] ∧ k ∉ zeroKeys ∧ (k < 0x14B20 ∨ 0x24B00 ≤ k)
 
 theorem Base.frame {W : List Word} {s t : MachineState} {keys : List Nat} (h : Base W s)
     (hr : ∀ r, r = .x5 ∨ r = .x8 ∨ r = .x30 ∨ r = .x9 → t.getReg r = s.getReg r)

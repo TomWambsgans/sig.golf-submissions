@@ -16,7 +16,7 @@ private theorem probOutput_probCompLift {Result : Type} (computation : ProbComp 
     Pr[= result | (liftM computation : PMF Result)] = Pr[= result | computation] := rfl
 
 theorem expected_certificateCacheLengthImpl_of_record_function (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (counter : CertificateCacheMonitorState → ENNReal) (weight : ProposalExecutionRecord input → ENNReal)
     (hadvance : ∀ length record, counter
@@ -36,7 +36,7 @@ theorem expected_certificateCacheLengthImpl_of_record_function (key : SecretKey)
   · rw [← PMF.monad_map_eq_map, tsum_probOutput_map_mul]
     simp only [hadvance]
 
-theorem certificateCacheLengthImpl_original_cache (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateCacheLengthImpl_original_cache (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState) :
     (fun result => (result.1, result.2.1)) <$> (certificateCacheLengthImpl key budget required stopAfter input).run state =
       (liftM ((simulateQ romImpl (expandedAdversaryImpl key input)).run state.1) : PMF _) := by
@@ -45,7 +45,7 @@ theorem certificateCacheLengthImpl_original_cache (key : SecretKey) (budget : Na
   simp only [Functor.map_map] at h
   exact h.trans (certificateLengthImpl_original_cache key budget required stopAfter input (certificateCacheMonitorProject state))
 
-theorem certificateCacheLengthImpl_finite (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateCacheLengthImpl_finite (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (hfinite : Finite state.1) (result : (OracleWorld + SigningSpec).Range input × CertificateCacheMonitorState)
     (hr : result ∈ ((certificateCacheLengthImpl key budget required stopAfter input).run state).support) :
@@ -66,7 +66,7 @@ theorem expected_originalProposalRecord_cacheWeight (key : SecretKey) (input : (
   rw [expectedBoundaryMessageCalls]
   exact h.le.trans (expected_certificateCacheExceptionWeight_boundary key (expandedAdversaryImpl key input) cache hfinite)
 
-theorem expected_originalCacheHistoryWeight_step (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem expected_originalCacheHistoryWeight_step (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (hfinite : Finite state.1) :
     (∑' result, Pr[= result | (certificateCacheLengthImpl key budget required stopAfter input).run state] *
@@ -104,7 +104,7 @@ theorem expected_originalCacheHistoryWeight_step (key : SecretKey) (budget : Nat
         rw [PMF.probOutput_eq_apply, hz, zero_mul, zero_mul]
 
 theorem expected_originalCacheHistoryWeight_run {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : CertificateCacheMonitorState)
     (hfinite : Finite state.1) :
     (∑' result, Pr[= result | (simulateQ (certificateCacheLengthImpl key budget required stopAfter) computation).run state] *
@@ -151,7 +151,7 @@ theorem expected_originalCacheHistoryWeight_run {Result : Type} (key : SecretKey
         _ = _ := by rw [hproject]; ring
 
 theorem certificateCacheLength_hit_le_message_cost {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : CertificateCacheMonitorState)
     (hfinite : Finite state.1) :
     Pr[fun result => result.2.2.2 = true |
@@ -169,7 +169,7 @@ theorem certificateCacheLength_hit_le_message_cost {Result : Type} (key : Secret
     exact bot_le
 
 theorem certificateCacheProposal_hit_le_message_cost {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : List Index × CertificateCacheMonitorState)
     (hfinite : Finite state.2.1) :
     Pr[fun result => result.2.2.2.2 = true |
@@ -190,7 +190,7 @@ private theorem expected_probCompLift_of_map_eq {Source Result : Type}
   simp only [probOutput_probCompLift]
 
 theorem certificateContextGame_cache_hit_le_original_message (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     Pr[fun result => result.2.2.2.2.2 = true | certificateContextGame adversary budget required stopAfter stopped] ≤
       originalCertificateMessageCost adversary * certificateCacheExceptionRate := by
   rw [certificateContextGame, probEvent_bind_eq_tsum]
@@ -236,7 +236,7 @@ theorem certificateContextGame_cache_hit_le_original_message (adversary : Advers
               (FtsProbeSimulation.retainedGameRestComputation adversary generated.1.1)) generated.2)
 
 theorem certificateContextGame_exception_le_cache_add_prefix (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     Pr[fun result => CertificateGameExceptional result.2 | certificateContextGame adversary budget required stopAfter stopped] ≤
       Pr[fun result => result.2.2.2.2.2 = true | certificateContextGame adversary budget required stopAfter stopped] +
       Pr[fun result => ProposalPrefixExceptional result.2.2.2.2.1.proposals result.2.2.2.2.1.log.length |

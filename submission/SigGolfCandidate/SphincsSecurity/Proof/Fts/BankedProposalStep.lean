@@ -56,14 +56,14 @@ theorem originalProposalRecord_world_hashCalls (key : SecretKey) (input : Oracle
   | inr input => rfl
 
 noncomputable def bankedProposalRecordValue (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (state : CoverLogState) (bank : HashInput → Bool)
+    (required : Finset IndexGroup) (state : CoverLogState) (bank : HashInput → Bool)
     (input : (OracleWorld + SigningSpec).Domain) (record : ProposalExecutionRecord input) (stopped : Bool) : ENNReal :=
   let after := proposalRecordLogState input state.2 record
   bankedTargetEnvelope key reuse (budget - record.trace.hashCalls) signatures required after
     (completedTargetBank key required after bank) stopped
 
 theorem expected_originalProposalRecord_world_banked_le (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (state : CoverLogState) (bank : HashInput → Bool) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (state : CoverLogState) (bank : HashInput → Bool) (input : OracleWorld.Domain)
     (stopped : ProposalExecutionRecord (.inl input) → Bool)
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
     (hcost : signingExecutionHashCost (.inl input) ≤ budget) :
@@ -96,7 +96,7 @@ theorem expected_originalProposalRecord_world_banked_le (key : SecretKey) (reuse
       (targetCreationPrice_budget_mono key reuse signatures required state (Nat.sub_le _ _)))
 
 theorem expected_originalProposalRecord_sign_banked_le (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (state : CoverLogState) (bank : HashInput → Bool) (message : Message)
+    (required : Finset IndexGroup) (state : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (stopped : ProposalExecutionRecord (.inr message) → Bool)
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
     (hreuse : exactDigestReuseWeight key message state.1 ≤ reuse) :
@@ -125,7 +125,7 @@ theorem expected_originalProposalRecord_sign_banked_le (key : SecretKey) (reuse 
       (targetCreationPrice_signatures_mono key reuse budget required state (Nat.le_succ _)))
 
 theorem expected_coupled_bankedProposalRecord_le {α : Type}
-    (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat) (required : Finset IndexGroup)
     (state : CoverLogState) (bank : HashInput → Bool) (input : (OracleWorld + SigningSpec).Domain)
     (law : PMF α) (record : α → ProposalExecutionRecord input) (stopped : α → Bool) (bound : ENNReal)
     (hrecord : law.map record = originalProposalRecord key input state.1)
@@ -145,7 +145,7 @@ theorem expected_coupled_bankedProposalRecord_le {α : Type}
     _ ≤ bound := hbound
 
 theorem expected_lengthBridge_sign_banked_le (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (state : CoverLogState) (bank : HashInput → Bool) (message : Message)
+    (required : Finset IndexGroup) (state : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (stopped : Nat × ProposalExecutionRecord (.inr message) → Bool)
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
     (hreuse : exactDigestReuseWeight key message state.1 ≤ reuse) :

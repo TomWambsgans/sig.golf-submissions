@@ -1,4 +1,4 @@
-import SigGolfCandidate.Equiv.Basic
+import SigGolfCandidate.Equiv.Wit
 
 /-!
 # Honest hash inputs
@@ -20,6 +20,7 @@ open SigGolf (Byte Bytes Query)
 open SigGolfCandidate.Bridge (AllQ allQ_pure allQ_bind allQ_query allQ_map)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed Index FtsTree
   FtsLeaf IndexGroup Message Signature)
+open SphincsSecurity.Concrete (porsTree ftsHeapIndex)
 open SphincsSecurity.Concrete (sequenceFin)
 
 set_option linter.unusedSimpArgs false
@@ -31,7 +32,7 @@ attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.diges
 /-- The input length of each tag. -/
 def tagLen : Nat → Nat
   | 0 => 64 | 1 => 48 | 2 => 704 | 3 => 64 | 4 => 52 | 7 => 96 | 8 => 64 | 9 => 48 | 10 => 64
-  | 11 => 256 | 12 => 96 | 13 => 64 | 14 => 65568 | _ => 0
+  | 12 => 96 | 13 => 64 | 14 => 65568 | _ => 0
 
 /-- The position field (bytes `4 .. 8`, little endian) of an input. -/
 def posField (x : List UInt8) : Nat := Ref.leNat (Ref.slice (toB x) 4 4)
@@ -39,20 +40,21 @@ def posField (x : List UInt8) : Nat := Ref.leNat (Ref.slice (toB x) 4 4)
 /-- The index field (bytes `12 .. 16`, little endian) of an input. -/
 def idxField (x : List UInt8) : Nat := Ref.leNat (Ref.slice (toB x) 12 4)
 
-/-- A node input (tag 3 or 10) names a node of its tree: level `1 ≤ λ ≤ h` and index
-`j < 2^(h - λ)`, `h = Ref.nodeHeight` (the height of the layer byte's tree, or `ftsA`). -/
+/-- A hypertree node input (tag 3) names a node of its tree: level `1 ≤ λ ≤ h` and index
+`j < 2^(h - λ)`, `h = Ref.nodeHeight` (the height of the layer byte's tree). PORS nodes (tag 10) are
+queried in their real block form (heap index), zero padded, so they need no condition. -/
 def NodeOk (x : List UInt8) : Prop :=
   1 ≤ posField x ∧ posField x ≤ Ref.nodeHeight (toB x) ∧
     idxField x < 2 ^ (Ref.nodeHeight (toB x) - posField x)
 
 /-- An honest hash input: protocol byte `1`, the length fixed by the tag byte, and
 * a chain input (tag 1): the zero parameter slot (bytes `16 .. 32`) and a position below `2^27`;
-* a node input (tags 3, 10): `NodeOk`;
+* a hypertree node input (tag 3): `NodeOk`;
 * the digest input (tag 12): the zero parameter slot and the zero root slot (bytes `48 .. 64`). -/
 def Honest (x : List UInt8) : Prop :=
   x.head? = some 1 ∧ x.length = tagLen (x.getD 1 0).toNat ∧
     (x.getD 1 0 = 1 → (x.drop 16).take 16 = List.replicate 16 0 ∧ posField x < 2 ^ 27) ∧
-    ((x.getD 1 0 = 3 ∨ x.getD 1 0 = 10) → NodeOk x) ∧
+    (x.getD 1 0 = 3 → NodeOk x) ∧
     (x.getD 1 0 = 12 → (x.drop 16).take 16 = List.replicate 16 0 ∧
       (x.drop 48).take 16 = List.replicate 16 0)
 
@@ -113,16 +115,14 @@ theorem getD_take4 (z : List Byte) (i : Nat) (hi : i < 4) : (z.take 4).getD i 0 
 
 theorem nodeHeight_take (z : List Byte) : Ref.nodeHeight z = Ref.nodeHeight (z.take 4) := by
   unfold Ref.nodeHeight
-  rw [getD_take4 z 1 (by omega), getD_take4 z 2 (by omega)]
+  rw [getD_take4 z 2 (by omega)]
 
 theorem height_le (l : Nat) : Ref.height l ≤ 11 := by
   unfold Ref.height Ref.heights
   rcases l with _ | _ | _ | _ | _ | l <;> simp
 
 theorem nodeHeight_le (z : List Byte) : Ref.nodeHeight z ≤ 11 := by
-  unfold Ref.nodeHeight; split
-  · exact height_le _
-  · simp [Ref.ftsA]
+  unfold Ref.nodeHeight; exact height_le _
 
 /-- The heap numbering `(λ, j) ↦ 2^(h - λ) + j` is injective on `1 ≤ λ ≤ h`, `j < 2^(h - λ)`. -/
 theorem heapIndex_inj (h a j b k : Nat) (ha : a ≤ h) (hb : b ≤ h)
@@ -203,13 +203,10 @@ theorem fmtQ_injOn : Set.InjOn fmtQ Honest := by
     have dw : w = w.take 4 ++ Ref.slice w 4 4 ++ Ref.slice w 8 8 ++ Ref.slice w 16 16 ++ w.drop 32 :=
       decomp w 4 4 8 16
     rw [dz, dw, eA, e4, eC, eP, eE]
-  by_cases h3 : x.getD 1 0 = 3 ∨ x.getD 1 0 = 10
-  · have hl64 : x.length = 64 := by rw [hx.2.1]; rcases h3 with h | h <;> rw [h] <;> rfl
-    have hnx : Ref.IsNodeFmt z :=
-      ⟨by omega, by rcases h3 with h | h; exacts [Or.inl (tag_toB x _ h), Or.inr (tag_toB x _ h)]⟩
-    have hny : Ref.IsNodeFmt w := ⟨by omega, by
-      rcases h3 with h | h
-      exacts [Or.inl (tag_toB y _ (ht ▸ h)), Or.inr (tag_toB y _ (ht ▸ h))]⟩
+  by_cases h3 : x.getD 1 0 = 3
+  · have hl64 : x.length = 64 := by rw [hx.2.1, h3]; rfl
+    have hnx : Ref.IsNodeFmt z := ⟨by omega, tag_toB x _ h3⟩
+    have hny : Ref.IsNodeFmt w := ⟨by omega, tag_toB y _ (ht ▸ h3)⟩
     have hcx : ¬ Ref.IsChainFmt z := fun h => by have := h.1; omega
     have hcy : ¬ Ref.IsChainFmt w := fun h => by have := h.1; omega
     unfold Ref.fmtList at hL
@@ -266,14 +263,13 @@ theorem fmtQ_injOn : Set.InjOn fmtQ Honest := by
       decomp w 16 16 16 16
     rw [dz, dw, eA, eP, eC, eR, eE]
   · have hnot : ∀ (u : List UInt8), u.getD 1 0 = x.getD 1 0 →
-        (toB u).getD 1 0 ∉ [Ref.byte 1, Ref.byte 3, Ref.byte 10, Ref.byte 12] := by
+        (toB u).getD 1 0 ∉ [Ref.byte 1, Ref.byte 3, Ref.byte 12] := by
       intro u hu hm
       rw [getD_toB, hu] at hm
       simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
-      rcases hm with hm | hm | hm | hm
+      rcases hm with hm | hm | hm
       · exact h1 (UInt8.toBitVec_inj.mp hm)
-      · exact h3 (Or.inl (UInt8.toBitVec_inj.mp hm))
-      · exact h3 (Or.inr (UInt8.toBitVec_inj.mp hm))
+      · exact h3 (UInt8.toBitVec_inj.mp hm)
       · exact h12 (UInt8.toBitVec_inj.mp hm)
     have hq : Ref.padTo64 z = Ref.padTo64 w := by
       have := congrArg qbytes hxy
@@ -333,23 +329,18 @@ theorem byte_eq_iff (a b : Nat) : Ref.byte a = Ref.byte b ↔ a % 256 = b % 256 
   · intro h; apply BitVec.eq_of_toNat_eq; simpa [Ref.byte_toNat] using h
 
 theorem nodeHeight_tweak (t lay tau p j : Nat) (r : List Byte) :
-    Ref.nodeHeight (Ref.tweak t lay tau p j ++ r) =
-      if t % 256 = 3 then Ref.height (lay % 256) else Ref.ftsA := by
+    Ref.nodeHeight (Ref.tweak t lay tau p j ++ r) = Ref.height (lay % 256) := by
   unfold Ref.nodeHeight
-  have h1 : (Ref.tweak t lay tau p j ++ r).getD 1 0 = Ref.byte t := by simp [Ref.tweak]
   have h2 : (Ref.tweak t lay tau p j ++ r).getD 2 0 = Ref.byte lay := by simp [Ref.tweak]
-  rw [h1, h2, Ref.byte_toNat]
-  by_cases h : t % 256 = 3
-  · rw [if_pos ((byte_eq_iff _ _).mpr (by simpa using h)), if_pos h]
-  · rw [if_neg (fun e => h (by simpa using (byte_eq_iff _ _).mp e)), if_neg h]
+  rw [h2, Ref.byte_toNat]
 
 /-- A tweak input `tw(t, lay, tau, p, j) || P || payload` is honest, given the facts of its tag. -/
 theorem honest_tw (t lay tau p j : Nat) (P : SphincsSecurity.PublicParameter) (payload : List UInt8)
     (hlen : 32 + payload.length = tagLen (t % 256))
     (h1 : t % 256 = 1 → P = 0 ∧ p % 2 ^ 32 < 2 ^ 27)
-    (hn : t % 256 = 3 ∨ t % 256 = 10 →
-      1 ≤ p % 2 ^ 32 ∧ p % 2 ^ 32 ≤ (if t % 256 = 3 then Ref.height (lay % 256) else Ref.ftsA) ∧
-        j % 2 ^ 32 < 2 ^ ((if t % 256 = 3 then Ref.height (lay % 256) else Ref.ftsA) - p % 2 ^ 32))
+    (hn : t % 256 = 3 →
+      1 ≤ p % 2 ^ 32 ∧ p % 2 ^ 32 ≤ Ref.height (lay % 256) ∧
+        j % 2 ^ 32 < 2 ^ (Ref.height (lay % 256) - p % 2 ^ 32))
     (h12 : t % 256 = 12 → P = 0 ∧ (payload.drop 16).take 16 = List.replicate 16 0) :
     Honest (SphincsSecurity.fieldBytes (SphincsSecurity.tweakFields t lay tau p j) ++
       SphincsSecurity.bytesLE 16 P ++ payload) := by
@@ -366,7 +357,7 @@ theorem honest_tw (t lay tau p j : Nat) (P : SphincsSecurity.PublicParameter) (p
     unfold posField; rw [hB, slice_tweak4, Ref.leNat_le32]
   have hidx : idxField x = j % 2 ^ 32 := by
     unfold idxField; rw [hB, slice_tweak12, Ref.leNat_le32]
-  have hnh : Ref.nodeHeight (toB x) = if t % 256 = 3 then Ref.height (lay % 256) else Ref.ftsA := by
+  have hnh : Ref.nodeHeight (toB x) = Ref.height (lay % 256) := by
     rw [hB, nodeHeight_tweak]
   have hd16 : x.drop 16 = SphincsSecurity.bytesLE 16 P ++ payload := by
     rw [hx, List.append_assoc, List.drop_left' (length_fieldBytes _)]
@@ -382,7 +373,7 @@ theorem honest_tw (t lay tau p j : Nat) (P : SphincsSecurity.PublicParameter) (p
     obtain ⟨a, b⟩ := h1 (htag 1 h)
     exact ⟨hPs ▸ hP0 a, hpos ▸ b⟩
   · intro h
-    obtain ⟨a, b, c⟩ := hn (h.imp (htag 3) (htag 10))
+    obtain ⟨a, b, c⟩ := hn (htag 3 h)
     unfold NodeOk
     rw [hpos, hidx, hnh]
     exact ⟨a, b, c⟩
@@ -393,18 +384,16 @@ theorem honest_tw (t lay tau p j : Nat) (P : SphincsSecurity.PublicParameter) (p
 /-- An input whose tag has no special format is honest when its length is right. -/
 theorem honest_plain (f : SphincsSecurity.TweakFields) (rest : List UInt8)
     (h : 16 + rest.length = tagLen f.tag.toNat)
-    (ht : f.tag.toNat ≠ 1 ∧ f.tag.toNat ≠ 3 ∧ f.tag.toNat ≠ 10 ∧ f.tag.toNat ≠ 12) :
+    (ht : f.tag.toNat ≠ 1 ∧ f.tag.toNat ≠ 3 ∧ f.tag.toNat ≠ 12) :
     Honest (SphincsSecurity.fieldBytes f ++ rest) := by
   have hg : ((SphincsSecurity.fieldBytes f ++ rest).getD 1 0).toNat = f.tag.toNat := by
     rw [getD1_fieldBytes]; rfl
   have htag : ∀ c : UInt8, (SphincsSecurity.fieldBytes f ++ rest).getD 1 0 = c → f.tag.toNat = c.toNat :=
     fun c e => hg ▸ congrArg UInt8.toNat e
   refine ⟨by simp [SphincsSecurity.fieldBytes, SphincsSecurity.protocolDomainSep], ?_,
-    fun e => absurd (htag 1 e) ht.1, fun e => ?_, fun e => absurd (htag 12 e) ht.2.2.2⟩
-  · rw [List.length_append, length_fieldBytes, h, hg]
-  · rcases e with e | e
-    · exact absurd (htag 3 e) ht.2.1
-    · exact absurd (htag 10 e) ht.2.2.1
+    fun e => absurd (htag 1 e) ht.1, fun e => absurd (htag 3 e) ht.2.1,
+    fun e => absurd (htag 12 e) ht.2.2⟩
+  rw [List.length_append, length_fieldBytes, h, hg]
 
 theorem tweakableHashInput_eq (P : SphincsSecurity.PublicParameter) (dom : SphincsSecurity.HashDomain)
     (payload : List UInt8) :
@@ -421,7 +410,11 @@ theorem layerHeight_eq (lay : Layer) : SphincsSecurity.layerHeight lay = Ref.hei
 abbrev HQ {α : Type} (oa : AComp α) : Prop :=
   AllQ (ι := List UInt8) (R := SphincsSecurity.HashOutput) Honest oa
 
-theorem hq_pure {α : Type} (a : α) : HQ (pure a : AComp α) := trivial
+theorem hq_pure {α : Type} (a : α) : HQ (pure a : AComp α) := allQ_pure Honest a
+
+/- `AllQ` is a structural recursion on the computation; sealing it keeps elaboration from evaluating
+the big concrete trees (`2^14` PORS leaves) inside `HQ` goals. -/
+attribute [local irreducible] SigGolfCandidate.Bridge.AllQ
 
 theorem hq_bind {α β : Type} {oa : AComp α} {ob : α → AComp β} (h : HQ oa) (h' : ∀ x, HQ (ob x)) :
     HQ (oa >>= ob) := allQ_bind Honest h h'
@@ -505,23 +498,22 @@ theorem hq_node (lay : Layer) (tree : TreeIndex) (lam j : Nat) (l r : Digest) (h
   have hj : j < 2 ^ 32 := lt_of_lt_of_le h3 (Nat.pow_le_pow_right (by omega) (by omega))
   refine honest_tw 3 lay.val tree.val lam j P _ (by simp [tagLen, nodePayload, length_bytesLE])
     (fun h => absurd h (by decide)) (fun _ => ?_) (fun h => absurd h (by decide))
-  rw [if_pos (by decide), Nat.mod_eq_of_lt (lay_lt256 lay), Nat.mod_eq_of_lt (show lam < 2 ^ 32 by omega),
+  rw [Nat.mod_eq_of_lt (lay_lt256 lay), Nat.mod_eq_of_lt (show lam < 2 ^ 32 by omega),
     Nat.mod_eq_of_lt hj, ← hh]
   exact ⟨h1, h2, h3⟩
 
-/-- A FORS node query is honest when it names a node of a FORS tree. -/
-theorem hq_ftsNode (index : Index) (tree : FtsTree) (lam j : Nat) (l r : Digest) (h1 : 1 ≤ lam)
-    (h2 : lam ≤ SphincsSecurity.ftsTreeHeight) (h3 : j < 2 ^ (SphincsSecurity.ftsTreeHeight - lam)) :
-    HQ (tweakableHash (m := AComp) P (.ftsNode index tree lam j) (nodePayload l r)) := by
+/-- A PORS node query (tag 10, any heap index, any 32-byte payload) is honest. -/
+theorem hq_ftsNodeAny (index : Index) (tree : FtsTree) (heap : Nat) (payload : List UInt8)
+    (hl : payload.length = 32) :
+    HQ (tweakableHash (m := AComp) P (.ftsNode index tree heap) payload) := by
   refine hq_th _ _ _ ?_
   rw [tweakableHashInput_eq]
-  have e : SphincsSecurity.ftsTreeHeight = 10 := rfl
-  rw [e] at h2 h3
-  have hj : j < 2 ^ 32 := lt_of_lt_of_le h3 (Nat.pow_le_pow_right (by omega) (by omega))
-  refine honest_tw 10 tree.val index.val lam j P _ (by simp [tagLen, nodePayload, length_bytesLE])
-    (fun h => absurd h (by decide)) (fun _ => ?_) (fun h => absurd h (by decide))
-  rw [if_neg (by decide), Nat.mod_eq_of_lt (show lam < 2 ^ 32 by omega), Nat.mod_eq_of_lt hj]
-  exact ⟨h1, h2, h3⟩
+  exact honest_tw 10 tree.val index.val 0 heap P _ (by simp [tagLen, hl])
+    (fun h => absurd h (by decide)) (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
+
+theorem hq_ftsNode (index : Index) (tree : FtsTree) (heap : Nat) (l r : Digest) :
+    HQ (tweakableHash (m := AComp) P (.ftsNode index tree heap) (nodePayload l r)) :=
+  hq_ftsNodeAny P index tree heap _ (by simp [nodePayload, length_bytesLE])
 
 theorem hq_encode (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Digest)
     (c : SphincsSecurity.Counter) : HQ (encode (m := AComp) P lay tree leaf M c) := by
@@ -530,21 +522,12 @@ theorem hq_encode (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Diges
   exact honest_tw 4 lay.val tree.val 0 leaf.val P _ (by simp [tagLen, length_bytesLE])
     (fun h => absurd h (by decide)) (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
 
-theorem hq_ftsLeafHash (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (s : Digest) :
+theorem hq_ftsLeafHash (index : Index) (tree : FtsTree) (leaf : Nat) (s : Digest) :
     HQ (ftsLeafHash (m := AComp) P index tree leaf s) := by
   refine hq_th _ _ _ ?_
   rw [tweakableHashInput_eq]
-  exact honest_tw 9 tree.val index.val 0 leaf.val P _ (by simp [tagLen, length_bytesLE])
+  exact honest_tw 9 tree.val index.val 0 leaf P _ (by simp [tagLen, length_bytesLE])
     (fun h => absurd h (by decide)) (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
-
-theorem hq_ftsRoots (index : Index) (roots : FtsTree → Digest) :
-    HQ (tweakableHash (m := AComp) P (.ftsRoots index) (ftsRootsPayload roots)) := by
-  refine hq_th _ _ _ ?_
-  rw [tweakableHashInput_eq]
-  refine honest_tw 11 0 index.val 0 0 P _ ?_
-    (fun h => absurd h (by decide)) (fun h => absurd h (by decide)) (fun h => absurd h (by decide))
-  rw [ftsRootsPayload, length_flatMap16, List.length_ofFn]
-  simp [tagLen, SphincsSecurity.ftsTrees]
 
 /-- The message digest query is honest (zero parameter; the root slot is zero). -/
 theorem hq_messageDigest (hP : P = 0) (root : Digest) (m : Message) (rho : Digest) :
@@ -590,7 +573,7 @@ end calls
 macro "hqs" : tactic => `(tactic| repeat (first
   | exact hq_pure _
   | apply hq_chainWalk | apply hq_leafHash | apply hq_node | apply hq_ftsNode | apply hq_encode
-  | apply hq_ftsLeafHash | apply hq_ftsRoots | apply hq_messageDigest | apply hq_deriveKey
+  | apply hq_ftsLeafHash | apply hq_messageDigest | apply hq_deriveKey
   | apply hq_deriveRandomizer
   | refine hq_bind ?_ (fun _ => ?_)
   | refine hq_sequenceFin _ (fun _ => ?_)
@@ -628,22 +611,75 @@ theorem hq_treeFold (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (path : 
     dsimp only
     split <;> exact hq_node _ _ _ _ _ _ _ (by omega) hn (div_pow_lt _ _ _ hleaf hn)
 
-theorem hq_ftsFold (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
-    (path : Fin SphincsSecurity.ftsTreeHeight → Digest) (n : Nat) (hn : n ≤ SphincsSecurity.ftsTreeHeight)
-    (v : Digest) : HQ (ftsFold (m := AComp) P index tree leaf path n v) := by
-  induction n with
+theorem length_foldPayload (right : Bool) (a b : Digest) : (foldPayload right a b).length = 32 := by
+  unfold foldPayload; split <;> simp [nodePayload, length_bytesLE]
+
+theorem hq_foldSegment (index : Index) (segment : SphincsSecurity.Segment) (remaining position : Nat)
+    (current : Digest) (heap : Nat) :
+    HQ (foldSegment (m := AComp) P index segment remaining position current heap) := by
+  induction remaining generalizing position current heap with
   | zero => exact hq_pure _
   | succ n ih =>
-    refine hq_bind (ih (by omega)) fun _ => ?_
-    dsimp only
-    split <;> exact hq_ftsNode _ _ _ _ _ _ _ (by omega) hn (div_pow_lt _ _ _ leaf.isLt hn)
+    unfold foldSegment
+    exact hq_bind (hq_ftsNodeAny _ _ _ _ _ (length_foldPayload _ _ _)) fun _ => ih _ _ _
 
-theorem hq_ftsRecover (index : Index) (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest)
-    (paths : FtsTree → Fin SphincsSecurity.ftsTreeHeight → Digest) :
-    HQ (ftsRecover (m := AComp) P index leaves secrets paths) := by
+theorem hq_recoverSegments (index : Index) (segments : Fin SphincsSecurity.ftsSegments → SphincsSecurity.Segment)
+    (fuel : Nat) (pending : PendingHash) (state : RecoverState) :
+    HQ (recoverSegments (m := AComp) P index segments fuel pending state) := by
+  induction fuel generalizing pending state with
+  | zero => exact hq_pure _
+  | succ n ih =>
+    unfold recoverSegments
+    split
+    swap
+    · exact hq_pure _
+    dsimp only
+    split
+    · exact hq_pure _
+    split
+    · exact hq_pure _
+    cases pending with
+    | leaf v s =>
+      refine hq_bind (hq_ftsLeafHash _ _ _ _ _) fun start => ?_
+      refine hq_bind (hq_foldSegment _ _ _ _ _ _ _) fun r => ?_
+      split
+      · split
+        · exact hq_pure _
+        · split
+          · exact ih _ _
+          · exact hq_pure _
+      · exact hq_pure _
+    | merge H l =>
+      refine hq_bind (hq_ftsNode _ _ _ _ _ _) fun start => ?_
+      refine hq_bind (hq_foldSegment _ _ _ _ _ _ _) fun r => ?_
+      split
+      · split
+        · exact hq_pure _
+        · split
+          · exact ih _ _
+          · exact hq_pure _
+      · exact hq_pure _
+
+theorem hq_recoverLeaves (index : Index) (values : SphincsSecurity.SlotCode → Nat)
+    (fts : SphincsSecurity.FtsSignature) (remaining position previous : Nat) (state : RecoverState) :
+    HQ (recoverLeaves (m := AComp) P index values fts remaining position previous state) := by
+  induction remaining generalizing position previous state with
+  | zero => exact hq_pure _
+  | succ n ih =>
+    unfold recoverLeaves
+    repeat (first
+      | exact hq_pure _
+      | exact ih _ _ _
+      | refine hq_bind (hq_recoverSegments _ _ _ _ _ _) (fun _ => ?_)
+      | split
+      | dsimp only)
+
+theorem hq_ftsRecover (index : Index) (values : SphincsSecurity.SlotCode → Nat)
+    (fts : SphincsSecurity.FtsSignature) :
+    HQ (ftsRecover (m := AComp) P index values fts) := by
   unfold ftsRecover
-  refine hq_bind (hq_sequenceFin _ fun t => hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ =>
-    hq_ftsFold _ _ _ _ _ _ le_rfl _) fun _ => hq_ftsRoots _ _ _
+  refine hq_bind (hq_recoverLeaves _ _ _ _ _ _ _ _) fun r => ?_
+  repeat (first | exact hq_pure _ | split | dsimp only)
 
 theorem hq_verifyLayers (hP : P = 0) (index : Index) (σ : Signature) (n : Nat) (M : Digest) :
     HQ (verifyLayers (m := AComp) P index σ n M) := by
@@ -666,10 +702,11 @@ theorem hq_verify (pk : SphincsSecurity.PublicKey) (hP : pk.parameter = 0) (m : 
   unfold verify verifyCore
   split
   · refine hq_bind (hq_messageDigest _ hP _ _ _) fun d => ?_
+    refine hq_bind (hq_ftsRecover _ _ _ _) fun r => ?_
     split
-    · exact hq_pure _
-    · refine hq_bind (hq_ftsRecover _ _ _ _ _) fun _ => hq_bind (hq_verifyLayers _ hP _ _ _ _) fun r => ?_
+    · refine hq_bind (hq_verifyLayers _ hP _ _ _ _) fun r => ?_
       split <;> exact hq_pure _
+    · exact hq_pure _
   · exact hq_pure _
 
 /-! ### Tree building and signing -/
@@ -696,11 +733,11 @@ theorem hq_layerNode (lay : Layer) (tree : TreeIndex) :
       HQ (tweakableHash (m := AComp) P (.node lay tree lam j) (nodePayload l r)) :=
   fun _ _ _ _ h1 h2 h3 => hq_node _ _ _ _ _ _ _ h1 h2 h3
 
-theorem hq_ftsTreeNode (index : Index) (tree : FtsTree) :
+theorem hq_ftsTreeNode (index : Index) :
     ∀ lam j l r, 1 ≤ lam → lam ≤ SphincsSecurity.ftsTreeHeight →
       j < 2 ^ (SphincsSecurity.ftsTreeHeight - lam) →
-      HQ (tweakableHash (m := AComp) P (.ftsNode index tree lam j) (nodePayload l r)) :=
-  fun _ _ _ _ h1 h2 h3 => hq_ftsNode _ _ _ _ _ _ _ h1 h2 h3
+      HQ (tweakableHash (m := AComp) P (.ftsNode index porsTree (ftsHeapIndex lam j)) (nodePayload l r)) :=
+  fun _ _ _ _ _ _ _ => hq_ftsNode _ _ _ _ _ _
 
 theorem hq_buildChain (hP : P = 0) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (c : ChainIndex)
     (secret : AComp Digest) (hs : HQ secret) (d : Nat) :
@@ -728,18 +765,12 @@ theorem hq_buildLayerTable (hP : P = 0) (lay : Layer) (tree : TreeIndex)
   hq_bind (hq_sequenceFin _ fun _ => hq_buildLeaf _ hP _ _ _ _ (hs _) _) fun _ =>
     hq_bind (hq_buildLevels _ _ (hq_layerNode _ _ _) _ _ le_rfl) fun _ => hq_pure _
 
-theorem hq_buildFtsTree (index : Index) (tree : FtsTree) (secret : FtsLeaf → AComp Digest)
-    (hs : ∀ j, HQ (secret j)) (leaf : FtsLeaf) :
-    HQ (buildFtsTree P index tree secret leaf) :=
+theorem hq_buildFtsTree (index : Index) (secret : FtsLeaf → AComp Digest)
+    (hs : ∀ j, HQ (secret j)) :
+    HQ (buildFtsTree P index secret) :=
   hq_bind (hq_sequenceFin _ fun j => hq_bind (hs j) fun _ =>
       hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ => hq_pure _) fun _ =>
-    hq_bind (hq_buildLevels _ _ (hq_ftsTreeNode _ _ _) _ _ le_rfl) fun _ => hq_pure _
-
-theorem hq_buildForest (index : Index) (secret : FtsTree → FtsLeaf → AComp Digest)
-    (hs : ∀ t j, HQ (secret t j)) (leaves : IndexGroup → FtsLeaf) :
-    HQ (buildForest P index secret leaves) :=
-  hq_bind (hq_sequenceFin _ fun t => hq_buildFtsTree _ _ _ _ (hs t) _) fun _ =>
-    hq_bind (hq_ftsRoots _ _ _) fun _ => hq_pure _
+    hq_bind (hq_buildLevels _ _ (hq_ftsTreeNode _ _) _ _ le_rfl) fun _ => hq_pure _
 
 theorem hq_encodingSearch (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Digest)
     (attempts counter : Nat) : HQ (encodingSearch (m := AComp) P lay tree leaf M attempts counter) := by
@@ -789,7 +820,7 @@ theorem hq_signFrom (hP : P = 0) (index : Index) (ftsSecret : FtsTree → FtsLea
     (ht : ∀ l j, HQ (topNode l j)) (randomness : Digest) (leaves : IndexGroup → FtsLeaf) :
     HQ (signFrom P index ftsSecret otsSecret topNode randomness leaves) := by
   unfold signFrom
-  refine hq_bind (hq_buildForest _ _ _ hf _) fun _ =>
+  refine hq_bind (hq_buildFtsTree _ _ _ (hf _)) fun _ =>
     hq_bind (hq_signLayers _ hP _ _ ho _ ht _ _) fun r => ?_
   split <;> exact hq_pure _
 
@@ -816,20 +847,13 @@ theorem hq_buildLayerTreePaired (hP : P = 0) (lay : Layer) (tree : TreeIndex)
     HQ (buildLayerTreePaired P lay tree secret leaf digits) :=
   hq_bind (hq_buildLayerTablePaired _ hP _ _ _ hs _ _) fun _ => hq_pure _
 
-theorem hq_buildFtsTreePaired (index : Index) (tree : FtsTree)
-    (secret : SphincsSecurity.FtsPair → AComp (Digest × Digest)) (hs : ∀ j, HQ (secret j))
-    (leaf : FtsLeaf) : HQ (buildFtsTreePaired P index tree secret leaf) :=
+theorem hq_buildFtsTreePaired (index : Index)
+    (secret : SphincsSecurity.FtsPair → AComp (Digest × Digest)) (hs : ∀ j, HQ (secret j)) :
+    HQ (buildFtsTreePaired P index secret) :=
   hq_bind (hq_sequenceFin _ fun j => hq_bind (hs j) fun _ =>
       hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ =>
         hq_bind (hq_ftsLeafHash _ _ _ _ _) fun _ => hq_pure _) fun _ =>
-    hq_bind (hq_buildLevels _ _ (hq_ftsTreeNode _ _ _) _ _ le_rfl) fun _ => hq_pure _
-
-theorem hq_buildForestPaired (index : Index)
-    (secret : FtsTree → SphincsSecurity.FtsPair → AComp (Digest × Digest))
-    (hs : ∀ t j, HQ (secret t j)) (leaves : IndexGroup → FtsLeaf) :
-    HQ (buildForestPaired P index secret leaves) :=
-  hq_bind (hq_sequenceFin _ fun t => hq_buildFtsTreePaired _ _ _ _ (hs t) _) fun _ =>
-    hq_bind (hq_ftsRoots _ _ _) fun _ => hq_pure _
+    hq_bind (hq_buildLevels _ _ (hq_ftsTreeNode _ _) _ _ le_rfl) fun _ => hq_pure _
 
 theorem hq_signTopLayerPaired (hP : P = 0) (index : Index)
     (secret : LeafIndex → SphincsSecurity.ChainPair → AComp (Digest × Digest))
@@ -873,7 +897,7 @@ theorem hq_signFromPaired (hP : P = 0) (index : Index)
     (ht : ∀ l j, HQ (topNode l j)) (randomness : Digest) (leaves : IndexGroup → FtsLeaf) :
     HQ (signFromPaired P index ftsSecret otsSecret topNode randomness leaves) := by
   unfold signFromPaired
-  refine hq_bind (hq_buildForestPaired _ _ _ hf _) fun _ =>
+  refine hq_bind (hq_buildFtsTreePaired _ _ _ (hf _)) fun _ =>
     hq_bind (hq_signLayersPaired _ hP _ _ ho _ ht _ _) fun r => ?_
   split <;> exact hq_pure _
 
@@ -930,6 +954,11 @@ theorem hq_sign (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
           _ (fun _ _ => hq_bind (hq_maskSecret _ _ _ _) fun _ => hq_pure _) _ _
       · exact hq_pure _
   · exact hq_pure _
+
+/-- **expand** (abstract) makes only honest queries: one digest query with parameter `0`. -/
+theorem hq_aExpand (m : Message) (pk : SphincsSecurity.PublicKey) (σ : Bytes 6100) :
+    HQ (aExpand m pk σ) :=
+  hq_bind (hq_messageDigest _ rfl _ _ _) fun _ => hq_pure _
 
 /-- **keygen** makes only honest queries. -/
 theorem hq_keygen (seed : MasterSeed) : HQ (SphincsSecurity.Seeded.keygenFromSeed seed) := by

@@ -28,14 +28,14 @@ def completeRecord (record : PublicSigningRecord) :
     OracleComp (World auxSpec Coordinate Digest) ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) :=
   match record.1.1, record.1.2 with
   | some plan, some view => do
-      let secrets ← sequenceFin fun tree => disclosure (view.1, tree, view.2 tree)
-      pure ((some (plan.finish secrets), some view), record.2)
+      let secrets ← sequenceFin fun slot => disclosure (view.1, porsTree, view.2 slot)
+      pure ((some (plan.finish view.2 secrets), some view), record.2)
   | _, _ => pure ((none, record.1.2), record.2)
 
 def completedState (environment : Environment auxSpec Coordinate Digest Memory) (labels : Coordinate → Digest)
     (record : PublicSigningRecord) (state : State Coordinate Digest Memory) : State Coordinate Digest Memory :=
   match record.1.1, record.1.2 with
-  | some _, some view => disclosureSequenceState environment labels (fun tree => (view.1, tree, view.2 tree)) state
+  | some _, some view => disclosureSequenceState environment labels (fun slot => (view.1, porsTree, view.2 slot)) state
   | _, _ => state
 
 theorem completedState_counts (environment : Environment auxSpec Coordinate Digest Memory) (labels : Coordinate → Digest)
@@ -48,7 +48,7 @@ theorem completedState_counts (environment : Environment auxSpec Coordinate Dige
   | some plan =>
       cases view with
       | none => rfl
-      | some view => exact disclosureSequenceState_counts environment labels (fun tree : FtsTree => (view.1, tree, view.2 tree)) state
+      | some view => exact disclosureSequenceState_counts environment labels (fun slot : IndexGroup => (view.1, porsTree, view.2 slot)) state
 
 theorem fixedRun_completeRecord (environment : Environment auxSpec Coordinate Digest Memory) (labels : Coordinate → Digest)
     (record : PublicSigningRecord) (state : State Coordinate Digest Memory) :

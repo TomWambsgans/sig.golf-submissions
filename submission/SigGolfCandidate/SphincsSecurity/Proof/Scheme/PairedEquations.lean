@@ -131,32 +131,25 @@ theorem buildLayerTreePaired_pure (parameter : PublicParameter) (lay : Layer) (t
   unfold buildLayerTree buildLayerTable
   simp only [bind_assoc, pure_bind]
 
-theorem buildFtsTreePaired_pure (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsLeaf → Digest) (leaf : FtsLeaf) :
-    (buildFtsTreePaired parameter index tree (fun pair => pure (ftsPairOf secret pair)) leaf : m _) =
-      buildFtsTree parameter index tree (fun leaf => pure (secret leaf)) leaf := by
+theorem buildFtsTreePaired_pure (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → Digest) :
+    (buildFtsTreePaired parameter index (fun pair => pure (ftsPairOf secret pair)) : m _) =
+      buildFtsTree parameter index (fun leaf => pure (secret leaf)) := by
   unfold buildFtsTreePaired buildFtsTree
   rw [sequenceFin_pairs (2 ^ (ftsTreeHeight - 1)) (2 ^ ftsTreeHeight) ftsLeaves_eq_two_mul, bind_map_left]
   simp only [pure_bind]
   have hstep : (fun pair : FtsPair => (do
-      let first ← ftsLeafHash parameter index tree (evenFtsLeaf pair) (ftsPairOf secret pair).1
-      let second ← ftsLeafHash parameter index tree (oddFtsLeaf pair) (ftsPairOf secret pair).2
+      let first ← ftsLeafHash parameter index porsTree (evenFtsLeaf pair).val (ftsPairOf secret pair).1
+      let second ← ftsLeafHash parameter index porsTree (oddFtsLeaf pair).val (ftsPairOf secret pair).2
       return (((ftsPairOf secret pair).1, first), ((ftsPairOf secret pair).2, second)) : m _)) =
       pairStep ftsLeaves_eq_two_mul (fun leafIdx : FtsLeaf => (do
-        let hashed ← ftsLeafHash parameter index tree leafIdx (secret leafIdx)
+        let hashed ← ftsLeafHash parameter index porsTree leafIdx.val (secret leafIdx)
         return (secret leafIdx, hashed) : m _)) := by
     funext pair
     simp only [pairStep, pure_bind, bind_assoc]
     rfl
   rw [hstep]
   simp only [unpairFtsLeaves_eq]
-
-theorem buildForestPaired_pure (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → Digest) (leaves : IndexGroup → FtsLeaf) :
-    (buildForestPaired parameter index (fun tree pair => pure (ftsPairOf (secret tree) pair)) leaves : m _) =
-      buildForest parameter index (fun tree leaf => pure (secret tree leaf)) leaves := by
-  unfold buildForestPaired buildForest
-  simp only [buildFtsTreePaired_pure]
 
 theorem signTopLayerPaired_pure (parameter : PublicParameter) (index : Index)
     (secret : LeafIndex → ChainIndex → Digest) (topNode : Nat → Nat → m Digest) (message : Digest) :
@@ -206,9 +199,9 @@ theorem signFromPaired_pure (parameter : PublicParameter) (index : Index)
       signFrom parameter index (fun tree leaf => pure (ftsSecret tree leaf))
         (fun lay tree leaf chainIdx => pure (otsSecret lay tree leaf chainIdx)) topNode randomness leaves := by
   unfold signFromPaired signFrom
-  rw [buildForestPaired_pure]
+  rw [buildFtsTreePaired_pure]
   apply bind_congr
-  rintro ⟨secrets, path, key⟩
+  rintro ⟨secrets, table⟩
   dsimp only
   rw [signLayersPaired_pure]
 

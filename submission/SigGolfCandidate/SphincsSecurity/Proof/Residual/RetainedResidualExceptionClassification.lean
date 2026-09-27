@@ -9,7 +9,7 @@ set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree)
+  (budget : Nat) (required : Finset IndexGroup)
 
 theorem exceptionHistoryRun_unstopped {Result : Type} (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : ExceptionHistoryState inputs) (hvalid : MonitoredValid inputs state.1)

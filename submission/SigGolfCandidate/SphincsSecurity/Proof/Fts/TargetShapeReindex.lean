@@ -6,16 +6,16 @@ namespace SphincsSecurity.Concrete
 open ENNReal
 attribute [local instance] Classical.propDecidable
 
-noncomputable def targetGroupAt (groups : Finset (Finset FtsTree)) (slot : Fin groups.card) : Finset FtsTree :=
+noncomputable def targetGroupAt (groups : Finset (Finset IndexGroup)) (slot : Fin groups.card) : Finset IndexGroup :=
   (groups.equivFin.symm slot).val
 
-theorem targetGroupAt_mem (groups : Finset (Finset FtsTree)) (slot : Fin groups.card) : targetGroupAt groups slot ∈ groups :=
+theorem targetGroupAt_mem (groups : Finset (Finset IndexGroup)) (slot : Fin groups.card) : targetGroupAt groups slot ∈ groups :=
   (groups.equivFin.symm slot).property
 
-theorem targetGroupAt_injective (groups : Finset (Finset FtsTree)) : Function.Injective (targetGroupAt groups) :=
+theorem targetGroupAt_injective (groups : Finset (Finset IndexGroup)) : Function.Injective (targetGroupAt groups) :=
   fun _ _ h => groups.equivFin.symm.injective (Subtype.ext h)
 
-theorem targetGroupAt_image (groups : Finset (Finset FtsTree)) : Finset.univ.image (targetGroupAt groups) = groups := by
+theorem targetGroupAt_image (groups : Finset (Finset IndexGroup)) : Finset.univ.image (targetGroupAt groups) = groups := by
   ext group
   constructor
   · intro h
@@ -24,18 +24,37 @@ theorem targetGroupAt_image (groups : Finset (Finset FtsTree)) : Finset.univ.ima
   · intro h
     exact Finset.mem_image.mpr ⟨groups.equivFin ⟨group, h⟩, Finset.mem_univ _, by simp [targetGroupAt]⟩
 
-theorem prod_targetGroupAt (groups : Finset (Finset FtsTree)) (f : Finset FtsTree → ENNReal) :
+theorem prod_targetGroupAt (groups : Finset (Finset IndexGroup)) (f : Finset IndexGroup → ENNReal) :
     (∏ slot : Fin groups.card, f (targetGroupAt groups slot)) = ∏ group ∈ groups, f group := by
   calc
     _ = ∏ group ∈ Finset.univ.image (targetGroupAt groups), f group :=
       (Finset.prod_image (targetGroupAt_injective groups).injOn).symm
     _ = _ := by rw [targetGroupAt_image]
 
-theorem sum_targetGroupAt_proper (groups : Finset (Finset FtsTree)) (f : Finset (Finset FtsTree) → ENNReal) :
+theorem sum_targetGroupAt_proper (groups : Finset (Finset IndexGroup)) (f : Finset (Finset IndexGroup) → ENNReal) :
     (∑ kept ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase Finset.univ,
       f (kept.image (targetGroupAt groups))) = ∑ kept ∈ groups.powerset.erase groups, f kept := by
   have hi := Finset.image_injective (targetGroupAt_injective groups)
   rw [← Finset.sum_image hi.injOn, Finset.image_erase hi, ← Finset.powerset_image, targetGroupAt_image]
+
+theorem sum_targetGroupAt_nonempty (groups : Finset (Finset IndexGroup)) (f : Finset (Finset IndexGroup) → ENNReal) :
+    (∑ selected ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase ∅,
+      f (selected.image (targetGroupAt groups))) = ∑ removed ∈ groups.powerset.erase ∅, f removed := by
+  have hi := Finset.image_injective (targetGroupAt_injective groups)
+  rw [← Finset.sum_image hi.injOn, Finset.image_erase hi, ← Finset.powerset_image, targetGroupAt_image,
+    Finset.image_empty]
+
+theorem biUnion_targetGroupAt (groups : Finset (Finset IndexGroup)) (selected : Finset (Fin groups.card)) :
+    selected.biUnion (targetGroupAt groups) = (selected.image (targetGroupAt groups)).biUnion id := by
+  rw [Finset.image_biUnion]
+  rfl
+
+theorem prod_targetGroupAt_compl (groups : Finset (Finset IndexGroup)) (selected : Finset (Fin groups.card))
+    (f : Finset IndexGroup → ENNReal) :
+    (∏ slot ∈ (Finset.univ : Finset (Fin groups.card)) \ selected, f (targetGroupAt groups slot)) =
+      ∏ group ∈ groups \ selected.image (targetGroupAt groups), f group := by
+  rw [← Finset.prod_image (targetGroupAt_injective groups).injOn,
+    Finset.image_sdiff _ _ (targetGroupAt_injective groups), targetGroupAt_image]
 
 theorem sum_nonempty_sdiff_eq_proper {α : Type} [DecidableEq α] (s : Finset α) (f : Finset α → ENNReal) :
     (∑ removed ∈ s.powerset.erase ∅, f (s \ removed)) = ∑ kept ∈ s.powerset.erase s, f kept := by
@@ -55,7 +74,7 @@ theorem sum_nonempty_sdiff_eq_proper {α : Type} [DecidableEq α] (s : Finset α
     exact Finset.sdiff_sdiff_eq_self (Finset.mem_powerset.mp (Finset.mem_erase.mp hkept).2)
   · intro _ _; rfl
 
-theorem sum_targetGroupAt_removed_products (groups : Finset (Finset FtsTree)) (f : Finset FtsTree → ENNReal) :
+theorem sum_targetGroupAt_removed_products (groups : Finset (Finset IndexGroup)) (f : Finset IndexGroup → ENNReal) :
     (∑ removed ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase ∅,
       ∏ slot ∈ (Finset.univ : Finset (Fin groups.card)) \ removed, f (targetGroupAt groups slot)) =
       ∑ kept ∈ groups.powerset.erase groups, ∏ group ∈ kept, f group := by

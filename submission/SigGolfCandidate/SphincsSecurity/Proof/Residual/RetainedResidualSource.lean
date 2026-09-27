@@ -19,11 +19,23 @@ noncomputable instance signatureFintype : Fintype Signature := by
       invFun := fun part => (part.counter, part.chainValues, part.path)
       left_inv := fun _ => rfl
       right_inv := fun _ => rfl }
+  letI : Fintype Segment := Fintype.ofEquiv
+    (Σ folds : Fin 16, Bool × {parity : Bool // folds.val = 0 → parity = false} × (Fin folds.val → Digest))
+    { toFun := fun s => ⟨s.1, s.2.1, s.2.2.1.1, s.2.2.2, s.2.2.1.2⟩
+      invFun := fun segment => ⟨segment.folds, segment.merge, ⟨segment.parity, segment.parity_normal⟩,
+        segment.nodes⟩
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
+  letI : Fintype FtsSignature := Fintype.ofEquiv
+    ((Fin ftsOpenings → SlotCode) × (Fin ftsOpenings → Digest) × (Fin ftsSegments → Segment))
+    { toFun := fun s => ⟨s.1, s.2.1, s.2.2⟩
+      invFun := fun fts => (fts.perm, fts.secrets, fts.segments)
+      left_inv := fun _ => rfl
+      right_inv := fun _ => rfl }
   exact Fintype.ofEquiv
-    (Randomness × (FtsTree → Digest) × (FtsTree → Fin ftsTreeHeight → Digest) ×
-      ((lay : Layer) → LayerSignature lay))
-    { toFun := fun s => ⟨s.1, s.2.1, s.2.2.1, s.2.2.2⟩
-      invFun := fun s => (s.randomness, s.ftsSecret, s.ftsPath, s.layers)
+    (Randomness × FtsSignature × ((lay : Layer) → LayerSignature lay))
+    { toFun := fun s => ⟨s.1, s.2.1, s.2.2⟩
+      invFun := fun s => (s.randomness, s.fts, s.layers)
       left_inv := fun _ => rfl
       right_inv := fun _ => rfl }
 

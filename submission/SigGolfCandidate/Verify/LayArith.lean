@@ -32,14 +32,6 @@ theorem merge_w0_toNat (w v : BitVec 64) :
   rw [replaceWord32_0_toNat]
   simp [BitVec.toNat_setWidth]
 
-theorem merge_w4_toNat (w v : BitVec 64) :
-    (StoreKind.merge .w w 4 v).toNat = w.toNat % 2 ^ 32 + 2 ^ 32 * (v.toNat % 2 ^ 32) := by
-  have := replaceWord32_1_toNat w (v.toNat % 2 ^ 32) (Nat.mod_lt _ (by decide))
-  simp only [StoreKind.merge, show (4 : Nat) / 4 = 1 from rfl]
-  have e : (BitVec.ofNat 64 (v.toNat % 2 ^ 32)).truncate 32 = v.truncate 32 := by
-    apply BitVec.eq_of_toNat_eq; simp [BitVec.toNat_setWidth]
-  rw [← e, this]
-
 theorem leNat_slice8 (l : List Byte) (off : Nat) (h : off + 4 ≤ l.length) :
     leNat (slice l off 8) = leNat (slice l off 4) + 2 ^ 32 * leNat (slice l (off + 4) 4) := by
   have : slice l off 8 = slice l off 4 ++ slice l (off + 4) 4 := by
@@ -49,35 +41,34 @@ theorem leNat_slice8 (l : List Byte) (off : Nat) (h : off + 4 ≤ l.length) :
   have : (slice l off 4).length = 4 := by simp [slice]; omega
   rw [this]; norm_num
 
-theorem witCounters_eq : witCounters = 6384 := by decide
 
-theorem ctrE_eval (lay : Nat) (hlay : lay < 5) (wl : List Byte) (hwl : wl.length = 6404)
+theorem ctrE_eval (lay : Nat) (hlay : lay < 5) (wl : List Byte) (hwl : wl.length = 6348)
     (s : MachineState) (hW : WitOK wl s) :
     ((ctrE lay).eval s).toNat = witCounter wl lay := by
-  have hw := wit_word hW (6384 + 8 * (lay / 2)) (by omega) (show 6384 + 8 * (lay / 2) < 6408 by omega)
+  have hw := wit_word hW (6328 + 8 * (lay / 2)) (by omega) (show 6328 + 8 * (lay / 2) < 7040 by omega)
   simp only [ctrE, ldE, Rv.E.eval, UnOp.eval, LoadKind.fromWord, cw]
-  rw [show 0x20F0 + 8 * (lay / 2) = 0x800 + (6384 + 8 * (lay / 2)) by omega, hw]
+  rw [show 0x20B8 + 8 * (lay / 2) = 0x800 + (6328 + 8 * (lay / 2)) by omega, hw]
   simp only [extractWord32, BitVec.truncate_eq_setWidth, BitVec.toNat_setWidth,
     BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
   rw [w64_toNat _ (by simp [slice]), leNat_slice8 _ _ (by omega), witCounter]
-  have hA := leNat_lt (slice wl (6384 + 8 * (lay / 2)) 4)
-  have hB := leNat_lt (slice wl (6384 + 8 * (lay / 2) + 4) 4)
+  have hA := leNat_lt (slice wl (6328 + 8 * (lay / 2)) 4)
+  have hB := leNat_lt (slice wl (6328 + 8 * (lay / 2) + 4) 4)
   have l4 : ∀ o, (slice wl o 4).length ≤ 4 := fun o => by simp [slice]
-  have hA' : leNat (slice wl (6384 + 8 * (lay / 2)) 4) < 2 ^ 32 :=
+  have hA' : leNat (slice wl (6328 + 8 * (lay / 2)) 4) < 2 ^ 32 :=
     lt_of_lt_of_le hA (le_trans (Nat.pow_le_pow_right (by decide) (l4 _)) (by norm_num))
-  have hB' : leNat (slice wl (6384 + 8 * (lay / 2) + 4) 4) < 2 ^ 32 :=
+  have hB' : leNat (slice wl (6328 + 8 * (lay / 2) + 4) 4) < 2 ^ 32 :=
     lt_of_lt_of_le hB (le_trans (Nat.pow_le_pow_right (by decide) (l4 _)) (by norm_num))
   rcases Nat.mod_two_eq_zero_or_one lay with h | h
-  · rw [show 4 * (lay % 2) / 4 * 32 = 0 by rw [h], show witCounters + 4 * lay = 6384 + 8 * (lay / 2) by
+  · rw [show 4 * (lay % 2) / 4 * 32 = 0 by rw [h], show witCounters + 4 * lay = 6328 + 8 * (lay / 2) by
       rw [witCounters_eq]; omega]
-    generalize leNat (slice wl (6384 + 8 * (lay / 2)) 4) = A at *
-    generalize leNat (slice wl (6384 + 8 * (lay / 2) + 4) 4) = B at *
+    generalize leNat (slice wl (6328 + 8 * (lay / 2)) 4) = A at *
+    generalize leNat (slice wl (6328 + 8 * (lay / 2) + 4) 4) = B at *
     norm_num at hA' hB' ⊢
     omega
-  · rw [show 4 * (lay % 2) / 4 * 32 = 32 by rw [h], show witCounters + 4 * lay = 6384 + 8 * (lay / 2) + 4 by
+  · rw [show 4 * (lay % 2) / 4 * 32 = 32 by rw [h], show witCounters + 4 * lay = 6328 + 8 * (lay / 2) + 4 by
       rw [witCounters_eq]; omega]
-    generalize leNat (slice wl (6384 + 8 * (lay / 2)) 4) = A at *
-    generalize leNat (slice wl (6384 + 8 * (lay / 2) + 4) 4) = B at *
+    generalize leNat (slice wl (6328 + 8 * (lay / 2)) 4) = A at *
+    generalize leNat (slice wl (6328 + 8 * (lay / 2) + 4) 4) = B at *
     norm_num at hA' hB' ⊢
     omega
 
@@ -268,8 +259,8 @@ theorem swS_eq (h0 : dA s < 2 ^ 63) (h1 : dB s < 2 ^ 63) :
   have hl : swarOf (dA s) (dB s) < 4096 := Nat.mod_lt _ (by decide)
   rw [← hs]
   change _ ↔ swarOf (dA s) (dB s) = targetSum
-  have hK : KT = BitVec.ofNat 64 (184 * 2 ^ 52) := rfl
-  rw [hK, show targetSum = 184 from rfl]
+  have hK : KT = BitVec.ofNat 64 (182 * 2 ^ 52) := rfl
+  rw [hK, show targetSum = 182 from rfl]
   constructor
   · intro h
     have := congrArg BitVec.toNat h

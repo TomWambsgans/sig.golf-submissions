@@ -165,10 +165,126 @@ theorem Good.hashHP {s : MachineState} {N C : Nat} {x : List Byte}
   have := Good.hashH hf ht0 hv (hin.trans hx.symm) h
   rwa [hx] at this
 
-/-- Zero-padded `thInput` for the tags that `fmt` leaves alone (not 1, 3, 10, 12). -/
+/-- Zero-padded `thInput` for the tags that `fmt` leaves alone (not 1, 3, 12). -/
 theorem fmt_th (t lay tau p j : Nat) (payload : List Byte)
-    (ht : byte t ∉ [byte 1, byte 3, byte 10, byte 12]) :
+    (ht : byte t ∉ [byte 1, byte 3, byte 12]) :
     fmt (thInput (tweak t lay tau p j) payload) = pad64 (thInput (tweak t lay tau p j) payload) :=
   fmt_thInput t lay tau p j payload ht
+
+end SigGolfCandidate.Verify
+
+/-! ## The judgment with an acceptance bound
+
+`GoodQ s N C Q A X`: as `Good s N C X`, and moreover every accepting run (exit `success`) satisfies
+`Q` and takes at most `A` cycles. (The verify program bounds accepting runs more tightly than
+all runs: an accepting run passed the check "total folds `≤ 120`".) -/
+
+namespace SigGolfCandidate.Verify
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+
+def GoodQ (s : MachineState) (N C : Nat) (Q : Prop) (A : Nat) (X : OracleComp HashSpec Obs) : Prop :=
+  ∀ F, N ≤ F → obs <$> Riscv.execute F image s = X ∧
+    ∀ hash : Hash, (evalWithAnswerFn hash (Riscv.execute F image s)).exit ≠ .unfinished ∧
+      (evalWithAnswerFn hash (Riscv.execute F image s)).cycles ≤ C ∧
+      ((evalWithAnswerFn hash (Riscv.execute F image s)).exit = .success →
+        Q ∧ (evalWithAnswerFn hash (Riscv.execute F image s)).cycles ≤ A)
+
+theorem Good.toQ {s : MachineState} {N C : Nat} {X : OracleComp HashSpec Obs} (h : Good s N C X) :
+    GoodQ s N C True C X := by
+  intro F hF
+  obtain ⟨h1, h2⟩ := h F hF
+  exact ⟨h1, fun hash => ⟨(h2 hash).1, (h2 hash).2, fun _ => ⟨trivial, (h2 hash).2⟩⟩⟩
+
+theorem GoodQ.toGood {s : MachineState} {N C : Nat} {Q : Prop} {A : Nat} {X : OracleComp HashSpec Obs}
+    (h : GoodQ s N C Q A X) : Good s N C X := by
+  intro F hF
+  obtain ⟨h1, h2⟩ := h F hF
+  exact ⟨h1, fun hash => ⟨(h2 hash).1, (h2 hash).2.1⟩⟩
+
+theorem GoodQ.mono {s : MachineState} {N C A N' C' A' : Nat} {Q Q' : Prop} {X : OracleComp HashSpec Obs}
+    (h : GoodQ s N C Q A X) (hN : N ≤ N') (hC : C ≤ C') (hQ : Q → Q' ∧ A ≤ A') :
+    GoodQ s N' C' Q' A' X := by
+  intro F hF
+  obtain ⟨h1, h2⟩ := h F (by omega)
+  refine ⟨h1, fun hash => ⟨(h2 hash).1, by have := (h2 hash).2.1; omega, fun hs => ?_⟩⟩
+  obtain ⟨hq, ha⟩ := (h2 hash).2.2 hs
+  exact ⟨(hQ hq).1, by have := (hQ hq).2; omega⟩
+
+theorem GoodQ.congr {s : MachineState} {N C A : Nat} {Q : Prop} {X Y : OracleComp HashSpec Obs}
+    (h : GoodQ s N C Q A X) (hXY : X = Y) : GoodQ s N C Q A Y := hXY ▸ h
+
+theorem GoodQ.steps {s t : MachineState} {k c N C A : Nat} {Q : Prop} {X : OracleComp HashSpec Obs}
+    (hst : Steps image s k c t) (h : GoodQ t N C Q A X) : GoodQ s (N + k) (C + c) Q (A + c) X := by
+  intro F hF
+  obtain ⟨h1, h2⟩ := h (F - k) (by omega)
+  have hF' : F = (F - k) + k := by omega
+  refine ⟨?_, fun hash => ?_⟩
+  · rw [hst.execute_le (by omega : k ≤ F), Functor.map_map]
+    simp only [obs_charge]
+    exact h1
+  · rw [hF', hst.evalWith hash (F - k)]
+    simp only [Execution.charge_exit, Execution.charge_cycles]
+    refine ⟨(h2 hash).1, by have := (h2 hash).2.1; omega, fun hs => ?_⟩
+    obtain ⟨hq, ha⟩ := (h2 hash).2.2 hs
+    exact ⟨hq, by omega⟩
+
+theorem GoodQ.steps' {s t : MachineState} {k c N C A N' C' A' : Nat} {Q Q' : Prop}
+    {X : OracleComp HashSpec Obs} (hst : Steps image s k c t) (h : GoodQ t N C Q A X)
+    (hN : N + k ≤ N') (hC : C + c ≤ C') (hQ : Q → Q' ∧ A + c ≤ A') : GoodQ s N' C' Q' A' X :=
+  (h.steps hst).mono hN hC hQ
+
+theorem GoodQ.hash {s : MachineState} {N C A : Nat} {Q : Prop} {x : List Byte}
+    {K : Val → OracleComp HashSpec Obs}
+    (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = fmt x)
+    (h : ∀ a, GoodQ (writeHash s a) N C Q A (K (answerBytes 16 a))) :
+    GoodQ s (N + 1) (C + 8 * (fmt x).blocks) Q (A + 8 * (fmt x).blocks) (cc (hash16 x) K) := by
+  intro F hF
+  have hF' : F = (F - 1) + 1 := by omega
+  refine ⟨?_, fun hash => ?_⟩
+  · rw [hF', execute_hash (F - 1) hf ht0 hv, cc_hash16, map_bind, hin]
+    congr 1; funext a
+    rw [Functor.map_map, ← (h a (F - 1) (by omega)).1, Functor.map_map]
+    congr 1
+  · rw [hF', evalWith_hash hash (F - 1) hf ht0 hv, hin]
+    obtain ⟨h1, h2, h3⟩ := (h (hash (fmt x)) (F - 1) (by omega)).2 hash
+    simp only [Execution.charge_exit, Execution.charge_cycles]
+    refine ⟨h1, by omega, fun hs => ?_⟩
+    obtain ⟨hq, ha⟩ := h3 hs
+    exact ⟨hq, by omega⟩
+
+theorem GoodQ.hashH {s : MachineState} {N C A : Nat} {Q : Prop} {x : List Byte}
+    {K : BitVec 256 → OracleComp HashSpec Obs}
+    (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = fmt x)
+    (h : ∀ a, GoodQ (writeHash s a) N C Q A (K a)) :
+    GoodQ s (N + 1) (C + 8 * (fmt x).blocks) Q (A + 8 * (fmt x).blocks) (cc (H x) K) := by
+  intro F hF
+  have hF' : F = (F - 1) + 1 := by omega
+  refine ⟨?_, fun hash => ?_⟩
+  · rw [hF', execute_hash (F - 1) hf ht0 hv, cc_H, map_bind, hin]
+    congr 1; funext a
+    rw [Functor.map_map, ← (h a (F - 1) (by omega)).1, Functor.map_map]
+    congr 1
+  · rw [hF', evalWith_hash hash (F - 1) hf ht0 hv, hin]
+    obtain ⟨h1, h2, h3⟩ := (h (hash (fmt x)) (F - 1) (by omega)).2 hash
+    simp only [Execution.charge_exit, Execution.charge_cycles]
+    refine ⟨h1, by omega, fun hs => ?_⟩
+    obtain ⟨hq, ha⟩ := h3 hs
+    exact ⟨hq, by omega⟩
+
+/-- HALT(1): a rejecting run (any acceptance condition). -/
+theorem GoodQ.reject {s : MachineState} {Q : Prop} {A : Nat} (hf : fetch image s = some (.base .ECALL))
+    (h5 : s.getReg .x5 = 1) (h10 : s.getReg .x10 = 1) : GoodQ s 1 1 Q A (pure (false, 0)) := by
+  intro F hF
+  have hF' : F = (F - 1) + 1 := by omega
+  refine ⟨?_, fun hash => ?_⟩
+  · rw [hF', execute_halt (F - 1) hf h5, map_pure]
+    simp only [obs, h10]
+    rfl
+  · rw [hF', evalWith_halt hash (F - 1) hf h5]
+    simp only [h10]
+    refine ⟨by decide, le_refl _, fun h => ?_⟩
+    exact absurd h (by decide)
 
 end SigGolfCandidate.Verify

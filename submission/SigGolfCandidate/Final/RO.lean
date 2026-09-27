@@ -90,9 +90,37 @@ theorem probEvent_exists_list_le {α κ : Type} (mx : ProbComp α) (L : List κ)
     simp only [List.mem_cons, exists_eq_or_imp, List.map_cons, List.sum_cons]
     exact (probEvent_or_le mx _ _).trans (add_le_add le_rfl ih)
 
+/-- Evaluating a relabelled computation is evaluating it with the relabelled answer function. -/
+theorem evalWithAnswerFn_relabel {ι ι' R : Type} (e : ι → ι') (h : QueryImpl (ι' →ₒ R) Id) {α : Type}
+    (P : OracleComp (ι →ₒ R) α) :
+    evalWithAnswerFn h (relabel e P) = evalWithAnswerFn (fun x => h (e x) : QueryImpl (ι →ₒ R) Id) P := by
+  induction P using OracleComp.inductionOn with
+  | pure x => rfl
+  | query_bind x k ih =>
+    rw [relabel_query_bind, evalWithAnswerFn_bind, evalWithAnswerFn_bind]
+    have e1 : evalWithAnswerFn h (((ι' →ₒ R).query (e x) : OracleComp (ι' →ₒ R) R)) = h (e x) :=
+      evalWithAnswerFn_query h (e x)
+    have e2 : evalWithAnswerFn (fun x => h (e x) : QueryImpl (ι →ₒ R) Id)
+        (((ι →ₒ R).query x : OracleComp (ι →ₒ R) R)) = h (e x) :=
+      evalWithAnswerFn_query _ x
+    rw [e1, e2, ih]
+
 section eager
 variable {D R : Type} [DecidableEq D] [Finite D] [Finite R] [Nonempty R]
   [SampleableType R] [SampleableType (D → R)]
+
+/-- **Lazy = eager** (finite query domain): the lazy random oracle's output law is the law of the
+evaluation under a uniformly random table. -/
+theorem probOutput_run'_eq_eager {β : Type} (oa : OracleComp (D →ₒ R) β) (y : β) :
+    Pr[= y | (simulateQ randomOracle oa).run' ∅] =
+      Pr[fun g => evalWithAnswerFn (QueryImpl.ofFn g) oa = y | $ᵗ (D → R)] := by
+  have h1 := evalSPMF_simulateQ_randomOracle_run'_empty_eq_uniformTable (D := D) (R := R) oa
+  have h2 : Pr[= y | (simulateQ randomOracle oa).run' ∅] =
+      Pr[= y | (fun g => evalWithAnswerFn (QueryImpl.ofFn g) oa) <$> ($ᵗ (D → R) : ProbComp _)] := by
+    simp only [probOutput_def, h1, map_eq_bind_pure_comp]
+    rfl
+  rw [h2, ← probEvent_eq_eq_probOutput, probEvent_map]
+  rfl
 
 /-- **Union bound under one shared lazy random oracle** (finite query domain). -/
 theorem probOutput_false_foldAll_le {κ : Type} (L : List κ) (P : κ → OracleComp (D →ₒ R) Bool) :

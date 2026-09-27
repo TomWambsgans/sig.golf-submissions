@@ -1,4 +1,6 @@
 import SigGolfCandidate.Equiv.Verify
+import SigGolfCandidate.Equiv.Sign
+import SigGolfCandidate.Equiv.Expand
 import SigGolfCandidate.Equiv.Keygen
 import SigGolfCandidate.Equiv.Honest
 import SigGolfCandidate.Bridge.All
@@ -53,7 +55,7 @@ structure Refinements : Prop where
   sign : ∀ sk cache m, (fun r => (r.value, r.hashCalls)) <$> submission.run .sign (sk, cache, m) =
     (fun p => (p.1, p.2)) <$> Ref.countCalls (Ref.signRef sk cache m)
   expand : ∀ m pk σ, (fun r => (r.value, r.hashCalls)) <$> submission.run .expand (m, pk, σ) =
-    pure (some (Ref.expandRef σ), 0)
+    Ref.countCalls (Ref.expandRef m pk σ)
   verify : ∀ m pk w, (fun r => (r.value, r.hashCalls)) <$> submission.run .verify (m, pk, w) =
     (fun p => (if p.1 then some () else none, p.2)) <$> Ref.countCalls (Ref.verifyRef m pk w)
 
@@ -69,10 +71,8 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
   seedOf_dist := SigGolfCandidate.Bridge.seedOf_id_dist
   msgOf := fun m => m
   msgOf_injective := fun _ _ h => h
-  sigCodec := sigCodec
-  expandFn := Ref.expandRef
+  compress := compress
   witDec := witDec
-  witDec_expandFn := witDec_expandRef
   pkEnc := pkEnc
   cacheEnc := cacheEnc
   cacheDec := cacheDec
@@ -82,6 +82,7 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
   honest_head := honest_head
   qEnc := SigGolfCandidate.Bridge.defaultQEnc
   qEnc_injective := SigGolfCandidate.Bridge.defaultQEnc_injective
+  aExpand := aExpand
   keygen_eq (sk : Bytes 32) := by
     have e1 : Ref.countCalls (Ref.keygenRef sk) =
         (fun p => (((p.1.1.root : Bytes 16), cacheEnc p.1.2.1), p.2)) <$>
@@ -94,15 +95,19 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
     obtain ⟨hs, hP, -⟩ := keygen_support _ _ h
     have hs' : sk'.seed = sk := hs
     have e1 : Ref.countCalls (Ref.signRef sk cache m) =
-        (fun p => (Option.map sigCodec.symm p.1, p.2)) <$>
+        (fun p => (Option.map compress p.1, p.2)) <$>
           Ref.countCalls (relabel fmtQ
             (SphincsSecurity.Seeded.sign (m := AComp) sk' (cacheDec cache) m)) := by
       rw [← hs', signRef_eq sk' hP cache m, countCalls_map]
     rw [R.sign, e1, Functor.map_map]
     rfl
   sign_honest seed pk cache' sk' h cache m := hq_sign sk' (keygen_support _ _ h).2.1 cache m
-  expand_eq m pk σ := R.expand m pk σ
-  verify_eq seed pk cache' sk' h m (w : Bytes 6404) := by
+  expand_eq seed pk cache' sk' h m σ := by
+    rw [R.expand m (pkEnc pk) σ, expandRef_eq m (pkEnc pk) pk σ]
+    rfl
+  expand_honest seed pk cache' sk' h m σ := hq_aExpand m pk σ
+  expand_compress seed pk cache' sk' h m σ w hw := aExpand_compress m pk σ w hw
+  verify_eq seed pk cache' sk' h m (w : Bytes 6348) := by
     obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
     have hpk' : pk = ⟨sk'.root, 0⟩ := hpk
     have e : (⟨pkEnc pk, 0⟩ : SphincsSecurity.PublicKey) = pk := by

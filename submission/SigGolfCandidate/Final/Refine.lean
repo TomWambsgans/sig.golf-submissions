@@ -41,8 +41,10 @@ theorem sign_value (hS : SignRefinementStatement) (sk : SecretKey) (cache : Cach
   exact h.trans (Sign.fst_countBoth _)
 
 theorem expand_value (m : Message) (pk : PublicKey) (σ : Bytes submission.sizes.signature) :
-    (fun r => r.value) <$> submission.run .expand (m, pk, σ) = pure (some (Ref.expandRef σ)) := by
-  rw [Expand.expand_run, map_pure]
+    (fun r => r.value) <$> submission.run .expand (m, pk, σ) = Ref.expandRef m pk σ := by
+  have h := congrArg (fun x => Prod.fst <$> x) (Expand.expand_refines_counts m pk σ)
+  simp only [Functor.map_map] at h
+  exact h.trans (Sign.fst_countBoth _)
 
 theorem isSome_countCalls (X : OracleComp HashSpec Bool) :
     (fun p : Option Unit × Nat => p.1.isSome) <$>
@@ -74,7 +76,8 @@ theorem refinements (hK : KeygenRefinementStatement) (hS : SignRefinementStateme
     simp only [Functor.map_map] at h
     exact h.trans ((Sign.countBoth_calls _).trans (id_map _).symm)
   expand m pk σ := by
-    rw [Expand.expand_run, map_pure]
+    rw [Expand.expand_refines]
+    exact id_map _
   verify m pk w := hV m pk w
 
 /-- The honest pipeline's success bit, with the reference programs. -/
@@ -84,7 +87,10 @@ theorem successPipe_eq_ref (hK : KeygenRefinementStatement) (hS : SignRefinement
       let (pk, cache) ← Ref.keygenRef sk
       match ← Ref.signRef sk cache m with
       | none => pure false
-      | some σ => Ref.verifyRef m pk (Ref.expandRef σ)) := by
+      | some σ =>
+        match ← Ref.expandRef m pk σ with
+        | none => pure false
+        | some w => Ref.verifyRef m pk w) := by
   unfold successPipe
   rw [keygen_value hK, bind_map_left]
   refine bind_congr fun kc => ?_
@@ -95,8 +101,11 @@ theorem successPipe_eq_ref (hK : KeygenRefinementStatement) (hS : SignRefinement
   rcases s with _ | σ
   · rfl
   simp only
-  rw [expand_value, pure_bind]
-  exact verify_value hV m pk _
+  rw [expand_value]
+  refine bind_congr fun e => ?_
+  rcases e with _ | w
+  · rfl
+  · exact verify_value hV m pk _
 
 /-- The reference pipeline is the abstract honest game relabelled by `fmtQ`. -/
 theorem ref_pipeline_eq (sk : SecretKey) (m : Message) :
@@ -104,15 +113,18 @@ theorem ref_pipeline_eq (sk : SecretKey) (m : Message) :
       let (pk, cache) ← Ref.keygenRef sk
       match ← Ref.signRef sk cache m with
       | none => pure false
-      | some σ => Ref.verifyRef m pk (Ref.expandRef σ)) =
-    relabel Equiv.fmtQ (game sk m) := by
+      | some σ =>
+        match ← Ref.expandRef m pk σ with
+        | none => pure false
+        | some w => Ref.verifyRef m pk w) =
+    relabel Equiv.fmtQ (gameX sk m) := by
   have hs : ∀ (root : SphincsSecurity.Digest) (c : SphincsSecurity.TopCache),
       Ref.signRef sk (Equiv.cacheEnc c) m =
-        Option.map Equiv.sigCodec.symm <$>
+        Option.map Equiv.compress <$>
           relabel Equiv.fmtQ (SphincsSecurity.Seeded.sign (m := Equiv.AComp) ⟨sk, 0, root⟩ c m) :=
     fun root c => by rw [Equiv.signRef_eq ⟨sk, 0, root⟩ rfl (Equiv.cacheEnc c) m, Equiv.cacheDec_cacheEnc]
   rw [Equiv.keygenRef_eq]
-  unfold game SphincsSecurity.Seeded.keygenFromSeed
+  unfold gameX SphincsSecurity.Seeded.keygenFromSeed
   simp only [relabel_bind, bind_assoc, map_bind, relabel_pure, pure_bind, map_pure]
   refine bind_congr fun t => ?_
   refine bind_congr fun region => ?_
@@ -121,13 +133,17 @@ theorem ref_pipeline_eq (sk : SecretKey) (m : Message) :
   refine bind_congr fun s => ?_
   rcases s with _ | σ
   · rfl
-  · show Ref.verifySigRef m _ (Equiv.sigCodec.symm σ) = _
-    rw [Equiv.verifySigRef_eq, Equiv.sigCodec.apply_symm_apply]
+  · simp only [Option.map_some, relabel_bind]
+    rw [Equiv.expandRef_eq m _ _ (Equiv.compress σ)]
+    refine bind_congr fun e => ?_
+    rcases e with _ | w
+    · rfl
+    · exact Equiv.verifyRef_eq m _ w
 
 /-- **The honest pipeline's success bit is the abstract honest game** (relabelled by `fmtQ`). -/
 theorem success_honest_eq_game (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
     (hV : VerifyRefinementStatement) (sk : SecretKey) (m : Message) :
-    HonestResult.success <$> submission.honest sk m = relabel Equiv.fmtQ (game sk m) := by
+    HonestResult.success <$> submission.honest sk m = relabel Equiv.fmtQ (gameX sk m) := by
   rw [success_honest_eq, successPipe_eq_ref hK hS hV, ref_pipeline_eq]
 
 end SigGolfCandidate.Final

@@ -104,7 +104,7 @@ theorem layer_good (L : LCtx) (hL : L.ok) (M : Val) (Kopt : Option Val → Oracl
               foldPath_eq]
             simp only [cc_pure]
             have hfold := fold_good (layFC L) hfc
-              (Or.inl ⟨rfl, by simp [layFC, Nat.mod_eq_of_lt (show L.lay < 256 by omega), heightL_eq _ hlay]⟩)
+              ⟨rfl, by simp [layFC, Nat.mod_eq_of_lt (show L.lay < 256 by omega), heightL_eq _ hlay]⟩
               (layFC_check L hL) _ (fun root => Kopt (some root))
               N C (fun a u hend => hK a u ⟨_, hend, hcar⟩) (heightL L.lay) 0 (by simp [layFC])
               (by have := heightL_le L.lay hlay; omega) _ _ hfi
@@ -166,10 +166,10 @@ theorem foldEnd_layerIn (wl pk : List Byte) (lay idx : Nat) (h1 : 1 ≤ lay) (h7
   · rw [writeHash_frame _ a _ _ h12 (by omega) (by omega) (by omega), hF.2 _ (by omega) (by omega)]
     exact h48
   · refine ⟨bitOf (layFC ⟨wl, pk, lay, idx⟩).E ((layFC ⟨wl, pk, lay, idx⟩).h - 1),
-      by simp [bitOf]; omega, ?_⟩
+      by simp only [bitOf, nCopy, if_neg (show lay - 1 ≠ 4 by omega)]; omega, ?_⟩
     rw [writeHash_pc, hpc, pcOf_add4]
     simp only [preStart, if_neg (show lay - 1 ≠ 4 by omega), layFC, Nat.sub_add_cancel h1,
-      show 5 - (lay - 1) = 6 - lay by omega]
+      show 3 - (lay - 1) = 4 - lay by omega]
 
 /-! ## The final comparison -/
 
@@ -205,7 +205,7 @@ theorem val_eq_iff (M P : Val) (hM : M.length = 16) (hP : P.length = 16) :
 def FinalIn (wl pk : List Byte) (idx : Nat) (M : Val) (s : MachineState) : Prop :=
   ∃ u a, FoldEndL ⟨wl, pk, 0, idx⟩ u ∧ s = writeHash u a ∧ M = answerBytes 16 a
 
-theorem cmp_link (t : Nat) (ht : t < 2) : lvlPc 6 t 0 10 + 6 + 1 = cmpPc t := by
+theorem cmp_link (t : Nat) (ht : t < 2) : lvlPc 4 t 0 10 + 6 + 1 = cmpPc t := by
   interval_cases t <;> decide
 
 theorem compare_good (wl pk : List Byte) (hpk : pk.length = 16) (idx : Nat) (M : Val)
@@ -280,7 +280,7 @@ def layersCost : Nat → Nat
   | n + 1 => layersCost n + layerCost n
 
 theorem layers_good (wl pk : List Byte) (hpk : pk.length = 16) (idx : Nat) (hidx : idx < 2 ^ 34)
-    (hwl : wl.length = 6404) :
+    (hwl : wl.length = 6348) :
     ∀ n, n ≤ 5 → ∀ M s, InLayer wl pk idx n M s →
       Good s (5000 * n + 9) (layersCost n) (cc (verifyLayers wl idx n M) (Kfin pk)) := by
   intro n

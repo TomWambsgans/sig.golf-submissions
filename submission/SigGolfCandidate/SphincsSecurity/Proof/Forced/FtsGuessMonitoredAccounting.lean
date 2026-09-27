@@ -17,7 +17,7 @@ variable (parameter : PublicParameter) (root : Digest)
   (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
   (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
   (selections : ReferenceFamily) (rows : CanonicalEncodingRows) (dummy : OtsReferenceWords) (slot : Nat)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 /-! ### Trace bookkeeping -/
 
@@ -252,10 +252,8 @@ theorem signStep_account (message : Message) (state : MonitoredState) (hvalid : 
     exact digestWork_messageCalls _ _ _ boundary.1
   have hcachesplit : raw.2.1 = boundary.2 := by rw [hcache, hsplit]
   have hmass : targetCreationMultiplier (monitorKey parameter root) state.1.1 (.inr message) ≤ (raw.1.2.hashCalls : ENNReal) := by
-    have hp := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
-      (freshDigestSelectionProbability_le_one (monitorKey parameter root) message state.1.1)
     calc
-      _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by simpa only [targetCreationMultiplier, mul_one] using hp
+      _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := targetCreationMultiplier_sign_le _ _ message
       _ ≤ (ftsOpenHashCost : ENNReal) := Nat.cast_le.mpr two_pow_ftsTreeHeight_le_ftsOpenHashCost
       _ ≤ _ := by
         rw [htrace]

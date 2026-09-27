@@ -1,13 +1,11 @@
-import SigGolfCandidate.Equiv.Tree
-import SigGolfCandidate.Equiv.Digits
-import SigGolfCandidate.Equiv.Codec
-import SigGolfCandidate.Equiv.Cache
+import SigGolfCandidate.Equiv.Keygen
+import SigGolfCandidate.Equiv.Sched
 
 /-!
-# Signing
+# Signing (PORS+FP)
 
-The few-time forest, the digest search, the counter search, the layer loop and the whole signer:
-each reference routine is `f <$> relabel fmtQ A` for the abstract routine `A`.
+`signRef_eq`: the reference signer is the relabelled abstract signer on the decoded cache, its
+output compressed by `compress`.
 -/
 
 open OracleComp OracleSpec
@@ -17,7 +15,7 @@ namespace SigGolfCandidate.Equiv
 open SigGolf (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed Index FtsTree
-  FtsLeaf IndexGroup Message)
+  FtsLeaf IndexGroup Message Signature LayerSignature)
 open SphincsSecurity.Concrete (sequenceFin)
 
 set_option linter.unusedSimpArgs false
@@ -26,61 +24,21 @@ set_option allowUnsafeReducibility true in
 attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.digestBits
   SphincsSecurity.messageBits SphincsSecurity.publicParameterBits SphincsSecurity.counterBits
 
-/-! ## Hash inputs of the forest and the digest -/
+/-! ## The PORS tree -/
 
-theorem prf2_fts (seed : MasterSeed) (index : Index) (tree : FtsTree)
-    (pair : SphincsSecurity.FtsPair) :
-    Ref.prf2 (Ref.ftsPrfInput (Ref.toList (n := 32) seed) tree index pair) =
-      (fun p => (dv p.1, dv p.2)) <$>
-        relabel fmtQ (SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index tree pair) := by
-  apply prf2_eq
-  simp [SphincsSecurity.keygenHashInput, SphincsSecurity.keygenDomainFields, toB_tweakFields,
-    toB_seed, Ref.ftsPrfInput, Ref.thInput]
-
-theorem hash16_ftsLeaf (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (s : Digest) :
-    Ref.hash16 (Ref.ftsLeafInput tree index leaf (dv s)) =
-      dv <$> relabel fmtQ (SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree leaf s) := by
-  apply hash16_tweakable
-  rw [toB_tweakableHashInput]
-  simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
-    toB_dv, Ref.ftsLeafInput, Ref.thInput, List.append_assoc]
-
-theorem hash16_ftsNode (index : Index) (tree : FtsTree) (lam j : Nat) (l r : Digest) :
-    Ref.hash16 (Ref.ftsNodeInput tree index lam j (dv l) (dv r)) =
-      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
-        (.ftsNode index tree lam j) (SphincsSecurity.Concrete.nodePayload l r)) := by
-  apply hash16_tweakable
-  rw [toB_tweakableHashInput]
-  simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
-    SphincsSecurity.Concrete.nodePayload, toB_append, toB_dv, Ref.ftsNodeInput, Ref.thInput,
-    List.append_assoc]
-
-theorem hash16_roots (index : Index) (roots : FtsTree → Digest) :
-    Ref.hash16 (Ref.rootsInput index (List.ofFn fun k => dv (roots k))) =
-      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
-        (.ftsRoots index) (SphincsSecurity.Concrete.ftsRootsPayload roots)) := by
-  apply hash16_tweakable
-  rw [toB_tweakableHashInput]
-  simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
-    SphincsSecurity.Concrete.ftsRootsPayload, toB_flatMap_dv, Ref.rootsInput, Ref.thInput,
-    List.map_ofFn, List.append_assoc]
-  rfl
-
-/-! ## One few-time tree -/
-
-theorem flatten_unpairFtsLeaves {α β : Type} (f : SphincsSecurity.FtsPair → α × α) (G : α → β) :
+theorem flatten_unpairPorsLeaves {α β : Type} (f : SphincsSecurity.FtsPair → α × α) (G : α → β) :
     (List.ofFn fun j : SphincsSecurity.FtsPair => [G (f j).1, G (f j).2]).flatten =
       List.ofFn fun c : FtsLeaf => G (SphincsSecurity.unpairFtsLeaves f c) := by
   let F : Nat → β := fun i =>
-    G (SphincsSecurity.unpairFtsLeaves f ⟨i % 1024, Nat.mod_lt _ (by decide)⟩)
+    G (SphincsSecurity.unpairFtsLeaves f ⟨i % 16384, Nat.mod_lt _ (by decide)⟩)
   have e1 : (List.ofFn fun j : SphincsSecurity.FtsPair => [G (f j).1, G (f j).2]) =
-      List.ofFn fun j : Fin 512 => [F (2 * j.val), F (2 * j.val + 1)] := by
+      List.ofFn fun j : Fin 8192 => [F (2 * j.val), F (2 * j.val + 1)] := by
     apply List.ofFn_inj.mpr
     funext j
-    have hj : j.val < 512 := j.isLt
-    have p1 : SphincsSecurity.ftsPairOf ⟨2 * j.val % 1024, Nat.mod_lt _ (by decide)⟩ = j := by
+    have hj : j.val < 8192 := j.isLt
+    have p1 : SphincsSecurity.ftsPairOf ⟨2 * j.val % 16384, Nat.mod_lt _ (by decide)⟩ = j := by
       apply Fin.ext; simp [SphincsSecurity.ftsPairOf]; omega
-    have p2 : SphincsSecurity.ftsPairOf ⟨(2 * j.val + 1) % 1024, Nat.mod_lt _ (by decide)⟩ = j := by
+    have p2 : SphincsSecurity.ftsPairOf ⟨(2 * j.val + 1) % 16384, Nat.mod_lt _ (by decide)⟩ = j := by
       apply Fin.ext; simp [SphincsSecurity.ftsPairOf]; omega
     simp only [F, SphincsSecurity.unpairFtsLeaves, p1, p2]
     rw [if_pos (by simp), if_neg (by simp)]
@@ -89,474 +47,260 @@ theorem flatten_unpairFtsLeaves {α β : Type} (f : SphincsSecurity.FtsPair → 
   funext c
   simp only [F]
   exact congrArg (fun c' => G (SphincsSecurity.unpairFtsLeaves f c'))
-    (Fin.ext (Nat.mod_eq_of_lt (show c.val < 1024 from c.isLt)))
+    (Fin.ext (Nat.mod_eq_of_lt (show c.val < 16384 from c.isLt)))
 
-theorem foldl_pair_capture {β : Type} {n : Nat} (A B : Fin n → β) (u : Nat) (s : β) :
-    (List.finRange n).foldl (fun acc j =>
-      if 2 * j.val = u then A j else if 2 * j.val + 1 = u then B j else acc) s =
-      if h : u / 2 < n then (if u % 2 = 0 then A ⟨u / 2, h⟩ else B ⟨u / 2, h⟩) else s := by
-  have e : (fun acc (j : Fin n) =>
-      if 2 * j.val = u then A j else if 2 * j.val + 1 = u then B j else acc) =
-      fun acc j => if j.val = u / 2 then (if u % 2 = 0 then A j else B j) else acc := by
-    funext acc j
-    by_cases h1 : 2 * j.val = u
-    · rw [if_pos h1, if_pos (by omega), if_pos (by omega)]
-    · rw [if_neg h1]
-      by_cases h2 : 2 * j.val + 1 = u
-      · rw [if_pos h2, if_pos (by omega), if_neg (by omega)]
-      · rw [if_neg h2, if_neg (by omega)]
-  rw [e, foldl_finRange_capture (fun j => if u % 2 = 0 then A j else B j)]
-
-/-- The abstract leaf pairs of a few-time tree. -/
-abbrev absFtsPairs (seed : MasterSeed) (index : Index) (tree : FtsTree) :=
+/-- The abstract leaf pairs of the PORS tree. -/
+abbrev absPorsPairs (seed : MasterSeed) (index : Index) :=
   sequenceFin (m := AComp) fun pair : SphincsSecurity.FtsPair => do
-    let secrets ← SphincsSecurity.Seeded.ftsSecret 0 seed index tree pair
-    let first ← SphincsSecurity.Concrete.ftsLeafHash 0 index tree (SphincsSecurity.evenFtsLeaf pair)
-      secrets.1
-    let second ← SphincsSecurity.Concrete.ftsLeafHash 0 index tree (SphincsSecurity.oddFtsLeaf pair)
-      secrets.2
+    let secrets ← SphincsSecurity.Seeded.ftsSecret 0 seed index SphincsSecurity.Concrete.porsTree pair
+    let first ← SphincsSecurity.Concrete.ftsLeafHash 0 index SphincsSecurity.Concrete.porsTree
+      (SphincsSecurity.evenFtsLeaf pair).val secrets.1
+    let second ← SphincsSecurity.Concrete.ftsLeafHash 0 index SphincsSecurity.Concrete.porsTree
+      (SphincsSecurity.oddFtsLeaf pair).val secrets.2
     return ((secrets.1, first), (secrets.2, second))
 
-theorem buildFtsLeaves_eq (seed : MasterSeed) (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
-    Ref.buildFtsLeaves (Ref.toList (n := 32) seed) tree index Ref.ftsA leaf =
+theorem buildPorsLeaves_eq (seed : MasterSeed) (index : Index) :
+    Ref.buildPorsLeaves (Ref.toList (n := 32) seed) index =
       (fun f => (List.ofFn fun j => dv (SphincsSecurity.unpairFtsLeaves f j).2,
-          dv (SphincsSecurity.unpairFtsLeaves f leaf).1)) <$>
-        relabel fmtQ (absFtsPairs seed index tree) := by
-  unfold Ref.buildFtsLeaves
-  have hbody : (fun (st : List Ref.Val × Ref.Val) (j : Nat) => do
-      let (s0, s1) ← Ref.prf2 (Ref.ftsPrfInput (Ref.toList (n := 32) seed) tree index j)
-      let l0 ← Ref.hash16 (Ref.ftsLeafInput tree index (2 * j) s0)
-      let l1 ← Ref.hash16 (Ref.ftsLeafInput tree index (2 * j + 1) s1)
-      pure (st.1 ++ [l0, l1],
-        if 2 * j = leaf.val then s0 else if 2 * j + 1 = leaf.val then s1 else st.2)) = fun st j =>
-      (Ref.prf2 (Ref.ftsPrfInput (Ref.toList (n := 32) seed) tree index j) >>= fun s =>
-        Ref.hash16 (Ref.ftsLeafInput tree index (2 * j) s.1) >>= fun l0 =>
-          Ref.hash16 (Ref.ftsLeafInput tree index (2 * j + 1) s.2) >>= fun l1 =>
+          List.ofFn fun j => dv (SphincsSecurity.unpairFtsLeaves f j).1)) <$>
+        relabel fmtQ (absPorsPairs seed index) := by
+  unfold Ref.buildPorsLeaves
+  have hbody : (fun (st : List Ref.Val × List Ref.Val) (q : Nat) => do
+      let (s0, s1) ← Ref.prf2 (Ref.porsPrfInput (Ref.toList (n := 32) seed) index q)
+      let l0 ← Ref.hash16 (Ref.porsLeafInput index (2 * q) s0)
+      let l1 ← Ref.hash16 (Ref.porsLeafInput index (2 * q + 1) s1)
+      pure (st.1 ++ [l0, l1], st.2 ++ [s0, s1])) = fun st q =>
+      (Ref.prf2 (Ref.porsPrfInput (Ref.toList (n := 32) seed) index q) >>= fun s =>
+        Ref.hash16 (Ref.porsLeafInput index (2 * q) s.1) >>= fun l0 =>
+          Ref.hash16 (Ref.porsLeafInput index (2 * q + 1) s.2) >>= fun l1 =>
             pure ((s.1, l0), (s.2, l1))) >>= fun r =>
-        pure (st.1 ++ [r.1.2, r.2.2],
-          if 2 * j = leaf.val then r.1.1 else if 2 * j + 1 = leaf.val then r.2.1 else st.2) := by
-    funext st j; simp only [bind_assoc, pure_bind]
-  rw [hbody, show 2 ^ Ref.ftsA / 2 = 2 ^ (SphincsSecurity.ftsTreeHeight - 1) from rfl, absFtsPairs,
+        pure (st.1 ++ [r.1.2, r.2.2], st.2 ++ [r.1.1, r.2.1]) := by
+    funext st q; simp only [bind_assoc, pure_bind]
+  rw [hbody, show Ref.porsT / 2 = 2 ^ (SphincsSecurity.ftsTreeHeight - 1) from rfl, absPorsPairs,
     relabel_sequenceFin]
   rw [foldlM_range_seq (fun pair : SphincsSecurity.FtsPair => relabel fmtQ (do
-      let secrets ← SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index tree pair
-      let first ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree
-        (SphincsSecurity.evenFtsLeaf pair) secrets.1
-      let second ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree
-        (SphincsSecurity.oddFtsLeaf pair) secrets.2
+      let secrets ← SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index
+        SphincsSecurity.Concrete.porsTree pair
+      let first ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index
+        SphincsSecurity.Concrete.porsTree (SphincsSecurity.evenFtsLeaf pair).val secrets.1
+      let second ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index
+        SphincsSecurity.Concrete.porsTree (SphincsSecurity.oddFtsLeaf pair).val secrets.2
       return ((secrets.1, first), (secrets.2, second)))) _
       (fun r : (Digest × Digest) × (Digest × Digest) =>
         ((dv r.1.1, dv r.1.2), (dv r.2.1, dv r.2.2))) (fun j hj => by
-    rw [prf2_fts seed index tree ⟨j, hj⟩, bind_map_left]
+    rw [prf2_pors seed index ⟨j, hj⟩, bind_map_left]
     simp only [relabel_bind, relabel_pure, map_bind]
     refine bind_congr (m := OracleComp SigGolf.HashSpec) fun sec => ?_
     rw [show 2 * j = (SphincsSecurity.evenFtsLeaf ⟨j, hj⟩).val from rfl,
-      hash16_ftsLeaf index tree _ sec.1, bind_map_left]
+      hash16_porsLeaf index _ sec.1, bind_map_left]
     refine bind_congr (m := OracleComp SigGolf.HashSpec) fun l0 => ?_
     rw [show (SphincsSecurity.evenFtsLeaf ⟨j, hj⟩).val + 1 = (SphincsSecurity.oddFtsLeaf ⟨j, hj⟩).val
-      from rfl, hash16_ftsLeaf index tree _ sec.2, bind_map_left]
+      from rfl, hash16_porsLeaf index _ sec.2, bind_map_left]
     rfl)]
   refine congrArg (· <$> _) ?_
   funext f
   rw [foldl_prod _ (fun acc j => acc ++ [dv (f j).1.2, dv (f j).2.2])
-      (fun acc (j : SphincsSecurity.FtsPair) =>
-        if 2 * j.val = leaf.val then dv (f j).1.1 else
-          if 2 * j.val + 1 = leaf.val then dv (f j).2.1 else acc),
-    foldl_finRange_appendList, foldl_pair_capture, List.nil_append,
-    flatten_unpairFtsLeaves f (fun r => dv r.2)]
-  have hl : leaf.val / 2 < 2 ^ (SphincsSecurity.ftsTreeHeight - 1) := by
-    have := leaf.isLt; simp [SphincsSecurity.ftsTreeHeight] at this ⊢; omega
-  rw [dif_pos hl]
-  unfold SphincsSecurity.unpairFtsLeaves SphincsSecurity.ftsPairOf
-  split_ifs <;> rfl
+      (fun acc j => acc ++ [dv (f j).1.1, dv (f j).2.1]),
+    foldl_finRange_appendList, foldl_finRange_appendList, List.nil_append, List.nil_append,
+    flatten_unpairPorsLeaves f (fun r => dv r.2), flatten_unpairPorsLeaves f (fun r => dv r.1)]
 
-theorem buildFtsTree_eq (seed : MasterSeed) (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
-    Ref.buildFtsTree (Ref.toList (n := 32) seed) tree index Ref.ftsA leaf =
-      (fun r => (dv r.1, (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv (r.2.1 l)),
-          dv r.2.2)) <$>
-        relabel fmtQ (SphincsSecurity.Concrete.buildFtsTreePaired (m := AComp) 0 index tree
-          (SphincsSecurity.Seeded.ftsSecret 0 seed index tree) leaf) := by
-  unfold Ref.buildFtsTree SphincsSecurity.Concrete.buildFtsTreePaired
-  rw [buildFtsLeaves_eq seed index tree leaf]
-  simp only [relabel_bind, relabel_pure, map_bind, bind_map_left, map_pure]
+theorem hash16_porsNodeFmt (index : Index) (lam j : Nat) (l r : Digest) :
+    Ref.hash16 (Ref.porsNodeFmt index lam j (dv l) (dv r)) =
+      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
+        (.ftsNode index SphincsSecurity.Concrete.porsTree
+          (SphincsSecurity.Concrete.ftsHeapIndex lam j)) (SphincsSecurity.Concrete.nodePayload l r)) :=
+  hash16_porsNode index _ l r
+
+/-- **The PORS tree**: levels `0 .. 14` (as `levelList`) and the secrets, leaf by leaf. -/
+theorem buildPorsTree_eq (seed : MasterSeed) (index : Index) :
+    Ref.buildPorsTree (Ref.toList (n := 32) seed) index =
+      (fun r : (FtsLeaf → Digest) × (Nat → Nat → Digest) =>
+        ((List.range (SphincsSecurity.ftsTreeHeight + 1)).map (levelList r.2 SphincsSecurity.ftsTreeHeight),
+          List.ofFn fun j => dv (r.1 j))) <$>
+        relabel fmtQ (SphincsSecurity.Concrete.buildFtsTreePaired (m := AComp) 0 index
+          (SphincsSecurity.Seeded.ftsSecret 0 seed index SphincsSecurity.Concrete.porsTree)) := by
+  unfold Ref.buildPorsTree SphincsSecurity.Concrete.buildFtsTreePaired
+  rw [buildPorsLeaves_eq seed index]
+  simp only [relabel_bind, relabel_pure, map_bind, bind_map_left, map_pure, bind_assoc, pure_bind]
   refine bind_congr (m := OracleComp SigGolf.HashSpec) fun f => ?_
-  rw [ofFn_leaves (SphincsSecurity.unpairFtsLeaves f) Prod.snd,
-    show Ref.ftsA = SphincsSecurity.ftsTreeHeight from rfl]
-  rw [buildLevels_eq (Ref.ftsNodeInput tree index) (fun level nodeIdx left right =>
-      SphincsSecurity.Concrete.tweakableHash (m := AComp) 0 (.ftsNode index tree level nodeIdx)
-        (SphincsSecurity.Concrete.nodePayload left right)) (hash16_ftsNode index tree) _ _ leaf.isLt
+  rw [ofFn_leaves (SphincsSecurity.unpairFtsLeaves f) Prod.snd]
+  unfold Ref.buildAllLevels
+  rw [show Ref.porsH = SphincsSecurity.ftsTreeHeight from rfl]
+  rw [buildAllLevels_steps (Ref.porsNodeFmt index) (fun level nodeIdx left right =>
+      SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
+        (.ftsNode index SphincsSecurity.Concrete.porsTree (SphincsSecurity.Concrete.ftsHeapIndex level nodeIdx))
+        (SphincsSecurity.Concrete.nodePayload left right)) (hash16_porsNodeFmt index) _
       (fun k => if h : k < 2 ^ SphincsSecurity.ftsTreeHeight then
-        (SphincsSecurity.unpairFtsLeaves f ⟨k, h⟩).2 else 0)]
+        (SphincsSecurity.unpairFtsLeaves f ⟨k, h⟩).2 else 0) _ le_rfl]
   simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp]
 
-/-! ## The forest -/
+/-! ## The opening and the signature bytes -/
 
-/-- `Ref.signFors` with the index and the leaf groups given separately. -/
-def signForsU (S : List Byte) (idx : Nat) (u : Nat → Nat) :
-    OracleComp SigGolf.HashSpec (List (Ref.Val × List Ref.Val) × List Ref.Val) :=
-  (List.range Ref.ftsTrees).foldlM (fun (st : List (Ref.Val × List Ref.Val) × List Ref.Val) k => do
-    let (s, path, root) ← Ref.buildFtsTree S k idx Ref.ftsA (u k)
-    pure (st.1 ++ [(s, path)], st.2 ++ [root])) ([], [])
+theorem length_sortedSlots (leaves : IndexGroup → FtsLeaf) :
+    (SphincsSecurity.Concrete.sortedSlots leaves).length = 15 := by
+  unfold SphincsSecurity.Concrete.sortedSlots
+  rw [List.length_insertionSort, List.length_finRange]; rfl
 
-theorem signFors_eq_U (S : List Byte) (N : Nat) :
-    Ref.signFors S N = signForsU S (Ref.idxOf N) (Ref.uOf N) := rfl
+theorem sortedLeaves_lt (leaves : IndexGroup → FtsLeaf) :
+    ∀ v ∈ SphincsSecurity.Concrete.sortedLeaves leaves, v < 2 ^ 14 := by
+  intro v hv
+  simp only [SphincsSecurity.Concrete.sortedLeaves, List.mem_map] at hv
+  obtain ⟨r, _, rfl⟩ := hv
+  exact (leaves r).isLt
 
-/-- The abstract forest trees. -/
-abbrev absTrees (seed : MasterSeed) (index : Index) (leaves : IndexGroup → FtsLeaf) :=
-  sequenceFin (m := AComp) fun tree : FtsTree =>
-    SphincsSecurity.Concrete.buildFtsTreePaired 0 index tree
-      (SphincsSecurity.Seeded.ftsSecret 0 seed index tree)
-      (leaves (SphincsSecurity.Concrete.ftsIndexOf tree))
-
-theorem signForsU_eq (seed : MasterSeed) (index : Index) (leaves : IndexGroup → FtsLeaf) :
-    signForsU (Ref.toList (n := 32) seed) index (uFun leaves) =
-      (fun trees : FtsTree → Digest × (Nat → Digest) × Digest =>
-        (List.ofFn fun k => (dv (trees k).1,
-            (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv ((trees k).2.1 l))),
-          List.ofFn fun k => dv (trees k).2.2)) <$>
-        relabel fmtQ (absTrees seed index leaves) := by
-  unfold signForsU
-  have hbody : (fun (st : List (Ref.Val × List Ref.Val) × List Ref.Val) (k : Nat) =>
-      Ref.buildFtsTree (Ref.toList (n := 32) seed) k index Ref.ftsA (uFun leaves k) >>= fun p =>
-        match p with | (s, path, root) => pure (st.1 ++ [(s, path)], st.2 ++ [root])) =
-      fun st k =>
-      Ref.buildFtsTree (Ref.toList (n := 32) seed) k index Ref.ftsA (uFun leaves k) >>= fun r =>
-        pure (st.1 ++ [(r.1, r.2.1)], st.2 ++ [r.2.2]) := rfl
-  rw [hbody, show Ref.ftsTrees = SphincsSecurity.ftsTrees - 1 from rfl, absTrees, relabel_sequenceFin]
-  rw [foldlM_range_seq (fun tree : FtsTree => relabel fmtQ
-      (SphincsSecurity.Concrete.buildFtsTreePaired (m := AComp) 0 index tree
-        (SphincsSecurity.Seeded.ftsSecret 0 seed index tree)
-        (leaves (SphincsSecurity.Concrete.ftsIndexOf tree)))) _
-      (fun r => (dv r.1, (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv (r.2.1 l)),
-          dv r.2.2)) (fun j hj => by
-    have hu : uFun leaves j = (leaves (SphincsSecurity.Concrete.ftsIndexOf ⟨j, hj⟩)).val := by
-      unfold uFun
-      rw [dif_pos (by simp [SphincsSecurity.ftsTrees] at hj ⊢; omega)]
-      rfl
-    rw [hu]
-    exact buildFtsTree_eq seed index ⟨j, hj⟩ _)]
-  refine congrArg (· <$> _) ?_
-  funext f
-  rw [foldl_prod _ (fun acc j => acc ++ [(dv (f j).1,
-      (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv ((f j).2.1 l)))])
-      (fun acc j => acc ++ [dv (f j).2.2]),
-    foldl_finRange_append, foldl_finRange_append, List.nil_append, List.nil_append]
-
-/-! ## The counter search -/
-
-theorem hash16_enc (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Digest) (c : Nat) :
-    Ref.hash16 (Ref.encInput lay tree leaf (dv M) c) =
-      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
-        (.encoding lay tree leaf)
-        (SphincsSecurity.bytesLE 16 M ++ SphincsSecurity.bytesLE 4 (BitVec.ofNat SphincsSecurity.counterBits c))) := by
-  apply hash16_tweakable
-  rw [toB_tweakableHashInput]
-  simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
-    toB_append, toB_dv, Ref.encInput, Ref.thInput, List.append_assoc]
-  rw [show (BitVec.ofNat SphincsSecurity.counterBits c) = BitVec.ofNat (8 * 4) c from rfl,
-    toB_bytesLE_ofNat]
+/-- The secrets of the opening. -/
+theorem opening_secrets (leaves : IndexGroup → FtsLeaf) (sec : FtsLeaf → Digest)
+    (T : Nat → Nat → Digest) :
+    (SphincsSecurity.Concrete.sortedLeaves leaves).map
+        (fun x => (List.ofFn fun j : FtsLeaf => dv (sec j)).getD x []) =
+      List.ofFn fun s => dv ((SphincsSecurity.Concrete.honestFts leaves sec T).secrets s) := by
+  have hl := length_sortedSlots leaves
+  apply List.ext_getElem (by simp [SphincsSecurity.Concrete.sortedLeaves, hl, SphincsSecurity.ftsOpenings])
+  intro i h1 h2
+  simp only [SphincsSecurity.Concrete.sortedLeaves, List.map_map, List.getElem_map, List.getElem_ofFn,
+    SphincsSecurity.Concrete.honestFts, Function.comp]
+  have hi : i < (SphincsSecurity.Concrete.sortedSlots leaves).length := by
+    simp [SphincsSecurity.Concrete.sortedLeaves] at h1; exact h1
+  rw [getD_ofFn, dif_pos ((SphincsSecurity.Concrete.sortedSlots leaves)[i]'hi |> leaves).isLt]
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi]
   rfl
 
-theorem searchCounter_eq (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Digest)
-    (fuel c : Nat) (h : c + fuel ≤ 2 ^ 32) :
-    Ref.searchCounter lay tree leaf (dv M) c fuel =
-      Option.map (fun r => (r.1.toNat, List.ofFn fun i => (r.2 i).val)) <$>
-        relabel fmtQ (SphincsSecurity.Concrete.encodingSearch (m := AComp) 0 lay tree leaf M fuel c) := by
-  induction fuel generalizing c with
-  | zero => simp [Ref.searchCounter, SphincsSecurity.Concrete.encodingSearch]
-  | succ fuel ih =>
-    unfold Ref.searchCounter SphincsSecurity.Concrete.encodingSearch SphincsSecurity.Concrete.encode
-    rw [hash16_enc]
-    simp only [relabel_bind, relabel_pure, bind_map_left, map_bind, bind_assoc, pure_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun d => ?_
-    rw [decodeDigits_dv]
-    cases hd : SphincsSecurity.TargetSum.decodeDigest d with
-    | none =>
-      simp only [Option.map_none]
-      rw [ih (c + 1) (by omega)]
-    | some enc =>
-      simp only [Option.map_some, relabel_pure, map_pure]
-      congr 2
-      simp only [BitVec.toNat_ofNat, SphincsSecurity.counterBits]
-      rw [Nat.mod_eq_of_lt (by omega)]
+/-- A tree node read from the reference's level lists. -/
+theorem levels_node (T : Nat → Nat → Digest) (p : Nat × Nat) (h1 : p.1 < 14)
+    (h2 : p.2 < 2 ^ (14 - p.1)) :
+    (((List.range (SphincsSecurity.ftsTreeHeight + 1)).map
+        (levelList T SphincsSecurity.ftsTreeHeight)).getD p.1 []).getD p.2 [] = dv (T p.1 p.2) := by
+  rw [getD_map_range_list _ _ _ (by simp [SphincsSecurity.ftsTreeHeight]; omega)]
+  unfold levelList
+  rw [getD_ofFn, dif_pos (by simpa [SphincsSecurity.ftsTreeHeight] using h2)]
 
-/-! ## The layers -/
+/-- The nodes of an honest segment are the table's nodes at its reads. -/
+theorem ofFn_toSegment_nodes (seg : SphincsSecurity.Concrete.ScheduleSegment) (hs : seg.reads.length ≤ 14)
+    (T : Nat → Nat → Digest) :
+    List.ofFn (seg.toSegment fun i =>
+        let position := seg.reads.getD i.val (0, 0)
+        T position.1 position.2).nodes = seg.reads.map fun p => T p.1 p.2 := by
+  have hf : seg.folds.val = seg.reads.length := by
+    simp only [SphincsSecurity.Concrete.ScheduleSegment.folds]; omega
+  apply List.ext_getElem (by simp only [List.length_ofFn, List.length_map]; exact hf)
+  intro i h1 h2
+  simp only [List.getElem_ofFn, List.getElem_map, SphincsSecurity.Concrete.ScheduleSegment.toSegment,
+    SphincsSecurity.Segment.normalized]
+  have hi : i < seg.reads.length := by simpa using h2
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi]
+  rfl
 
-theorem layer_tables : ∀ lay : Layer, Ref.shiftBelow lay.val = SphincsSecurity.heightBelow lay ∧
-    Ref.height lay.val = SphincsSecurity.layerHeight lay ∧
-    Ref.shiftBelow lay.val + Ref.height lay.val =
-      SphincsSecurity.totalHeight - SphincsSecurity.heightAbove lay := by
-  decide
+/-- The authentication nodes of the honest opening: the table's nodes at the schedule's reads. -/
+theorem authNodes_honest (rho : Digest) (leaves : IndexGroup → FtsLeaf)
+    (hadm : SphincsSecurity.Concrete.AdmissibleLeaves leaves) (sec : FtsLeaf → Digest)
+    (T : Nat → Nat → Digest) (layers : (lay : Layer) → LayerSignature lay) :
+    authNodes ⟨rho, SphincsSecurity.Concrete.honestFts leaves sec T, layers⟩ =
+      (((SphincsSecurity.Concrete.schedule (SphincsSecurity.Concrete.sortedLeaves leaves)).map
+        (·.reads)).flatten).map fun p => T p.1 p.2 := by
+  obtain ⟨hlen, hseg, -⟩ := schedule_admissible leaves hadm
+  set segs := SphincsSecurity.Concrete.schedule (SphincsSecurity.Concrete.sortedLeaves leaves)
+  unfold authNodes
+  simp only [SphincsSecurity.Concrete.honestFts]
+  rw [List.map_flatten, List.map_map]
+  have e : (List.ofFn fun j : Fin SphincsSecurity.ftsSegments =>
+      List.ofFn ((segs.getD j.val default).toSegment fun i =>
+        let position := (segs.getD j.val default).reads.getD i.val (0, 0)
+        T position.1 position.2).nodes) = segs.map ((List.map fun p => T p.1 p.2) ∘ (·.reads)) := by
+    apply List.ext_getElem (by simp [hlen, SphincsSecurity.ftsSegments, SphincsSecurity.ftsOpenings])
+    intro j h1 h2
+    have hj : j < segs.length := by simpa using h2
+    simp only [List.getElem_ofFn, List.getElem_map, Function.comp]
+    have hg : segs.getD j default = segs[j] := by
+      rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj]; rfl
+    rw [hg]
+    exact ofFn_toSegment_nodes _ (hseg _ (List.getElem_mem hj)).1 T
+  exact congrArg List.flatten e
 
-theorem route_eq (index : Index) (lay : Layer) :
-    Ref.route index lay = ((SphincsSecurity.Concrete.leafIndexAt index lay).val,
-      (SphincsSecurity.Concrete.treeIndexAt index lay).val) := by
-  obtain ⟨h1, h2, h3⟩ := layer_tables lay
-  simp only [Ref.route, SphincsSecurity.Concrete.leafIndexAt, SphincsSecurity.Concrete.treeIndexAt]
-  rw [← h3, h1, h2]
+theorem length_flatten_map_dv (l : List Digest) : (l.map dv).flatten.length = 16 * l.length := by
+  induction l with
+  | nil => rfl
+  | cons a l ih => simp only [List.map_cons, List.flatten_cons, List.length_append, length_dv, ih,
+      List.length_cons]; ring
 
-theorem height_eq (lay : Layer) : Ref.height lay.val = SphincsSecurity.layerHeight lay :=
-  (layer_tables lay).2.1
+/-- The layer bytes of the reference serialization. -/
+theorem serialize_layers (parts : Layer → SphincsSecurity.Concrete.LayerOutput) (σ : Signature)
+    (hσ : σ.layers = fun lay => SphincsSecurity.Concrete.LayerOutput.toSignature lay (parts lay)) :
+    ((List.ofFn fun l : Fin (4 + 1) =>
+        layerRef (Fin.castLE (le_refl 5) l) (parts (Fin.castLE (le_refl 5) l))).map
+      fun l => Ref.le32 l.1 ++ l.2.1.flatten ++ l.2.2.flatten).flatten =
+      (List.ofFn (layerBytes σ)).flatten := by
+  simp only [List.map_ofFn]
+  congr 2
+  funext l
+  simp only [Function.comp, layerBytes, layerRef, map_range_eq_ofFn, hσ,
+    SphincsSecurity.Concrete.LayerOutput.toSignature]
+  rw [Ref.le32, leBytes_eq_toList]
+  have e : ∀ c : SphincsSecurity.Counter,
+      Ref.toList (n := 4) (BitVec.ofNat (8 * 4) c.toNat) = Ref.toList (n := 4) c := fun c => by
+    rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
+  rw [e]
+  rfl
 
-theorem leafIndexAt_lt (index : Index) (lay : Layer) :
-    (SphincsSecurity.Concrete.leafIndexAt index lay).val < 2 ^ SphincsSecurity.layerHeight lay := by
-  simp only [SphincsSecurity.Concrete.leafIndexAt]
-  exact Nat.mod_lt _ (Nat.two_pow_pos _)
-
-/-- A layer's output as the reference's `(counter, chain values, path)`. -/
-def layerRef (lay : Layer) (o : SphincsSecurity.Concrete.LayerOutput) : Ref.LayerSig :=
-  (o.1.toNat, List.ofFn (fun i => dv (o.2.1 i)),
-    (List.range (SphincsSecurity.layerHeight lay)).map fun l => dv (o.2.2 l))
-
-/-! ### The top layer (from the cache) -/
-
-theorem dv_xor (a b : Digest) : dv (a ^^^ b) = Ref.xorBytes (dv a) (dv b) := by
-  simp only [dv, Ref.toList, SigGolf.bytes, Ref.xorBytes, List.zipWith_map, List.zipWith_self]
-  apply List.map_congr_left
-  intro i hi
-  apply BitVec.eq_of_getLsbD_eq
-  intro k hk
-  simp [BitVec.getLsbD_extractLsb', BitVec.getLsbD_xor, hk]
-
-theorem hash16_mask (seed : MasterSeed) (l s : Nat) (hl : l < SphincsSecurity.maxLayerHeight)
-    (hs : s < 2 ^ SphincsSecurity.maxLayerHeight) :
-    Ref.hash16 (Ref.maskInput (Ref.toList (n := 32) seed) l s) =
-      dv <$> relabel fmtQ (SphincsSecurity.Seeded.maskSecret (m := AComp) 0 seed l s) := by
-  apply hash16_derive
-  simp only [SphincsSecurity.keygenHashInput, SphincsSecurity.Seeded.maskDomain,
-    SphincsSecurity.keygenDomainFields, Nat.mod_eq_of_lt hl, Nat.mod_eq_of_lt hs]
-  simp [toB_tweakFields, toB_seed, Ref.maskInput, Ref.thInput]
-
-theorem chainTo_eq (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
-    (c : ChainIndex) (x : Nat) (hx : x ≤ 7) (v : Digest) :
-    Ref.chainTo lay tree leaf c x (dv v) =
-      dv <$> relabel fmtQ (SphincsSecurity.Concrete.chainWalk (m := AComp) 0 lay tree leaf c 0 x v) := by
-  unfold Ref.chainTo
-  have h := chainFold_eq lay tree leaf c 0 x (by omega) v
-  rw [Nat.zero_add] at h
-  exact h
-
-/-- The cached top node `(l, s)` as the signer reads it. -/
-abbrev absTopNode (seed : MasterSeed) (b : SigGolfCandidate.Cache) :=
-  SphincsSecurity.Seeded.cachedTopNode (m := AComp) 0 seed (cacheDec b)
-
-theorem topPath_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (e : Nat)
-    (he : e < 2 ^ SphincsSecurity.maxLayerHeight) :
-    Ref.topPath (Ref.toList (n := 32) seed) (Ref.toList b) e =
-      (fun path : Fin SphincsSecurity.maxLayerHeight → Digest => List.ofFn fun l => dv (path l)) <$>
-        relabel fmtQ (sequenceFin (m := AComp) (n := SphincsSecurity.maxLayerHeight) fun level =>
-          absTopNode seed b level.val (Nat.xor (e / 2 ^ level.val) 1)) := by
-  unfold Ref.topPath
-  rw [show Ref.topH = SphincsSecurity.maxLayerHeight from rfl, relabel_sequenceFin]
-  have hbody : (fun (acc : List Ref.Val) (l : Nat) => do
-      let mk ← Ref.hash16 (Ref.maskInput (Ref.toList (n := 32) seed) l ((e / 2 ^ l) ^^^ 1))
-      pure (acc ++ [Ref.xorBytes (Ref.cacheNode (Ref.toList b) l ((e / 2 ^ l) ^^^ 1)) mk])) =
-      fun acc l => (do
-        let mk ← Ref.hash16 (Ref.maskInput (Ref.toList (n := 32) seed) l ((e / 2 ^ l) ^^^ 1))
-        pure (Ref.xorBytes (Ref.cacheNode (Ref.toList b) l ((e / 2 ^ l) ^^^ 1)) mk)) >>= fun v =>
-          pure (acc ++ [v]) := by
-    funext acc l; simp only [bind_assoc, pure_bind]
-  rw [hbody]
-  rw [foldlM_range_seq (fun level : Fin SphincsSecurity.maxLayerHeight => relabel fmtQ
-      (absTopNode seed b level.val (Nat.xor (e / 2 ^ level.val) 1))) _ dv (fun l hl => by
-    have hs : (e / 2 ^ l) ^^^ 1 < 2 ^ (SphincsSecurity.maxLayerHeight - l) := by
-      have h1 : e / 2 ^ l < 2 ^ (SphincsSecurity.maxLayerHeight - l) := by
-        rw [Nat.div_lt_iff_lt_mul (by positivity), ← Nat.pow_add,
-          show SphincsSecurity.maxLayerHeight - l + l = SphincsSecurity.maxLayerHeight by omega]
-        exact he
-      exact Nat.xor_lt_two_pow h1 (Nat.one_lt_two_pow (by omega))
-    have hs' : (e / 2 ^ l) ^^^ 1 < 2 ^ SphincsSecurity.maxLayerHeight :=
-      lt_of_lt_of_le hs (Nat.pow_le_pow_right (by omega) (by omega))
-    simp only [absTopNode, SphincsSecurity.Seeded.cachedTopNode, relabel_bind, relabel_pure]
-    rw [hash16_mask seed l _ hl hs', bind_map_left, map_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun mk => ?_
-    simp only [map_pure]
-    rw [dv_xor]
-    exact congrArg (fun x => pure (Ref.xorBytes x (dv mk))) (dv_cacheDec_node b l _ hl hs).symm)]
-  refine congrArg (· <$> _) ?_
-  funext f
-  rw [foldl_finRange_append, List.nil_append]
-
-theorem signTop_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (index : Index) (M : Digest) :
-    Ref.signTop (Ref.toList (n := 32) seed) (Ref.toList b) index (dv M) =
-      Option.map (fun o => [layerRef SphincsSecurity.topLayer o]) <$> relabel fmtQ
-        (SphincsSecurity.Concrete.signTopLayerPaired (m := AComp) 0 index
-          (SphincsSecurity.Seeded.otsSecret 0 seed SphincsSecurity.topLayer
-            (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer))
-          (absTopNode seed b) M) := by
-  have hr := route_eq index SphincsSecurity.topLayer
-  unfold Ref.signTop SphincsSecurity.Concrete.signTopLayerPaired
-  rw [show ((SphincsSecurity.topLayer : Layer) : Nat) = 0 from rfl] at hr
-  simp only [hr]
-  have hsc := searchCounter_eq SphincsSecurity.topLayer
-    (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-    (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) M Ref.cMax 0
-    (by simp [Ref.cMax])
-  rw [show ((SphincsSecurity.topLayer : Layer) : Nat) = 0 from rfl] at hsc
-  rw [hsc, show Ref.cMax = SphincsSecurity.encodingAttemptLimit from rfl]
-  simp only [relabel_bind, relabel_pure, bind_map_left, map_bind]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
-  rcases r with _ | ⟨counter, enc⟩
-  · simp
-  · simp only [Option.map_some]
-    rw [show Ref.nChains / 2 = SphincsSecurity.numChains / 2 from rfl]
-    have hbody : (fun (acc : List Ref.Val) (k : Nat) => do
-        let (s0, s1) ← Ref.prf2 (Ref.prfInput (Ref.toList (n := 32) seed) 0
-          (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) k)
-        let v0 ← Ref.chainTo 0 (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) (2 * k)
-          ((List.ofFn fun i => (enc i).val).getD (2 * k) 0) s0
-        let v1 ← Ref.chainTo 0 (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) (2 * k + 1)
-          ((List.ofFn fun i => (enc i).val).getD (2 * k + 1) 0) s1
-        pure (acc ++ [v0, v1])) = fun acc k =>
-        (Ref.prf2 (Ref.prfInput (Ref.toList (n := 32) seed) 0
-          (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) k) >>= fun s =>
-          Ref.chainTo 0 (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-            (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) (2 * k)
-            ((List.ofFn fun i => (enc i).val).getD (2 * k) 0) s.1 >>= fun v0 =>
-          Ref.chainTo 0 (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-            (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) (2 * k + 1)
-            ((List.ofFn fun i => (enc i).val).getD (2 * k + 1) 0) s.2 >>= fun v1 =>
-            pure (v0, v1)) >>= fun r => pure (acc ++ [r.1, r.2]) := by
-      funext acc k; simp only [bind_assoc, pure_bind]
-    rw [hbody]
-    rw [foldlM_range_seq (fun pair : SphincsSecurity.ChainPair => relabel fmtQ (do
-        let secrets ← SphincsSecurity.Seeded.otsSecret (m := AComp) 0 seed SphincsSecurity.topLayer
-          (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer) pair
-        let first ← SphincsSecurity.Concrete.chainWalk 0 SphincsSecurity.topLayer
-          (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.evenChain pair) 0 (enc (SphincsSecurity.evenChain pair)).val secrets.1
-        let second ← SphincsSecurity.Concrete.chainWalk 0 SphincsSecurity.topLayer
-          (SphincsSecurity.Concrete.treeIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.Concrete.leafIndexAt index SphincsSecurity.topLayer)
-          (SphincsSecurity.oddChain pair) 0 (enc (SphincsSecurity.oddChain pair)).val secrets.2
-        return (first, second)))
-      _ (fun r => (dv r.1, dv r.2)) (fun j hj => by
-        have e2 : 2 * j = (SphincsSecurity.evenChain ⟨j, hj⟩).val := rfl
-        have e3 : 2 * j + 1 = (SphincsSecurity.oddChain ⟨j, hj⟩).val := rfl
-        rw [show (0 : Nat) = ((SphincsSecurity.topLayer : Layer) : Nat) from rfl,
-          prf2_ots seed _ _ _ ⟨j, hj⟩, e3, e2, getD_ofFn, getD_ofFn,
-          dif_pos (SphincsSecurity.evenChain ⟨j, hj⟩).isLt,
-          dif_pos (SphincsSecurity.oddChain ⟨j, hj⟩).isLt, bind_map_left]
-        simp only [relabel_bind, relabel_pure, map_bind, bind_assoc]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun sec => ?_
-        rw [chainTo_eq _ _ _ _ _ (digit_le enc _) sec.1, bind_map_left]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun v0 => ?_
-        rw [chainTo_eq _ _ _ _ _ (digit_le enc _) sec.2, bind_map_left]
-        rfl)]
-    simp only [relabel_bind, relabel_sequenceFin, map_bind, bind_map_left, relabel_pure]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun vals => ?_
-    have hlt := leafIndexAt_lt index SphincsSecurity.topLayer
-    rw [topPath_eq seed b _ hlt, bind_map_left, relabel_sequenceFin]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun path => ?_
-    simp only [map_pure, Option.map_some]
-    rw [foldl_finRange_appendList, List.nil_append]
-    refine congrArg (fun x => pure (some [x])) ?_
-    simp only [layerRef]
-    rw [flatten_unpairChains vals dv]
-    congr 2
-
-/-! ### All layers -/
-
-theorem signLayers_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (index : Index) (n : Nat)
-    (hn : n + 1 ≤ SphincsSecurity.numLayers) (M : Digest) :
-    Ref.signLayers (Ref.toList (n := 32) seed) (Ref.toList b) index n (dv M) =
-      Option.map (fun parts => List.ofFn fun l : Fin (n + 1) =>
-          layerRef (Fin.castLE hn l) (parts (Fin.castLE hn l))) <$>
-        relabel fmtQ (SphincsSecurity.Concrete.signLayersPaired (m := AComp) 0 index
-          (SphincsSecurity.Seeded.otsSecret 0 seed) (absTopNode seed b) (n + 1) M) := by
-  induction n generalizing M with
-  | zero =>
-    unfold Ref.signLayers SphincsSecurity.Concrete.signLayersPaired
-    rw [dif_pos (by decide), if_pos rfl, signTop_eq]
-    simp only [relabel_bind, relabel_pure, map_bind, bind_map_left]
-    rw [map_eq_bind_pure_comp]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
-    rcases r with _ | o
-    · rfl
-    · simp only [Option.map_some, map_pure]
-      rfl
-  | succ n ih =>
-    let lay : Layer := ⟨n + 1, by omega⟩
-    have hr := route_eq index lay
-    have hh := height_eq lay
-    simp only [lay] at hr hh
-    unfold Ref.signLayers SphincsSecurity.Concrete.signLayersPaired
-    rw [dif_pos (show n + 1 < SphincsSecurity.numLayers by omega), if_neg (by omega)]
-    simp only [hr, hh]
-    rw [searchCounter_eq lay (SphincsSecurity.Concrete.treeIndexAt index lay)
-      (SphincsSecurity.Concrete.leafIndexAt index lay) M Ref.cMax 0 (by simp [Ref.cMax])]
-    rw [show Ref.cMax = SphincsSecurity.encodingAttemptLimit from rfl]
-    simp only [relabel_bind, relabel_pure, bind_map_left, map_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
-    rcases r with _ | ⟨counter, enc⟩
-    · simp
-    · simp only [Option.map_some]
-      rw [buildTree_eq seed lay (SphincsSecurity.Concrete.treeIndexAt index lay)
-        (SphincsSecurity.Concrete.leafIndexAt index lay) (leafIndexAt_lt index lay) enc
-        (List.ofFn fun i => (enc i).val) (fun i => by rw [getD_ofFn, dif_pos i.isLt])]
-      simp only [relabel_bind, relabel_pure, bind_map_left, map_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun T => ?_
-      rw [ih (by omega), bind_map_left]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
-      rcases r with _ | rest
-      · simp
-      · simp only [Option.map_some, relabel_pure, map_pure]
-        congr 2
-        rw [List.ofFn_succ_last (n := n + 1)]
-        congr 1
-        · congr 1; funext l
-          split_ifs with h
-          · have := congrArg Fin.val h
-            have h2 : l.val = n + 1 := this
-            exact absurd h2 (by have := l.isLt; omega)
-          · rfl
-        · split_ifs with h
-          · rfl
-          · exact absurd rfl h
+/-- **The signature bytes**: the reference serialization of the PORS opening and the layers is the
+compressed abstract signature. -/
+theorem serialize_eq (rho : Digest) (leaves : IndexGroup → FtsLeaf)
+    (hadm : SphincsSecurity.Concrete.AdmissibleLeaves leaves) (sec : FtsLeaf → Digest)
+    (T : Nat → Nat → Digest) (parts : Layer → SphincsSecurity.Concrete.LayerOutput) :
+    Ref.serialize (dv rho)
+      (Ref.porsOpening (Ref.sortLeaves (List.ofFn fun r => (leaves r).val))
+        ((List.range (SphincsSecurity.ftsTreeHeight + 1)).map (levelList T SphincsSecurity.ftsTreeHeight))
+        (List.ofFn fun j => dv (sec j)))
+      (List.ofFn fun l : Fin (4 + 1) =>
+        layerRef (Fin.castLE (le_refl 5) l) (parts (Fin.castLE (le_refl 5) l))) =
+    compressList ⟨rho, SphincsSecurity.Concrete.honestFts leaves sec T,
+      fun lay => SphincsSecurity.Concrete.LayerOutput.toSignature lay (parts lay)⟩ := by
+  obtain ⟨hlen, hseg, hoct⟩ := schedule_admissible leaves hadm
+  have hoct' := hadm.2
+  set σ : Signature := ⟨rho, SphincsSecurity.Concrete.honestFts leaves sec T,
+      fun lay => SphincsSecurity.Concrete.LayerOutput.toSignature lay (parts lay)⟩ with hσ
+  unfold Ref.serialize compressList
+  rw [serialize_layers parts σ rfl, sortLeaves_eq]
+  unfold Ref.porsOpening
+  rw [schedule_ref _ (sortedLeaves_lt leaves)]
+  simp only
+  set segs := SphincsSecurity.Concrete.schedule (SphincsSecurity.Concrete.sortedLeaves leaves)
+  set R := (segs.map (·.reads)).flatten with hR
+  have hY : R.map (fun hj => (((List.range (SphincsSecurity.ftsTreeHeight + 1)).map
+        (levelList T SphincsSecurity.ftsTreeHeight)).getD hj.1 []).getD hj.2 []) =
+      (authNodes σ).map dv := by
+    rw [hσ, authNodes_honest rho leaves hadm sec T, List.map_map]
+    apply List.map_congr_left
+    intro p hp
+    rw [hR, List.mem_flatten] at hp
+    obtain ⟨l, hl, hpl⟩ := hp
+    rw [List.mem_map] at hl
+    obtain ⟨sg, hsg, rfl⟩ := hl
+    obtain ⟨h1, h2⟩ := (hseg sg hsg).2 p hpl
+    exact levels_node T p h1 h2
+  rw [opening_secrets leaves sec T, hY]
+  have hn : (authNodes σ).length ≤ 120 := by
+    rw [hσ, authNodes_honest rho leaves hadm sec T, List.length_map, hoct]
+    exact hoct'
+  have hA := length_flatten_map_dv (authNodes σ)
+  simp only [List.flatten_append, List.flatten_replicate_replicate, List.length_append,
+    List.length_ofFn, List.length_map, Ref.zeros, Ref.porsK, Ref.porsM, List.append_assoc]
+  rw [List.take_append, List.take_of_length_le (by rw [hA]; omega), hA,
+    List.take_replicate]
+  have hk : (15 + 120 - (SphincsSecurity.ftsOpenings + (authNodes σ).length)) * 16 =
+      min (16 * 120 - 16 * (authNodes σ).length) (16 * 120) := by
+    simp only [SphincsSecurity.ftsOpenings]; omega
+  rw [hk]
+  simp only [List.append_assoc]
+  rfl
 
 /-! ## The digest search -/
 
-theorem toB_msg (m : Message) :
-    toB (SphincsSecurity.bytesLE 32 m) = Ref.toList (n := 32) m := toB_bytesLE 32 m
-
-theorem hash16_rnd (seed : MasterSeed) (m : Message) (a : Nat) :
-    Ref.hash16 (Ref.rndInput (Ref.toList (n := 32) seed) (Ref.toList (n := 32) m) a) =
-      dv <$> relabel fmtQ (SphincsSecurity.deriveRandomizer (m := AComp) 0 seed m (BitVec.ofNat 32 a)) := by
-  apply hash16_derive
-  simp only [SphincsSecurity.randomizerHashInput, toB_append, toB_P, toB_seed, toB_msg,
-    Ref.rndInput, Ref.thInput, List.append_assoc]
-  rw [show (⟨7#8, 0#8, 0#40, BitVec.ofNat 32 a, 0#32⟩ : SphincsSecurity.TweakFields) =
-    SphincsSecurity.tweakFields 7 0 0 a 0 from rfl, toB_tweakFields]
-
-theorem digest_eq (root rho : Digest) (m : Message) :
-    Ref.digest (dv rho) (Ref.toList (n := 32) m) =
-      (fun d => d.toNat) <$> relabel fmtQ
-        (SphincsSecurity.Concrete.messageDigest (m := AComp) 0 root m rho) := by
-  unfold Ref.digest SphincsSecurity.Concrete.messageDigest
-  simp only [relabel_bind, relabel_oracleHash, relabel_pure, map_bind, map_pure]
-  have hin : toB (SphincsSecurity.tweakableHashInput 0 .message
-      (SphincsSecurity.Concrete.messageDigestPayload root m rho)) = Ref.digestInput (dv rho) (Ref.toList (n := 32) m) := by
-    rw [toB_tweakableHashInput]
-    simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
-      SphincsSecurity.Concrete.messageDigestPayload, toB_append, toB_dv, toB_msg, Ref.digestInput,
-      Ref.thInput, List.append_assoc]
-    rw [show dv 0 = Ref.zeros 16 from toList_zero 16]
-  rw [hin]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun a => ?_
-  rw [truncateMessageDigest_toNat]
-
 /-- Project a reference digest-search result to what the rest of the signer reads. -/
-def projN (r : Ref.Val × Nat) : Ref.Val × Nat × (Nat → Nat) := (r.1, Ref.idxOf r.2, Ref.uOf r.2)
+def projN (r : Ref.Val × Nat) : Ref.Val × Nat × List Nat := (r.1, Ref.idxOf r.2, Ref.leavesOf r.2)
 
 /-- The same projection of an abstract digest-search result. -/
-def projA (r : Digest × Index × (IndexGroup → FtsLeaf)) : Ref.Val × Nat × (Nat → Nat) :=
-  (dv r.1, r.2.1.val, uFun r.2.2)
+def projA (r : Digest × Index × (IndexGroup → FtsLeaf)) : Ref.Val × Nat × List Nat :=
+  (dv r.1, r.2.1.val, List.ofFn fun i => (r.2.2 i).val)
 
 theorem searchDigest_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
     (m : Message) (fuel a : Nat) :
@@ -576,20 +320,53 @@ theorem searchDigest_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.paramet
     rw [admissible_eq]
     by_cases hd : SphincsSecurity.Concrete.Admissible d
     · simp only [hd, decide_true, if_true, pure_bind, relabel_pure, map_pure, Option.map_some]
-      simp only [projN, projA, idxOf_eq, uOf_eq]
+      simp only [projN, projA, idxOf_eq, leavesOf_eq]
     · simp only [hd, decide_false, if_false, pure_bind, Bool.false_eq_true]
       exact ih (a + 1)
+
+theorem mem_support_relabel {ι ι' R α : Type} (f : ι → ι') (oa : OracleComp (ι →ₒ R) α) (x : α)
+    (hx : x ∈ support (relabel f oa)) : x ∈ support oa := by
+  induction oa using OracleComp.inductionOn with
+  | pure a => simpa using hx
+  | query_bind t k ih =>
+    rw [SigGolfCandidate.Bridge.relabel_query_bind] at hx
+    rw [mem_support_bind_iff] at hx ⊢
+    obtain ⟨u, -, hu⟩ := hx
+    exact ⟨u, by simp, ih u hu⟩
+
+/-- The digest loop only returns admissible leaves. -/
+theorem signDigestLoop_admissible (sk : SphincsSecurity.Seeded.SecretKey) (m : Message) :
+    ∀ (fuel a : Nat) (randomness : Digest) (index : Index) (leaves : IndexGroup → FtsLeaf),
+      some (randomness, index, leaves) ∈
+        support (SphincsSecurity.Seeded.signDigestLoop (m := AComp) sk m fuel a) →
+      SphincsSecurity.Concrete.AdmissibleLeaves leaves := by
+  intro fuel
+  induction fuel with
+  | zero => intro a randomness index leaves h; simp [SphincsSecurity.Seeded.signDigestLoop] at h
+  | succ fuel ih =>
+    intro a randomness index leaves h
+    unfold SphincsSecurity.Seeded.signDigestLoop SphincsSecurity.Seeded.signAttempt at h
+    simp only [bind_assoc, mem_support_bind_iff] at h
+    obtain ⟨rho, -, d, -, h⟩ := h
+    by_cases hd : SphincsSecurity.Concrete.Admissible d
+    · simp only [hd, if_true, support_pure, Set.mem_singleton_iff, exists_eq_left] at h
+      simp only [support_pure, Set.mem_singleton_iff, Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨-, -, rfl⟩ := h
+      exact hd
+    · simp only [hd, if_false, support_pure, Set.mem_singleton_iff, exists_eq_left] at h
+      exact ih (a + 1) randomness index leaves h
 
 /-! ## The whole signer -/
 
 /-- What the reference signer does after the MAC check and the digest search. -/
-def signCont (S cache : List Byte) (rho : Ref.Val) (idx : Nat) (u : Nat → Nat) :
+def signCont (S cache : List Byte) (rho : Ref.Val) (idx : Nat) (lv : List Nat) :
     OracleComp SigGolf.HashSpec (Option (List Byte)) := do
-  let (fors, roots) ← signForsU S idx u
-  let M ← Ref.hash16 (Ref.rootsInput idx roots)
+  let (levels, secrets) ← Ref.buildPorsTree S idx
+  let M := (levels.getD Ref.porsH []).getD 0 []
+  let fts := Ref.porsOpening (Ref.sortLeaves lv) levels secrets
   match ← Ref.signLayers S cache idx (Ref.nLayers - 1) M with
   | none => pure none
-  | some lays => pure (some (Ref.serialize rho fors lays))
+  | some lays => pure (some (Ref.serialize rho fts lays))
 
 theorem signList_eq_cont (S cache m : List Byte) :
     Ref.signList S cache m = Ref.H (Ref.macInput S (Ref.cacheRegion cache)) >>= fun tag =>
@@ -597,7 +374,7 @@ theorem signList_eq_cont (S cache m : List Byte) :
         (Option.map projN <$> Ref.searchDigest S m 0 Ref.aMax) >>= fun r =>
           match r with
           | none => pure none
-          | some (rho, idx, u) => signCont S cache rho idx u
+          | some (rho, idx, lv) => signCont S cache rho idx lv
       else pure none := by
   unfold Ref.signList
   refine bind_congr (m := OracleComp SigGolf.HashSpec) fun tag => ?_
@@ -607,49 +384,35 @@ theorem signList_eq_cont (S cache m : List Byte) :
     rcases r with _ | ⟨rho, N⟩ <;> rfl
   · rfl
 
-theorem serialize_eq (rho : Digest) (trees : FtsTree → Digest × (Nat → Digest) × Digest)
-    (parts : Layer → SphincsSecurity.Concrete.LayerOutput) :
-    Ref.serialize (dv rho)
-      (List.ofFn fun k => (dv (trees k).1,
-        (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv ((trees k).2.1 l))))
-      (List.ofFn fun l : Fin (4 + 1) =>
-        layerRef (Fin.castLE (le_refl 5) l) (parts (Fin.castLE (le_refl 5) l))) =
-    sigToList ⟨rho, fun t => (trees t).1, fun t l => (trees t).2.1 l.val,
-      fun lay => SphincsSecurity.Concrete.LayerOutput.toSignature lay (parts lay)⟩ := by
-  unfold Ref.serialize sigToList
-  simp only [List.map_ofFn]
-  congr 1
-  congr 2
-  funext l
-  simp only [Function.comp, layerPart, layerRef, map_range_eq_ofFn,
-    SphincsSecurity.Concrete.LayerOutput.toSignature]
-  rw [Ref.le32, leBytes_eq_toList]
-  have e : ∀ c : SphincsSecurity.Counter,
-      Ref.toList (n := 4) (BitVec.ofNat (8 * 4) c.toNat) = Ref.toList (n := 4) c := fun c => by
-    rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
-  rw [e]
-  rfl
-
-theorem signCont_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (randomness : Digest) (index : Index)
-    (leaves : IndexGroup → FtsLeaf) :
-    signCont (Ref.toList (n := 32) seed) (Ref.toList b) (dv randomness) index (uFun leaves) =
-      Option.map sigToList <$> relabel fmtQ
+theorem signCont_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (randomness : Digest)
+    (index : Index) (leaves : IndexGroup → FtsLeaf)
+    (hadm : SphincsSecurity.Concrete.AdmissibleLeaves leaves) :
+    signCont (Ref.toList (n := 32) seed) (Ref.toList b) (dv randomness) index
+        (List.ofFn fun r => (leaves r).val) =
+      Option.map compressList <$> relabel fmtQ
         (SphincsSecurity.Concrete.signFromPaired (m := AComp) 0 index
           (SphincsSecurity.Seeded.ftsSecret 0 seed index) (SphincsSecurity.Seeded.otsSecret 0 seed)
           (absTopNode seed b) randomness leaves) := by
-  unfold signCont SphincsSecurity.Concrete.signFromPaired SphincsSecurity.Concrete.buildForestPaired
-  rw [signForsU_eq]
+  unfold signCont SphincsSecurity.Concrete.signFromPaired
+  rw [buildPorsTree_eq]
   simp only [relabel_bind, relabel_pure, bind_map_left, map_bind, bind_assoc, pure_bind]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun trees => ?_
-  rw [hash16_roots, bind_map_left]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun key => ?_
-  rw [show Ref.nLayers - 1 = 4 from rfl]
-  rw [signLayers_eq seed b index 4 (le_refl 5) key, bind_map_left]
+  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun tree => ?_
+  rcases tree with ⟨sec, T⟩
+  have hM : (((List.range (SphincsSecurity.ftsTreeHeight + 1)).map
+      (levelList T SphincsSecurity.ftsTreeHeight)).getD Ref.porsH []).getD 0 [] =
+      dv (T SphincsSecurity.ftsTreeHeight 0) := by
+    rw [show Ref.porsH = SphincsSecurity.ftsTreeHeight from rfl,
+      getD_map_range_list _ _ _ (by omega)]
+    unfold levelList
+    rw [getD_ofFn, dif_pos (by simp)]
+  simp only
+  rw [hM, show Ref.nLayers - 1 = 4 from rfl]
+  rw [signLayers_eq seed b index 4 (le_refl 5) (T SphincsSecurity.ftsTreeHeight 0), bind_map_left]
   refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
   rcases r with _ | parts
   · simp
   · simp only [Option.map_some, relabel_pure, map_pure]
-    exact congrArg (fun x => pure (some x)) (serialize_eq randomness trees parts)
+    exact congrArg (fun x => pure (some x)) (serialize_eq randomness leaves hadm sec T parts)
 
 theorem toB_macHashInput (seed : MasterSeed) (b : SigGolfCandidate.Cache) :
     toB (SphincsSecurity.macHashInput 0 seed (cacheDec b).region) =
@@ -665,7 +428,7 @@ cache, for any secret key with the parameter `0` (the root is ignored). -/
 theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
     (b : SigGolfCandidate.Cache) (m : Message) :
     Ref.signList (Ref.toList (n := 32) sk.seed) (Ref.toList b) (Ref.toList (n := 32) m) =
-      Option.map sigToList <$> relabel fmtQ
+      Option.map compressList <$> relabel fmtQ
         (SphincsSecurity.Seeded.sign (m := AComp) sk (cacheDec b) m) := by
   rw [signList_eq_cont]
   unfold SphincsSecurity.Seeded.sign
@@ -678,20 +441,21 @@ theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter =
     have hsd := searchDigest_eq sk hP m SphincsSecurity.digestAttemptLimit 0
     rw [hsd, bind_map_left]
     simp only [relabel_bind, relabel_pure, map_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
+    refine OracleComp.bind_congr_of_forall_mem_support _ fun r hr => ?_
     rcases r with _ | ⟨randomness, index, leaves⟩
     · simp
     · simp only [Option.map_some, projA]
-      rw [signCont_eq, hP]
+      have hadm := signDigestLoop_admissible sk m _ _ randomness index leaves
+        (mem_support_relabel fmtQ _ _ hr)
+      rw [signCont_eq _ _ _ _ _ hadm, hP]
   · rw [if_neg (fun h => ht ((cacheTag_iff b tag).mp h)), if_neg ht]
     simp
 
-/-- **sign**: `signRef` is the relabelled abstract signer on the decoded cache, decoded by the
-signature codec. -/
+/-- **sign**: `signRef` is the relabelled abstract signer on the decoded cache, compressed. -/
 theorem signRef_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
     (b : SigGolfCandidate.Cache) (m : Bytes 32) :
     Ref.signRef sk.seed b m =
-      Option.map sigCodec.symm <$> relabel fmtQ
+      Option.map compress <$> relabel fmtQ
         (SphincsSecurity.Seeded.sign (m := AComp) sk (cacheDec b) m) := by
   unfold Ref.signRef
   rw [signList_eq sk hP b m]

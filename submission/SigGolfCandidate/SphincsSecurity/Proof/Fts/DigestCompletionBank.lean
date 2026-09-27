@@ -15,7 +15,7 @@ theorem expected_digestCompletion_reuseTarget_le {α : Type}
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
     (hreuse : exactDigestReuseWeight key message state.1 ≤ reuse)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run state.1 >>= finish] *
       reuseTargetEnvelope key reuse budget payload target signatures
         ((record result).2, state.2 ++ [⟨message, (record result).1.1⟩]) groups remaining) ≤
@@ -34,21 +34,20 @@ theorem expected_digestCompletion_reuseNewTarget_le_mass_mul {α : Type}
     (hcompletion : ∀ loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run state.1),
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run state.1 >>= finish] *
       reuseNewTargetEnvelope key reuse budget signatures state.1
         ((record result).2, state.2 ++ [⟨message, (record result).1.1⟩]) groups remaining) ≤
       freshDigestSelectionProbability key message state.1 *
-        ((Fintype.card Index : ENNReal)⁻¹ * reuseRawEnvelope key reuse budget signatures state groups remaining) := by
+        (admissibleProbability⁻¹ * ((Fintype.card Index : ENNReal)⁻¹ * reuseRawEnvelope key reuse budget signatures state groups remaining)) := by
   have h := expected_digestCompletion_newTargetEnvelopeCharge_le_mass_mul key message state.1 finish record hcompletion
-    state.2 hsigned (Fintype.card Index : ENNReal)⁻¹ reuse
-    (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) budget signatures groups remaining hvalid
+    state.2 hsigned reuse budget signatures groups remaining hvalid
   refine h.trans_eq ?_
   unfold reuseRawEnvelope observedRawIndexShapeVector
   rw [targetShapeEnvelope_lift _ _ _ _ _ _ groups remaining hvalid]
 
 theorem expected_digestCompletion_bankedTarget_le {α : Type}
-    (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat) (required : Finset IndexGroup)
     (state : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (finish : DigestLoopRecord → ProbComp α)
     (record : α → (Option Signature × Option FewTimeView) × QueryCache HashSpec)
@@ -63,7 +62,7 @@ theorem expected_digestCompletion_bankedTarget_le {α : Type}
         (completedTargetBank key required ((record result).2, state.2 ++ [⟨message, (record result).1.1⟩]) bank) (stopped result)) ≤
       bankedTargetEnvelope key reuse budget (signatures + 1) required state bank false +
         freshDigestSelectionProbability key message state.1 *
-          ((Fintype.card Index : ENNReal)⁻¹ * reuseRawEnvelope key reuse budget signatures state ∅ required) *
+          (admissibleProbability⁻¹ * ((Fintype.card Index : ENNReal)⁻¹ * reuseRawEnvelope key reuse budget signatures state ∅ required)) *
             targetCertificateScale required := by
   have hvalid : TargetShapeValid ∅ required := by constructor <;> simp
   apply expected_bankedCacheWeight_step_le_of_split

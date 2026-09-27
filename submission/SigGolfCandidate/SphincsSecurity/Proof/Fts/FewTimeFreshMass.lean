@@ -90,7 +90,7 @@ theorem completeFreshSelectedLoopView_eq_elim
     (result : Option (Randomness × Index × (IndexGroup → FtsLeaf)) × QueryCache HashSpec) :
     completeFreshSelectedLoopView referenceCache key message result =
       (freshSelectedLoopView? referenceCache key message result).elim
-        ($ᵗ FewTimeView) pure := by
+        signerViewSample pure := by
   unfold completeFreshSelectedLoopView
   cases freshSelectedLoopView? referenceCache key message result <;> rfl
 
@@ -102,11 +102,11 @@ theorem probEvent_signDigestLoop_freshSelected_eq_mass_mul_uniform
       (simulateQ romImpl (signDigestLoop attempts key message)).run workingCache] =
       Pr[fun result => freshSelectedLoopView? referenceCache key message result ≠ none |
         (simulateQ romImpl (signDigestLoop attempts key message)).run workingCache] *
-          Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] := by
+          Pr[P | signerViewSample] := by
   have h := probEvent_selectedOption_eq_mass_mul
     ((simulateQ romImpl (signDigestLoop attempts key message)).run workingCache)
-    (freshSelectedLoopView? referenceCache key message) ($ᵗ FewTimeView) P
-    (by simp) (by simp) (by
+    (freshSelectedLoopView? referenceCache key message) signerViewSample P
+    (by simp) probFailure_signerViewSample (by
       intro Q
       simpa only [funext (completeFreshSelectedLoopView_eq_elim referenceCache key message)] using
         (probEvent_completeFreshSelectedLoopView_le_uniform attempts key message

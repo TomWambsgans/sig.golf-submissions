@@ -5,7 +5,15 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 /-!
 # SPHINCS+ scheme
 
-Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: five layers of heights `(11,6,6,6,5)`, target sum `184`, paired secret derivations (one query yields two secrets), a top tree cached by key generation (masked, and authenticated by a MAC keyed with the master seed), no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
+Parameters, serialized hash inputs, key generation, signing, and verification for the instance defined in `doc/sphincs/main.tex`, with the changes of the SPHINCS-golf variant: five layers of heights `(11,6,6,6,5)`, target sum `182`, paired secret derivations (one query yields two secrets), a top tree cached by key generation (masked, and authenticated by a MAC keyed with the master seed), no public-parameter derivation (`P = 0`), a message digest that does not bind the root, a verifier that rejects counters at or above `C_max`, and a signer that builds every tree it touches exactly once, in the query order of the reference implementation.
+
+The few-time signature is PORS+FP (`work/design/SPEC-pors.md`, reference `work/py-pors/ref.py`): one Merkle
+tree of height `14` per instance `idx`, the full 256-bit digest split into `idx` (34 bits) and `k = 15`
+leaf indices, admissible when the indices are distinct and their octopus (the pruned authentication set)
+has at most `120` nodes. The signature is *witness-shaped*: the sorted leaves' digest slots, their secrets,
+and the stack-machine segments of the verifier with the authentication nodes they fold. The verifier is the
+stack machine of `ref.pors_root`, and the tree root is the bottom layer's message. Tree nodes are hashed
+under their heap index (tag `10`, position `0`), the relabeled form of `ref.py`'s node tweaks.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -23,14 +31,20 @@ def counterBits : Nat := 32
 def winternitzBits : Nat := 3
 def chainLength : Nat := 2 ^ winternitzBits
 def numChains : Nat := 42
-def targetSum : Nat := 184
+def targetSum : Nat := 182
 def numLayers : Nat := 5
 def totalHeight : Nat := 34
 /-- The tallest layer, the top one, `h_0 = 11`, which bounds every layer's leaf index. -/
 def maxLayerHeight : Nat := 11
-def ftsTreeHeight : Nat := 10
-/-- The `k` index groups a digest carries. The forest holds `k - 1` trees, the last group being pinned to zero. -/
-def ftsTrees : Nat := 15
+/-- The height of the PORS tree of an instance: `2^14` leaves. -/
+def ftsTreeHeight : Nat := 14
+/-- `k`, the leaf indices a digest carries (its slots) and the leaves a signature opens. -/
+def ftsOpenings : Nat := 15
+/-- The authentication-node budget: an admissible digest's octopus has at most `120` nodes, and the verifier
+accepts at most `120` folds. -/
+def ftsAuthCapacity : Nat := 120
+/-- The verifier's segments: one per opened leaf and one per merge, `2k - 1 = 29`. -/
+def ftsSegments : Nat := 2 * ftsOpenings - 1
 /-- Signatures allowed per key pair, `q_s`. -/
 def signatureLimit : Nat := 2 ^ 32
 /-- Digest attempts per signature, `A_max`. -/
@@ -56,16 +70,21 @@ abbrev LeafIndex := Fin (2 ^ maxLayerHeight)
 abbrev ChainIndex := Fin numChains
 abbrev Digit := Fin chainLength
 abbrev ChainStep := Fin (chainLength - 1)
-/-- A tree of the few-time forest, `kappa < k - 1`. -/
-abbrev FtsTree := Fin (ftsTrees - 1)
-/-- An index group of the message digest, `kappa < k`. The first `k - 1` select a tree's leaf; the last is pinned to zero. -/
-abbrev IndexGroup := Fin ftsTrees
+/-- The tree of a few-time instance. PORS has a single tree per instance, so this type is a unit; it is kept
+so that the secret table `Index → FtsTree → FtsLeaf → Digest`, the key-derivation domain and the hash
+domains keep their shape. Its only value is `porsTree`. -/
+abbrev FtsTree := Fin 1
+/-- A slot of the message digest, `r < k`: slot `r` carries the leaf index `v_r`. -/
+abbrev IndexGroup := Fin ftsOpenings
+/-- A slot code of the signature's permutation: a digest slot `r < k`, or `k = 15`, the out-of-range
+sentinel whose value is `2^14`. -/
+abbrev SlotCode := Fin (ftsOpenings + 1)
 abbrev FtsLeaf := Fin (2 ^ ftsTreeHeight)
 abbrev Encoding := ChainIndex → Digit
 abbrev HashInput := List UInt8
 /-- A pair of chains `(2k, 2k + 1)` of a one-time key, whose secrets one derivation query yields. -/
 abbrev ChainPair := Fin (numChains / 2)
-/-- A pair of leaves `(2k, 2k + 1)` of a few-time tree, whose secrets one derivation query yields. -/
+/-- A pair of leaves `(2q, 2q + 1)` of the PORS tree, whose secrets one derivation query yields. -/
 abbrev FtsPair := Fin (2 ^ (ftsTreeHeight - 1))
 
 /-- Chain `2k`. -/
@@ -107,12 +126,13 @@ def heightBelow (lay : Layer) : Nat := totalHeight - heightAbove lay - layerHeig
 def truncateHash (output : HashOutput) : Digest :=
   output.extractLsb' 0 digestBits
 
-/-- The message digest is `h + k * a = 184` bits, an index and `k` leaf indices. -/
-def messageDigestBits : Nat := totalHeight + ftsTrees * ftsTreeHeight
+/-- The message digest is the full 256-bit answer: the index (`h = 34` bits), the `k = 15` leaf indices of
+`14` bits each, and `12` unused bits. -/
+def messageDigestBits : Nat := hashOutputBits
 
 abbrev MessageDigest := BitVec messageDigestBits
 
-/-- Keep the first `h + k * a` output bits. -/
+/-- The message digest of an answer: all of its bits. -/
 def truncateMessageDigest (output : HashOutput) : MessageDigest :=
   output.extractLsb' 0 messageDigestBits
 
@@ -129,11 +149,42 @@ structure LayerSignature (lay : Layer) where
   path : Fin (layerHeight lay) → Digest
 deriving DecidableEq
 
-/-- The randomizer, FORS openings, and five layer signatures, totaling 6404 bytes. -/
+/-- One segment of the PORS stack machine: `folds` authentication nodes to fold into the pending node, then a
+merge with the node on top of the stack (`merge = true`) or the end of the current leaf (`merge = false`).
+`parity` is bit `0` of the heap index at the segment's start; it orders the first fold's children. It is
+read only when `folds > 0`, and is normalised to `false` otherwise, so that an accepted signature carries no
+unread data. A segment with `folds = 15` is rejected by the verifier before any node is read. -/
+structure Segment where
+  folds : Fin 16
+  merge : Bool
+  parity : Bool
+  nodes : Fin folds.val → Digest
+  parity_normal : folds.val = 0 → parity = false
+deriving DecidableEq
+
+/-- A segment with `parity` normalised: kept when there is a fold, `false` otherwise. -/
+def Segment.normalized (folds : Fin 16) (merge parity : Bool) (nodes : Fin folds.val → Digest) : Segment :=
+  ⟨folds, merge, parity && decide (folds.val ≠ 0), nodes, fun h => by simp [h]⟩
+
+instance : Inhabited Segment := ⟨⟨0, false, false, fun index => index.elim0, fun _ => rfl⟩⟩
+
+/-- The node `i` of a segment, or zero past its folds. -/
+def Segment.node (segment : Segment) (i : Nat) : Digest :=
+  if h : i < segment.folds.val then segment.nodes ⟨i, h⟩ else 0
+
+/-- The few-time (PORS) part of a signature, in the shape the verifier reads it: for the `s`-th smallest
+opened leaf, `perm s` is its digest slot and `secrets s` its secret; `segments` is the stack machine's
+program, `2k - 1 = 29` segments carrying the authentication nodes in read order. -/
+structure FtsSignature where
+  perm : Fin ftsOpenings → SlotCode
+  secrets : Fin ftsOpenings → Digest
+  segments : Fin ftsSegments → Segment
+deriving DecidableEq
+
+/-- The randomizer, the PORS opening and five layer signatures. -/
 structure Signature where
   randomness : Randomness
-  ftsSecret : FtsTree → Digest
-  ftsPath : FtsTree → Fin ftsTreeHeight → Digest
+  fts : FtsSignature
   layers : (lay : Layer) → LayerSignature lay
 deriving DecidableEq
 
@@ -171,21 +222,24 @@ inductive HashDomain where
   | leaf (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
   | node (lay : Layer) (tree : TreeIndex) (level : Nat) (nodeIdx : Nat)
   | encoding (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
-  | ftsLeaf (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
-  | ftsNode (index : Index) (tree : FtsTree) (level : Nat) (nodeIdx : Nat)
-  | ftsRoots (index : Index)
+  /-- The PORS leaf `j` (tag `9`). The verifier may hash the sentinel value `j = 2^14` before rejecting,
+  so the leaf is a natural number; honest leaves are below `2^14`. -/
+  | ftsLeaf (index : Index) (tree : FtsTree) (leaf : Nat)
+  /-- The PORS node with heap index `heapIdx` (tag `10`, position `0`): node `(level, nodeIdx)` of the tree
+  has heap index `2^(14 - level) + nodeIdx`. The verifier's queries have heap indices below `2^14`,
+  including `0`, which no tree node has. -/
+  | ftsNode (index : Index) (tree : FtsTree) (heapIdx : Nat)
   | message
 deriving DecidableEq
 
-/-- Serialize a typed hash domain into the fields of a tweak. Inside the hypertree the layer field is the layer and the tree field the tree; inside a few-time key they are the tree of the forest and the index that selects the instance. -/
+/-- Serialize a typed hash domain into the fields of a tweak. Inside the hypertree the layer field is the layer and the tree field the tree; inside a few-time key they are the (only) tree, `0`, and the index that selects the instance. -/
 def hashDomainFields : HashDomain → TweakFields
   | .chain lay tree leaf chainIdx step => tweakFields 1 lay tree (chainLength * chainIdx + step) leaf
   | .leaf lay tree leaf => tweakFields 2 lay tree 0 leaf
   | .node lay tree level nodeIdx => tweakFields 3 lay tree level nodeIdx
   | .encoding lay tree leaf => tweakFields 4 lay tree 0 leaf
   | .ftsLeaf index tree leaf => tweakFields 9 tree index 0 leaf
-  | .ftsNode index tree level nodeIdx => tweakFields 10 tree index level nodeIdx
-  | .ftsRoots index => tweakFields 11 0 index 0 0
+  | .ftsNode index tree heapIdx => tweakFields 10 tree index 0 heapIdx
   | .message => tweakFields 12 0 0 0 0
 
 /-- The exact 16 bytes supplied by the specification as a hash tweak. -/
@@ -206,7 +260,7 @@ def randomizerHashInput (parameter : PublicParameter) (seed : MasterSeed)
 inductive KeygenDomain where
   /-- The secrets of chains `2k` and `2k + 1` of a one-time key. -/
   | ots (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (pair : ChainPair)
-  /-- The secrets of leaves `2k` and `2k + 1` of a few-time tree. -/
+  /-- The secrets of leaves `2q` and `2q + 1` of the PORS tree of instance `index`. -/
   | fts (index : Index) (tree : FtsTree) (pair : FtsPair)
   /-- The mask of the cached top-tree node `(level, nodeIdx)`. -/
   | mask (level : Fin maxLayerHeight) (nodeIdx : Fin (2 ^ maxLayerHeight))
@@ -255,7 +309,7 @@ def macHashInput (parameter : PublicParameter) (seed : MasterSeed) (region : Top
 
 /-! ### The target-sum code
 
-`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 184`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
+`v = 42` chunks of `w = 3` bits, 21 in each half of the digest, one pinned bit per half, and the code is the words of digit sum `T = 182`. Two distinct words of equal sum are incomparable, which is what removes the Winternitz checksum and the reason why we need the counter. -/
 
 namespace TargetSum
 
@@ -400,51 +454,135 @@ def treeFold (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (lea
       else
         tweakableHash parameter (.node lay tree (levels + 1) nodeIdx) (nodePayload current sibling)
 
-/-! ### The few-time signature -/
+/-! ### The few-time signature (PORS) -/
+
+/-- The only tree of an instance. -/
+def porsTree : FtsTree := ⟨0, by decide⟩
 
 /-- A node index at level `0` read as a leaf index. -/
 def ftsLeafOfNat (value : Nat) : FtsLeaf :=
   ⟨value % 2 ^ ftsTreeHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩
 
-/-- The index group of the digest that selects this tree's leaf. -/
-def ftsIndexOf (tree : FtsTree) : IndexGroup :=
-  tree.castLE (Nat.sub_le ftsTrees 1)
+/-- The heap index of node `(level, nodeIdx)` of the PORS tree: `2^(14 - level) + nodeIdx` (the root is `1`,
+leaf `j` is `2^14 + j`). -/
+def ftsHeapIndex (level nodeIdx : Nat) : Nat := 2 ^ (ftsTreeHeight - level) + nodeIdx
 
-/-- The last index group, the one the digest is resampled to zero and the verifier checks. Its tree is the dropped one. -/
-def lastIndexGroup : IndexGroup := ⟨ftsTrees - 1, by decide⟩
-
-/-- `Y^{idx,kappa}_{0,j}`, the hash of one few-time secret. -/
-def ftsLeafHash (parameter : PublicParameter) (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
+/-- `Y^{idx}_{0,j}`, the hash of one few-time secret. -/
+def ftsLeafHash (parameter : PublicParameter) (index : Index) (tree : FtsTree) (leaf : Nat)
     (secret : Digest) : m Digest :=
   tweakableHash parameter (.ftsLeaf index tree leaf) (bytesLE 16 secret)
 
-/-- The `k - 1` roots of the forest. -/
-def ftsRootsPayload (roots : FtsTree → Digest) : HashInput :=
-  (List.ofFn roots).flatMap (bytesLE 16)
+/-- The children in the order a fold hashes them: the sibling first when the current node is a right
+child. -/
+def foldPayload (right : Bool) (sibling current : Digest) : HashInput :=
+  if right then nodePayload sibling current else nodePayload current sibling
 
-/-- The verifier's half of one few-time tree. -/
-def ftsFold (parameter : PublicParameter) (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
-    (path : Fin ftsTreeHeight → Digest) : Nat → Digest → m Digest
-  | 0, value => pure value
-  | levels + 1, value => do
-      let current ← ftsFold parameter index tree leaf path levels value
-      let sibling := if hlevel : levels < ftsTreeHeight then path ⟨levels, hlevel⟩ else 0
-      let nodeIdx := leaf.val / 2 ^ (levels + 1)
-      if leaf.val.testBit levels then
-        tweakableHash parameter (.ftsNode index tree (levels + 1) nodeIdx)
-          (nodePayload sibling current)
+/-- The `remaining` folds of a segment from its fold `position` on, starting from `current` at heap index
+`heap`: fold `i` hashes `current` with the segment's node `i` into the node with heap index `heap / 2`. The
+first fold's child order is the segment's `parity`, later folds use bit `0` of `heap`. Returns the node and
+its heap index. -/
+def foldSegment (parameter : PublicParameter) (index : Index) (segment : Segment) :
+    Nat → Nat → Digest → Nat → m (Digest × Nat)
+  | 0, _, current, heap => pure (current, heap)
+  | remaining + 1, position, current, heap => do
+      let right := if position = 0 then segment.parity else decide (heap % 2 = 1)
+      let parent ← tweakableHash parameter (.ftsNode index porsTree (heap / 2))
+        (foldPayload right (segment.node position) current)
+      foldSegment parameter index segment remaining (position + 1) parent (heap / 2)
+
+/-- The hash a segment performs before its folds: the leaf hash of the leaf's value and secret (the leaf's
+first segment), or the merge of the node `left` popped from the stack with the current node into the node
+with heap index `heapIdx`. -/
+inductive PendingHash where
+  | leaf (value : Nat) (secret : Digest)
+  | merge (heapIdx : Nat) (left : Digest)
+
+/-- The stack machine's state: the current node and its heap index, the stack of pending nodes with the heap
+index of the sibling they wait for (top first), the folds so far, and the next segment. -/
+structure RecoverState where
+  node : Digest
+  heap : Nat
+  stack : List (Digest × Nat)
+  folds : Nat
+  segment : Nat
+
+/-- The start state. -/
+def RecoverState.initial : RecoverState := ⟨0, 0, [], 0, 0⟩
+
+/-- Run one leaf's segments, `ref.pors_root`'s inner loop, with at most `fuel` segments. Per segment: reject
+`folds > 14`; reject a segment with folds whose parity bit `t` is not bit `0` of the current heap index
+(`t` orders the first fold's children, so an unchecked `t` would let a hash computed at heap index `E` stand
+for the sibling `E xor 1`); the pending hash; the folds; then either the leaf ends (`merge = false`) or the
+stack's top is popped (reject if the stack is empty or its sibling heap index is not the current one) and
+becomes the next segment's pending merge, one level up. -/
+def recoverSegments (parameter : PublicParameter) (index : Index) (segments : Fin ftsSegments → Segment) :
+    Nat → PendingHash → RecoverState → m (Option RecoverState)
+  | 0, _, _ => pure none
+  | fuel + 1, pending, state => do
+      if hsegment : state.segment < ftsSegments then
+        let segment := segments ⟨state.segment, hsegment⟩
+        if ftsTreeHeight < segment.folds.val then
+          return none
+        else if segment.folds.val ≠ 0 ∧ segment.parity ≠ decide (state.heap % 2 = 1) then
+          return none
+        else
+          let start ← match pending with
+            | .leaf value secret => ftsLeafHash parameter index porsTree value secret
+            | .merge heapIdx left =>
+                tweakableHash parameter (.ftsNode index porsTree heapIdx) (nodePayload left state.node)
+          let (node, heap) ← foldSegment parameter index segment segment.folds.val 0 start state.heap
+          let state : RecoverState :=
+            { state with node := node, heap := heap, folds := state.folds + segment.folds.val,
+                         segment := state.segment + 1 }
+          if segment.merge then
+            match state.stack with
+            | [] => return none
+            | (left, sibling) :: rest =>
+                if sibling = heap then
+                  recoverSegments parameter index segments fuel (.merge (heap / 2) left)
+                    { state with stack := rest, heap := heap / 2 }
+                else
+                  return none
+          else
+            return some state
       else
-        tweakableHash parameter (.ftsNode index tree (levels + 1) nodeIdx)
-          (nodePayload current sibling)
+        return none
 
-/-- `FtsRec`: recover the few-time public key from the opened secrets and paths. -/
-def ftsRecover (parameter : PublicParameter) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest) : m Digest := do
-  let roots ← sequenceFin fun tree => do
-    let leaf := leaves (ftsIndexOf tree)
-    let value ← ftsLeafHash parameter index tree leaf (secrets tree)
-    ftsFold parameter index tree leaf (paths tree) ftsTreeHeight value
-  tweakableHash parameter (.ftsRoots index) (ftsRootsPayload roots)
+/-- Run the leaves from the `position`-th smallest on, `ref.pors_root`'s outer loop: the leaf's value is
+`values (perm position)`; reject unless the values increase strictly and the last one is below `2^14`;
+start at heap index `2^14 | value` with the leaf hash pending, run its segments, and push the node with its
+sibling's heap index unless it is the last leaf. -/
+def recoverLeaves (parameter : PublicParameter) (index : Index) (values : SlotCode → Nat)
+    (fts : FtsSignature) : Nat → Nat → Nat → RecoverState → m (Option RecoverState)
+  | 0, _, _, state => pure (some state)
+  | remaining + 1, position, previous, state => do
+      if hposition : position < ftsOpenings then
+        let value := values (fts.perm ⟨position, hposition⟩)
+        if 0 < position ∧ ¬ previous < value then
+          return none
+        else if position + 1 = ftsOpenings ∧ ¬ value < 2 ^ ftsTreeHeight then
+          return none
+        else
+          let some state ← recoverSegments parameter index fts.segments ftsSegments
+              (.leaf value (fts.secrets ⟨position, hposition⟩))
+              { state with heap := 2 ^ ftsTreeHeight ||| value }
+            | return none
+          let state := if position + 1 < ftsOpenings then
+              { state with stack := (state.node, state.heap ^^^ 1) :: state.stack } else state
+          recoverLeaves parameter index values fts remaining (position + 1) value state
+      else
+        return none
+
+/-- `FtsRec`, the stack machine of `ref.pors_root`: run the `k` leaves, then accept the node as the PORS root
+if there were at most `120` folds, the node is the root (heap index `1`) and the stack is empty. -/
+def ftsRecover (parameter : PublicParameter) (index : Index) (values : SlotCode → Nat)
+    (fts : FtsSignature) : m (Option Digest) := do
+  let some state ← recoverLeaves parameter index values fts ftsOpenings 0 0 RecoverState.initial
+    | return none
+  if state.folds ≤ ftsAuthCapacity ∧ state.heap = 1 ∧ state.stack = [] then
+    return some state.node
+  else
+    return none
 
 /-! ### The message digest -/
 
@@ -452,7 +590,7 @@ def ftsRecover (parameter : PublicParameter) (index : Index) (leaves : IndexGrou
 def messageDigestPayload (_root : Digest) (message : Message) (randomness : Randomness) : HashInput :=
   bytesLE 16 randomness ++ bytesLE 16 (0 : Digest) ++ bytesLE 32 message
 
-/-- `Digest(P, m, rho)`, truncated to `h + k * a` bits. -/
+/-- `Digest(P, m, rho)`, the full answer. -/
 def messageDigest (parameter : PublicParameter) (root : Digest) (message : Message)
     (randomness : Randomness) : m MessageDigest := do
   let output ← oracleHash
@@ -463,15 +601,130 @@ def messageDigest (parameter : PublicParameter) (root : Digest) (message : Messa
 def digestIndex (digest : MessageDigest) : Index :=
   (digest.extractLsb' 0 totalHeight).toFin
 
-/-- `u_kappa = floor(N / 2^(h + kappa * a)) mod 2^a`. -/
+/-- `v_r = floor(N / 2^(h + 14 r)) mod 2^14`, the leaf index in slot `r`. -/
 def digestLeaves (digest : MessageDigest) : IndexGroup → FtsLeaf :=
-  fun tree => (digest.extractLsb' (totalHeight + ftsTreeHeight * tree.val) ftsTreeHeight).toFin
+  fun slot => (digest.extractLsb' (totalHeight + ftsTreeHeight * slot.val) ftsTreeHeight).toFin
 
-/-- A digest is admissible exactly when its last index group is zero. -/
-def Admissible (digest : MessageDigest) : Prop := digestLeaves digest lastIndexGroup = 0
+/-- The value of a slot code as the verifier reads it: the slot's leaf index, or `2^14` for the sentinel
+code `k`. -/
+def slotValue (leaves : IndexGroup → FtsLeaf) (code : SlotCode) : Nat :=
+  if h : code.val < ftsOpenings then (leaves ⟨code.val, h⟩).val else 2 ^ ftsTreeHeight
+
+/-! ### Octopus and schedule
+
+The pure combinatorics of `ref.octopus_size` and `ref.schedule` on the sorted leaf indices. -/
+
+/-- Python's `int.bit_length`: `0` for `0`, else `floor(log2 x) + 1`. -/
+def bitLength (x : Nat) : Nat := if x = 0 then 0 else Nat.log2 x + 1
+
+/-- The size of the octopus (the pruned authentication set) of the sorted distinct leaves `sorted`:
+`14 + sum_{s >= 1} bitlen(v_{s-1} xor v_s) - 2 (|sorted| - 1)`, written as `14 + 2 + sum - 2 |sorted|`
+(the same value for every nonempty list; on sorted distinct lists the subtraction never truncates). -/
+def octopusSize (sorted : List Nat) : Nat :=
+  ftsTreeHeight + 2 + (List.zipWith (fun a b => bitLength (a ^^^ b)) sorted sorted.tail).sum -
+    2 * sorted.length
+
+/-- The slots ordered by their leaf indices (stable: equal indices keep their slot order). -/
+def sortedSlots (leaves : IndexGroup → FtsLeaf) : List IndexGroup :=
+  (List.finRange ftsOpenings).insertionSort fun r r' => (leaves r).val ≤ (leaves r').val
+
+/-- The leaf indices, sorted. -/
+def sortedLeaves (leaves : IndexGroup → FtsLeaf) : List Nat :=
+  (sortedSlots leaves).map fun r => (leaves r).val
+
+/-- The signer's (and the verifier's) condition on a digest's leaf indices: pairwise distinct, and an
+octopus of at most `120` nodes. -/
+def AdmissibleLeaves (leaves : IndexGroup → FtsLeaf) : Prop :=
+  Function.Injective leaves ∧ octopusSize (sortedLeaves leaves) ≤ ftsAuthCapacity
+
+instance (leaves : IndexGroup → FtsLeaf) : Decidable (AdmissibleLeaves leaves) :=
+  inferInstanceAs (Decidable (Function.Injective leaves ∧ _))
+
+/-- A digest is admissible exactly when its leaf indices are. -/
+def Admissible (digest : MessageDigest) : Prop := AdmissibleLeaves (digestLeaves digest)
 
 instance (digest : MessageDigest) : Decidable (Admissible digest) :=
-  inferInstanceAs (Decidable (digestLeaves digest lastIndexGroup = 0))
+  inferInstanceAs (Decidable (AdmissibleLeaves (digestLeaves digest)))
+
+/-- One segment of the honest schedule: whether it ends in a merge, the parity bit `t` of its start (not yet
+normalised), and the positions `(height, nodeIdx)` of the nodes it folds, in read order. -/
+structure ScheduleSegment where
+  merge : Bool
+  parity : Bool
+  reads : List (Nat × Nat)
+deriving DecidableEq, Inhabited
+
+/-- The schedule's state: the finished segments, the stack of sibling heap indices the pending nodes wait
+for (top first), the current heap index, and the open segment's parity and reads. -/
+structure ScheduleState where
+  done : List ScheduleSegment
+  stack : List Nat
+  heap : Nat
+  parity : Bool
+  reads : List (Nat × Nat)
+
+/-- One height of a leaf's climb: merge if the stack's top waits for the current node (the open segment
+ends with a merge, and the next one starts one level up), else fold with the witness sibling. -/
+def scheduleStep (state : ScheduleState) (height : Nat) : ScheduleState :=
+  let fold : ScheduleState :=
+    { state with reads := state.reads ++ [(height, (state.heap ^^^ 1) - 2 ^ (ftsTreeHeight - height))],
+                 heap := state.heap / 2 }
+  match state.stack with
+  | top :: rest =>
+      if top = state.heap then
+        { state with done := state.done ++ [⟨true, state.parity, state.reads⟩], stack := rest,
+                     heap := state.heap / 2, parity := decide (state.heap / 2 % 2 = 1), reads := [] }
+      else fold
+  | [] => fold
+
+/-- The leaves from `v` on: climb from `2^14 | v` through the heights below the level where `v` meets the
+next leaf (all `14` heights for the last leaf), close the leaf's last segment, and push the sibling of the
+node reached unless it is the last leaf. -/
+def scheduleLeaves : List Nat → ScheduleState → ScheduleState
+  | [], state => state
+  | v :: rest, state =>
+      let heap := 2 ^ ftsTreeHeight ||| v
+      let top := match rest with
+        | [] => ftsTreeHeight
+        | w :: _ => bitLength (v ^^^ w) - 1
+      let state := (List.range top).foldl scheduleStep
+        { state with heap := heap, parity := decide (heap % 2 = 1), reads := [] }
+      let state := { state with done := state.done ++ [⟨false, state.parity, state.reads⟩] }
+      scheduleLeaves rest (match rest with
+        | [] => state
+        | _ :: _ => { state with stack := (state.heap ^^^ 1) :: state.stack })
+
+/-- `ref.schedule`: the honest segments of the sorted leaves. For an admissible digest there are `29` of
+them, each with at most `14` reads, and `octopusSize` reads in all. -/
+def schedule (sorted : List Nat) : List ScheduleSegment :=
+  (scheduleLeaves sorted ⟨[], [], 0, false, []⟩).done
+
+/-- The number of folds of a schedule segment, as a segment field. -/
+def ScheduleSegment.folds (segment : ScheduleSegment) : Fin 16 :=
+  ⟨segment.reads.length % 16, Nat.mod_lt _ (by decide)⟩
+
+/-- `ref.schedule`'s segment byte `a | 16 merge | 32 t` (before normalisation). -/
+def ScheduleSegment.byte (segment : ScheduleSegment) : Nat :=
+  segment.reads.length + 16 * (if segment.merge then 1 else 0) + 32 * (if segment.parity then 1 else 0)
+
+/-- The segment with the given nodes, its parity normalised. -/
+def ScheduleSegment.toSegment (segment : ScheduleSegment) (nodes : Fin segment.folds.val → Digest) :
+    Segment :=
+  Segment.normalized segment.folds segment.merge segment.parity nodes
+
+/-- The honest PORS signature of the digest's leaves: the slots in the order of their leaves, the leaves'
+secrets, and the schedule's segments with the tree's nodes (`node level nodeIdx`) at their read positions. -/
+def honestFts (leaves : IndexGroup → FtsLeaf) (secret : FtsLeaf → Digest) (node : Nat → Nat → Digest) :
+    FtsSignature :=
+  let slots := sortedSlots leaves
+  let segments := schedule (sortedLeaves leaves)
+  { perm := fun s => (slots.getD s.val ⟨0, by decide⟩).castSucc
+    secrets := fun s => secret (leaves (slots.getD s.val ⟨0, by decide⟩))
+    segments := fun j =>
+      let segment := segments.getD j.val default
+      segment.toSegment fun i =>
+        let position := segment.reads.getD i.val (0, 0)
+        node position.1 position.2 }
 
 /-! ### Verification -/
 
@@ -503,16 +756,17 @@ def CountersInRange (signature : Signature) : Prop :=
 instance (signature : Signature) : Decidable (CountersInRange signature) :=
   inferInstanceAs (Decidable (∀ lay, (signature.layers lay).counter.toNat < encodingAttemptLimit))
 
-/-- `Ver` after the counter check: recompute the digest, recover the few-time key, walk the layers and compare with the root. -/
+/-- `Ver` after the counter check: recompute the digest, recover the PORS root with the stack machine (which
+enforces admissibility: strictly increasing leaves, at most `120` folds), walk the layers and compare with
+the root. -/
 def verifyCore (publicKey : PublicKey) (message : Message) (signature : Signature) : m Bool := do
   let digest ← messageDigest publicKey.parameter publicKey.root message signature.randomness
-  if ¬ Admissible digest then return false
-  else
-    let index := digestIndex digest
-    let ftsPublicKey ← ftsRecover publicKey.parameter index (digestLeaves digest)
-      signature.ftsSecret signature.ftsPath
-    let some root ← verifyLayers publicKey.parameter index signature numLayers ftsPublicKey | return false
-    return decide (root = publicKey.root)
+  let index := digestIndex digest
+  let some ftsPublicKey ← ftsRecover publicKey.parameter index (slotValue (digestLeaves digest))
+      signature.fts
+    | return false
+  let some root ← verifyLayers publicKey.parameter index signature numLayers ftsPublicKey | return false
+  return decide (root = publicKey.root)
 
 /-- `Ver(pk, m, sigma)`: reject any counter at or above `C_max`, then verify. -/
 def verify (publicKey : PublicKey) (message : Message) (signature : Signature) : m Bool :=
@@ -601,32 +855,22 @@ def buildLayerTree (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex
   return (values, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
     table (layerHeight lay) 0)
 
-/-- Build one few-time tree once: leaves `j = 0, ..., 2^a - 1` (secret, then leaf hash), then the
-levels. Returns the secret of `leaf`, its authentication path, and the root. -/
-def buildFtsTree (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsLeaf → m Digest) (leaf : FtsLeaf) : m (Digest × (Nat → Digest) × Digest) := do
+/-- Build the PORS tree of instance `index` once: leaves `j = 0, ..., 2^14 - 1` (secret, then leaf hash),
+then the levels bottom-up, each left to right, node `(level, nodeIdx)` under its heap index. Returns the
+secrets and the node table (level `0` holds the leaves, level `14` the root). -/
+def buildFtsTree (parameter : PublicParameter) (index : Index) (secret : FtsLeaf → m Digest) :
+    m ((FtsLeaf → Digest) × (Nat → Nat → Digest)) := do
   let leaves ← sequenceFin fun leafIdx : FtsLeaf => do
     let value ← secret leafIdx
-    let hashed ← ftsLeafHash parameter index tree leafIdx value
+    let hashed ← ftsLeafHash parameter index porsTree leafIdx.val value
     return (value, hashed)
   let table ← buildLevels
     (fun level nodeIdx left right =>
-      tweakableHash parameter (.ftsNode index tree level nodeIdx) (nodePayload left right))
+      tweakableHash parameter (.ftsNode index porsTree (ftsHeapIndex level nodeIdx)) (nodePayload left right))
     ftsTreeHeight
     (fun nodeIdx => if h : nodeIdx < 2 ^ ftsTreeHeight then (leaves ⟨nodeIdx, h⟩).2 else 0)
     ftsTreeHeight
-  return ((leaves leaf).1, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
-    table ftsTreeHeight 0)
-
-/-- Build the forest `kappa = 0, ..., k - 2` in order, then hash the roots into the few-time public
-key. Returns the opened secrets, the paths and the key. -/
-def buildForest (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → m Digest) (leaves : IndexGroup → FtsLeaf) :
-    m ((FtsTree → Digest) × (FtsTree → Fin ftsTreeHeight → Digest) × Digest) := do
-  let trees ← sequenceFin fun tree =>
-    buildFtsTree parameter index tree (secret tree) (leaves (ftsIndexOf tree))
-  let key ← tweakableHash parameter (.ftsRoots index) (ftsRootsPayload fun tree => (trees tree).2.2)
-  return (fun tree => (trees tree).1, fun tree level => (trees tree).2.1 level.val, key)
+  return (fun leafIdx => (leaves leafIdx).1, table)
 
 /-- `OtsSign`'s counter search: the least counter from `counter` on whose encoding decodes, trying at
 most `attempts` counters. -/
@@ -691,16 +935,18 @@ def LayerOutput.toSignature (lay : Layer) (output : LayerOutput) : LayerSignatur
   ⟨output.1, output.2.1, fun level => output.2.2 level.val⟩
 
 /-- `Sig` after the digest loop, with the secret derivations and the top tree's nodes as arguments:
-build the forest once, then sign the layers from the bottom up. -/
+build the PORS tree once, read the opening off it, then sign the layers from the bottom up, the tree's root
+being the bottom layer's message. -/
 def signFrom (parameter : PublicParameter) (index : Index)
     (ftsSecret : FtsTree → FtsLeaf → m Digest)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → m Digest)
     (topNode : Nat → Nat → m Digest)
     (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) : m (Option Signature) := do
-  let (secrets, ftsPath, ftsPublicKey) ← buildForest parameter index ftsSecret leaves
-  let some parts ← signLayers parameter index otsSecret topNode numLayers ftsPublicKey
+  let (secrets, table) ← buildFtsTree parameter index (ftsSecret porsTree)
+  let some parts ← signLayers parameter index otsSecret topNode numLayers (table ftsTreeHeight 0)
     | return none
-  return some ⟨randomness, secrets, ftsPath, fun lay => LayerOutput.toSignature lay (parts lay)⟩
+  return some ⟨randomness, honestFts leaves secrets table,
+    fun lay => LayerOutput.toSignature lay (parts lay)⟩
 
 attribute [irreducible] verify
 
@@ -747,33 +993,23 @@ def buildLayerTreePaired (parameter : PublicParameter) (lay : Layer) (tree : Tre
   return (values, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
     table (layerHeight lay) 0)
 
-/-- `buildFtsTree` with pair getters: per pair, its secrets, the leaf hash of `2k`, of `2k + 1`; then the
+/-- `buildFtsTree` with pair getters: per pair, its secrets, the leaf hash of `2q`, of `2q + 1`; then the
 levels. -/
-def buildFtsTreePaired (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsPair → m (Digest × Digest)) (leaf : FtsLeaf) : m (Digest × (Nat → Digest) × Digest) := do
+def buildFtsTreePaired (parameter : PublicParameter) (index : Index)
+    (secret : FtsPair → m (Digest × Digest)) : m ((FtsLeaf → Digest) × (Nat → Nat → Digest)) := do
   let pairs ← sequenceFin fun pair : FtsPair => do
     let secrets ← secret pair
-    let first ← ftsLeafHash parameter index tree (evenFtsLeaf pair) secrets.1
-    let second ← ftsLeafHash parameter index tree (oddFtsLeaf pair) secrets.2
+    let first ← ftsLeafHash parameter index porsTree (evenFtsLeaf pair).val secrets.1
+    let second ← ftsLeafHash parameter index porsTree (oddFtsLeaf pair).val secrets.2
     return ((secrets.1, first), (secrets.2, second))
   let leaves := unpairFtsLeaves pairs
   let table ← buildLevels
     (fun level nodeIdx left right =>
-      tweakableHash parameter (.ftsNode index tree level nodeIdx) (nodePayload left right))
+      tweakableHash parameter (.ftsNode index porsTree (ftsHeapIndex level nodeIdx)) (nodePayload left right))
     ftsTreeHeight
     (fun nodeIdx => if h : nodeIdx < 2 ^ ftsTreeHeight then (leaves ⟨nodeIdx, h⟩).2 else 0)
     ftsTreeHeight
-  return ((leaves leaf).1, fun level => table level (Nat.xor (leaf.val / 2 ^ level) 1),
-    table ftsTreeHeight 0)
-
-/-- `buildForest` with pair getters. -/
-def buildForestPaired (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsPair → m (Digest × Digest)) (leaves : IndexGroup → FtsLeaf) :
-    m ((FtsTree → Digest) × (FtsTree → Fin ftsTreeHeight → Digest) × Digest) := do
-  let trees ← sequenceFin fun tree =>
-    buildFtsTreePaired parameter index tree (secret tree) (leaves (ftsIndexOf tree))
-  let key ← tweakableHash parameter (.ftsRoots index) (ftsRootsPayload fun tree => (trees tree).2.2)
-  return (fun tree => (trees tree).1, fun tree level => (trees tree).2.1 level.val, key)
+  return (fun leafIdx => (leaves leafIdx).1, table)
 
 /-- `signTopLayer` with pair getters: per pair, its secrets, the first `x_{2k}` steps of chain `2k`, the
 first `x_{2k+1}` steps of chain `2k + 1`. -/
@@ -826,10 +1062,11 @@ def signFromPaired (parameter : PublicParameter) (index : Index)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainPair → m (Digest × Digest))
     (topNode : Nat → Nat → m Digest)
     (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) : m (Option Signature) := do
-  let (secrets, ftsPath, ftsPublicKey) ← buildForestPaired parameter index ftsSecret leaves
-  let some parts ← signLayersPaired parameter index otsSecret topNode numLayers ftsPublicKey
+  let (secrets, table) ← buildFtsTreePaired parameter index (ftsSecret porsTree)
+  let some parts ← signLayersPaired parameter index otsSecret topNode numLayers (table ftsTreeHeight 0)
     | return none
-  return some ⟨randomness, secrets, ftsPath, fun lay => LayerOutput.toSignature lay (parts lay)⟩
+  return some ⟨randomness, honestFts leaves secrets table,
+    fun lay => LayerOutput.toSignature lay (parts lay)⟩
 
 end Concrete
 
@@ -866,7 +1103,7 @@ def otsSecret (parameter : PublicParameter) (seed : MasterSeed) (lay : Layer) (t
     (leaf : LeafIndex) (pair : ChainPair) : m (Digest × Digest) := do
   return splitSecrets (← Concrete.oracleHash (keygenHashInput parameter (.ots lay tree leaf pair) seed))
 
-/-- `s^{idx,kappa}_{2k}` and `s^{idx,kappa}_{2k+1}`, derived from the seed with one query. -/
+/-- `s^{idx}_{2q}` and `s^{idx}_{2q+1}`, derived from the seed with one query. -/
 def ftsSecret (parameter : PublicParameter) (seed : MasterSeed) (index : Index) (tree : FtsTree)
     (pair : FtsPair) : m (Digest × Digest) := do
   return splitSecrets (← Concrete.oracleHash (keygenHashInput parameter (.fts index tree pair) seed))
@@ -927,7 +1164,7 @@ def signDigestLoop (secretKey : SecretKey) (message : Message) : Nat → Nat →
       | some (index, leaves) => return some (randomness, index, leaves)
       | none => signDigestLoop secretKey message attempts (trial + 1)
 
-/-- `Sig(sk, m)` after the MAC check: the digest loop, the forest built once, then the layers from the
+/-- `Sig(sk, m)` after the MAC check: the digest loop, the PORS tree built once, then the layers from the
 bottom up, each a counter search followed by its tree built once, and the top layer from the cache. -/
 def signChecked (secretKey : SecretKey) (cache : TopCache) (message : Message) : m (Option Signature) := do
   let some (randomness, index, leaves) ← signDigestLoop secretKey message digestAttemptLimit 0

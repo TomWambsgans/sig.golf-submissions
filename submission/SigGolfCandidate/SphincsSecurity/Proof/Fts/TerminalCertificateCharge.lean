@@ -70,7 +70,7 @@ private theorem expected_pmf_congr_of_support {α : Type} (law : PMF α) (first 
     rw [hp, zero_mul, zero_mul]
 
 theorem certificateProposalImpl_counter_support (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState)
     (counter : CertificateMonitorState → ENNReal) (value : ENNReal)
     (hadvance : ∀ length record, counter
@@ -86,7 +86,7 @@ theorem certificateProposalImpl_counter_support (key : SecretKey) (budget : Nat)
     exact hadvance _ _
 
 theorem expected_certificateProposalImpl_creationCost (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateProposalImpl key budget required stopAfter input).run state] *
       result.2.2.2.creationCost) = state.2.2.creationCost + certificateMonitorCharge key budget required input state.2 := by
@@ -98,7 +98,7 @@ theorem expected_certificateProposalImpl_creationCost (key : SecretKey) (budget 
   simp only [ENNReal.tsum_mul_right, PMF.probOutput_eq_apply, PMF.tsum_coe, one_mul]
 
 theorem expected_certificateProposalImpl_mass_terminalPotential (key : SecretKey) (budget total : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (payoff : List Index → ENNReal)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (payoff : List Index → ENNReal)
     (input : (OracleWorld + SigningSpec).Domain) (state : List Index × CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateProposalImpl key budget required stopAfter input).run state] *
       (result.2.2.2.creationMass * terminalProposalPotential (PMF.uniformOfFintype Index) total payoff result.2.1)) =
@@ -123,7 +123,7 @@ theorem expected_certificateProposalImpl_mass_terminalPotential (key : SecretKey
       exact add_mul _ _ _
 
 theorem expected_certificateProposal_creationCost_le_mass_terminalPotential {α : Type}
-    (key : SecretKey) (budget total : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (key : SecretKey) (budget total : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : List Index × CertificateMonitorState)
     (hbudget : budget ≤ 2 ^ 127) (hinv : CertificateProposalInvariant key total state) :
     (∑' result, Pr[= result | (simulateQ (certificateProposalImpl key budget required
@@ -158,7 +158,7 @@ theorem expected_certificateProposal_creationCost_le_mass_terminalPotential {α 
     _ ≤ _ := by rw [hmass]; exact add_le_add le_rfl le_add_self
 
 theorem expected_certificateTerminalGame_project (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
     (weight : CertificateGameResult → ENNReal) :
     (∑' result, Pr[= result | certificateTerminalGame adversary budget required stopAfter stopped total] * weight result.1) =
       ∑' result, Pr[= result | certificateGame adversary budget required stopAfter stopped] * weight result := by
@@ -168,7 +168,7 @@ theorem expected_certificateTerminalGame_project (adversary : Adversary) (budget
   exact h
 
 theorem expected_certificateTerminalGame_weight_payoff (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) (total : Nat)
     (weight : CertificateGameResult → ENNReal) (payoff : List Index → ENNReal) :
     (∑' result, Pr[= result | certificateTerminalGame adversary budget required stopAfter stopped total] *
       (weight result.1 * payoff result.2)) =
@@ -188,7 +188,7 @@ theorem expected_certificateTerminalGame_weight_payoff (adversary : Adversary) (
     _ = _ := ENNReal.tsum_mul_left
 
 theorem expected_certificateGame_creationCost_le_terminalPotential (adversary : Adversary)
-    (budget total : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (budget total : Nat) (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule)
     (hbudget : budget ≤ 2 ^ 127) :
     (∑' result, Pr[= result | certificateGame adversary budget required
       (fun key input state length record => proposalPrefixStop input state length record || stopAfter key input state length record)
@@ -209,7 +209,7 @@ theorem expected_certificateGame_creationCost_le_terminalPotential (adversary : 
       ([], generated.2, initialCertificateMonitor generated.1.2.hashCalls (decide (total < fixedProposalLength))) hbudget hinv
 
 theorem expected_certificateTerminalGame_count_le_mass_price (adversary : Adversary)
-    (budget total : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (budget total : Nat) (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule)
     (hbudget : budget ≤ 2 ^ 127) :
     (∑' result, Pr[= result | certificateTerminalGame adversary budget required
       (fun key input state length record => proposalPrefixStop input state length record || stopAfter key input state length record)

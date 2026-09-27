@@ -17,10 +17,10 @@ noncomputable def observedTargetShapeVector (key : SecretKey) (payload : HashInp
 theorem expected_fresh_targetShape_le (key : SecretKey) (payload : HashInput) (target : FewTimeView)
     (before : QueryCache HashSpec) (log : QueryLog SigningSpec) (input : HashInput) (hfresh : before input = none)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       observedTargetShapeVector key payload target (before.cacheQuery input output, log) groups remaining) ≤
-        targetShapeQuery (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹)
+        targetShapeQuery (arrivalRate target)
           (observedTargetShapeVector key payload target (before, log)) groups remaining := by
   have h := expected_randomOracle_targetShapeMoments_le key before log payload target groups remaining hvalid input hsigned
   rw [randomOracle, QueryImpl.withCaching_run_none _ hfresh, tsum_probOutput_map_mul] at h
@@ -35,19 +35,20 @@ attribute [local instance] Classical.propDecidable
 
 noncomputable def reuseTargetMixedSigningEnvelope (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree) (reuse : ENNReal) : ENNReal :=
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup) (reuse : ENNReal) : ENNReal :=
   normalizedTargetCacheProduct key.parameter cache (tweakableHashInput key.parameter .message payload) target groups *
     (normalizedTargetLogProduct key cache log payload target required +
-      (Fintype.card Index : ENNReal)⁻¹ * (∑ selected ∈ required.powerset.erase ∅, normalizedTargetLogProduct key cache log payload target (required \ selected)) +
+      (∑ selected ∈ required.powerset.erase ∅,
+        signerRate target selected * normalizedTargetLogProduct key cache log payload target (required \ selected)) +
       (∑ selected ∈ required.powerset.erase ∅,
         normalizedCachedTargetSubsetMatch key.parameter cache (tweakableHashInput key.parameter .message payload) target selected *
           normalizedTargetLogProduct key cache log payload target (required \ selected)) * reuse) +
-    (Fintype.card Index : ENNReal)⁻¹ *
       ∑ selected ∈ (Finset.univ : Finset (Fin m)).powerset.erase ∅,
         ∑ trees ∈ required.powerset,
-          (∏ slot ∈ (Finset.univ : Finset (Fin m)) \ selected,
-            normalizedCachedTargetSubsetMatch key.parameter cache (tweakableHashInput key.parameter .message payload) target (groups slot)) *
-              normalizedTargetLogProduct key cache log payload target (required \ trees)
+          signerRate target (selected.biUnion groups ∪ trees) *
+            ((∏ slot ∈ (Finset.univ : Finset (Fin m)) \ selected,
+              normalizedCachedTargetSubsetMatch key.parameter cache (tweakableHashInput key.parameter .message payload) target (groups slot)) *
+                normalizedTargetLogProduct key cache log payload target (required \ trees))
 
 theorem digestCompletion_normalizedTargetMixedMoment_eq_frozen_add_growth (key : SecretKey) (message : Message)
     (before : QueryCache HashSpec) (loop : DigestLoopRecord)
@@ -55,7 +56,7 @@ theorem digestCompletion_normalizedTargetMixedMoment_eq_frozen_add_growth (key :
     (result : (Option Signature × Option FewTimeView) × QueryCache HashSpec)
     (hcompletion : DigestCompletionPreservesMessages key loop result)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree) :
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup) :
     normalizedTargetMixedMoment key result.2 log payload target groups required =
       normalizedTargetCacheProduct key.parameter before (tweakableHashInput key.parameter .message payload) target groups *
         normalizedTargetLogProduct key result.2 log payload target required +
@@ -76,7 +77,7 @@ theorem expected_digestCompletion_normalizedTargetMixedMoment_le_of_exactReuse {
     (hcompletion : ∀ loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before),
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree)
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup)
     (hgroups : ∀ slot, (groups slot).Nonempty) (hdisjoint : Pairwise (fun i j => Disjoint (groups i) (groups j)))
     (hremaining : ∀ slot, Disjoint (groups slot) required)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
@@ -112,22 +113,51 @@ theorem expected_digestCompletion_normalizedTargetMixedMoment_le_of_exactReuse {
 
 theorem targetShapeSigning_eq_reuseIndexedEnvelope (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) (reuse : ENNReal) :
-    targetShapeSigning (Fintype.card Index : ENNReal)⁻¹ reuse
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) (reuse : ENNReal) :
+    targetShapeSigning (signerRate target) reuse
       (targetShapeMoments key cache log payload target) groups remaining =
         reuseTargetMixedSigningEnvelope key cache log payload target (targetGroupAt groups) remaining reuse := by
+  let cached : Finset IndexGroup → ENNReal := fun group => normalizedCachedTargetSubsetMatch key.parameter cache
+    (tweakableHashInput key.parameter .message payload) target group
+  let logged : Finset IndexGroup → ENNReal := fun required => normalizedTargetLogProduct key cache log payload target required
+  have hmoments (kept : Finset (Finset IndexGroup)) (required : Finset IndexGroup) :
+      targetShapeMoments key cache log payload target kept required = (∏ group ∈ kept, cached group) * logged required := rfl
+  have hfirst : (∑ selected ∈ remaining.powerset,
+      if (∅ : Finset (Finset IndexGroup)) = ∅ ∧ selected = ∅ then (0 : ENNReal) else
+        signerRate target (groupCoordinates ∅ ∪ selected) *
+          targetShapeMoments key cache log payload target (groups \ ∅) (remaining \ selected)) =
+      (∏ group ∈ groups, cached group) *
+        ∑ selected ∈ remaining.powerset.erase ∅, signerRate target selected * logged (remaining \ selected) := by
+    rw [← Finset.add_sum_erase _ _ (Finset.empty_mem_powerset remaining), if_pos ⟨rfl, rfl⟩, zero_add, Finset.mul_sum]
+    apply Finset.sum_congr rfl
+    intro selected hselected
+    rw [if_neg (fun h => (Finset.mem_erase.mp hselected).1 h.2), Finset.sdiff_empty, hmoments]
+    simp only [groupCoordinates, Finset.biUnion_empty, Finset.empty_union]
+    ring
+  have hrest : (∑ removed ∈ groups.powerset.erase ∅, ∑ selected ∈ remaining.powerset,
+      if removed = ∅ ∧ selected = ∅ then (0 : ENNReal) else
+        signerRate target (groupCoordinates removed ∪ selected) *
+          targetShapeMoments key cache log payload target (groups \ removed) (remaining \ selected)) =
+      ∑ selected ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase ∅,
+        ∑ trees ∈ remaining.powerset,
+          signerRate target (selected.biUnion (targetGroupAt groups) ∪ trees) *
+            ((∏ slot ∈ (Finset.univ : Finset (Fin groups.card)) \ selected, cached (targetGroupAt groups slot)) *
+              logged (remaining \ trees)) := by
+    rw [← sum_targetGroupAt_nonempty groups]
+    apply Finset.sum_congr rfl
+    intro selected hselected
+    have hne : selected.image (targetGroupAt groups) ≠ ∅ := by
+      intro h
+      exact (Finset.mem_erase.mp hselected).1 (Finset.image_eq_empty.mp h)
+    apply Finset.sum_congr rfl
+    intro trees _
+    rw [if_neg (fun h => hne h.1), hmoments, prod_targetGroupAt_compl, biUnion_targetGroupAt]
+    rfl
+  unfold targetShapeSigning targetFreshStep
+  rw [← Finset.add_sum_erase _ _ (Finset.empty_mem_powerset groups), hfirst, hrest,
+    targetShapeMoments_reuse_eq key cache log payload target groups remaining hvalid]
   unfold reuseTargetMixedSigningEnvelope
-  rw [targetShapeMoments_cross_eq]
-  simp only [normalizedTargetCacheProduct, prod_targetGroupAt]
-  unfold targetShapeSigning
-  rw [targetShapeMoments_reuse_eq key cache log payload target groups remaining hvalid]
-  have htree : targetTreeLower (targetShapeMoments key cache log payload target) groups remaining =
-      (∏ group ∈ groups, normalizedCachedTargetSubsetMatch key.parameter cache
-        (tweakableHashInput key.parameter .message payload) target group) *
-          ∑ trees ∈ remaining.powerset.erase ∅, normalizedTargetLogProduct key cache log payload target (remaining \ trees) := by
-    simp only [targetTreeLower, targetShapeMoments, Finset.mul_sum]
-  rw [htree]
-  unfold targetShapeMoments
+  simp only [normalizedTargetCacheProduct, prod_targetGroupAt, hmoments]
   ring
 
 theorem expected_digestCompletion_targetShapeMoments_le_of_exactReuse {α : Type} (key : SecretKey) (message : Message) (before : QueryCache HashSpec)
@@ -136,12 +166,12 @@ theorem expected_digestCompletion_targetShapeMoments_le_of_exactReuse {α : Type
     (hcompletion : ∀ loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before),
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining)
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (reuse : ENNReal) (hreuse : exactDigestReuseWeight key message before ≤ reuse) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] *
       targetShapeMoments key (record result).2 (log ++ [⟨message, (record result).1.1⟩]) payload target groups remaining) ≤
-        targetShapeSigning (Fintype.card Index : ENNReal)⁻¹ reuse
+        targetShapeSigning (signerRate target) reuse
           (targetShapeMoments key before log payload target) groups remaining := by
   simp only [targetShapeMoments_eq_indexed]
   rw [targetShapeSigning_eq_reuseIndexedEnvelope key before log payload target groups remaining hvalid reuse]
@@ -153,12 +183,12 @@ theorem expected_digestCompletion_targetShapeMoments_le_of_exactReuse {α : Type
 
 theorem expected_signWithView_targetShapeMoments_le_of_exactReuse (key : SecretKey) (message : Message) (before : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining)
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (reuse : ENNReal) (hreuse : exactDigestReuseWeight key message before ≤ reuse) :
     (∑' result, Pr[= result | (simulateQ romImpl (signWithView key message)).run before] *
       targetShapeMoments key result.2 (log ++ [⟨message, result.1.1⟩]) payload target groups remaining) ≤
-        targetShapeSigning (Fintype.card Index : ENNReal)⁻¹ reuse
+        targetShapeSigning (signerRate target) reuse
           (targetShapeMoments key before log payload target) groups remaining := by
   rw [signWithView_run_eq_digestCompletion]
   exact expected_digestCompletion_targetShapeMoments_le_of_exactReuse key message before
@@ -169,10 +199,10 @@ theorem expected_logTraced_sign_targetShape_le_of_exactReuse (key : SecretKey) (
     (payload : HashInput) (target : FewTimeView) (state : CoverLogState)
     (hsigned : SigningDigestsCached key.parameter state.1 key.root state.2)
     (message : Message) (hreuse : exactDigestReuseWeight key message state.1 ≤ reuse)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     (∑' result, Pr[= result | (logTracedMappedAdversaryImpl key (.inr message)).run state] *
       observedTargetShapeVector key payload target result.2 groups remaining) ≤
-        targetShapeSigning (Fintype.card Index : ENNReal)⁻¹ reuse
+        targetShapeSigning (signerRate target) reuse
           (observedTargetShapeVector key payload target state) groups remaining := by
   rw [logTracedMappedAdversaryImpl_run_map, tsum_probOutput_map_mul]
   have hrun : (unloggedMappedAdversaryImpl key (.inr message)).run state.1 =

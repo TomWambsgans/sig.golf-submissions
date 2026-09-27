@@ -72,7 +72,7 @@ theorem signingMacroHashCost_le_record (key : SecretKey)
       exact two_pow_ftsTreeHeight_le_ftsOpenHashCost.trans (originalProposalRecord_sign_hashCalls key message cache record hr)
 
 theorem certificateMonitorUpdate_ready (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hr : record ∈ (originalProposalRecord key input state.1).support)
@@ -93,7 +93,7 @@ theorem certificateMonitorUpdate_ready (key : SecretKey) (budget : Nat)
     And.intro hsigned (And.intro hcap hcost)
 
 theorem certificateMonitorUpdate_stopped_eq (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state) :

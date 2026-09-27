@@ -103,12 +103,10 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   /-- (B) messages. -/
   msgOf : SigGolf.Message → SphincsSecurity.Message
   msgOf_injective : Function.Injective msgOf
-  /-- (B) signatures: an exact byte codec. -/
-  sigCodec : SigGolf.Bytes sub.sizes.signature ≃ SphincsSecurity.Signature
-  /-- (B) the expansion map and the witness decoder, with `witDec ∘ expandFn = sigCodec`. -/
-  expandFn : SigGolf.Bytes sub.sizes.signature → SigGolf.Bytes sub.sizes.witness
+  /-- (B) signatures: compact signature of a witness-shaped abstract signature, and the witness
+  decoder. -/
+  compress : SphincsSecurity.Signature → SigGolf.Bytes sub.sizes.signature
   witDec : SigGolf.Bytes sub.sizes.witness → SphincsSecurity.Signature
-  witDec_expandFn : ∀ b, witDec (expandFn b) = sigCodec b
   /-- (B) public keys. -/
   pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
   /-- (B) caches: the bytes key generation publishes, and the abstract cache the signer reads from
@@ -122,6 +120,9 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   honest_head : ∀ x, Honest x → x.head? = some 1
   qEnc : SigGolf.Query → List UInt8
   qEnc_injective : Function.Injective qEnc
+  /-- (B) the abstract expansion: it may query the oracle and may fail. -/
+  aExpand : SphincsSecurity.Message → SphincsSecurity.PublicKey →
+    SigGolf.Bytes sub.sizes.signature → OracleComp AHash (Option (SigGolf.Bytes sub.sizes.witness))
   /-- (D) key generation. -/
   keygen_eq : ∀ sk, (fun r => (r.value, r.hashCalls)) <$> sub.run .keygen sk =
     (fun p => (some (pkEnc p.1.1, cacheEnc p.1.2.1), p.2)) <$>
@@ -131,15 +132,22 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   sign_eq : ∀ sk pk cache' sk', (pk, cache', sk') ∈ support (aKeygen (seedOf sk)) →
     ∀ cache message,
       (fun r => (r.value, r.hashCalls)) <$> sub.run .sign (sk, cache, message) =
-        (fun p => (p.1.map sigCodec.symm, p.2)) <$>
+        (fun p => (p.1.map compress, p.2)) <$>
           countCalls (relabel pad
             (aSign sk' (cacheDec cache) (msgOf message)))
   sign_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ cache message, AllQ Honest (aSign sk' cache message)
-  /-- (D) expansion: no hash calls. -/
-  expand_eq : ∀ message pk signature,
-    (fun r => (r.value, r.hashCalls)) <$> sub.run .expand (message, pk, signature) =
-      pure (some (expandFn signature), 0)
+  /-- (D) expansion, for public keys produced by key generation. -/
+  expand_eq : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature,
+      (fun r => (r.value, r.hashCalls)) <$> sub.run .expand (message, pkEnc pk, signature) =
+        countCalls (relabel pad (aExpand (msgOf message) pk signature))
+  expand_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature, AllQ Honest (aExpand message pk signature)
+  /-- (B) on every successful run, the expanded witness compresses back to the signature. -/
+  expand_compress : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature witness, some witness ∈ support (aExpand message pk signature) →
+      compress (witDec witness) = signature
   /-- (D) verification, for public keys produced by key generation. -/
   verify_eq : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ message witness,
@@ -170,10 +178,8 @@ noncomputable def toAssumptions : Assumptions sub where
   seedOf_dist := Z.seedOf_dist
   msgOf := Z.msgOf
   msgOf_injective := Z.msgOf_injective
-  sigCodec := Z.sigCodec
-  expandFn := Z.expandFn
+  compress := Z.compress
   witDec := Z.witDec
-  witDec_expandFn := Z.witDec_expandFn
   pkEnc := Z.pkEnc
   cacheEnc := Z.cacheEnc
   cacheDec := Z.cacheDec
@@ -182,12 +188,16 @@ noncomputable def toAssumptions : Assumptions sub where
   Honest := Z.Honest
   pad_unpad := zpPad_zpUnpad Z.honest_head Z.qEnc_injective
   unpad_pad := zpUnpad_zpPad Z.pad_injOn
+  aExpand := Z.aExpand
   keygen_eq sk := by rw [Z.keygen_eq, Z.relabel_zp (Z.keygen_honest _)]
   keygen_honest := Z.keygen_honest
   sign_eq sk pk cache' sk' h cache m := by
     rw [Z.sign_eq sk pk cache' sk' h, Z.relabel_zp (Z.sign_honest _ pk cache' sk' h _ _)]
   sign_honest := Z.sign_honest
-  expand_eq := Z.expand_eq
+  expand_eq seed pk cache' sk' h m σ := by
+    rw [Z.expand_eq seed pk cache' sk' h, Z.relabel_zp (Z.expand_honest _ pk cache' sk' h _ _)]
+  expand_honest := Z.expand_honest
+  expand_compress := Z.expand_compress
   verify_eq seed pk cache' sk' h m w := by
     rw [Z.verify_eq seed pk cache' sk' h, Z.relabel_zp (Z.verify_honest _ pk cache' sk' h _ _)]
   verify_honest := Z.verify_honest

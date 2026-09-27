@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.JointProbeMessageAnswers
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualCheckedTrace
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualDigestLaw
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualProgram

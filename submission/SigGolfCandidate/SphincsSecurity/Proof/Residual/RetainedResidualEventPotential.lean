@@ -175,7 +175,7 @@ theorem expected_le_of_pointwise {Result : Type} (law : SPMF Result) (f : Result
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredWorldResult_creationMass_le (input : OracleWorld.Domain) (state : MonitoredState inputs)
     (raw : Option (OracleWorld.Range input) × State inputs) :
@@ -455,7 +455,7 @@ omit hencoding words publicReplies selections rows required stopAfter in
 theorem initialMonitoredSource_event_primitive (adversary : Adversary)
     (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
     (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support) (hbudget : budget ≤ 2 ^ 127) :
     Pr[fun result => result.1 = none ∧ result.2.1.memory.external.hashCalls ≤ budget |
       initialMonitoredSource key adversary encoding dummy exposed high budget required stopAfter stopped] +

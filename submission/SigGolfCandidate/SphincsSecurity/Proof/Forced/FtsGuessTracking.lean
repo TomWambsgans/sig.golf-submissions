@@ -11,14 +11,14 @@ variable {Memory : Type}
 def Covered (key : SecretKey) (f : QueryImpl HashSpec Id) (log : QueryLog SigningSpec) (coordinate : Coordinate) : Prop :=
   ∃ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ log ∧
     (RetainedResidual.signingView key f message signature).1 = coordinate.1 ∧
-    (RetainedResidual.signingView key f message signature).2 coordinate.2.1 = coordinate.2.2
+    coordinate.2.2 ∈ Set.range (RetainedResidual.signingView key f message signature).2
 
 structure Tracking (key : SecretKey) (f : QueryImpl HashSpec Id) (before after : State Coordinate Digest Memory)
     (log : QueryLog SigningSpec) (trace : Trace) : Prop where
   guesses : before.guesses ⊆ after.guesses
   retired : before.retired ⊆ after.retired
   origin : ∀ coordinate ∈ after.retired, coordinate ∈ before.retired ∨ coordinate ∈ after.guesses ∨ Covered key f log coordinate
-  queried : ∀ coordinate, FtsVerifierWitness.TrueSecretQuery f key coordinate.1 coordinate.2.1 coordinate.2.2 trace →
+  queried : ∀ coordinate, FtsVerifierWitness.TrueSecretQuery f key coordinate.1 coordinate.2.2 trace →
     coordinate ∈ after.retired
 
 theorem Tracking.refl (key : SecretKey) (f : QueryImpl HashSpec Id) (state : State Coordinate Digest Memory) :
@@ -103,8 +103,10 @@ theorem fixed_hashProgram_tracking (environment : Environment Auxiliary Coordina
           simpa only [List.nil_append, one_mul] using h
   refine { hbase with queried := ?_ }
   intro target h
+  obtain ⟨index, tree, leaf⟩ := target
+  obtain rfl : tree = porsTree := Subsingleton.elim _ _
   have hi := congrArg Prod.fst (List.mem_singleton.mp h)
-  let probe : FtsSecretProbe := ⟨target.1, target.2.1, target.2.2, key.ftsSecret target.1 target.2.1 target.2.2⟩
+  let probe : FtsSecretProbe := ⟨index, porsTree, leaf, key.ftsSecret index porsTree leaf⟩
   have hp : probe.input key.parameter = input := hi
   rw [hashProgram, (FtsProbeSimulation.decodeProbe?_eq_some_iff key.parameter input probe).mpr hp,
     fixedRun, SecretGuessObservation.runWith_query_bind] at hr
@@ -140,7 +142,7 @@ theorem completedState_retired (environment : Environment Auxiliary Coordinate D
     target ∈ (FtsGuessSigning.completedState environment secrets record state).retired ↔
       target ∈ state.retired ∨ ∃ signature view,
         (completePublicSigningRecord (FtsGuessSigning.secretTable.symm secrets) record).1.1 = some signature ∧
-        record.1.2 = some view ∧ view.1 = target.1 ∧ view.2 target.2.1 = target.2.2 := by
+        record.1.2 = some view ∧ view.1 = target.1 ∧ target.2.2 ∈ Set.range view.2 := by
   rcases record with ⟨⟨plan, view⟩, trace⟩
   cases plan with
   | none =>
@@ -155,13 +157,11 @@ theorem completedState_retired (environment : Environment Auxiliary Coordinate D
           apply or_congr_right
           constructor
           · intro h
-            obtain ⟨tree, ht⟩ := List.mem_ofFn.mp h
-            refine ⟨_, view, rfl, rfl, congrArg Prod.fst ht, ?_⟩
-            have htree := congrArg (fun coordinate : Coordinate => coordinate.2.1) ht
-            simpa only [← htree] using congrArg (fun coordinate : Coordinate => coordinate.2.2) ht
-          · rintro ⟨signature, selected, _, rfl, hi, hl⟩
+            obtain ⟨slot, ht⟩ := List.mem_ofFn.mp h
+            exact ⟨_, view, rfl, rfl, congrArg Prod.fst ht, slot, congrArg (fun coordinate : Coordinate => coordinate.2.2) ht⟩
+          · rintro ⟨signature, selected, _, rfl, hi, slot, hl⟩
             apply List.mem_ofFn.mpr
-            exact ⟨target.2.1, Prod.ext hi (Prod.ext rfl hl)⟩
+            exact ⟨slot, Prod.ext hi (Prod.ext (Subsingleton.elim _ _) hl)⟩
 
 theorem fixed_signingProgram_tracking (environment : Environment Auxiliary Coordinate Digest Memory) (key : SecretKey)
     (f : QueryImpl HashSpec Id) (message : Message) (state : State Coordinate Digest Memory)

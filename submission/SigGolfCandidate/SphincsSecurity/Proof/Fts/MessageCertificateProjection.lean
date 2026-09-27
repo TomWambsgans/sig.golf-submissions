@@ -17,7 +17,7 @@ theorem observedTargetShapeVector_messageOnlyCache (key : SecretKey) (payload : 
     messageAnswers_messageOnlyCache]
 
 theorem targetCertificateForecast_messageOnlyCache (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
+    (required : Finset IndexGroup) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
     (input : HashInput) (target : FewTimeView) :
     targetCertificateForecast key reuse budget signatures required (messageOnlyCache key.parameter cache, log) input target =
       targetCertificateForecast key reuse budget signatures required (cache, log) input target := by
@@ -30,7 +30,7 @@ theorem bankedCacheWeight_messageOnlyCache (parameter : PublicParameter)
   cases stopped <;> simp only [bankedCacheWeight_stopped, bankedCacheWeight_live, cacheMessageWeight_messageOnlyCache]
 
 theorem bankedTargetEnvelope_messageOnlyCache (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
+    (required : Finset IndexGroup) (cache : QueryCache HashSpec) (log : QueryLog SigningSpec)
     (bank : HashInput → Bool) (stopped : Bool) :
     bankedTargetEnvelope key reuse budget signatures required (messageOnlyCache key.parameter cache, log) bank stopped =
       bankedTargetEnvelope key reuse budget signatures required (cache, log) bank stopped := by
@@ -40,7 +40,7 @@ theorem bankedTargetEnvelope_messageOnlyCache (key : SecretKey) (reuse : ENNReal
   rw [hweight, bankedCacheWeight_messageOnlyCache]
 
 theorem bankedTargetEnvelope_congr_messageHistory (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (before after : QueryCache HashSpec)
+    (required : Finset IndexGroup) (before after : QueryCache HashSpec)
     (hcache : messageAnswers key.parameter before = messageAnswers key.parameter after)
     (log : QueryLog SigningSpec) (bank : HashInput → Bool) (stopped : Bool) :
     bankedTargetEnvelope key reuse budget signatures required (before, log) bank stopped =
@@ -50,7 +50,7 @@ theorem bankedTargetEnvelope_congr_messageHistory (key : SecretKey) (reuse : ENN
     messageOnlyCache_eq_of_messageAnswers_eq key.parameter before after hcache]
 
 theorem bankedTargetEnvelope_complete_le (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (state : CoverLogState) (bank : HashInput → Bool) (stopped : Bool) :
+    (required : Finset IndexGroup) (state : CoverLogState) (bank : HashInput → Bool) (stopped : Bool) :
     bankedTargetEnvelope key reuse budget signatures required state (completedTargetBank key required state bank) stopped ≤
       bankedTargetEnvelope key reuse budget signatures required state bank false := by
   apply bankedCacheWeight_bank_le
@@ -59,7 +59,7 @@ theorem bankedTargetEnvelope_complete_le (key : SecretKey) (reuse : ENNReal) (bu
     (of_decide_eq_true hcomplete)
 
 theorem bankedProposalRecordValue_world_le_of_messageHistory (key : SecretKey) (reuse : ENNReal)
-    (budget signatures : Nat) (required : Finset FtsTree) (state : CoverLogState)
+    (budget signatures : Nat) (required : Finset IndexGroup) (state : CoverLogState)
     (bank : HashInput → Bool) (input : OracleWorld.Domain) (record : ProposalExecutionRecord (.inl input))
     (stopped : Bool) (hcache : messageAnswers key.parameter record.cache = messageAnswers key.parameter state.1) :
     bankedProposalRecordValue key reuse budget signatures required state bank (.inl input) record stopped ≤

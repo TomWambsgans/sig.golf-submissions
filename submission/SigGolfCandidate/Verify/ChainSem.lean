@@ -27,7 +27,7 @@ def CCtx.Regs (c : CCtx) (s : MachineState) : Prop :=
   s.getReg .x31 = c.x31
 
 def CCtx.ok (c : CCtx) : Prop :=
-  c.lay < 5 ∧ c.tau < 2 ^ 32 ∧ c.e < 2 ^ 32 ∧ c.wl.length = 6404 ∧ c.d0.toNat < 2 ^ 63 ∧
+  c.lay < 5 ∧ c.tau < 2 ^ 32 ∧ c.e < 2 ^ 32 ∧ c.wl.length = 6348 ∧ c.d0.toNat < 2 ^ 63 ∧
     c.d1.toNat < 2 ^ 63
 
 /-- The chain tweak word 0 at CB: low half `0x101 | lay << 16` (bytes 0..3), bytes 6, 7 zero. -/
@@ -88,8 +88,8 @@ def EndInv (c : CCtx) (i : Nat) (acc : List Val) (v : Val) (s : MachineState) : 
 theorem witLayerOff_eq (lay : Nat) (h : lay < 5) : witLayerOff lay = layBody lay := by
   interval_cases lay <;> decide
 
-theorem layBody_le (lay : Nat) (h : lay < 5) : layBody lay ≤ 5632 ∧ layBody lay % 8 = 0 ∧
-    layBody lay + 672 + 16 * heightL lay = (if lay + 1 < 5 then layBody (lay + 1) else 6384) := by
+theorem layBody_le (lay : Nat) (h : lay < 5) : layBody lay ≤ 5576 ∧ layBody lay % 8 = 0 ∧
+    layBody lay + 672 + 16 * heightL lay = (if lay + 1 < 5 then layBody (lay + 1) else 6328) := by
   interval_cases lay <;> decide
 
 theorem length_witChain (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) :

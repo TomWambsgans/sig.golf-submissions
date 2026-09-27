@@ -1,4 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Completeness.Paired
+import SigGolfCandidate.SphincsSecurity.Completeness.Stack
 import Mathlib.Data.Nat.Bitwise
 
 /-!
@@ -6,7 +7,8 @@ import Mathlib.Data.Nat.Bitwise
 
 The specification's §sec:ver argues that each one-time recovery returns the leaf the signer built
 and each authentication path returns its root, so verification accepts whenever signing succeeds.
-This file is that argument.
+This file is that argument. For the PORS part the verifier is a stack machine; that it returns the root
+on the honest opening of admissible leaves is `Stack.lean` (`eval_ftsRecover_honest`).
 
 Everything is deterministic once the oracle is fixed, so the whole file works under an answer
 function `f`: `evalWithAnswerFn f` reads each algorithm as a plain function. Nothing here is
@@ -104,63 +106,33 @@ theorem eval_treeFold_honest (parameter : PublicParameter) (lay : Layer) (tree :
           simp only [Bool.false_eq_true, if_false, Concrete.eval_tweakableHash]
           rw [hsib, hcur]
 
-/-- Folding an opened few-time secret through its siblings reaches the honest node above it. -/
-theorem eval_ftsFold_honest (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsLeaf → Digest) (leaf : FtsLeaf) (path : Fin ftsTreeHeight → Digest) :
-    ∀ levels : Nat, levels ≤ ftsTreeHeight →
-      (∀ (level : Nat) (hlevel : level < ftsTreeHeight), level < levels →
-        path ⟨level, hlevel⟩ = honestFtsNode f parameter index tree secret level
-          (Nat.xor (leaf.val / 2 ^ level) 1)) →
-      evalWithAnswerFn f (ftsFold parameter index tree leaf path levels
-          (honestFtsNode f parameter index tree secret 0 leaf.val) : OracleComp HashSpec Digest)
-        = honestFtsNode f parameter index tree secret levels (leaf.val / 2 ^ levels) := by
-  intro levels
-  induction levels with
-  | zero => intro _ _; simp [ftsFold]
-  | succ levels ih =>
-      intro hheight hpath
-      have hlevels : levels < ftsTreeHeight := Nat.lt_of_succ_le hheight
-      rw [ftsFold, evalWithAnswerFn_bind,
-        ih (Nat.le_of_succ_le hheight)
-          (fun level hlevel hlt => hpath level hlevel (Nat.lt_succ_of_lt hlt))]
-      rw [dif_pos hlevels, hpath levels hlevels (Nat.lt_succ_self levels), honestFtsNode_succ]
-      cases hbit : leaf.val.testBit levels with
-      | true =>
-          obtain ⟨hcur, hsib⟩ := parts_odd leaf.val levels hbit
-          simp only [if_true, Concrete.eval_tweakableHash]
-          rw [hsib, hcur]
-      | false =>
-          obtain ⟨hcur, hsib⟩ := parts_even leaf.val levels hbit
-          simp only [Bool.false_eq_true, if_false, Concrete.eval_tweakableHash]
-          rw [hsib, hcur]
+/-! ## The PORS tree
 
-/-- The verifier recovers the specification's few-time public key from the opened secrets and the
-specification's opening. -/
-theorem eval_ftsRecover_honest (parameter : PublicParameter) (index : Index)
-    (leaves : IndexGroup → FtsLeaf) (secret : FtsTree → FtsLeaf → Digest) :
-    evalWithAnswerFn f (ftsRecover parameter index leaves
-        (fun tree => secret tree (leaves (ftsIndexOf tree)))
-        (evalWithAnswerFn f (ftsOpen parameter index leaves secret)) : OracleComp HashSpec Digest)
-      = evalWithAnswerFn f (ftsKey parameter index secret : OracleComp HashSpec Digest) := by
-  have hroot : ∀ tree : FtsTree,
-      evalWithAnswerFn f (ftsFold parameter index tree (leaves (ftsIndexOf tree))
-          (evalWithAnswerFn f (ftsOpen parameter index leaves secret) tree) ftsTreeHeight
-          (evalWithAnswerFn f (ftsLeafHash parameter index tree (leaves (ftsIndexOf tree))
-            (secret tree (leaves (ftsIndexOf tree))) : OracleComp HashSpec Digest))
-          : OracleComp HashSpec Digest)
-        = honestFtsNode f parameter index tree (secret tree) ftsTreeHeight 0 := by
-    intro tree
-    have hzero : evalWithAnswerFn f (ftsLeafHash parameter index tree (leaves (ftsIndexOf tree))
-        (secret tree (leaves (ftsIndexOf tree))) : OracleComp HashSpec Digest)
-        = honestFtsNode f parameter index tree (secret tree) 0 (leaves (ftsIndexOf tree)).val := by
-      simp only [honestFtsNode, ftsNode_zero_eq, ftsLeafOfNat_val]
-    rw [hzero, eval_ftsFold_honest f parameter index tree (secret tree) (leaves (ftsIndexOf tree)) _
-      ftsTreeHeight (Nat.le_refl _) (fun level hlevel _ => by
-        simp only [ftsOpen, evalWithAnswerFn_sequenceFin, honestFtsNode])]
-    congr 1
-    exact Nat.div_eq_of_lt (leaves (ftsIndexOf tree)).isLt
-  simp only [ftsRecover, ftsKey, evalWithAnswerFn_sequenceFin, evalWithAnswerFn_bind, hroot,
-    honestFtsNode]
+The specification's tree is an honest table for the stack machine (`Stack.lean`): every inner node is
+the hash of its children under its heap index, every leaf the hash of its secret. -/
+
+theorem honestTable_honestFtsNode (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → Digest) :
+    HonestTable f parameter index (honestFtsNode f parameter index porsTree secret) := by
+  intro x k _ _
+  rw [honestFtsNode_succ, Concrete.eval_tweakableHash]
+
+theorem eval_ftsLeafHash_honest (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → Digest) (leaf : FtsLeaf) :
+    evalWithAnswerFn f (ftsLeafHash parameter index porsTree leaf.val (secret leaf)
+      : OracleComp HashSpec Digest) = honestFtsNode f parameter index porsTree secret 0 leaf.val := by
+  rw [honestFtsNode_zero, ftsLeafHash, Concrete.eval_tweakableHash]
+
+/-- The verifier recovers the specification's few-time public key from the specification's opening of
+admissible leaves. -/
+theorem eval_ftsRecover_ftsOpen (parameter : PublicParameter) (index : Index)
+    (leaves : IndexGroup → FtsLeaf) (hadm : AdmissibleLeaves leaves) (secret : FtsTree → FtsLeaf → Digest) :
+    evalWithAnswerFn f (ftsRecover parameter index (slotValue leaves)
+        (evalWithAnswerFn f (ftsOpen parameter index leaves secret)) : OracleComp HashSpec (Option Digest))
+      = some (evalWithAnswerFn f (ftsKey parameter index secret : OracleComp HashSpec Digest)) := by
+  rw [eval_ftsOpen]
+  exact eval_ftsRecover_honest (honestTable_honestFtsNode f parameter index (secret porsTree)) leaves hadm
+    (secret porsTree) (eval_ftsLeafHash_honest f parameter index (secret porsTree))
 
 /-! ## One layer
 
@@ -327,10 +299,7 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
       rw [← hsig]
       exact (signLayer_spec f key index lay (Option.some_get (hall lay)).symm).1
     have hrandomness : signature.randomness = randomness := by rw [← hsig]
-    have hsecrets : signature.ftsSecret
-        = fun tree => key.ftsSecret index tree (digestLeaves digest (ftsIndexOf tree)) := by
-      rw [← hsig]
-    have hpaths : signature.ftsPath
+    have hfts : signature.fts
         = evalWithAnswerFn f (ftsOpen key.parameter index (digestLeaves digest) (key.ftsSecret index)) := by
       rw [← hsig]
     have hbottom : enterMessage f key index numLayers
@@ -342,11 +311,10 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
     have htop : layerRoot f key index topLayer = key.root := by
       rw [hroot, layerRoot, show treeIndexAt index topLayer = rootTree from
         Fin.ext (treeIndexAt_topLayer index)]
-    rw [Concrete.verify, if_pos hcounters, verifyCore]
-    simp only [evalWithAnswerFn_bind, hrandomness, ← hdigest, if_neg (not_not_intro hadmissible),
-      hsecrets, hpaths]
-    rw [← hindex, eval_ftsRecover_honest, ← hbottom,
-      eval_verifyLayers f key index signature hlayers numLayers (Nat.le_refl _), htop]
+    rw [verify_eq _ _ _ hcounters]
+    simp only [evalWithAnswerFn_bind, hrandomness, ← hdigest, ← hindex, hfts,
+      eval_ftsRecover_ftsOpen f key.parameter index _ hadmissible]
+    rw [← hbottom, eval_verifyLayers f key index signature hlayers numLayers (Nat.le_refl _), htop]
     simp
   next => simp at hsig
 

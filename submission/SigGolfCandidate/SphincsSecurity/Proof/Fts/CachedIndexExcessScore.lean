@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.CacheIndexMultiplicity
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.AdmissibleCount
 
 /-! ## CacheGrowthCharge -/
 
@@ -62,7 +63,7 @@ theorem cachedIndexMultiplicity_ne_top (parameter : PublicParameter) (cache : Qu
 
 noncomputable def cachedIndexExcessScore (parameter : PublicParameter) (cache : QueryCache HashSpec)
     (index : Index) : ℝ :=
-  (cachedIndexMultiplicity parameter cache index).toReal - (QueryCache.enncard cache).toReal / 2 ^ 44
+  (cachedIndexMultiplicity parameter cache index).toReal - (QueryCache.enncard cache).toReal * cachedIndexRate.toReal
 
 theorem cachedIndexExcessScore_cacheQuery (parameter : PublicParameter) (cache : QueryCache HashSpec)
     (hfinite : Finite cache) (input : HashInput) (output : HashOutput)
@@ -70,7 +71,7 @@ theorem cachedIndexExcessScore_cacheQuery (parameter : PublicParameter) (cache :
     cachedIndexExcessScore parameter (cache.cacheQuery input output) index =
       cachedIndexExcessScore parameter cache index +
         (if MessageHashInput parameter input ∧ Admissible (truncateMessageDigest output) ∧
-          (hashOutputFewTimeView output).1 = index then 1 else 0) - (2 ^ 44 : ℝ)⁻¹ := by
+          (hashOutputFewTimeView output).1 = index then 1 else 0) - cachedIndexRate.toReal := by
   have hcount := cachedIndexMultiplicity_ne_top parameter cache hfinite index
   have hcard : QueryCache.enncard cache ≠ ⊤ := by
     rw [← hfinite.cachedInputs_ncard_toENNReal_eq_enncard]
@@ -86,7 +87,7 @@ theorem cachedIndexExcessScore_nonpos_of_no_message (parameter : PublicParameter
     (index : Index) : cachedIndexExcessScore parameter cache index ≤ 0 := by
   rw [cachedIndexExcessScore, cachedIndexMultiplicity, cacheMessageWeight_of_no_message parameter _ cache hnone,
     ENNReal.toReal_zero, zero_sub]
-  exact neg_nonpos.mpr (div_nonneg ENNReal.toReal_nonneg (by positivity))
+  exact neg_nonpos.mpr (mul_nonneg ENNReal.toReal_nonneg ENNReal.toReal_nonneg)
 
 def CachedIndexExcessExceptional (parameter : PublicParameter) (cache : QueryCache HashSpec) : Prop :=
   ∃ index, (2 ^ 72 : ℝ) < cachedIndexExcessScore parameter cache index
@@ -94,19 +95,20 @@ def CachedIndexExcessExceptional (parameter : PublicParameter) (cache : QueryCac
 theorem cachedIndexExcessExceptional_of_bound_failure (parameter : PublicParameter)
     (cache : QueryCache HashSpec) (hfinite : Finite cache) (spent : Nat)
     (hcache : QueryCache.enncard cache ≤ spent) (index : Index)
-    (hbad : (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal) <
+    (hbad : (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal) <
       cachedIndexMultiplicity parameter cache index) : CachedIndexExcessExceptional parameter cache := by
   have hcard : QueryCache.enncard cache ≠ ⊤ := by
     rw [← hfinite.cachedInputs_ncard_toENNReal_eq_enncard]
     finiteness
-  have hreal := (ENNReal.toReal_lt_toReal (by finiteness)
+  have hreal := (ENNReal.toReal_lt_toReal (ENNReal.add_ne_top.mpr ⟨ENNReal.mul_ne_top (by finiteness) cachedIndexRate_ne_top, by finiteness⟩)
     (cachedIndexMultiplicity_ne_top parameter cache hfinite index)).mpr hbad
   have hcacheReal := (ENNReal.toReal_le_toReal hcard (by finiteness)).mpr hcache
-  rw [ENNReal.toReal_add (by finiteness) (by finiteness)] at hreal
-  norm_num [ENNReal.toReal_mul, ENNReal.toReal_inv] at hreal hcacheReal
+  rw [ENNReal.toReal_add (ENNReal.mul_ne_top (by finiteness) cachedIndexRate_ne_top) (by finiteness),
+    ENNReal.toReal_mul] at hreal
+  norm_num at hreal hcacheReal
   refine ⟨index, ?_⟩
   unfold cachedIndexExcessScore
-  have hscaled := div_le_div_of_nonneg_right hcacheReal (by positivity : (0 : ℝ) ≤ 2 ^ 44)
+  have hscaled := mul_le_mul_of_nonneg_right hcacheReal (ENNReal.toReal_nonneg (a := cachedIndexRate))
   norm_num at hscaled ⊢
   linarith
 
@@ -114,7 +116,7 @@ theorem cachedIndex_bound_of_no_excess (parameter : PublicParameter) (cache : Qu
     (hfinite : Finite cache) (spent : Nat) (hcache : QueryCache.enncard cache ≤ spent)
     (hclean : ¬ CachedIndexExcessExceptional parameter cache) (index : Index) :
     cachedIndexMultiplicity parameter cache index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal) := by
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal) := by
   by_contra hbad
   exact hclean (cachedIndexExcessExceptional_of_bound_failure parameter cache hfinite spent hcache index
     (lt_of_not_ge hbad))

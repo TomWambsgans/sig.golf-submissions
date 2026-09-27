@@ -34,21 +34,17 @@ theorem expected_cachedIndexExcessMoment_le (parameter : PublicParameter)
     (cache : QueryCache HashSpec) (hfinite : Finite cache) (input : HashInput) (hfresh : cache input = none) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       cachedIndexExcessMoment parameter (cache.cacheQuery input output)) ≤
-        cachedIndexExcessMoment parameter cache + (2 ^ 10 : ENNReal)⁻¹ := by
+        cachedIndexExcessMoment parameter cache + admissibleProbability := by
   calc
     _ = ∑ index : Index, ∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
         positiveScoreMoment (cachedIndexExcessScore parameter (cache.cacheQuery input output) index) 2 := by
       simp only [cachedIndexExcessMoment, Finset.mul_sum]
       exact Summable.tsum_finsetSum (fun _ _ => ENNReal.summable)
     _ ≤ ∑ index : Index, (positiveScoreMoment (cachedIndexExcessScore parameter cache index) 2 +
-        ((2 ^ 44 : Nat) : ENNReal)⁻¹) :=
+        cachedIndexRate) :=
       Finset.sum_le_sum (fun index _ => expected_cachedIndexScore_second_le parameter cache hfinite input hfresh index)
     _ = _ := by
-      rw [Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ, nsmul_eq_mul]
-      congr 1
-      have hcard : Fintype.card Index = 2 ^ 34 := Fintype.card_fin _
-      rw [hcard]
-      apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
-      norm_num [ENNReal.toReal_mul, ENNReal.toReal_inv]
+      rw [Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ, nsmul_eq_mul, card_mul_cachedIndexRate]
+      rfl
 
 end SphincsSecurity.Concrete

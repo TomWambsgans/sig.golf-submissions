@@ -19,7 +19,8 @@ theorem probe_canonical_iff (parameter : PublicParameter)
     List.flatMap_cons, List.flatMap_nil, List.append_nil]
   constructor
   · intro h
-    exact (digestBytes_injective (tweakableHashInput_injective parameter (by trivial) (by trivial) h).2).symm
+    exact (digestBytes_injective (tweakableHashInput_injective parameter (HashDomain.ftsLeaf_inRange _ _ _)
+      (HashDomain.ftsLeaf_inRange _ _ _) h).2).symm
   · intro h
     rw [h]
 

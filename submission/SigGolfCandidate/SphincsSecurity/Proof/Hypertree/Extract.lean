@@ -39,7 +39,7 @@ def orderedPayload (bit : Bool) (current sibling : Digest) : HashInput :=
     orderedPayload true current sibling = nodePayload sibling current := rfl
 
 /-- The payload the fold hashes on its way from `level` to `level + 1`. -/
-def foldPayload (value : Digest) (level : Nat) : HashInput :=
+def treeFoldPayload (value : Digest) (level : Nat) : HashInput :=
   orderedPayload (leaf.val.testBit level)
     (foldValue f parameter lay tree leaf path value level) (path level)
 
@@ -60,8 +60,8 @@ theorem foldValue_succ (value : Digest) (level : Nat) :
     foldValue f parameter lay tree leaf path value (level + 1)
       = truncateHash (f (tweakableHashInput parameter
           (.node lay tree (level + 1) (leaf.val / 2 ^ (level + 1)))
-          (foldPayload f parameter lay tree leaf path value level))) := by
-  simp only [foldValue, foldPayload, treeFold_succ_eq, evalWithAnswerFn_bind, orderedPayload]
+          (treeFoldPayload f parameter lay tree leaf path value level))) := by
+  simp only [foldValue, treeFoldPayload, treeFold_succ_eq, evalWithAnswerFn_bind, orderedPayload]
   cases leaf.val.testBit level <;> rfl
 
 /-- A hit at a node position: something other than the honest payload hashing to the honest value
@@ -83,7 +83,7 @@ theorem treeFold_extract (value : Digest) (levels : Nat)
             = honestNode f parameter lay tree secret level (Nat.xor (leaf.val / 2 ^ level) 1))
       ∨ ∃ level, level < levels
           ∧ NodeHit f parameter lay tree secret level (leaf.val / 2 ^ (level + 1))
-              (foldPayload f parameter lay tree leaf path value level) := by
+              (treeFoldPayload f parameter lay tree leaf path value level) := by
   induction levels with
   | zero =>
       left
@@ -96,18 +96,18 @@ theorem treeFold_extract (value : Digest) (levels : Nat)
         rcases hcase with ⟨hc, _, _⟩ | ⟨hc, _, _⟩ <;> omega
       have hhash : truncateHash (f (tweakableHashInput parameter
             (.node lay tree (levels + 1) (leaf.val / 2 ^ (levels + 1)))
-            (foldPayload f parameter lay tree leaf path value levels)))
+            (treeFoldPayload f parameter lay tree leaf path value levels)))
           = honestNode f parameter lay tree secret (levels + 1) (leaf.val / 2 ^ (levels + 1)) := by
         rw [← foldValue_succ]
         exact hfold
-      by_cases hagree : foldPayload f parameter lay tree leaf path value levels
+      by_cases hagree : treeFoldPayload f parameter lay tree leaf path value levels
           = nodePayload (honestNode f parameter lay tree secret levels (2 * j))
               (honestNode f parameter lay tree secret levels (2 * j + 1))
       · have hstep : foldValue f parameter lay tree leaf path value levels
               = honestNode f parameter lay tree secret levels (leaf.val / 2 ^ levels)
             ∧ path levels = honestNode f parameter lay tree secret levels
               (Nat.xor (leaf.val / 2 ^ levels) 1) := by
-          rw [foldPayload] at hagree
+          rw [treeFoldPayload] at hagree
           rcases hcase with ⟨hc, hsibling, hmod⟩ | ⟨hc, hsibling, hmod⟩
           · rw [show leaf.val.testBit levels = false by
               rw [Bool.eq_false_iff, ne_eq, testBit_iff_div_mod]; omega] at hagree

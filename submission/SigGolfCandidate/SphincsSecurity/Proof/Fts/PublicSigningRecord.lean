@@ -14,7 +14,7 @@ def completePublicSigningRecord (ftsSecret : Index → FtsTree → FtsLeaf → D
     (record : PublicSigningRecord) : (Option Signature × Option FewTimeView) × SigningBoundaryTrace :=
   match record.1.2 with
   | none => ((none, none), record.2)
-  | some view => ((record.1.1.map (fun plan => plan.finish (fun tree => ftsSecret view.1 tree (view.2 tree))), some view), record.2)
+  | some view => ((record.1.1.map (fun plan => plan.finish view.2 (fun slot => ftsSecret view.1 porsTree (view.2 slot))), some view), record.2)
 
 noncomputable def publicSigningRecord (parameter : PublicParameter) (root : Digest) (outside : QueryImpl HashSpec Id)
     (known : Labels) (words : OtsReferenceWords) (selections : ReferenceFamily) (message : Message) :

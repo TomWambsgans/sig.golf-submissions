@@ -207,39 +207,22 @@ theorem Avoids.buildLayerTree (parameter : PublicParameter) (lay : Layer) (tree 
       (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
     (Avoids.pure' f target _)
 
-theorem Avoids.buildFtsTree (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsLeaf → OracleComp HashSpec Digest) (leaf : FtsLeaf)
+theorem Avoids.buildFtsTree (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → OracleComp HashSpec Digest)
     (hsecret : ∀ leaf, Avoids f target (secret leaf))
-    (hleafHash : ∀ (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target) :
-    Avoids f target (Concrete.buildFtsTree parameter index tree secret leaf) := by
+    (hleafHash : ∀ (leaf : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsLeaf index porsTree leaf) payload ≠ target)
+    (hnode : ∀ (heap : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsNode index porsTree heap) payload ≠ target) :
+    Avoids f target (Concrete.buildFtsTree parameter index secret) := by
   rw [Concrete.buildFtsTree]
   refine Avoids.bind f target (Avoids.sequenceFin f target _ fun leafIdx =>
     Avoids.bind f target (hsecret leafIdx) (Avoids.bind f target
       (Avoids.tweakableHash f target parameter _ _ (hleafHash _ _)) (Avoids.pure' f target _))) ?_
   exact Avoids.bind f target
     (Avoids.buildLevels f target _ _ _
-      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
+      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _)) _)
     (Avoids.pure' f target _)
-
-theorem Avoids.buildForest (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → OracleComp HashSpec Digest) (leaves : IndexGroup → FtsLeaf)
-    (hsecret : ∀ tree leaf, Avoids f target (secret tree leaf))
-    (hleafHash : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hroots : ∀ payload : HashInput,
-      tweakableHashInput parameter (.ftsRoots index) payload ≠ target) :
-    Avoids f target (Concrete.buildForest parameter index secret leaves) := by
-  rw [Concrete.buildForest]
-  exact Avoids.bind f target (Avoids.sequenceFin f target _ fun tree =>
-    Avoids.buildFtsTree f target parameter index tree _ _ (hsecret tree) (hleafHash tree)
-      (hnode tree))
-    (Avoids.bind f target (Avoids.tweakableHash f target parameter _ _ (hroots _))
-      (Avoids.pure' f target _))
 
 /-- Building a layer's table avoids what building its tree avoids: the same queries. -/
 theorem Avoids.buildLayerTable (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
@@ -346,14 +329,14 @@ theorem Avoids.buildLayerTreePaired (parameter : PublicParameter) (lay : Layer) 
     (Avoids.buildLayerTablePaired f target parameter lay tree secret leaf digits hsecret hchain hleaf hnode)
     (Avoids.pure' f target _)
 
-theorem Avoids.buildFtsTreePaired (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsPair → OracleComp HashSpec (Digest × Digest)) (leaf : FtsLeaf)
+theorem Avoids.buildFtsTreePaired (parameter : PublicParameter) (index : Index)
+    (secret : FtsPair → OracleComp HashSpec (Digest × Digest))
     (hsecret : ∀ pair, Avoids f target (secret pair))
-    (hleafHash : ∀ (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target) :
-    Avoids f target (Concrete.buildFtsTreePaired parameter index tree secret leaf) := by
+    (hleafHash : ∀ (leaf : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsLeaf index porsTree leaf) payload ≠ target)
+    (hnode : ∀ (heap : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.ftsNode index porsTree heap) payload ≠ target) :
+    Avoids f target (Concrete.buildFtsTreePaired parameter index secret) := by
   rw [Concrete.buildFtsTreePaired]
   refine Avoids.bind f target (Avoids.sequenceFin f target _ fun pair =>
     Avoids.bind f target (hsecret pair) (Avoids.bind f target
@@ -361,25 +344,8 @@ theorem Avoids.buildFtsTreePaired (parameter : PublicParameter) (index : Index) 
         (Avoids.tweakableHash f target parameter _ _ (hleafHash _ _)) (Avoids.pure' f target _)))) ?_
   exact Avoids.bind f target
     (Avoids.buildLevels f target _ _ _
-      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
+      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _)) _)
     (Avoids.pure' f target _)
-
-theorem Avoids.buildForestPaired (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsPair → OracleComp HashSpec (Digest × Digest)) (leaves : IndexGroup → FtsLeaf)
-    (hsecret : ∀ tree pair, Avoids f target (secret tree pair))
-    (hleafHash : ∀ (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
-      tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target)
-    (hnode : ∀ (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-      tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target)
-    (hroots : ∀ payload : HashInput,
-      tweakableHashInput parameter (.ftsRoots index) payload ≠ target) :
-    Avoids f target (Concrete.buildForestPaired parameter index secret leaves) := by
-  rw [Concrete.buildForestPaired]
-  exact Avoids.bind f target (Avoids.sequenceFin f target _ fun tree =>
-    Avoids.buildFtsTreePaired f target parameter index tree _ _ (hsecret tree) (hleafHash tree)
-      (hnode tree))
-    (Avoids.bind f target (Avoids.tweakableHash f target parameter _ _ (hroots _))
-      (Avoids.pure' f target _))
 
 /-- Masking the top tree derives the masks and nothing else. -/
 theorem Avoids.maskRegion (parameter : PublicParameter) (seed : MasterSeed)
@@ -542,12 +508,10 @@ structure Structural (parameter : PublicParameter) (seed : MasterSeed) (target :
     tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target
   node : ∀ (lay : Layer) (tree : TreeIndex) (level nodeIdx : Nat) (payload : HashInput),
     tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target
-  ftsLeaf : ∀ (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (payload : HashInput),
+  ftsLeaf : ∀ (index : Index) (tree : FtsTree) (leaf : Nat) (payload : HashInput),
     tweakableHashInput parameter (.ftsLeaf index tree leaf) payload ≠ target
-  ftsNodeHash : ∀ (index : Index) (tree : FtsTree) (level nodeIdx : Nat) (payload : HashInput),
-    tweakableHashInput parameter (.ftsNode index tree level nodeIdx) payload ≠ target
-  ftsRoots : ∀ (index : Index) (payload : HashInput),
-    tweakableHashInput parameter (.ftsRoots index) payload ≠ target
+  ftsNodeHash : ∀ (index : Index) (tree : FtsTree) (heap : Nat) (payload : HashInput),
+    tweakableHashInput parameter (.ftsNode index tree heap) payload ≠ target
   msg : ∀ payload : HashInput, tweakableHashInput parameter .message payload ≠ target
   randomizer : ∀ (message : Message) (trial : BitVec 32),
     randomizerHashInput parameter seed message trial ≠ target
@@ -565,9 +529,7 @@ theorem structural_encoding (parameter : PublicParameter) (seed : MasterSeed) (l
     (by simp [hashDomainFields, tweakFields]) _ _
   ftsLeaf _ _ _ _ := tweakableHashInput_ne_of_tag_ne parameter
     (by simp [hashDomainFields, tweakFields]) _ _
-  ftsNodeHash _ _ _ _ _ := tweakableHashInput_ne_of_tag_ne parameter
-    (by simp [hashDomainFields, tweakFields]) _ _
-  ftsRoots _ _ := tweakableHashInput_ne_of_tag_ne parameter
+  ftsNodeHash _ _ _ _ := tweakableHashInput_ne_of_tag_ne parameter
     (by simp [hashDomainFields, tweakFields]) _ _
   msg _ := tweakableHashInput_ne_of_tag_ne parameter
     (by simp [hashDomainFields, tweakFields]) _ _
@@ -586,15 +548,14 @@ theorem Avoids.signDigestLoop_of_structural (secretKey : Seeded.SecretKey) (mess
   Avoids.signDigestLoop f target secretKey message
     (fun trial => hstruct.randomizer message trial) (fun _ => hstruct.msg _)
 
-theorem Avoids.buildForestPaired_of_structural (parameter : PublicParameter) (index : Index)
-    (seed : MasterSeed) (leaves : IndexGroup → FtsLeaf) (hstruct : Structural parameter seed target) :
-    Avoids f target (Concrete.buildForestPaired parameter index (Seeded.ftsSecret parameter seed index) leaves
-      : OracleComp HashSpec _) :=
-  Avoids.buildForestPaired f target parameter index _ leaves
-    (fun _ _ => Avoids.ftsSecret f target parameter seed _ _ _ (hstruct.derive _))
-    (fun tree leaf payload => hstruct.ftsLeaf index tree leaf payload)
-    (fun tree level nodeIdx payload => hstruct.ftsNodeHash index tree level nodeIdx payload)
-    (fun payload => hstruct.ftsRoots index payload)
+theorem Avoids.buildFtsTreePaired_of_structural (parameter : PublicParameter) (index : Index)
+    (seed : MasterSeed) (hstruct : Structural parameter seed target) :
+    Avoids f target (Concrete.buildFtsTreePaired parameter index
+      (Seeded.ftsSecret parameter seed index porsTree) : OracleComp HashSpec _) :=
+  Avoids.buildFtsTreePaired f target parameter index _
+    (fun _ => Avoids.ftsSecret f target parameter seed _ _ _ (hstruct.derive _))
+    (fun leaf payload => hstruct.ftsLeaf index porsTree leaf payload)
+    (fun heap payload => hstruct.ftsNodeHash index porsTree heap payload)
 
 theorem Avoids.buildLayerTreePaired_of_structural (parameter : PublicParameter) (seed : MasterSeed)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (digits : Encoding)

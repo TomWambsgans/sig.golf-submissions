@@ -13,7 +13,7 @@ theorem Compatible.honest_public_plan {inputs : Finset HashInput} {context : Con
     (index : Index) (leaves : IndexGroup → FtsLeaf) (signature : Signature)
     (hfull : FullyHonestOpening context.oracle memory.external.cache context.key index leaves signature) :
     (publicSignPlan memory.routing.known context.words context.auxiliary.selections signature.randomness index leaves).1.map
-      (fun plan => plan.finish (fun tree => context.key.ftsSecret index tree (leaves (ftsIndexOf tree)))) = some signature := by
+      (fun plan => plan.finish leaves (fun slot => context.key.ftsSecret index porsTree (leaves slot))) = some signature := by
   have hagrees : PublicAgreement context.words memory.routing.disclosed memory.routing.known
       (CanonicalCoordinate.value context.key.otsSecret context.key.ftsSecret
         (canonicalGraphLabels context.key.parameter context.key.otsSecret context.key.ftsSecret context.oracle)) := by
@@ -37,12 +37,11 @@ theorem Compatible.honest_public_plan {inputs : Finset HashInput} {context : Con
       funext chain
       exact (hvalues chain).symm
     simp only [publicSignLayer, referenceSelectionResult, hselected, Option.map_some, hchain, ← hcounter, parts]
-  have hftsPath : knownFtsPath memory.routing.known index leaves = signature.ftsPath := by
-    rw [knownFtsPath_eq context.key.parameter context.key.otsSecret context.key.ftsSecret context.oracle context.words
-      memory.routing.disclosed memory.routing.known hagrees]
-    funext tree level
-    simp only [ftsOpen, evalWithAnswerFn_sequenceFin]
-    exact ((hfull.2.1 tree).2 level.val level.isLt).symm
+  have hfts : honestFtsOfSlots leaves (fun slot => context.key.ftsSecret index porsTree (leaves slot))
+      (knownFtsNodes memory.routing.known index) = signature.fts := by
+    rw [honestFtsOfSlots_comp, knownFtsOpening_eq context.key.parameter context.key.otsSecret context.key.ftsSecret
+      context.oracle context.words memory.routing.disclosed memory.routing.known hagrees index leaves]
+    exact hfull.2.1.symm
   have hparts : (fun lay => LayerSignature.ofPadded lay (parts lay)) = signature.layers := by
     funext lay
     apply LayerSignature.ext
@@ -57,13 +56,8 @@ theorem Compatible.honest_public_plan {inputs : Finset HashInput} {context : Con
       obtain ⟨_, _, _, hpath⟩ := (hfull.1 lay).1
       simpa only [signaturePath, dif_pos level.isLt, Fin.eta, honestNode] using
         (hpath level.val level.isLt).symm
-  simp only [publicSignPlan, hlayers, sequenceFin_some, Option.map_some, hftsPath, PublicSigningPlan.finish, parts]
-  congr 1
-  change Signature.mk signature.randomness (fun tree => context.key.ftsSecret index tree (leaves (ftsIndexOf tree)))
-    signature.ftsPath (fun lay => LayerSignature.ofPadded lay (parts lay)) = signature
-  have hsecrets : (fun tree => context.key.ftsSecret index tree (leaves (ftsIndexOf tree))) = signature.ftsSecret :=
-    funext fun tree => ((hfull.2.1 tree).1).symm
-  rw [hsecrets, hparts]
+  simp only [publicSignPlan, hlayers, sequenceFin_some, Option.map_some, PublicSigningPlan.finish]
+  rw [hfts, hparts]
 
 theorem Compatible.honest_signAfterDigest {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
     (hcompatible : Compatible context memory) (hdummy : ∀ lay tree leaf, OtsCode.Valid (context.dummy lay tree leaf))

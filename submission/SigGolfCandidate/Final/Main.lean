@@ -1,5 +1,5 @@
 import SigGolfCandidate.Final.Completeness
-import SigGolfCandidate.Budget.Bridge
+import SigGolfCandidate.Budget.Final
 
 /-!
 # The certificate
@@ -10,9 +10,9 @@ from the pending sign / verify / abstract-security statements (`Pending.lean`).
 | field | proof |
 |---|---|
 | `admissible` | `submission_admissible` (kernel `decide`) |
-| `termination` | expand exact (`expand_runWith`), keygen / sign / verify pending |
+| `termination` | expand (`Expand.expand_terminates`), keygen / sign / verify pending |
 | `completeness` | `submission_complete` (this directory) |
-| `compressionBounds` | `Budget.submission_compressionBounds_of_counts'` |
+| `compressionBounds` | `Budget.submission_compressionBounds` |
 | `security` | `Equiv.submission_secure` |
 | `verificationBound` | `honest_success_verify` + `VerifyCyclesStatement` (`verifyCycleBound + witnessCharge`) |
 -/
@@ -36,10 +36,7 @@ theorem submission_terminates (hK : KeygenTerminationStatement) (hS : SignTermin
     exact hS hash sk cache m
   | expand =>
     obtain ⟨m, pk, σ⟩ := input
-    show (submission.runWith hash .expand (m, pk, σ)).finished = true ∧
-      (submission.runWith hash .expand (m, pk, σ)).cycles < CYCLE_LIMIT
-    rw [Expand.expand_runWith]
-    exact ⟨rfl, by show _ < 2 ^ 32; norm_num⟩
+    exact Expand.expand_terminates hash m pk σ
   | verify =>
     obtain ⟨m, pk, w⟩ := input
     exact hV hash m pk w
@@ -60,15 +57,10 @@ theorem submission_verificationBound (hC : VerifyCyclesStatement) :
   unfold claimedC
   omega
 
-/-- **Compression bounds**, from the keygen and sign refinements (expand proved). -/
-theorem submission_compressionBounds (hK : KeygenRefinementStatement)
-    (hS : SignRefinementStatement) : submission.CompressionBounds := by
-  refine Budget.submission_compressionBounds_of_counts' (fun sk => ⟨some, hK sk⟩)
-    (fun sk cache m => ⟨id, ?_⟩) ?_
-  · exact (hS sk cache m).trans (id_map _).symm
-  · rintro ⟨m, pk, σ⟩
-    refine ⟨Unit, (), fun _ => some (Ref.expandRef σ), ?_⟩
-    rw [Expand.expand_run, map_pure, Sign.countBoth_pure, map_pure]
+/-- **Compression bounds** (`Budget.submission_compressionBounds`: keygen, sign and expand discharged
+by their refinements). -/
+theorem submission_compressionBounds : submission.CompressionBounds :=
+  Budget.submission_compressionBounds
 
 /-- **Security**, from (A) and the keygen / sign / verify refinements. -/
 theorem submission_secure (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
@@ -80,7 +72,7 @@ theorem certificate_of (P : Pending) : Certificate submission claimedC where
   admissible := submission_admissible
   termination := submission_terminates P.keygenTermination P.signTermination P.verifyTermination
   completeness := submission_complete P.keygenRefinement P.signRefinement P.verifyRefinement
-  compressionBounds := submission_compressionBounds P.keygenRefinement P.signRefinement
+  compressionBounds := submission_compressionBounds
   security := submission_secure P.keygenRefinement P.signRefinement P.verifyRefinement P.eventSecurity
   verificationBound := submission_verificationBound P.verifyCycles
 

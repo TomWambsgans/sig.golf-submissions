@@ -6,49 +6,49 @@ open ENNReal
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
-abbrev TargetShapeVector := Finset (Finset FtsTree) → Finset FtsTree → ENNReal
+abbrev TargetShapeVector := Finset (Finset IndexGroup) → Finset IndexGroup → ENNReal
 
-noncomputable def targetCacheAll (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : ENNReal :=
+noncomputable def targetCacheAll (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : ENNReal :=
   ∑ kept ∈ groups.powerset, f kept remaining
 
-noncomputable def targetCacheLower (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : ENNReal :=
+noncomputable def targetCacheLower (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : ENNReal :=
   ∑ kept ∈ groups.powerset.erase groups, f kept remaining
 
-noncomputable def targetTreeLower (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : ENNReal :=
+noncomputable def targetTreeLower (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : ENNReal :=
   ∑ selected ∈ remaining.powerset.erase ∅, f groups (remaining \ selected)
 
-noncomputable def targetReuseStep (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : ENNReal :=
+noncomputable def targetReuseStep (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : ENNReal :=
   ∑ selected ∈ remaining.powerset.erase ∅, f (insert selected groups) (remaining \ selected)
 
-theorem targetCacheAll_eq (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetCacheAll_eq (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetCacheAll f groups remaining = f groups remaining + targetCacheLower f groups remaining := by
   exact (Finset.add_sum_erase _ _ (Finset.mem_powerset.mpr (Finset.Subset.refl groups))).symm
 
-theorem targetCacheLower_add (f g : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetCacheLower_add (f g : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetCacheLower (fun G R => f G R + g G R) groups remaining = targetCacheLower f groups remaining + targetCacheLower g groups remaining := by
   simp only [targetCacheLower, Finset.sum_add_distrib]
 
-theorem targetTreeLower_add (f g : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetTreeLower_add (f g : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetTreeLower (fun G R => f G R + g G R) groups remaining = targetTreeLower f groups remaining + targetTreeLower g groups remaining := by
   simp only [targetTreeLower, Finset.sum_add_distrib]
 
-theorem targetReuseStep_add (f g : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetReuseStep_add (f g : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetReuseStep (fun G R => f G R + g G R) groups remaining = targetReuseStep f groups remaining + targetReuseStep g groups remaining := by
   simp only [targetReuseStep, Finset.sum_add_distrib]
 
-theorem targetCacheLower_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetCacheLower_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetCacheLower (fun G R => c * f G R) groups remaining = c * targetCacheLower f groups remaining := by
   simp only [targetCacheLower, Finset.mul_sum]
 
-theorem targetTreeLower_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetTreeLower_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetTreeLower (fun G R => c * f G R) groups remaining = c * targetTreeLower f groups remaining := by
   simp only [targetTreeLower, Finset.mul_sum]
 
-theorem targetReuseStep_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetReuseStep_mul (c : ENNReal) (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetReuseStep (fun G R => c * f G R) groups remaining = c * targetReuseStep f groups remaining := by
   simp only [targetReuseStep, Finset.mul_sum]
 
-theorem targetCacheLower_tree_commute (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+theorem targetCacheLower_tree_commute (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetCacheLower (targetTreeLower f) groups remaining = targetTreeLower (targetCacheLower f) groups remaining := by
   unfold targetCacheLower targetTreeLower
   exact Finset.sum_comm
@@ -60,7 +60,7 @@ private theorem sum_erase_as_indicator {α : Type} [DecidableEq α] (s : Finset 
   intro x _
   by_cases h : x = a <;> simp only [h, ne_eq, not_true_eq_false, not_false_eq_true, if_true, if_false]
 
-theorem targetCacheLower_insert (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining selected : Finset FtsTree)
+theorem targetCacheLower_insert (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining selected : Finset IndexGroup)
     (hnot : selected ∉ groups) :
     targetCacheLower f (insert selected groups) remaining = targetCacheAll f groups remaining +
       targetCacheLower (fun G R => f (insert selected G) R) groups remaining := by
@@ -80,18 +80,18 @@ theorem targetCacheLower_insert (f : TargetShapeVector) (groups : Finset (Finset
     have heq : insert selected kept = insert selected groups ↔ kept = groups := by
       constructor
       · intro heq
-        have h := congrArg (fun s : Finset (Finset FtsTree) => s.erase selected) heq
+        have h := congrArg (fun s : Finset (Finset IndexGroup) => s.erase selected) heq
         simpa only [Finset.erase_insert hkeptNot, Finset.erase_insert hnot] using h
       · rintro rfl; rfl
     simp only [heq]
 
-theorem targetReuse_cache_commute (f : TargetShapeVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree)
+theorem targetReuse_cache_commute (f : TargetShapeVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup)
     (hvalid : TargetShapeValid groups remaining) :
     targetReuseStep (targetCacheLower f) groups remaining =
       targetCacheLower (targetReuseStep f) groups remaining + targetTreeLower f groups remaining +
         targetCacheLower (targetTreeLower f) groups remaining := by
   unfold targetReuseStep
-  have hinsert (selected : Finset FtsTree) (hselected : selected ∈ remaining.powerset.erase ∅) :
+  have hinsert (selected : Finset IndexGroup) (hselected : selected ∈ remaining.powerset.erase ∅) :
       targetCacheLower f (insert selected groups) (remaining \ selected) = targetCacheAll f groups (remaining \ selected) +
         targetCacheLower (fun G R => f (insert selected G) R) groups (remaining \ selected) :=
     targetCacheLower_insert f groups _ selected (hvalid.new_group

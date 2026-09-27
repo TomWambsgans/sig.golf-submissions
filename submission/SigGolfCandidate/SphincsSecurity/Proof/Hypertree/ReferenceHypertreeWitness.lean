@@ -53,14 +53,14 @@ theorem layer_frame_reference (index : Index) (signature : Signature) (lay : Lay
       · exact False.elim (hclean (Or.inr ⟨lay, treeIndexAt index lay, leafIndexAt index lay, Or.inr (Or.inr hc)⟩))
       · exact False.elim (hclean (Or.inl he))
 
-theorem hypertree_reference (index : Index) (leaves : IndexGroup → FtsLeaf) (signature : Signature) (trace : Trace)
+theorem hypertree_reference (index : Index) (ftsPublicKey : Digest) (signature : Signature) (trace : Trace)
     (hvalid : ∀ lay, OtsCode.Valid (words lay (treeIndexAt index lay) (leafIndexAt index lay)))
     (hmessages : ∀ lay, messages ⟨lay, treeIndexAt index lay, leafIndexAt index lay⟩ = evalWithAnswerFn f (layerMessage key index lay))
     (hroot : key.root = honestNode f key.parameter topLayer rootTree (key.otsSecret topLayer rootTree) (layerHeight topLayer) 0)
     (hclean : ¬LayerException f key words messages selections trace)
-    (hverify : evalWithAnswerFn f (verifyLayers key.parameter index signature numLayers (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath))) = some key.root)
-    (hrun : ContainsRun f trace (verifyLayers key.parameter index signature numLayers (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)))) :
-    (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) = honestFtsKey f key.parameter index (key.ftsSecret index) ∧
+    (hverify : evalWithAnswerFn f (verifyLayers key.parameter index signature numLayers ftsPublicKey) = some key.root)
+    (hrun : ContainsRun f trace (verifyLayers key.parameter index signature numLayers ftsPublicKey)) :
+    ftsPublicKey = honestFtsKey f key.parameter index (key.ftsSecret index) ∧
       ∀ lay, ReferenceLayerOpening f key words selections index signature lay ∧
         CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
           (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay)) := by
@@ -79,18 +79,18 @@ theorem hypertree_reference (index : Index) (leaves : IndexGroup → FtsLeaf) (s
   rw [hwalk.2, layerMessage_bottomLayer]
   rfl
 
-theorem hypertree_classification (index : Index) (leaves : IndexGroup → FtsLeaf) (signature : Signature) (trace : Trace)
+theorem hypertree_classification (index : Index) (ftsPublicKey : Digest) (signature : Signature) (trace : Trace)
     (hvalid : ∀ lay, OtsCode.Valid (words lay (treeIndexAt index lay) (leafIndexAt index lay)))
     (hmessages : ∀ lay, messages ⟨lay, treeIndexAt index lay, leafIndexAt index lay⟩ = evalWithAnswerFn f (layerMessage key index lay))
     (hroot : key.root = honestNode f key.parameter topLayer rootTree (key.otsSecret topLayer rootTree) (layerHeight topLayer) 0)
-    (hverify : evalWithAnswerFn f (verifyLayers key.parameter index signature numLayers (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath))) = some key.root)
-    (hrun : ContainsRun f trace (verifyLayers key.parameter index signature numLayers (evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)))) :
-    ((evalWithAnswerFn f (ftsRecover key.parameter index leaves signature.ftsSecret signature.ftsPath)) = honestFtsKey f key.parameter index (key.ftsSecret index) ∧ ∀ lay, ReferenceLayerOpening f key words selections index signature lay ∧
+    (hverify : evalWithAnswerFn f (verifyLayers key.parameter index signature numLayers ftsPublicKey) = some key.root)
+    (hrun : ContainsRun f trace (verifyLayers key.parameter index signature numLayers ftsPublicKey)) :
+    (ftsPublicKey = honestFtsKey f key.parameter index (key.ftsSecret index) ∧ ∀ lay, ReferenceLayerOpening f key words selections index signature lay ∧
         CachedRun (recordedCache f trace) f (otsLeafAttempt key.parameter lay (treeIndexAt index lay) (leafIndexAt index lay)
           (evalWithAnswerFn f (layerMessage key index lay)) (signature.counter lay) (signature.chainValue lay))) ∨
       LayerException f key words messages selections trace := by
   by_cases h : LayerException f key words messages selections trace
   · exact Or.inr h
-  · exact Or.inl (hypertree_reference f key words messages selections index leaves signature trace hvalid hmessages hroot h hverify hrun)
+  · exact Or.inl (hypertree_reference f key words messages selections index ftsPublicKey signature trace hvalid hmessages hroot h hverify hrun)
 
 end SphincsSecurity.Concrete.OtsVerifierWitness

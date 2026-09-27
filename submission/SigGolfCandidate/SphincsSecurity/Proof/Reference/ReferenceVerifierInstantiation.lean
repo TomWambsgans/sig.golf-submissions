@@ -53,7 +53,7 @@ def SuccessWitnessFor (key : SecretKey) (f : QueryImpl HashSpec Id) (root : Dige
     ContainsRun f trace (messageDigest key.parameter actualKey.root before.1.1.1.message before.1.1.1.signature.randomness) ∧ Admissible digest ∧
     ((FullyHonestOpening f (recordedCache f trace) actualKey (digestIndex digest) (digestLeaves digest) before.1.1.1.signature ∧
       (∀ lay, ReferenceLayerOpening f actualKey words selections (digestIndex digest) before.1.1.1.signature lay) ∧
-      (∀ tree, FtsVerifierWitness.TrueSecretQuery f actualKey (digestIndex digest) tree (digestLeaves digest (ftsIndexOf tree)) trace) ∧
+      (∀ slot, FtsVerifierWitness.TrueSecretQuery f actualKey (digestIndex digest) (digestLeaves digest slot) trace) ∧
       ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ before.1.1.2 →
         messageDigestPayload actualKey.root message signature.randomness ≠
           messageDigestPayload actualKey.root before.1.1.1.message before.1.1.1.signature.randomness) ∨

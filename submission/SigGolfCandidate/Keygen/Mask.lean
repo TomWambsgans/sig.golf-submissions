@@ -87,11 +87,11 @@ theorem Vals.update {s t : MachineState} {A : Nat} {L R : List Val} {x y : Val}
 /-- Facts kept after the root copy: the public key at `160`, the zeroed 32 bytes after the region. -/
 structure Out (root : Val) (t : MachineState) : Prop where
   pk : ValAt t 160 root
-  z : ∀ A ∈ [0x144A0, 0x144A8, 0x144B0, 0x144B8], t.getMem (BitVec.ofNat 64 A) = 0
+  z : ∀ A ∈ [0x14B00, 0x14B08, 0x14B10, 0x14B18], t.getMem (BitVec.ofNat 64 A) = 0
 
 theorem Out.frame {root : Val} {s t : MachineState} {keys : List Nat} (h : Out root s)
     (hf : Frame s t keys)
-    (hk : ∀ k ∈ keys, (k + 8 ≤ 160 ∨ 176 ≤ k) ∧ (k + 8 ≤ 0x144A0 ∨ 0x144C0 ≤ k) ∧ k < 2 ^ 64) :
+    (hk : ∀ k ∈ keys, (k + 8 ≤ 160 ∨ 176 ≤ k) ∧ (k + 8 ≤ 0x14B00 ∨ 0x14B20 ≤ k) ∧ k < 2 ^ 64) :
     Out root t := by
   refine ⟨h.pk.frame hf (by norm_num) (fun k hk' => by have := hk k hk'; omega), fun A hA => ?_⟩
   rw [getMem_frame hf (by simp at hA; omega) (fun k hk' heq => by
@@ -235,7 +235,7 @@ theorem mask_node_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (levels :
     fun r h1 h2 h3 h4 h5 h6 h7 h8 => by
       rw [vun r h1 h2 h3 h4, getReg_writeHash, ux r ⟨h5, h6, h7, h8⟩]
   have hkeys : ∀ k ∈ [1696, 1704] ++ [320, 320 + 8, 320 + 16, 320 + 24] ++ [A, A + 8],
-      (k + 8 ≤ 160 ∨ 176 ≤ k) ∧ (k + 8 ≤ 0x144A0 ∨ 0x144C0 ≤ k) ∧ k < 2 ^ 64 := by
+      (k + 8 ≤ 160 ∨ 176 ≤ k) ∧ (k + 8 ≤ 0x14B00 ∨ 0x14B20 ≤ k) ∧ k < 2 ^ 64 := by
     intro k hk; simp at hk
     rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
       (try rw [hAdef]) <;> (try unfold REGION) <;> omega

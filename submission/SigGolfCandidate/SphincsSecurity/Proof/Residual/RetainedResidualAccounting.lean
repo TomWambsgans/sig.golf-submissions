@@ -13,7 +13,7 @@ def MonitoredAccounting {inputs : Finset HashInput} (state : MonitoredState inpu
   state.2.stopped = false → state.2.spent = state.1.memory.external.hashCalls
 
 private theorem update_spent_eq {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain)
     (state : MonitoredState inputs) (hbefore : MonitoredAccounting state) (length : Nat)
     (record : ProposalExecutionRecord input) (after : Memory)
     (hhash : after.external.hashCalls = state.1.memory.external.hashCalls + record.trace.hashCalls)
@@ -28,7 +28,7 @@ private theorem update_spent_eq {inputs : Finset HashInput} (key : SecretKey) (b
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_accounting (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hvalid : MonitoredValid inputs state) (hinputs : requestInputs key input ⊆ inputs)

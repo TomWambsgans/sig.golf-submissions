@@ -6,11 +6,12 @@ import SigGolfCandidate.SphincsSecurity.Completeness.Uniform
 # The randomizer search
 
 Each trial derives a randomizer from a fresh input, then hashes the message with it and keeps the
-digest if its last index group is zero, which a fresh answer does with probability `1/1024`. The
+digest if it is admissible (distinct leaf indices, octopus of at most `120` nodes), which a fresh answer
+is with probability `p = 15! · N / 2^210 ≥ 2^-10` (`Octopus/`). The
 second query need not be fresh: a randomizer can repeat one an earlier trial drew, and then the
 digest is the earlier, rejected one. So the induction carries the set `R` of randomizers drawn so
 far. A trial lands in `R` with probability at most `|R| / 2 ^ 128`, and otherwise its digest query
-is fresh; either way one trial fails with probability at most `1023/1024 + 2 ^ 20 / 2 ^ 128`, since
+is fresh; either way one trial fails with probability at most `1 - 2^-10 + 2 ^ 20 / 2 ^ 128`, since
 at most `A_max = 2 ^ 20` randomizers are ever drawn.
 -/
 
@@ -74,13 +75,15 @@ noncomputable def digestReject : ℝ≥0∞ :=
   Pr[fun u : HashOutput => ¬ Admissible (truncateMessageDigest u) |
     ($ᵗ HashOutput : ProbComp HashOutput)]
 
-theorem digestReject_add : digestReject + (1024 : ℝ≥0∞)⁻¹ = 1 := by
+theorem digestReject_add : digestReject + (1024 : ℝ≥0∞)⁻¹ ≤ 1 := by
   have h := probEvent_compl ($ᵗ HashOutput : ProbComp HashOutput)
     (fun u => Admissible (truncateMessageDigest u))
   have hfail : Pr[⊥ | ($ᵗ HashOutput : ProbComp HashOutput)] = 0 := by simp
-  rw [probEvent_admissible, hfail, tsub_zero] at h
-  rw [add_comm]
-  exact h
+  rw [hfail, tsub_zero] at h
+  calc digestReject + (1024 : ℝ≥0∞)⁻¹
+      ≤ digestReject + Pr[fun u : HashOutput => Admissible (truncateMessageDigest u) |
+          ($ᵗ HashOutput : ProbComp HashOutput)] := add_le_add le_rfl probEvent_admissible_ge
+    _ = 1 := by rw [add_comm]; exact h
 
 theorem digestReject_le_one : digestReject ≤ 1 := probEvent_le_one
 

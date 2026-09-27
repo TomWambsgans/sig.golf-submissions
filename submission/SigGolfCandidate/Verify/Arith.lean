@@ -48,4 +48,12 @@ theorem geu_digit (D : BitVec 64) (r k : Nat) (hr : r ≤ 20) (hk : k < 8) :
   interval_cases r <;> simp only [Bool.not_eq_eq_eq_not] <;>
     (simp only [Nat.reducePow, Nat.reduceSub, Nat.reduceMul] at *; rw [Bool.eq_iff_iff]; simp; omega)
 
+theorem merge_w4_toNat (w v : BitVec 64) :
+    (StoreKind.merge .w w 4 v).toNat = w.toNat % 2 ^ 32 + 2 ^ 32 * (v.toNat % 2 ^ 32) := by
+  have := replaceWord32_1_toNat w (v.toNat % 2 ^ 32) (Nat.mod_lt _ (by decide))
+  simp only [StoreKind.merge, show (4 : Nat) / 4 = 1 from rfl]
+  have e : (BitVec.ofNat 64 (v.toNat % 2 ^ 32)).truncate 32 = v.truncate 32 := by
+    apply BitVec.eq_of_toNat_eq; simp [BitVec.toNat_setWidth]
+  rw [← e, this]
+
 end SigGolfCandidate.Verify

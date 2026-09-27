@@ -81,7 +81,7 @@ theorem expected_selectedLoopInputWeight_le_exactReuse
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before] *
       selectedLoopInputWeight key message weight result) ≤
       freshDigestSelectionProbability key message before *
-        (∑' view, Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] * uniformWeight view) +
+        (∑' view, Pr[= view | signerViewSample] * uniformWeight view) +
       (∑' input, cachedSignerInputWeight key message before weight input) * exactDigestReuseWeight key message before := by
   have hexpect {α : Type} (event : α → DigestLoopRecord → Prop) (value : α → ENNReal) :
       (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before] *
@@ -112,7 +112,7 @@ theorem expected_selectedLoopInputWeight_le_exactReuse
             cachedSignerInputWeight key message before weight input := by
       simp only [mul_add, ENNReal.tsum_add, hexpect]
     _ ≤ (∑' view, (freshDigestSelectionProbability key message before *
-          Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)]) * uniformWeight view) +
+          Pr[= view | signerViewSample]) * uniformWeight view) +
         ∑' input, exactDigestReuseWeight key message before * cachedSignerInputWeight key message before weight input := by
       apply add_le_add
       · apply ENNReal.tsum_le_tsum
@@ -131,7 +131,7 @@ theorem expected_freshSelectedLoopInputWeight_le (key : SecretKey) (message : Me
     (∑' loop, Pr[= loop | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before] *
       selectedLoopInputWeight key message (fun input source => if before input = none then weight source else 0) loop) ≤
       freshDigestSelectionProbability key message before *
-        ∑' source, Pr[= source | ($ᵗ FewTimeView : ProbComp FewTimeView)] * weight source := by
+        ∑' source, Pr[= source | signerViewSample] * weight source := by
   have hzero (input : HashInput) : cachedSignerInputWeight key message before
       (fun input source => if before input = none then weight source else 0) input = 0 := by
     unfold cachedSignerInputWeight
@@ -210,7 +210,7 @@ theorem expected_digestCompletion_freshCost_le {α : Type}
         selectedLoopInputWeight key message (fun input source => if before input = none then weight source else 0) loop) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] * cost result) ≤
       freshDigestSelectionProbability key message before *
-        ∑' source, Pr[= source | ($ᵗ FewTimeView : ProbComp FewTimeView)] * weight source :=
+        ∑' source, Pr[= source | signerViewSample] * weight source :=
   (expected_digestCompletion_cost_le_selected key message before finish cost _ hcost).trans
     (expected_freshSelectedLoopInputWeight_le key message before weight)
 
@@ -225,7 +225,7 @@ theorem expected_digestCompletion_successfulInputWeight_le_exactReuse {α : Type
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] *
       successfulSignerInputWeight key message weight (record result)) ≤
       freshDigestSelectionProbability key message before *
-        (∑' view, Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] * uniformWeight view) +
+        (∑' view, Pr[= view | signerViewSample] * uniformWeight view) +
       (∑' input, cachedSignerInputWeight key message before weight input) * exactDigestReuseWeight key message before :=
   (expected_digestCompletion_successfulInputWeight_le_selected key message before finish record hconsistent weight).trans
     (expected_selectedLoopInputWeight_le_exactReuse key message before weight uniformWeight hweight)
@@ -242,7 +242,7 @@ theorem expected_digestCompletion_successfulInputWeight_le_allMessage {α : Type
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] *
       successfulSignerInputWeight key message weight (record result)) ≤
       freshDigestSelectionProbability key message before *
-        (∑' view, Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] * uniformWeight view) +
+        (∑' view, Pr[= view | signerViewSample] * uniformWeight view) +
       cacheMessageWeight key.parameter weight before * reuse :=
   (expected_digestCompletion_successfulInputWeight_le_exactReuse key message before finish record hconsistent
     weight uniformWeight hweight).trans (add_le_add le_rfl (mul_le_mul'

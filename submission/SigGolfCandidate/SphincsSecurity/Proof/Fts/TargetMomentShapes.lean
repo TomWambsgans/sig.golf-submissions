@@ -5,25 +5,25 @@ namespace SphincsSecurity.Concrete
 
 attribute [local instance] Classical.propDecidable
 
-structure TargetShapeValid (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : Prop where
+structure TargetShapeValid (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : Prop where
   nonempty : ∀ group ∈ groups, group.Nonempty
   disjoint : ∀ first ∈ groups, ∀ second ∈ groups, first ≠ second → Disjoint first second
   remaining : ∀ group ∈ groups, Disjoint group remaining
 
-theorem TargetShapeValid.subsets {groups kept : Finset (Finset FtsTree)} {remaining trees : Finset FtsTree}
+theorem TargetShapeValid.subsets {groups kept : Finset (Finset IndexGroup)} {remaining trees : Finset IndexGroup}
     (hvalid : TargetShapeValid groups remaining) (hgroups : kept ⊆ groups) (htrees : trees ⊆ remaining) :
     TargetShapeValid kept trees where
   nonempty group hgroup := hvalid.nonempty group (hgroups hgroup)
   disjoint first hfirst second hsecond hne := hvalid.disjoint first (hgroups hfirst) second (hgroups hsecond) hne
   remaining group hgroup := (hvalid.remaining group (hgroups hgroup)).mono_right htrees
 
-theorem TargetShapeValid.new_group {groups : Finset (Finset FtsTree)} {remaining selected : Finset FtsTree}
+theorem TargetShapeValid.new_group {groups : Finset (Finset IndexGroup)} {remaining selected : Finset IndexGroup}
     (hvalid : TargetShapeValid groups remaining) (hselected : selected.Nonempty) (hsub : selected ⊆ remaining) : selected ∉ groups := by
   intro hmem
   obtain ⟨tree, htree⟩ := hselected
   exact Finset.disjoint_left.mp (hvalid.remaining selected hmem) htree (hsub htree)
 
-theorem TargetShapeValid.reuse {groups : Finset (Finset FtsTree)} {remaining selected : Finset FtsTree}
+theorem TargetShapeValid.reuse {groups : Finset (Finset IndexGroup)} {remaining selected : Finset IndexGroup}
     (hvalid : TargetShapeValid groups remaining) (hselected : selected.Nonempty) (hsub : selected ⊆ remaining) :
     TargetShapeValid (insert selected groups) (remaining \ selected) := by
   constructor

@@ -11,11 +11,11 @@ namespace SphincsSecurity.Concrete
 
 open ENNReal
 
-/-- The signer's forest: every few-time tree built once (its `2^a` leaves and `2^a - 1` nodes), then the hash of the roots. -/
-irreducible_def ftsOpenHashCost : Nat := ∑ _tree : FtsTree, (2 ^ (ftsTreeHeight + 1) - 1) + 1
+/-- The signer's PORS tree, built once: its `2^14` leaves and `2^14 - 1` nodes. -/
+irreducible_def ftsOpenHashCost : Nat := 2 ^ (ftsTreeHeight + 1) - 1
 
-/-- A few-time public key: every tree root, then the hash of the roots. -/
-irreducible_def ftsKeyHashCost : Nat := ∑ _tree : FtsTree, (2 ^ (ftsTreeHeight + 1) - 1) + 1
+/-- A PORS public key (the tree root): every leaf and node of the tree. -/
+irreducible_def ftsKeyHashCost : Nat := 2 ^ (ftsTreeHeight + 1) - 1
 
 theorem two_pow_ftsTreeHeight_le_ftsOpenHashCost : 2 ^ ftsTreeHeight ≤ ftsOpenHashCost := by
   rw [ftsOpenHashCost_def]
@@ -26,16 +26,16 @@ theorem ftsOpenHashCost_le_digestAttemptLimit : ftsOpenHashCost ≤ digestAttemp
   decide
 
 /-- The length of the uniform proposal word that both budget routes price certificates against. -/
-irreducible_def fixedProposalLength : Nat := 6455033869
+irreducible_def fixedProposalLength : Nat := 6455033870
 
 /-- How far a proposal-word prefix may run ahead of its expected length before the monitor stops. -/
 irreducible_def proposalPrefixSlack : Nat := 2 ^ 23
 
 /-- Per query, the expected excess of the full certificate price over the price of one fresh digest. -/
-noncomputable irreducible_def fullCertificateExcessRate : ENNReal := 11 / 2 ^ 144
+noncomputable irreducible_def fullCertificateExcessRate : ENNReal := 1 / 2 ^ 144
 
-/-- Per query, the average price of a near certificate that omits one given tree. -/
-noncomputable irreducible_def nearCertificatePrice : ENNReal := ((557 : ENNReal) / 14) / (2 ^ 128 : Nat)
+/-- Per query, the average price of a near certificate that omits one given digest slot. -/
+noncomputable irreducible_def nearCertificatePrice : ENNReal := ((1241 : ENNReal) / 15) / (2 ^ 128 : Nat)
 
 /-- The probability that a proposal-word prefix ever runs past its slack. -/
 noncomputable irreducible_def proposalPrefixExceptionBound : ENNReal := (2 ^ 700 : ENNReal)⁻¹

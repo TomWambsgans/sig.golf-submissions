@@ -366,9 +366,9 @@ theorem foldl_disclosure_allowed_of_mem (auxiliary : QueryImpl Auxiliary ProbCom
 
 theorem completedState_allowed_disclosed (auxiliary : QueryImpl Auxiliary ProbComp) (secrets : Coordinate → Digest)
     (plan : PublicSigningPlan) (view : FewTimeView) (trace : SigningBoundaryTrace) (state : State Coordinate Digest PUnit)
-    (tree : FtsTree) :
+    (tree : IndexGroup) :
     (FtsGuessSigning.completedState (environment auxiliary) secrets ((some plan, some view), trace) state).allowed
-      (view.1, tree, view.2 tree) = {secrets (view.1, tree, view.2 tree)} := by
+      (view.1, porsTree, view.2 tree) = {secrets (view.1, porsTree, view.2 tree)} := by
   simp only [FtsGuessSigning.completedState, SecretGuessObservation.disclosureSequenceState]
   apply foldl_disclosure_allowed_of_mem
   rw [List.mem_ofFn]
@@ -376,7 +376,7 @@ theorem completedState_allowed_disclosed (auxiliary : QueryImpl Auxiliary ProbCo
 
 theorem completePublicSigningRecord_congr (first second : Index → FtsTree → FtsLeaf → Digest) (record : PublicSigningRecord)
     (hagree : ∀ (plan : PublicSigningPlan) (view : FewTimeView), record.1 = (some plan, some view) →
-      ∀ tree, first view.1 tree (view.2 tree) = second view.1 tree (view.2 tree)) :
+      ∀ tree, first view.1 porsTree (view.2 tree) = second view.1 porsTree (view.2 tree)) :
     completePublicSigningRecord first record = completePublicSigningRecord second record := by
   obtain ⟨⟨plan, view⟩, trace⟩ := record
   cases plan with
@@ -433,7 +433,7 @@ theorem cachedSigning_mem_support_sign (message : Message) (cache : QueryCache H
       completePublicSigningRecord (fun index tree leaf => table (index, tree, leaf)) record := by
     apply completePublicSigningRecord_congr
     intro plan view hrecord tree
-    have hmem := mem_of_complete_ne_zero _ _ hsecrets (view.1, tree, view.2 tree)
+    have hmem := mem_of_complete_ne_zero _ _ hsecrets (view.1, porsTree, view.2 tree)
     have hrec : record = ((some plan, some view), record.2) := Prod.ext hrecord rfl
     rw [hstate, hrec, completedState_allowed_disclosed, Finset.mem_singleton] at hmem
     exact hmem

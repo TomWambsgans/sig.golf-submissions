@@ -43,14 +43,14 @@ def completedNearGuess (key : SecretKey) (f : QueryImpl HashSpec Id) (result : C
 
 noncomputable def completedNearCertificate (parameter : PublicParameter) (root : Digest) (result : Completed) : Prop :=
   let key : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0, fun _ _ => 0⟩
-  SigningTranscript.Valid result.1.1.1.2 ∧ ∃ omitted : FtsTree,
+  SigningTranscript.Valid result.1.1.1.2 ∧ ∃ omitted : IndexGroup,
     TargetCertificateAt key (Finset.univ.erase omitted)
       (hashRowsCache (result.1.1.2 * result.2.1.2).messageCalls, result.1.1.1.2)
       (signingInput key result.1.1.1.1.message result.1.1.1.1.signature)
 
 theorem completedNearCertificate_iff (key : SecretKey) (result : Completed) :
     completedNearCertificate key.parameter key.root result ↔
-      SigningTranscript.Valid result.1.1.1.2 ∧ ∃ omitted : FtsTree,
+      SigningTranscript.Valid result.1.1.1.2 ∧ ∃ omitted : IndexGroup,
         TargetCertificateAt key (Finset.univ.erase omitted)
           (hashRowsCache (result.1.1.2 * result.2.1.2).messageCalls, result.1.1.1.2)
           (signingInput key result.1.1.1.1.message result.1.1.1.1.signature) := Iff.rfl

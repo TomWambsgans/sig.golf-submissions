@@ -7,20 +7,22 @@ namespace SigGolfCandidate.Verify
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 
-/-- Start of the precode of layer `lay` in stream `t`: after the roots hash (layer 6) or after the
-last fold hash of layer `lay + 1`. -/
-def rootsStart (t : Nat) : Nat := lvlPc 1 t 60 9 + 7
+/-- The number of copies of the precode of layer `lay` (layer 4: one per PORS root tail). -/
+def nCopy (lay : Nat) : Nat := if lay = 4 then 3 else 2
+
+/-- Start of copy `t` of the precode of layer `lay`: after the PORS root tail's layer constants
+(layer 4) or after the last fold hash of layer `lay + 1` in stream `t`. -/
 def preStart (lay t : Nat) : Nat :=
-  if lay = 4 then rootsStart t + 6 else lvlPc (5 - lay) t 0 (heightL (lay + 1) - 1) + 7
-def stepsA (lay : Nat) : Nat := if lay = 4 then 28 else if lay = 0 then 15 else 14
+  if lay = 4 then (layerPcTab.getD 4 []).getD t 0 else lvlPc (3 - lay) t 0 (heightL (lay + 1) - 1) + 7
+def stepsA (lay : Nat) : Nat := if lay = 0 then 15 else 14
 def encPc (lay t : Nat) : Nat := preStart lay t + stepsA lay
 
 /-- Known registers at the precode start. -/
-def a6K : List (Reg × Word) := gkF ++ [(.x10, 544), (.x11, 256), (.x12, 0x120)]
+def l4K : List (Reg × Word) := gkL ++ [(.x11, 64), (.x12, 0x120), (.x27, 0x40101)]
 def aK (lay : Nat) : List (Reg × Word) :=
   gkL ++ [(.x10, 0x1C0), (.x11, 64), (.x12, 0x120),
     (.x27, BitVec.ofNat 64 (hWord (lay + 1))), (.x15, BitVec.ofNat 64 (bVal (lay + 1) 41))]
-def preK (lay : Nat) : List (Reg × Word) := if lay = 4 then a6K else aK lay
+def preK (lay : Nat) : List (Reg × Word) := if lay = 4 then l4K else aK lay
 
 /-- Known registers after the encoding hash call. -/
 def bK (lay : Nat) : List (Reg × Word) :=
@@ -35,7 +37,7 @@ def x31Er (lay : Nat) : E := .bin .add (tauEr lay) (.bin .sll (uEr lay) (cw 32))
 /-- `U = e | 2^h` (heap sentinel): `ori` (h < 11) or two `addi 1024` (h = 11). -/
 def uHE (lay : Nat) : E :=
   if lay = 0 then .bin .add (uEr lay) (cw 2048) else .bin .or (uEr lay) (cw (2 ^ heightL lay))
-def ctrE (lay : Nat) : E := .un (.ld .wu (4 * (lay % 2))) (ldE (0x20F0 + 8 * (lay / 2)))
+def ctrE (lay : Nat) : E := .un (.ld .wu (4 * (lay % 2))) (ldE (0x20B8 + 8 * (lay / 2)))
 
 def specA (lay t : Nat) : Spec :=
   ⟨[(.x23, uHE lay), (.x30, tauEr lay), (.x31, x31Er lay)],
@@ -69,7 +71,7 @@ def rE0 (lay : Nat) : E := mkBin .add (maskD 0 d0E) (cw (bVal lay 0))
 
 def stepsB (lay : Nat) : Nat := if lay = 4 then 39 else 36
 
-/-- Chain setup: `sw H, CB; sd X31, CB+8` (layer 4 also zeroes CB+32..48, left by FORS), then
+/-- Chain setup: `sw H, CB; sd X31, CB+8` (layer 4 also zeroes CB+32..48, left by the last PORS leaf), then
 chain 0's head writes byte 5 (`i = 0`). -/
 def setupMem (lay : Nat) : List (Addr × E) :=
   [(⟨none, BitVec.ofNat 64 192⟩, .bin (.st .b 5) (stW0 192 (cw (hWord lay))) (cw 0))] ++
@@ -86,8 +88,8 @@ def specBok (lay t : Nat) : Spec :=
 
 def rejK : List (Reg × E) := [(.x5, cw 1), (.x10, cw 1)]
 
-def specRej1 : Spec := ⟨rejK, [], 33, true, 7, [⟨.lt, orE, .c 0, true⟩], none⟩
-def specRej2 : Spec := ⟨rejK, [], 33, true, 27, [⟨.ne, swS, .c KT, true⟩, ⟨.lt, orE, .c 0, false⟩], none⟩
+def specRej1 : Spec := ⟨rejK, [], 32, true, 7, [⟨.lt, orE, .c 0, true⟩], none⟩
+def specRej2 : Spec := ⟨rejK, [], 32, true, 27, [⟨.ne, swS, .c KT, true⟩, ⟨.lt, orE, .c 0, false⟩], none⟩
 
 /-! ## Leaf -/
 
@@ -95,7 +97,7 @@ def specLeaf (lay : Nat) (d : Bool) : Spec :=
   ⟨[(.x10, cw 832), (.x11, cw 704), (.x12, cw (480 + 16 * (if d then 1 else 0)))],
    [(⟨none, BitVec.ofNat 64 456⟩, stW0 456 (.reg .x30)), (⟨none, BitVec.ofNat 64 448⟩, cw (hWord lay + 512)),
     (⟨none, BitVec.ofNat 64 840⟩, .reg .x31), (⟨none, BitVec.ofNat 64 832⟩, cw (hWord lay + 256))],
-   xPc (6 - lay) (if d then 1 else 0) 0 + 1, true, 11,
+   xPc (4 - lay) (if d then 1 else 0) 0 + 1, true, 11,
    [⟨.lt, .bin .sll (.reg .x23) (cw 63), .c 0, d⟩], none⟩
 
 def leafKeep : List Reg := [.x16, .x17, .x22, .x23, .x30, .x31]
@@ -118,7 +120,7 @@ def specCR2 (t : Nat) : Spec :=
 /-! ## The per-layer check -/
 
 def layerCheck (lay : Nat) : Bool :=
-  ((List.range 2).all fun t =>
+  ((List.range (nCopy lay)).all fun t =>
     specB gkL (runAt (preK lay) [] (preStart lay t) []) (specA lay t) (bK lay) [] &&
     specB gkL (runAt (bK lay) [] (encPc lay t + 1) [.br false, .br false, .jmp]) (specBok lay t)
       (chKa lay) [.x22, .x23, .x30, .x31] &&

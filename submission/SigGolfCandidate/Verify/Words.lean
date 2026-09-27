@@ -171,11 +171,11 @@ theorem pad64_chainInput (lay tau e i mu : Nat) (v : Val) (hv : v.length = 16) :
     show 8 * 0 + 4 = 2 + 2 by rfl, wordsOfN_val_append v hv]
   rfl
 
-theorem pad64_ftsLeafInput (k idx j : Nat) (v : Val) (hv : v.length = 16) :
-    pad64 (ftsLeafInput k idx j v) = queryOfWords 0
-      [BitVec.ofNat 64 (twLo 9 k idx 0), BitVec.ofNat 64 (twHi idx j), 0, 0,
+theorem pad64_porsLeafInput (idx j : Nat) (v : Val) (hv : v.length = 16) :
+    pad64 (porsLeafInput idx j v) = queryOfWords 0
+      [BitVec.ofNat 64 (twLo 9 0 idx 0), BitVec.ofNat 64 (twHi idx j), 0, 0,
         vw0 v, vw1 v, 0, 0] := by
-  unfold ftsLeafInput
+  unfold porsLeafInput
   rw [pad64_thInput _ _ (by simp) 0 (by omega) (by omega), wordsOfN_tweak, hv,
     show 8 * 0 + 4 = 2 + 2 by rfl, wordsOfN_val_append v hv]
   rfl
@@ -192,12 +192,12 @@ theorem pad64_nodeInput (lay tau lam j : Nat) (l r : Val) (hl : l.length = 16)
     wordsOfN_val_append r hr]
   rfl
 
-theorem pad64_ftsNodeInput (k idx lam j : Nat) (l r : Val) (hl : l.length = 16)
+theorem pad64_porsNodeInput (idx H : Nat) (l r : Val) (hl : l.length = 16)
     (hr : r.length = 16) :
-    pad64 (ftsNodeInput k idx lam j l r) = queryOfWords 0
-      [BitVec.ofNat 64 (twLo 10 k idx lam), BitVec.ofNat 64 (twHi idx j), 0, 0,
+    pad64 (porsNodeInput idx H l r) = queryOfWords 0
+      [BitVec.ofNat 64 (twLo 10 0 idx 0), BitVec.ofNat 64 (twHi idx H), 0, 0,
         vw0 l, vw1 l, vw0 r, vw1 r] := by
-  unfold ftsNodeInput
+  unfold porsNodeInput
   rw [pad64_thInput _ _ (by simp) 0 (by simp [hl, hr]) (by simp [hl, hr]), wordsOfN_tweak]
   simp only [List.length_append, hl, hr]
   rw [show 8 * 0 + 4 = 2 + (2 + 0) by rfl, List.append_assoc l r, wordsOfN_val_append l hl,
@@ -238,24 +238,6 @@ theorem pad64_leafInput (lay tau e : Nat) (ends : List Val) (hl : ends.length = 
   unfold leafInput
   rw [pad64_thInput _ _ (by simp) 10 (by omega) (by omega), wordsOfN_tweak, hflat,
     show 8 * 10 + 4 = 2 * ends.length + 0 by omega, wordsOfN_flatten_append ends hv]
-  simp [wordsOfN]
-
-theorem pad64_rootsInput (idx : Nat) (roots : List Val) (hl : roots.length = 14)
-    (hv : ∀ v ∈ roots, v.length = 16) :
-    pad64 (rootsInput idx roots) = queryOfWords 3
-      ([BitVec.ofNat 64 (twLo 11 0 idx 0), BitVec.ofNat 64 (twHi idx 0), 0, 0] ++
-        (roots.map fun v => [vw0 v, vw1 v]).flatten) := by
-  have hflat : roots.flatten.length = 224 := by
-    rw [List.length_flatten]
-    have : roots.map List.length = List.replicate 14 16 := by
-      apply List.ext_getElem (by simp [hl])
-      intro i h1 h2
-      simp only [List.getElem_map, List.getElem_replicate]
-      exact hv _ (List.getElem_mem _)
-    rw [this]; decide
-  unfold rootsInput
-  rw [pad64_thInput _ _ (by simp) 3 (by omega) (by omega), wordsOfN_tweak, hflat,
-    show 8 * 3 + 4 = 2 * roots.length + 0 by omega, wordsOfN_flatten_append roots hv]
   simp [wordsOfN]
 
 theorem pad64_digestInput (rho m : List Byte) (hr : rho.length = 16) (hm : m.length = 32) :

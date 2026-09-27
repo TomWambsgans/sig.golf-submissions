@@ -66,7 +66,7 @@ theorem lowerTreesCost_eq : lowerTreesCost = 66300 := by
   simp only [lowerTreesCost, lowerTreesFrom, numLayers, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
-theorem signCharge_eq : signCharge = 94959 := by
+theorem signCharge_eq : signCharge = 99067 := by
   rw [signCharge, lowerTreesCost_eq, ftsOpenHashCost_def]
   decide
 

@@ -212,28 +212,33 @@ theorem boundaryEval_signLayers (key : SecretKey) (f : QueryImpl HashSpec Id) (i
               (fun level nodeIdx => pure (key.top level nodeIdx)) remaining root) <;>
             simp only [boundaryEval_pure, mul_one, pow_add, mul_assoc]
 
-/-- **The table signer's cost after the digest loop**: the forest and the layers it walks. -/
+/-- **The table signer's cost after the digest loop**: the PORS tree and the layers it walks. -/
 theorem boundaryEval_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id)
     (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
     (boundaryEval key.parameter f (signAfterDigest key randomness index leaves)).2 =
       (FreeMonoid.of none) ^ (ftsOpenHashCost + sequenceLayersHashCost (specLayerCost key f index)) := by
-  have hforest := eval_buildForest f key.parameter index
-    (fun tree leaf => pure (key.ftsSecret index tree leaf)) leaves
-  rw [signAfterDigest_eq_signFrom, signFrom, boundaryEval_bind, boundaryEval_buildForest_pure]
+  have hforest := eval_buildFtsTree_open f key.parameter index
+    (fun leaf => pure (key.ftsSecret index porsTree leaf)) leaves
+  rw [signAfterDigest_eq_signFrom, signFrom, boundaryEval_bind, boundaryEval_buildFtsTree_pure]
   revert hforest
-  generalize evalWithAnswerFn f (buildForest key.parameter index
-    (fun tree leaf => pure (key.ftsSecret index tree leaf)) leaves) = forest
-  rcases forest with ⟨secrets, ftsPath, ftsPublicKey⟩
-  rintro ⟨_, _, hkey⟩
-  simp only [evalWithAnswerFn_pure] at hkey
-  rw [boundaryEval_bind, boundaryEval_signLayers key f index numLayers le_rfl ftsPublicKey (by
+  generalize evalWithAnswerFn f (buildFtsTree key.parameter index
+    (fun leaf => pure (key.ftsSecret index porsTree leaf))) = built
+  rcases built with ⟨secrets, table⟩
+  rintro ⟨_, hkey⟩
+  have htable : (fun (_ : FtsTree) leaf => evalWithAnswerFn f
+      (pure (key.ftsSecret index porsTree leaf) : OracleComp HashSpec Digest)) = key.ftsSecret index := by
+    funext tree leaf
+    rw [Subsingleton.elim tree porsTree]
+    rfl
+  simp only [htable] at hkey
+  rw [boundaryEval_bind, boundaryEval_signLayers key f index numLayers le_rfl (table ftsTreeHeight 0) (by
     intro _
     rw [hkey]
     change _ = evalWithAnswerFn f (layerMessage key index bottomLayer)
     rw [layerMessage_bottomLayer_eq])]
   cases evalWithAnswerFn f (signLayers key.parameter index
       (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx))
-      (fun level nodeIdx => pure (key.top level nodeIdx)) numLayers ftsPublicKey) <;>
+      (fun level nodeIdx => pure (key.top level nodeIdx)) numLayers (table ftsTreeHeight 0)) <;>
     simp only [boundaryEval_pure, mul_one, pow_add, sequenceLayersHashCost]
 
 /-- **The table signer after the digest loop**, for a key whose table is the specification's top tree:

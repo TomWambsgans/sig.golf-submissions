@@ -1,6 +1,16 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Reference.VerifierTraceDescent
 import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.TreeFoldBound
 import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.GraphPayloadInputs
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.ExtractFts
+/-!
+# The few-time part of an accepted forgery, on the verifier's trace
+
+`ftsRecover_extract` (Fts/ExtractFts) in the vocabulary of the structural-match bound: an accepting run of the
+stack machine reaching the honest PORS root makes the digest's leaves admissible, and either the signature's
+PORS part is the honest opening and the verifier queried the true secret of every opened leaf
+(`TrueSecretQuery`, one per digest slot), or some query on the trace is a structural match at a PORS position
+of the instance (`Exception`).
+-/
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec OtsContactTrace
@@ -18,93 +28,54 @@ namespace FtsVerifierWitness
 
 variable (f : QueryImpl HashSpec Id) (key : SecretKey) (index : Index)
 
+/-- The PORS positions of an instance: its leaves and its nodes. -/
 def AtIndex : Position → Prop
-  | .ftsLeaf actual _ _ | .ftsNode actual _ _ _ | .ftsRoots actual => actual = index
+  | .ftsLeaf actual _ _ | .ftsNode actual _ _ => actual = index
   | _ => False
 
+/-- A structural match at a PORS position of the instance. -/
 def Exception (trace : Trace) : Prop := ∃ position, AtIndex index position ∧ QueriedOutputMatch f key position trace
 
-def Opening (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest) : Prop :=
-  ∀ tree, secrets tree = key.ftsSecret index tree (leaves (ftsIndexOf tree)) ∧
-    ∀ level (hlevel : level < ftsTreeHeight), paths tree ⟨level, hlevel⟩ =
-      honestFtsNode f key.parameter index tree (key.ftsSecret index tree) level (Nat.xor ((leaves (ftsIndexOf tree)).val / 2 ^ level) 1)
-
-def TrueSecretQuery (tree : FtsTree) (leaf : FtsLeaf) (trace : Trace) : Prop :=
-  let input := tweakableHashInput key.parameter (.ftsLeaf index tree leaf) (digestBytes (key.ftsSecret index tree leaf))
+/-- The verifier hashed the true secret of `leaf` (one opened leaf, i.e. one digest slot). -/
+def TrueSecretQuery (leaf : FtsLeaf) (trace : Trace) : Prop :=
+  let input := tweakableHashInput key.parameter (.ftsLeaf index porsTree leaf.val)
+    (digestBytes (key.ftsSecret index porsTree leaf))
   (input, f input) ∈ trace.toList
 
-theorem tree_reference (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (trace : Trace) (hclean : ¬Exception f key index trace) (tree : FtsTree)
-    (hfold : ftsFoldValue f key.parameter index tree (leaves (ftsIndexOf tree)) (paths tree)
-      (truncateHash (f (tweakableHashInput key.parameter (.ftsLeaf index tree (leaves (ftsIndexOf tree))) (digestBytes (secrets tree))))) ftsTreeHeight =
-        honestFtsNode f key.parameter index tree (key.ftsSecret index tree) ftsTreeHeight 0)
-    (hrun : ContainsRun f trace (ftsRecover key.parameter index leaves secrets paths)) :
-    secrets tree = key.ftsSecret index tree (leaves (ftsIndexOf tree)) ∧
-      ∀ level (hlevel : level < ftsTreeHeight), paths tree ⟨level, hlevel⟩ =
-        honestFtsNode f key.parameter index tree (key.ftsSecret index tree) level (Nat.xor ((leaves (ftsIndexOf tree)).val / 2 ^ level) 1) := by
-  let leaf := leaves (ftsIndexOf tree)
-  let value := truncateHash (f (tweakableHashInput key.parameter (.ftsLeaf index tree leaf) (digestBytes (secrets tree))))
-  have hroot : leaf.val / 2 ^ ftsTreeHeight = 0 := Nat.div_eq_of_lt leaf.isLt
-  rcases ftsFold_extract f key.parameter index tree (key.ftsSecret index tree) leaf (paths tree) value ftsTreeHeight (le_refl _)
-      (by simpa only [leaf, value, hroot] using hfold) with ⟨hv, hp⟩ | ⟨level, hl, hh⟩
-  · rcases ftsLeaf_extract f key.parameter index tree (key.ftsSecret index tree) leaf (secrets tree) hv with hs | hh
-    · refine ⟨hs, ?_⟩
-      intro level hl
-      simpa only [ftsSibling, dif_pos hl, leaf] using hp level hl
-    · apply False.elim
-      apply hclean
-      refine ⟨.ftsLeaf index tree leaf, rfl, trivial, digestBytes (secrets tree), digestBytes_mem_canonicalPayloadInputs _,
-        hrun _ (ftsRecover_leaf_query_mem f key.parameter index leaves secrets paths tree), ?_, ?_⟩
-      · exact fun he => hh.1 (digestBytes_injective he)
-      · simpa only [Position.domain, honestValue_ftsLeaf] using hh.2
-  · have hn : leaf.val / 2 ^ (level + 1) < 2 ^ ftsTreeHeight := (Nat.div_le_self _ _).trans_lt leaf.isLt
-    apply False.elim
-    apply hclean
-    refine ⟨.ftsNode index tree ⟨level, hl⟩ ⟨_, hn⟩, rfl,
-      fold_node_bound ftsTreeHeight level leaf.val hl leaf.isLt, ftsFoldPayload f key.parameter index tree leaf (paths tree) value level,
-      orderedPayload_mem_canonicalPayloadInputs _ _ _,
-      hrun _ (ftsRecover_fold_query_mem f key.parameter index leaves secrets paths tree level hl), hh.1, ?_⟩
-    simpa only [Position.domain, honestValue_ftsNode] using hh.2
+/-- A hit of the stack machine is a structural match at a PORS position. -/
+theorem hit_exception (trace : Trace) (input : HashInput) (hinput : (input, f input) ∈ trace.toList)
+    (hhit : PorsMachine.Hit f key.parameter index (key.ftsSecret index porsTree) input) :
+    Exception f key index trace := by
+  rcases hhit with ⟨heap, left, right, hpos, hlt, rfl, hne, hvalue⟩ | ⟨leaf, candidate, rfl, hne, hvalue⟩
+  · refine ⟨.ftsNode index porsTree ⟨heap, hlt⟩, rfl, hpos, nodePayload left right,
+      nodePayload_mem_canonicalPayloadInputs _ _, hinput, hne, ?_⟩
+    rw [honestValue_ftsNode f key.parameter key.otsSecret key.ftsSecret index porsTree ⟨heap, hlt⟩ hpos]
+    exact hvalue
+  · refine ⟨.ftsLeaf index porsTree leaf, rfl, trivial, digestBytes candidate,
+      digestBytes_mem_canonicalPayloadInputs _, hinput, fun h => hne (digestBytes_injective h), ?_⟩
+    rw [honestValue_ftsLeaf, ← honestFtsHeap_leaf]
+    exact hvalue
 
-theorem recover_reference (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (trace : Trace) (hclean : ¬Exception f key index trace)
-    (hrecover : evalWithAnswerFn f (ftsRecover key.parameter index leaves secrets paths) = honestFtsKey f key.parameter index (key.ftsSecret index))
-    (hrun : ContainsRun f trace (ftsRecover key.parameter index leaves secrets paths)) : Opening f key index leaves secrets paths := by
-  let roots : FtsTree → Digest := fun tree => evalWithAnswerFn f
-    (ftsFold key.parameter index tree (leaves (ftsIndexOf tree)) (paths tree) ftsTreeHeight
-      (evalWithAnswerFn f (ftsLeafHash key.parameter index tree (leaves (ftsIndexOf tree)) (secrets tree))))
-  by_cases hp : ftsRootsPayload roots = honestPayload f key.parameter key.otsSecret key.ftsSecret (.ftsRoots index)
-  · have hr : roots = fun tree => honestFtsNode f key.parameter index tree (key.ftsSecret index tree) ftsTreeHeight 0 := by
-      apply ftsRootsPayload_injective
-      exact hp
-    intro tree
-    apply tree_reference f key index leaves secrets paths trace hclean tree _ hrun
-    simpa only [roots, evalWithAnswerFn_bind, ftsLeafHash, eval_tweakableHash, ftsFoldValue] using congrFun hr tree
-  · apply False.elim
-    apply hclean
-    refine ⟨.ftsRoots index, rfl, trivial, ftsRootsPayload roots, ftsRootsPayload_mem_canonicalPayloadInputs _, ?_, hp, ?_⟩
-    · exact hrun _ (ftsRecover_roots_query_mem f key.parameter index leaves secrets paths)
-    · rw [honestValue_ftsRoots]
-      simp only [ftsRecover, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin, eval_tweakableHash] at hrecover
-      change truncateHash (f (tweakableHashInput key.parameter (.ftsRoots index) (ftsRootsPayload roots))) = _
-      simpa only [roots, evalWithAnswerFn_bind] using hrecover
+/-- **The classification of an accepted PORS opening.** -/
+theorem recover_classification (leaves : IndexGroup → FtsLeaf) (fts : FtsSignature) (trace : Trace)
+    (hrecover : evalWithAnswerFn f (ftsRecover key.parameter index (slotValue leaves) fts)
+      = some (honestFtsKey f key.parameter index (key.ftsSecret index)))
+    (hrun : ContainsRun f trace (ftsRecover key.parameter index (slotValue leaves) fts)) :
+    AdmissibleLeaves leaves ∧
+      ((fts = evalWithAnswerFn f (ftsOpen key.parameter index leaves (key.ftsSecret index)) ∧
+          ∀ slot, TrueSecretQuery f key index (leaves slot) trace) ∨
+        Exception f key index trace) := by
+  obtain ⟨hadmissible, hcase⟩ := ftsRecover_extract f key.parameter index leaves (key.ftsSecret index) fts hrecover
+  refine ⟨hadmissible, ?_⟩
+  rcases hcase with ⟨hopen, hqueries⟩ | ⟨input, hinput, hhit⟩
+  · exact Or.inl ⟨hopen, fun slot => hrun _ (hqueries slot)⟩
+  · exact Or.inr (hit_exception f key index trace input (hrun _ hinput) hhit)
 
-theorem opening_trueSecretQuery (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (trace : Trace) (hopening : Opening f key index leaves secrets paths)
-    (hrun : ContainsRun f trace (ftsRecover key.parameter index leaves secrets paths)) (tree : FtsTree) :
-    TrueSecretQuery f key index tree (leaves (ftsIndexOf tree)) trace := by
-  apply hrun
-  simpa only [(hopening tree).1] using ftsRecover_leaf_query_mem f key.parameter index leaves secrets paths tree
-
-theorem recover_classification (leaves : IndexGroup → FtsLeaf) (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (trace : Trace)
-    (hrecover : evalWithAnswerFn f (ftsRecover key.parameter index leaves secrets paths) = honestFtsKey f key.parameter index (key.ftsSecret index))
-    (hrun : ContainsRun f trace (ftsRecover key.parameter index leaves secrets paths)) :
-    (Opening f key index leaves secrets paths ∧ ∀ tree, TrueSecretQuery f key index tree (leaves (ftsIndexOf tree)) trace) ∨ Exception f key index trace := by
-  by_cases he : Exception f key index trace
-  · exact Or.inr he
-  · have ho := recover_reference f key index leaves secrets paths trace he hrecover hrun
-    exact Or.inl ⟨ho, opening_trueSecretQuery f key index leaves secrets paths trace ho hrun⟩
+/-- Distinct digest slots of admissible leaves open distinct leaves (for the two-guesses outcome: two
+uncovered slots are two distinct secret-guess coordinates). -/
+theorem slot_leaf_ne {leaves : IndexGroup → FtsLeaf} (hadmissible : AdmissibleLeaves leaves)
+    {first second : IndexGroup} (hne : first ≠ second) : leaves first ≠ leaves second :=
+  fun h => hne (hadmissible.1 h)
 
 end FtsVerifierWitness
 

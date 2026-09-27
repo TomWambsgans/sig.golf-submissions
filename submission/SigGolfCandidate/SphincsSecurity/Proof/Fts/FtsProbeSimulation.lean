@@ -18,7 +18,7 @@ abbrev Coordinate := Index × FtsTree × FtsLeaf
 
 noncomputable local instance instNonemptyCoordinate : Nonempty Coordinate :=
   ⟨(⟨0, by norm_num [totalHeight]⟩,
-    ⟨0, by norm_num [ftsTrees]⟩,
+    ⟨0, by decide⟩,
     ⟨0, by norm_num [ftsTreeHeight]⟩)⟩
 
 noncomputable def decodeProbe? (parameter : PublicParameter) (input : HashInput) :

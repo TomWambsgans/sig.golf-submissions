@@ -70,16 +70,28 @@ private theorem layer_le : numLayers ≤ 2 ^ 8 := by decide
 private theorem tree_le : 2 ^ totalHeight ≤ 2 ^ 40 := Nat.pow_le_pow_right (by omega) (by decide)
 private theorem index_le : 2 ^ totalHeight ≤ 2 ^ 40 := tree_le
 private theorem leaf_le : 2 ^ maxLayerHeight ≤ 2 ^ 32 := Nat.pow_le_pow_right (by omega) (by decide)
-private theorem ftsTree_le : ftsTrees - 1 ≤ 2 ^ 8 := by decide
-private theorem ftsLeaf_le : 2 ^ ftsTreeHeight ≤ 2 ^ 32 := Nat.pow_le_pow_right (by omega) (by decide)
 
 /-- Every field a tweak carries is below the width that encodes it. The `Fin`-valued ones are by
-construction; the two tree recursions take their level and node as naturals, so those are the only
-positions that need saying, and honest use keeps them far below `2^32`. -/
+construction; the hypertree's tree recursion takes its level and node as naturals, and the PORS leaf and
+node domains are keyed by a natural leaf index and heap index (the verifier also hashes the sentinel
+leaf `2^14` and the heap index `0`), so those are the only positions that need saying, and every use keeps
+them far below `2^32`. -/
 def HashDomain.InRange : HashDomain → Prop
   | .node _ _ level nodeIdx => level < 2 ^ 32 ∧ nodeIdx < 2 ^ 32
-  | .ftsNode _ _ level nodeIdx => level < 2 ^ 32 ∧ nodeIdx < 2 ^ 32
+  | .ftsLeaf _ _ leafIdx => leafIdx < 2 ^ 32
+  | .ftsNode _ _ heapIdx => heapIdx < 2 ^ 32
   | _ => True
+
+/-- A PORS leaf of the tree is in range. -/
+theorem HashDomain.ftsLeaf_inRange (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
+    (HashDomain.ftsLeaf index tree leaf.val).InRange :=
+  Nat.lt_of_lt_of_le leaf.isLt (Nat.pow_le_pow_right (by omega) (by decide))
+
+/-- A PORS heap index below `2^15` (every node of the tree, and every heap index the verifier hashes) is
+in range. -/
+theorem HashDomain.ftsNode_inRange (index : Index) (tree : FtsTree) {heap : Nat}
+    (hheap : heap < 2 ^ (ftsTreeHeight + 1)) : (HashDomain.ftsNode index tree heap).InRange :=
+  Nat.lt_of_lt_of_le hheap (Nat.pow_le_pow_right (by omega) (by decide))
 
 theorem fin_of_ofNat_eq {w n : Nat} {a b : Fin n} (hn : n ≤ 2 ^ w)
     (h : BitVec.ofNat w a.val = BitVec.ofNat w b.val) : a = b :=
@@ -105,12 +117,10 @@ theorem tweakBytes_injective {d1 d2 : HashDomain} (h1 : d1.InRange) (h2 : d2.InR
       ofNat_inj_of_lt h1.1 h2.1 h.2.2.1, ofNat_inj_of_lt h1.2 h2.2 h.2.2.2⟩
   case encoding.encoding => exact ⟨fin_of_ofNat_eq layer_le h.1, fin_of_ofNat_eq tree_le h.2.1,
       fin_of_ofNat_eq leaf_le h.2.2⟩
-  case ftsLeaf.ftsLeaf => exact ⟨fin_of_ofNat_eq index_le h.2.1, fin_of_ofNat_eq ftsTree_le h.1,
-      fin_of_ofNat_eq ftsLeaf_le h.2.2⟩
-  case ftsNode.ftsNode =>
-    exact ⟨fin_of_ofNat_eq index_le h.2.1, fin_of_ofNat_eq ftsTree_le h.1,
-      ofNat_inj_of_lt h1.1 h2.1 h.2.2.1, ofNat_inj_of_lt h1.2 h2.2 h.2.2.2⟩
-  case ftsRoots.ftsRoots => exact fin_of_ofNat_eq index_le h
+  case ftsLeaf.ftsLeaf index1 tree1 leaf1 index2 tree2 leaf2 =>
+    exact ⟨fin_of_ofNat_eq index_le h.1, Subsingleton.elim _ _, ofNat_inj_of_lt h1 h2 h.2⟩
+  case ftsNode.ftsNode index1 tree1 heap1 index2 tree2 heap2 =>
+    exact ⟨fin_of_ofNat_eq index_le h.1, Subsingleton.elim _ _, ofNat_inj_of_lt h1 h2 h.2⟩
 
 theorem tweakBytes_length (domain : HashDomain) : (tweakBytes domain).length = 16 := by
   simp [tweakBytes, fieldBytes, bytesLE_length]
@@ -141,8 +151,7 @@ theorem tweakableHashInput_ne_message (parameter : PublicParameter) (domain : Ha
 
 /-! ### Payloads
 
-A node's payload is its two children, a leaf's is its `v` chain endpoints, and a few-time key's is
-its `k-1` roots. Each is injective, which is what lets the extraction argument descend: if an
+A node's payload is its two children and a leaf's is its `v` chain endpoints. Each is injective, which is what lets the extraction argument descend: if an
 adversary's payload hashes to an honest value, either it *is* the honest payload, and then its parts
 are the honest parts, or the hash was hit. -/
 
@@ -182,12 +191,6 @@ theorem flatMap_ofFn_injective {α β : Type} (g : α → List β) (len : Nat)
 theorem leafPayload_injective {endpoints endpoints' : ChainIndex → Digest}
     (h : Concrete.leafPayload endpoints = Concrete.leafPayload endpoints') :
     endpoints = endpoints' :=
-  flatMap_ofFn_injective Concrete.digestBytes 16 digestBytes_length
-    (fun _ _ => digestBytes_injective) h
-
-/-- A few-time public key's payload is its `k - 1` roots. -/
-theorem ftsRootsPayload_injective {roots roots' : FtsTree → Digest}
-    (h : Concrete.ftsRootsPayload roots = Concrete.ftsRootsPayload roots') : roots = roots' :=
   flatMap_ofFn_injective Concrete.digestBytes 16 digestBytes_length
     (fun _ _ => digestBytes_injective) h
 

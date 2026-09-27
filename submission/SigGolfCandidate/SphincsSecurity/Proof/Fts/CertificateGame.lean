@@ -60,7 +60,7 @@ theorem keygen_cache_message_none (generated : (PublicKey × SecretKey) × Query
 
 abbrev CertificateGameResult := RetainedRestResult × (List Index × CertificateMonitorState)
 
-noncomputable def certificateGame (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+noncomputable def certificateGame (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) : PMF CertificateGameResult := do
   let generated ← (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)
   let key := generated.1.1.2
@@ -68,7 +68,7 @@ noncomputable def certificateGame (adversary : Adversary) (budget : Nat) (requir
     (retainedGameRestComputation adversary generated.1.1.1)).run
       ([], generated.2, initialCertificateMonitor generated.1.2.hashCalls stopped)
 
-theorem certificateGame_cost_le (adversary : Adversary) (q : Nat) (required : Finset FtsTree)
+theorem certificateGame_cost_le (adversary : Adversary) (q : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
     (hbound : HasHashQueryBound scheme adversary q) (result : CertificateGameResult)
     (hr : result ∈ (certificateGame adversary q required stopAfter stopped).support) :
@@ -89,7 +89,7 @@ theorem certificateGame_cost_le (adversary : Adversary) (q : Nat) (required : Fi
   exact ⟨by omega, hcost.2.trans (Nat.cast_le.mpr (Nat.sub_le _ _))⟩
 
 theorem expected_certificateGame_creationMass_le_messageCalls (adversary : Adversary)
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     (∑' result, Pr[= result | certificateGame adversary budget required stopAfter stopped] * result.2.2.2.creationMass) ≤
       ∑' result, Pr[= result | certificateGame adversary budget required stopAfter stopped] * result.2.2.2.messageCalls := by
   rw [certificateGame, tsum_probOutput_bind_mul, tsum_probOutput_bind_mul]
@@ -100,7 +100,7 @@ theorem expected_certificateGame_creationMass_le_messageCalls (adversary : Adver
     (retainedGameRestComputation adversary generated.1.1.1) generated.2 stopped)
 
 theorem expected_certificateGame_count_le_creationCost (adversary : Adversary)
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     (∑' result, Pr[= result | certificateGame adversary budget required stopAfter stopped] *
         certificateBankCount result.2.2.2.bank) ≤
       ∑' result, Pr[= result | certificateGame adversary budget required stopAfter stopped] * result.2.2.2.creationCost := by

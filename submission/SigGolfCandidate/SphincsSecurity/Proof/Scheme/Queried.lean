@@ -1,7 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Eval
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.ExtractChain
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.ExtractFts
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.HonestFts
 import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Support
 /-!
 # Queries made by verification
@@ -97,7 +97,7 @@ theorem otsLeaf_chain_query_mem (lay : Layer) (tree : TreeIndex) (leafIdx : Leaf
   exact chainWalk_query_mem f parameter lay tree leafIdx chainIdx (codeword chainIdx).val
     (chainLength - 1 - (codeword chainIdx).val) (values chainIdx) offset hoffset hrange
 
-theorem ftsLeafHash_query_mem (index : Index) (tree : FtsTree) (leafIdx : FtsLeaf)
+theorem ftsLeafHash_query_mem (index : Index) (tree : FtsTree) (leafIdx : Nat)
     (secret : Digest) :
     tweakableHashInput parameter (.ftsLeaf index tree leafIdx) (digestBytes secret)
       ∈ queriedInputs f (ftsLeafHash parameter index tree leafIdx secret) := by
@@ -107,7 +107,7 @@ theorem treeFold_query_mem (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex
     (path : Nat → Digest) (value : Digest) (levels offset : Nat) (hoffset : offset < levels) :
     tweakableHashInput parameter
         (.node lay tree (offset + 1) (leafIdx.val / 2 ^ (offset + 1)))
-        (foldPayload f parameter lay tree leafIdx path value offset)
+        (treeFoldPayload f parameter lay tree leafIdx path value offset)
       ∈ queriedInputs f (treeFold parameter lay tree leafIdx path levels value) := by
   induction levels generalizing offset with
   | zero => omega
@@ -117,71 +117,10 @@ theorem treeFold_query_mem (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex
       · exact List.mem_append_left _ (ih offset hlt)
       · subst offset
         apply List.mem_append_right _
-        simp only [foldValue, foldPayload]
+        simp only [foldValue, treeFoldPayload]
         cases leafIdx.val.testBit levels <;> simp
 
-theorem ftsFold_query_mem (index : Index) (tree : FtsTree) (leafIdx : FtsLeaf)
-    (path : Fin ftsTreeHeight → Digest) (value : Digest) (levels offset : Nat)
-    (hlevels : levels ≤ ftsTreeHeight) (hoffset : offset < levels) :
-    tweakableHashInput parameter
-        (.ftsNode index tree (offset + 1) (leafIdx.val / 2 ^ (offset + 1)))
-        (ftsFoldPayload f parameter index tree leafIdx path value offset)
-      ∈ queriedInputs f (ftsFold parameter index tree leafIdx path levels value) := by
-  induction levels generalizing offset with
-  | zero => omega
-  | succ levels ih =>
-      rw [ftsFold_succ_eq, queriedInputs_bind]
-      rcases Nat.lt_succ_iff_lt_or_eq.mp hoffset with hlt | heq
-      · exact List.mem_append_left _ (ih offset (by omega) hlt)
-      · subst offset
-        have hlevel : levels < ftsTreeHeight := by omega
-        apply List.mem_append_right _
-        simp only [ftsFoldValue, ftsFoldPayload, ftsSibling, dif_pos hlevel]
-        cases leafIdx.val.testBit levels <;> simp
-
-theorem ftsRecover_leaf_query_mem (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (tree : FtsTree) :
-    tweakableHashInput parameter (.ftsLeaf index tree (leaves (ftsIndexOf tree)))
-        (digestBytes (secrets tree))
-      ∈ queriedInputs f (ftsRecover parameter index leaves secrets paths) := by
-  simp only [ftsRecover]
-  apply queriedInputs_mono_bind_left
-  apply sequenceFin_component_query_mem f _ tree
-  apply queriedInputs_mono_bind_left
-  exact ftsLeafHash_query_mem f parameter index tree (leaves (ftsIndexOf tree)) (secrets tree)
-
-theorem ftsRecover_fold_query_mem (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (tree : FtsTree) (offset : Nat) (hoffset : offset < ftsTreeHeight) :
-    tweakableHashInput parameter
-        (.ftsNode index tree (offset + 1)
-          ((leaves (ftsIndexOf tree)).val / 2 ^ (offset + 1)))
-        (ftsFoldPayload f parameter index tree (leaves (ftsIndexOf tree)) (paths tree)
-          (truncateHash (f (tweakableHashInput parameter
-            (.ftsLeaf index tree (leaves (ftsIndexOf tree))) (digestBytes (secrets tree))))) offset)
-      ∈ queriedInputs f (ftsRecover parameter index leaves secrets paths) := by
-  simp only [ftsRecover]
-  apply queriedInputs_mono_bind_left
-  apply sequenceFin_component_query_mem f _ tree
-  apply queriedInputs_mono_bind_right
-  simpa only [ftsLeafHash, eval_tweakableHash] using
-    ftsFold_query_mem f parameter index tree (leaves (ftsIndexOf tree)) (paths tree)
-      (truncateHash (f (tweakableHashInput parameter
-        (.ftsLeaf index tree (leaves (ftsIndexOf tree))) (digestBytes (secrets tree)))))
-      ftsTreeHeight offset (le_refl _) hoffset
-
-theorem ftsRecover_roots_query_mem (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest) :
-    tweakableHashInput parameter (.ftsRoots index)
-        (ftsRootsPayload fun tree => evalWithAnswerFn f
-          (ftsFold parameter index tree (leaves (ftsIndexOf tree)) (paths tree) ftsTreeHeight
-            (evalWithAnswerFn f
-              (ftsLeafHash parameter index tree (leaves (ftsIndexOf tree)) (secrets tree)))))
-      ∈ queriedInputs f (ftsRecover parameter index leaves secrets paths) := by
-  simp only [ftsRecover]
-  apply queriedInputs_mono_bind_right
-  simp only [evalWithAnswerFn_sequenceFin, evalWithAnswerFn_bind, queriedInputs_tweakableHash,
-    List.mem_singleton]
+/-! The queries of the PORS stack machine (`ftsRecover`) are located in the extraction modules
+(`pors-extract`), next to the stack-machine extraction. -/
 
 end SphincsSecurity.Concrete

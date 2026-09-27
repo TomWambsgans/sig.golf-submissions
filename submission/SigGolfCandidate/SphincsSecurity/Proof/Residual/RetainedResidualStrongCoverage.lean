@@ -38,12 +38,12 @@ theorem SigningHistory.strong_covered {inputs : Finset HashInput} {context : Con
     (hnew : ¬ SigningTranscript.Contains memory.log forgery)
     (hfull : let digest := truncateMessageDigest (context.oracle (signingInput context.key forgery.message forgery.signature))
       FullyHonestOpening context.oracle memory.external.cache context.key (digestIndex digest) (digestLeaves digest) forgery.signature)
-    (hdisclosed : ∀ tree, memory.routing.disclosed (signingView context.key context.oracle forgery.message forgery.signature).1
-      tree ((signingView context.key context.oracle forgery.message forgery.signature).2 tree)) :
+    (hdisclosed : ∀ slot, memory.routing.disclosed (signingView context.key context.oracle forgery.message forgery.signature).1
+      porsTree ((signingView context.key context.oracle forgery.message forgery.signature).2 slot)) :
     CoveredFewTimeView (fixedSigningViews context.key.parameter memory.external.cache context.key.root memory.log
       (signingInput context.key forgery.message forgery.signature)) (signingView context.key context.oracle forgery.message forgery.signature) := by
   intro tree
-  obtain ⟨message, signature, hentry, hindex, hleaf⟩ := hhistory.disclosed _ tree _ (hdisclosed tree)
+  obtain ⟨message, signature, hentry, hindex, hleaf⟩ := hhistory.disclosed _ porsTree _ (hdisclosed tree)
   have hne := hhistory.signing_payload_ne hcompatible hdummy forgery hnew hfull message signature hentry
   have horigin := hhistory.entries message signature hentry
   obtain ⟨answer, hcache⟩ := Option.ne_none_iff_exists'.mp horigin.1
@@ -51,7 +51,7 @@ theorem SigningHistory.strong_covered {inputs : Finset HashInput} {context : Con
       some (context.oracle (signingInput context.key message signature)) :=
     hcache.trans (congrArg some (hcompatible.cached _ _ hcache))
   obtain ⟨slot, hslot⟩ := List.mem_iff_get.mp hentry
-  refine ⟨slot, signingView context.key context.oracle message signature, ?_, hindex.symm, hleaf.symm⟩
+  refine ⟨slot, signingView context.key context.oracle message signature, ?_, hindex.symm, hleaf⟩
   change eligibleSigningView? _ _ _ (memory.log.get slot) = _
   rw [hslot]
   simp only [eligibleSigningView?, signingInput,

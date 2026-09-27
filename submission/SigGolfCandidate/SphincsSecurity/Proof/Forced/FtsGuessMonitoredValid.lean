@@ -176,7 +176,7 @@ theorem cachedForcedRun_world_hash_support' (input : HashInput) (state : CachedS
 
 def Valid (state : MonitoredState) : Prop := ∀ coordinate, (state.1.2.allowed coordinate).Nonempty
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_forced (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState)
     (result : AdversaryStep input × MonitoredState)

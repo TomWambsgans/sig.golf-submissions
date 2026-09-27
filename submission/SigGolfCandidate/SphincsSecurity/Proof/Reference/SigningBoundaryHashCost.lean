@@ -72,10 +72,10 @@ theorem boundaryHashAtLeast_buildLevels (traceParameter : PublicParameter)
       · intro _
         exact boundaryHashAtLeast_zero _ _
 
-theorem boundaryHashAtLeast_buildFtsTree (traceParameter parameter : PublicParameter) (index : Index)
-    (tree : FtsTree) (secret : FtsLeaf → Digest) (leaf : FtsLeaf) :
+theorem boundaryHashAtLeast_buildFtsTree_levels (traceParameter parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → Digest) :
     BoundaryHashAtLeast traceParameter
-      (liftM (buildFtsTree parameter index tree (fun leaf => pure (secret leaf)) leaf :
+      (liftM (buildFtsTree parameter index (fun leaf => pure (secret leaf)) :
         OracleComp HashSpec _)) (2 ^ (ftsTreeHeight + 1) - 1) := by
   have hcost : 2 ^ (ftsTreeHeight + 1) - 1 = 2 ^ ftsTreeHeight + (levelsHashCost ftsTreeHeight ftsTreeHeight + 0) := by
     rw [levelsHashCost_self, pow_succ]
@@ -86,7 +86,7 @@ theorem boundaryHashAtLeast_buildFtsTree (traceParameter parameter : PublicParam
   · have h := boundaryHashAtLeast_lift_sequenceFin traceParameter
       (fun leafIdx : FtsLeaf => (do
         let value ← (pure (secret leafIdx) : OracleComp HashSpec Digest)
-        let hashed ← ftsLeafHash parameter index tree leafIdx value
+        let hashed ← ftsLeafHash parameter index porsTree leafIdx.val value
         return (value, hashed)))
       (fun _ => 1) (fun leafIdx => by
         rw [pure_bind, liftM_bind, ← Nat.add_zero 1]
@@ -101,21 +101,14 @@ theorem boundaryHashAtLeast_buildFtsTree (traceParameter parameter : PublicParam
     intro _
     exact boundaryHashAtLeast_zero _ _
 
-/-- **Every signature the signer completes builds the whole forest.** -/
-theorem boundaryHashAtLeast_buildForest (traceParameter parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → Digest) (leaves : IndexGroup → FtsLeaf) :
+/-- **Every signature the signer completes builds the whole PORS tree.** -/
+theorem boundaryHashAtLeast_buildFtsTree (traceParameter parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → Digest) :
     BoundaryHashAtLeast traceParameter
-      (liftM (buildForest parameter index (fun tree leaf => pure (secret tree leaf)) leaves :
+      (liftM (buildFtsTree parameter index (fun leaf => pure (secret leaf)) :
         OracleComp HashSpec _)) ftsOpenHashCost := by
-  rw [ftsOpenHashCost_def, buildForest, liftM_bind]
-  apply boundaryHashAtLeast_bind _ _ _ _ _
-    (boundaryHashAtLeast_lift_sequenceFin traceParameter _ (fun _ => 2 ^ (ftsTreeHeight + 1) - 1)
-      (fun tree => boundaryHashAtLeast_buildFtsTree _ _ _ _ _ _))
-  intro trees
-  rw [liftM_bind, ← Nat.add_zero 1]
-  apply boundaryHashAtLeast_bind _ _ _ _ _ (boundaryHashAtLeast_tweakableHash _ _ _ _)
-  intro _
-  exact boundaryHashAtLeast_zero _ _
+  rw [ftsOpenHashCost_def]
+  exact boundaryHashAtLeast_buildFtsTree_levels traceParameter parameter index secret
 
 theorem boundaryHashAtLeast_signAttempt (parameter : PublicParameter) (key : SecretKey)
     (message : Message) (randomness : Randomness) :
@@ -157,7 +150,7 @@ theorem boundaryHashAtLeast_sign (parameter : PublicParameter) (key : SecretKey)
   show BoundaryHashAtLeast parameter (liftM (signAfterDigest key randomness index leaves :
       OracleComp HashSpec (Option Signature))) ftsOpenHashCost
   rw [signAfterDigest, signFrom, liftM_bind, ← Nat.add_zero ftsOpenHashCost]
-  apply boundaryHashAtLeast_bind _ _ _ _ _ (boundaryHashAtLeast_buildForest _ _ _ _ _)
+  apply boundaryHashAtLeast_bind _ _ _ _ _ (boundaryHashAtLeast_buildFtsTree _ _ _ _)
   intro _
   exact boundaryHashAtLeast_zero _ _
 

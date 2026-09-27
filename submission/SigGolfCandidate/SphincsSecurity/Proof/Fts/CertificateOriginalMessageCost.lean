@@ -10,7 +10,7 @@ set_option backward.isDefEq.respectTransparency false
 private theorem probOutput_probCompLift {Result : Type} (computation : ProbComp Result) (result : Result) :
     Pr[= result | (liftM computation : PMF Result)] = Pr[= result | computation] := rfl
 
-theorem certificateLengthImpl_original_cache (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateLengthImpl_original_cache (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (fun result => (result.1, result.2.1)) <$> (certificateLengthImpl key budget required stopAfter input).run state =
       (liftM ((simulateQ romImpl (expandedAdversaryImpl key input)).run state.1) : PMF _) := by
@@ -34,7 +34,7 @@ theorem certificateMonitorMessageCharge_le_original (key : SecretKey) (budget : 
   · exact bot_le
 
 theorem expectedCertificateMessageCharge_le_original {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : CertificateMonitorState) :
     expectedCertificateCharge key budget required stopAfter (certificateMonitorMessageCharge key budget) computation state ≤
       expectedBoundaryMessageCalls key.parameter (simulateQ (expandedAdversaryImpl key) computation) state.1 := by
@@ -54,7 +54,7 @@ theorem expectedCertificateMessageCharge_le_original {Result : Type} (key : Secr
         _ = _ := h
 
 theorem expected_certificateLength_messageCalls_le_original {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] *
       (result.2.2.messageCalls : ENNReal)) ≤ (state.2.messageCalls : ENNReal) +
@@ -63,7 +63,7 @@ theorem expected_certificateLength_messageCalls_le_original {Result : Type} (key
   exact add_le_add le_rfl (expectedCertificateMessageCharge_le_original key budget required stopAfter computation state)
 
 theorem expected_certificateCacheProposal_messageCalls_le_original {Result : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (state : List Index × CertificateCacheMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateCacheProposalImpl key budget required stopAfter) computation).run state] *
       (result.2.2.2.1.messageCalls : ENNReal)) ≤ (state.2.2.1.messageCalls : ENNReal) +

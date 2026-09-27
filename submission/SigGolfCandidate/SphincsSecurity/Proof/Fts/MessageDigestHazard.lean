@@ -14,7 +14,7 @@ attribute [local irreducible] signAttempt signDigestAttemptPrefix signDigestLoop
 
 theorem probEvent_signDigestAttemptPrefix_fresh_ge_messageMiss
     (key : SecretKey) (message : Message) (reference cache : QueryCache HashSpec) (hreference : reference ≤ cache) :
-    messageInputMissProbability key message cache * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ ≤
+    messageInputMissProbability key message cache * Concrete.admissibleProbability ≤
       Pr[FreshDigestAttempt reference key message | signDigestAttemptPrefix key message cache] := by
   rw [signDigestAttemptPrefix]
   apply mul_le_probEvent_bind
@@ -27,7 +27,7 @@ theorem probEvent_signDigestAttemptPrefix_fresh_ge_messageMiss
       | some output => simpa only [hmiss, reduceCtorEq] using hreference hc
     rw [show (fun result => pure (randomness, result)) = pure ∘ fun result => (randomness, result) from rfl,
       probEvent_bind_pure_comp]
-    change ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ ≤
+    change Concrete.admissibleProbability ≤
       Pr[fun result => reference (tweakableHashInput key.parameter .message
         (messageDigestPayload key.root message randomness)) = none ∧ result.1 ≠ none |
         (simulateQ (randomOracle : QueryImpl HashSpec _) (signAttempt key message randomness)).run cache]
@@ -36,7 +36,7 @@ theorem probEvent_signDigestAttemptPrefix_fresh_ge_messageMiss
 theorem digestAttemptExpectation_mul_message_rate_le_freshSelection
     (attempts : Nat) (key : SecretKey) (message : Message) (reference cache : QueryCache HashSpec)
     (hreference : reference ≤ cache) (budget rate : ENNReal)
-    (hrate : rate ≤ (1 - budget * ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹)
+    (hrate : rate ≤ (1 - budget * ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) * Concrete.admissibleProbability)
     (hbudget : cachedMessageEntryCount cache key.parameter key.root message + (attempts : ENNReal) ≤ budget) :
     digestAttemptExpectation attempts key message cache * rate ≤
       Pr[fun result => freshSelectedLoopView? reference key message result ≠ none |
@@ -69,7 +69,7 @@ theorem digestAttemptExpectation_mul_message_rate_le_freshSelection
 
 noncomputable def messageDigestFreshRate (key : SecretKey) (message : Message) (cache : QueryCache HashSpec) : ENNReal :=
   (1 - (cachedMessageEntryCount cache key.parameter key.root message + (digestAttemptLimit : ENNReal)) *
-    ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹
+    ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) * Concrete.admissibleProbability
 
 noncomputable def messageDigestReuseWeight (key : SecretKey) (message : Message) (cache : QueryCache HashSpec) : ENNReal :=
   ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹ / messageDigestFreshRate key message cache
@@ -77,7 +77,7 @@ noncomputable def messageDigestReuseWeight (key : SecretKey) (message : Message)
 theorem messageDigestFreshRate_ge_budget (key : SecretKey) (message : Message) (cache : QueryCache HashSpec)
     (q : Nat) (hcache : QueryCache.enncard cache ≤ q) :
     (1 - ((q + digestAttemptLimit : Nat) : ENNReal) * ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) *
-      ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ ≤ messageDigestFreshRate key message cache := by
+      Concrete.admissibleProbability ≤ messageDigestFreshRate key message cache := by
   unfold messageDigestFreshRate
   rw [Nat.cast_add]
   exact mul_le_mul' (tsub_le_tsub_left (mul_le_mul' (add_le_add
@@ -94,7 +94,7 @@ theorem messageDigestFreshRate_ne_zero (key : SecretKey) (message : Message) (ca
 theorem messageDigestFreshRate_ne_top (key : SecretKey) (message : Message) (cache : QueryCache HashSpec) :
     messageDigestFreshRate key message cache ≠ ⊤ := by
   unfold messageDigestFreshRate
-  finiteness
+  exact ENNReal.mul_ne_top (by finiteness) admissibleProbability_ne_top
 
 theorem messageDigestReuseWeight_le (key : SecretKey) (message : Message) (cache : QueryCache HashSpec)
     (q : Nat) (hcache : QueryCache.enncard cache ≤ q) :

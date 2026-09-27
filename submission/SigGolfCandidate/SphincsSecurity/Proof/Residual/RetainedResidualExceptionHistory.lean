@@ -17,7 +17,7 @@ noncomputable def exceptionHistoryUpdate {inputs : Finset HashInput} (key : Secr
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 noncomputable def exceptionHistoryStep (input : (OracleWorld + SigningSpec).Domain) (state : ExceptionHistoryState inputs) :
     SPMF (Option ((OracleWorld + SigningSpec).Range input) × ExceptionHistoryState inputs) :=

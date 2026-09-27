@@ -1,12 +1,13 @@
 import SigGolfCandidate.SphincsSecurity.Scheme
+import SigGolfCandidate.SphincsSecurity.Completeness.Octopus.Prob
 
 /-!
 # What one uniform answer shows
 
 A trial of either search reads a few low bits of a uniform `256`-bit answer: the counter search its
-low `128` bits, the randomizer search the last `10`-bit index group of its low `184`. Splitting a
-bit vector into its low and high bits is a bijection, so a condition on the low bits holds for
-exactly the share of answers the condition has among the low bits alone. This file counts both.
+low `128` bits, the randomizer search its leaf indices, bits `34 .. 243`. Splitting a bit vector into
+its low and high bits is a bijection, so a condition on the low bits holds for exactly the share of
+answers the condition has among the low bits alone. The admissible share is counted in `Octopus/`.
 -/
 
 open OracleComp ENNReal Finset
@@ -92,34 +93,45 @@ theorem probEvent_truncateHash_mem (targets : Finset Digest) :
   rw [hcard, Nat.cast_mul, Nat.cast_pow, Nat.cast_ofNat, hsplit,
     ENNReal.mul_div_mul_right _ _ (by simp) (by simp)]
 
-/-- The admissibility test reads bits `174 .. 183` of the digest, the high part past `174`. -/
-theorem admissible_iff (d : MessageDigest) :
-    Concrete.Admissible d ↔ d.extractLsb' 174 (messageDigestBits - 174) = 0 := by
-  change (d.extractLsb' 174 10).toFin = 0 ↔ d.extractLsb' 174 10 = 0
-  exact ⟨fun h => BitVec.eq_of_toFin_eq h, fun h => by rw [h]; rfl⟩
+/-! ## Admissibility
 
-/-- A uniform answer's digest is admissible with probability `1 / 1024`. -/
-theorem probEvent_admissible :
-    Pr[fun u : HashOutput => Concrete.Admissible (truncateMessageDigest u) |
-      ($ᵗ HashOutput : ProbComp HashOutput)] = (1024 : ℝ≥0∞)⁻¹ := by
-  rw [probEvent_uniform]
-  have hinner : (univ.filter fun d : BitVec messageDigestBits => Concrete.Admissible d).card
-      = 2 ^ 174 := by
-    simp_rw [admissible_iff]
-    rw [card_filter_high (n := messageDigestBits) (w := 174) (by decide) (fun b => b = 0),
-      Finset.filter_eq' univ 0, if_pos (Finset.mem_univ _), Finset.card_singleton, mul_one]
-  have hcard := card_filter_low' (n := hashOutputBits) (w := messageDigestBits) (by decide)
-    (fun u : HashOutput => Concrete.Admissible (truncateMessageDigest u))
-    (fun d => Concrete.Admissible d) (fun _ => Iff.rfl)
-  have hsplit : (2 : ℝ≥0∞) ^ hashOutputBits
-      = 2 ^ (174 + (hashOutputBits - messageDigestBits)) * 2 ^ 10 := by
-    rw [← pow_add]; congr 1
-  rw [hcard, hinner, ← pow_add, Nat.cast_pow, Nat.cast_ofNat, hsplit]
-  have hA0 : (2 : ℝ≥0∞) ^ (174 + (hashOutputBits - messageDigestBits)) ≠ 0 := by simp
-  have hAt : (2 : ℝ≥0∞) ^ (174 + (hashOutputBits - messageDigestBits)) ≠ ⊤ := by simp
-  generalize (2 : ℝ≥0∞) ^ (174 + (hashOutputBits - messageDigestBits)) = A at hA0 hAt ⊢
-  calc A / (A * 2 ^ 10) = A * 1 / (A * 2 ^ 10) := by rw [mul_one]
-    _ = 1 / 2 ^ 10 := ENNReal.mul_div_mul_left _ _ hA0 hAt
-    _ = (1024 : ℝ≥0∞)⁻¹ := by norm_num
+The signer keeps a digest when its `15` leaf indices (bits `34 .. 243`) are distinct and their octopus
+has at most `120` nodes. `Octopus/` counts those digests exactly, on natural numbers
+(`Octopus.admissible`); the two tests agree. -/
+
+theorem sortedLeaves_eq_sortLeaves (leaves : IndexGroup → FtsLeaf) :
+    Concrete.sortedLeaves leaves = Octopus.sortLeaves (Octopus.valList leaves) := by
+  unfold Concrete.sortedLeaves Concrete.sortedSlots Octopus.sortLeaves Octopus.valList
+  rw [List.ofFn_eq_map]
+  exact List.map_insertionSort (fun r r' : IndexGroup => (leaves r).val ≤ (leaves r').val)
+    (fun a b : Nat => a ≤ b) _ _ (fun _ _ _ _ => Iff.rfl)
+
+theorem valList_digestLeaves (d : MessageDigest) :
+    Octopus.valList (Concrete.digestLeaves d) = Octopus.leavesOf d.toNat := by
+  unfold Octopus.valList Octopus.leavesOf Octopus.leafOf Concrete.digestLeaves
+  apply List.ext_getElem (by simp [ftsOpenings])
+  intro r h1 _
+  simp [Nat.shiftRight_eq_div_pow, totalHeight, ftsTreeHeight]
+
+/-- The scheme's admissibility is the counted one. -/
+theorem admissible_iff (u : HashOutput) :
+    Concrete.Admissible (truncateMessageDigest u) ↔ Octopus.admissible u.toNat = true := by
+  have htrunc : (truncateMessageDigest u).toNat = u.toNat := by
+    simp [truncateMessageDigest, messageDigestBits, hashOutputBits]
+    exact Nat.mod_eq_of_lt u.isLt
+  unfold Concrete.Admissible Concrete.AdmissibleLeaves Octopus.admissible
+  rw [sortedLeaves_eq_sortLeaves, valList_digestLeaves, htrunc, ← Octopus.valList_nodup,
+    valList_digestLeaves, htrunc]
+  simp [ftsAuthCapacity]
+
+/-- A uniform answer's digest is admissible with probability at least `2⁻¹⁰` (exactly
+`15! · N / 2²¹⁰ ≈ 2^-9.76`). -/
+theorem probEvent_admissible_ge :
+    (1024 : ℝ≥0∞)⁻¹ ≤ Pr[fun u : HashOutput => Concrete.Admissible (truncateMessageDigest u) |
+      ($ᵗ HashOutput : ProbComp HashOutput)] := by
+  have h := Octopus.probEvent_admissibleDigest_ge
+  rw [show (1 : ℝ≥0∞) / 2 ^ 10 = (1024 : ℝ≥0∞)⁻¹ by norm_num] at h
+  refine h.trans (le_of_eq ?_)
+  exact probEvent_congr' (fun u _ => (admissible_iff u).symm) rfl
 
 end SphincsSecurity.Completeness

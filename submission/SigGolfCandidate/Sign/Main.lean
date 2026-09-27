@@ -1,7 +1,6 @@
 import SigGolfCandidate.Sign.Setup
-import SigGolfCandidate.Sign.DigOk
-import SigGolfCandidate.Sign.Roots
-import SigGolfCandidate.Sign.Pack
+import SigGolfCandidate.Sign.PorsTreeSim
+import SigGolfCandidate.Sign.Entry
 
 /-!
 # `sign` refines `signRef` (main theorems)
@@ -10,6 +9,8 @@ import SigGolfCandidate.Sign.Pack
 set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
+set_option linter.unusedTactic false
+set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
@@ -24,139 +25,10 @@ theorem fetch_ecall (t : MachineState) (i : Nat) (hi : image.code[i]? = some 0x0
   rw [if_neg (by simp <;> omega), show (0x1000 + 4 * i - 0x1000) / 4 = i by omega, hi]
   exact decode_ecall
 
-theorem code86 : image.code[86]? = some 0x00000073#32 := by decide +kernel
-theorem code89 : image.code[89]? = some 0x00000073#32 := by decide +kernel
-theorem code337 : image.code[337]? = some 0x00000073#32 := by decide +kernel
-theorem code2800 : image.code[2800]? = some 0x00000073#32 := by decide +kernel
-
-end SigGolfCandidate.Sign
-
-namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
-
-theorem openAt_words (t : MachineState) (B : Nat) (o : Val × List Val) (h : OpenAt t B o) :
-    t.readWords (BitVec.ofNat 64 B) 22 = wordsOf (o.1 ++ o.2.flatten) := by
-  obtain ⟨h1, h2, h3, h4⟩ := h
-  have hv : ∀ v ∈ o.1 :: o.2, v.length = 16 := by
-    intro v hv; rcases List.mem_cons.mp hv with rfl | hv; exact h1; exact h3 v hv
-  rw [show (22 : Nat) = 2 * (o.1 :: o.2).length by simp [h2], readWords_slots t B _ h4,
-    ← wordsOf_flatten _ hv, List.flatten_cons]
-
-theorem fors_words (t : MachineState) : ∀ (fors : List (Val × List Val)) (B : Nat),
-    (∀ i (hi : i < fors.length), OpenAt t (B + 176 * i) fors[i]) →
-    t.readWords (BitVec.ofNat 64 B) (22 * fors.length) =
-      wordsOf (fors.map (fun o => o.1 ++ o.2.flatten)).flatten := by
-  intro fors
-  induction fors with
-  | nil => intro B _; simp [wordsOf_nil]
-  | cons o os ih =>
-    intro B h
-    have h0 := h 0 (by simp)
-    simp only [Nat.mul_zero, Nat.add_zero, List.getElem_cons_zero] at h0
-    rw [List.length_cons, show 22 * (os.length + 1) = 22 + 22 * os.length by ring, readWords_ofNat_add,
-      openAt_words t B o h0, ih (B + 176) (fun i hi => by
-        have := h (i + 1) (by simp; omega)
-        rw [show B + 176 + 176 * i = B + 176 * (i + 1) by ring]; simpa using this),
-      List.map_cons, List.flatten_cons, wordsOf_append (o.1 ++ o.2.flatten) _ (by
-        obtain ⟨h1, h2, h3, _⟩ := h0
-        simp [h1, length_flatten_vals o.2 h3, h2])]
-
-theorem le32_bytes (t : MachineState) (a c : Nat) (ha : a % 8 = 0) (hb : a + 8 < 2 ^ 64)
-    (hc : c < 2 ^ 32) (h : t.getMem (BitVec.ofNat 64 a) = BitVec.ofNat 64 c) :
-    bytesAt t a 4 = le32 c := by
-  apply List.ext_getElem (by simp [le32])
-  intro i h1 h2
-  simp only [length_bytesAt] at h1
-  simp only [bytesAt, List.getElem_map, List.getElem_range, le32, leBytes]
-  rw [getByte_aligned' t a i ha (by omega) hb, h]
-  apply BitVec.eq_of_toNat_eq
-  rw [extractByte_toNat', byte_toNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show c < 2 ^ 64 by omega),
-    show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [Nat.pow_mul]]
-
-theorem stage_bytes (t : MachineState) (l : Nat) (hl : l < 5) (ls : LayerSig) (h : StageAt t l ls) :
-    bytesAt t (0x900 + 856 * l) 4 ++ bytesAt t (0x900 + 856 * l + 8) (672 + 16 * height l) =
-      le32 ls.1 ++ ls.2.1.flatten ++ ls.2.2.flatten := by
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8⟩ := h
-  have hh := height_le l (by omega)
-  rw [le32_bytes t _ ls.1 (by omega) (by omega) (by omega) h1, List.append_assoc]
-  congr 1
-  have hv : ∀ v ∈ ls.2.1 ++ ls.2.2, v.length = 16 := by
-    intro v hv; rcases List.mem_append.mp hv with hv | hv; exact h4 v hv; exact h7 v hv
-  have hsl : Slots t (0x900 + 856 * l + 8) (ls.2.1 ++ ls.2.2) :=
-    Slots.append h5 (by rw [h3, show 0x900 + 856 * l + 8 + 16 * 42 = 0x900 + 856 * l + 680 by ring]; exact h8)
-  have hw := readWords_slots t _ _ hsl
-  rw [← wordsOf_flatten _ hv, List.flatten_append] at hw
-  have hlen : (ls.2.1 ++ ls.2.2).length = 42 + height l := by simp [h3, h6]
-  rw [show 672 + 16 * height l = 8 * (2 * (ls.2.1 ++ ls.2.2).length) by rw [hlen]; ring]
-  refine bytesAt_of_readWords t _ _ _ (by omega) (by rw [hlen]; omega) ?_ hw
-  rw [List.length_append, length_flatten_vals _ h4, length_flatten_vals _ h7, hlen, h3, h6]; ring
-
-end SigGolfCandidate.Sign
-
-namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
-
-theorem flatMap_range_eq {β γ : Type} (xs : List β) (g : Nat → List γ) (f : β → List γ)
-    (h : ∀ l (hl : l < xs.length), g l = f xs[l]) :
-    (List.range xs.length).flatMap g = (xs.map f).flatten := by
-  induction xs using List.reverseRecOn with
-  | nil => simp
-  | append_singleton xs x ih =>
-    rw [List.length_append, List.length_singleton, List.range_succ, List.flatMap_append,
-      ih (fun l hl => by rw [h l (by simp; omega), List.getElem_append_left hl]),
-      List.map_append, List.flatten_append]
-    simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil, List.map_cons, List.map_nil,
-      List.flatten_cons, List.flatten_nil]
-    rw [h xs.length (by simp), List.getElem_append_right (le_refl _)]
-    simp
-
-set_option maxRecDepth 100000 in
-/-- The signature bytes after the pack. -/
-theorem final_bytes (t4 : MachineState) (rho : Val) (fors : List (Val × List Val)) (lays : List LayerSig)
-    (hrho : rho.length = 16) (hrw : t4.readWords (BitVec.ofNat 64 0x2650) 2 = wordsOf rho)
-    (hfl : fors.length = 14)
-    (hopen : ∀ i (hi : i < fors.length), OpenAt t4 (0x2650 + 16 + 176 * i) fors[i])
-    (hll : lays.length = 5) (hst : ∀ l (hl : l < lays.length), StageAt t4 l lays[l]) (t5 : MachineState)
-    (hw5 : t5.readWords (BitVec.ofNat 64 (0x2650 + 2480)) 491 = packTab.map (packDW t4))
-    (hf5 : Frame t4 t5 (fun x => packD ≤ x ∧ x < packD + 8 * 491)) :
-    bytesAt t5 0x2650 6404 = serialize rho fors lays := by
-  have hfb : (fors.map (fun o => o.1 ++ o.2.flatten)).flatten.length = 2464 := by
-    have : ∀ os : List (Val × List Val), (∀ i (hi : i < os.length), OpenAt t4 (0x2650 + 16 + 176 * i) os[i]) →
-        True := fun _ _ => trivial
-    rw [List.length_flatten, List.map_map]
-    have hlen : ∀ o ∈ fors, (o.1 ++ o.2.flatten).length = 176 := by
-      intro o ho
-      obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem ho
-      obtain ⟨h1, h2, h3, _⟩ := hopen i hi
-      simp [h1, length_flatten_vals _ h3, h2]
-    rw [List.map_congr_left (fun o ho => by simp only [Function.comp]; exact hlen o ho)]
-    simp [hfl]
-  rw [show (6404 : Nat) = 2480 + 3924 from rfl, bytesAt_add, pack_layers t4 t5 hw5]
-  unfold serialize
-  congr 1
-  · have hw : t5.readWords (BitVec.ofNat 64 0x2650) 310 =
-        wordsOf (rho ++ (fors.map (fun o => o.1 ++ o.2.flatten)).flatten) := by
-      rw [hf5.readWords _ _ (by norm_num) (fun i hi => by simp only [packD]; omega), show (310 : Nat) = 2 + 22 * fors.length by rw [hfl], readWords_ofNat_add, hrw,
-        fors_words t4 fors _ hopen, wordsOf_append rho _ (by omega)]
-    rw [show (2480 : Nat) = 8 * 310 from rfl]
-    exact bytesAt_of_readWords _ 310 _ _ (by norm_num) (by norm_num) (by simp [hrho, hfb]) hw
-  · rw [← hll]
-    refine flatMap_range_eq lays _ _ (fun l hl => ?_)
-    rw [List.append_assoc]
-    exact (stage_bytes t4 l (by omega) lays[l] (hst l hl)).trans (by rw [List.append_assoc])
-
-end SigGolfCandidate.Sign
-
-namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
-
-theorem OpenAt.frame {s t : MachineState} {W : Nat → Prop} {B : Nat} {o : Val × List Val}
-    (h : OpenAt s B o) (hf : Frame s t W) (hB : B + 176 + 16 < 2 ^ 64)
-    (hW : ∀ a, B ≤ a → a < B + 176 → ¬ W a) : OpenAt t B o := by
-  obtain ⟨h1, h2, h3, h4⟩ := h
-  refine ⟨h1, h2, h3, h4.frame hf (by simp [h2]; omega) (fun i hi => ?_)⟩
-  simp [h2] at hi
-  exact ⟨hW _ (by omega) (by omega), hW _ (by omega) (by omega)⟩
+theorem code141 : image.code[141]? = some 0x00000073#32 := by decide +kernel
+theorem code144 : image.code[144]? = some 0x00000073#32 := by decide +kernel
+theorem code381 : image.code[381]? = some 0x00000073#32 := by decide +kernel
+theorem code2843 : image.code[2843]? = some 0x00000073#32 := by decide +kernel
 
 /-- `signList` after the MAC check. -/
 def signRest (S cache m : List Byte) : OracleComp HashSpec (Option (List Byte)) :=
@@ -164,12 +36,11 @@ def signRest (S cache m : List Byte) : OracleComp HashSpec (Option (List Byte)) 
     match r with
     | none => pure none
     | some (rho, N) =>
-      signFors S N >>= fun p =>
-        hash16 (rootsInput (idxOf N) p.2) >>= fun M =>
-          signLayers S cache (idxOf N) 4 M >>= fun r2 =>
-            match r2 with
-            | none => pure none
-            | some lays => pure (some (serialize rho p.1 lays))
+      buildPorsTree S (idxOf N) >>= fun p =>
+        signLayers S cache (idxOf N) 4 ((p.1.getD porsH []).getD 0 []) >>= fun r2 =>
+          match r2 with
+          | none => pure none
+          | some lays => pure (some (serialize rho (porsOpening (sortLeaves (leavesOf N)) p.1 p.2) lays))
 
 theorem signList_eq (S cache m : List Byte) :
     signList S cache m = (H (macInput S (cacheRegion cache)) >>= fun tag =>
@@ -182,21 +53,49 @@ def ListPost (r : Option (List Byte)) (t : MachineState) : Prop :=
   fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 1 ∧
   match r with
   | none => t.getReg .x10 = 1
-  | some l => t.getReg .x10 = 0 ∧ readBuffer t 0x2650 6404 = ofList 6404 l
+  | some l => t.getReg .x10 = 0 ∧ readBuffer t 0x3300 6100 = ofList 6100 l
 
-/-- The zero buffers used as padding / P slots, never written by `sign` after the setup. -/
+/-- The zero buffers used as P slots / padding, never written by `sign` after the setup. -/
 def ZA (a : Nat) : Prop :=
   (0x110 ≤ a ∧ a < 0x120) ∨ (0x6B0 ≤ a ∧ a < 0x6C0) ∨ (0xD0 ≤ a ∧ a < 0xE0) ∨
-    (0x350 ≤ a ∧ a < 0x360) ∨ (0x1D0 ≤ a ∧ a < 0x1E0) ∨ (0x230 ≤ a ∧ a < 0x240) ∨ (0xF0 ≤ a ∧ a < 0x100)
+    (0x350 ≤ a ∧ a < 0x360) ∨ (0x1D0 ≤ a ∧ a < 0x1E0) ∨ (0xF0 ≤ a ∧ a < 0x100)
 
-end SigGolfCandidate.Sign
+/-- The sorted keys give the sorted leaf indices, strictly increasing and `< 2^14`. -/
+theorem keys_facts (N : Nat) (hadm : admissible N = true) :
+    (sortKeys (keys0 N)).length = 15 ∧ ((sortKeys (keys0 N)).map keyV).Pairwise (· < ·) ∧
+      (∀ v ∈ (sortKeys (keys0 N)).map keyV, v < 2 ^ 14) ∧ KeysBound (sortKeys (keys0 N)) ∧
+      (sortKeys (keys0 N)).map keyV = sortLeaves (leavesOf N) := by
+  have hl : (keys0 N).length = 15 := by simp [keys0]
+  have hb : KeysBound (sortKeys (keys0 N)) :=
+    keysBound_perm (keysBound_keys0 N) (sortKeys_perm _ hl (keys0_nodup N))
+  have hvs := (sortLeaves_eq N).symm
+  refine ⟨length_sortKeys _ hl, ?_, fun v hv => ?_, hb, hvs⟩
+  · have hle : ((sortKeys (keys0 N)).map keyV).Pairwise (· ≤ ·) := by
+      rw [hvs]; exact List.pairwise_insertionSort _ _
+    have hnd : ((sortKeys (keys0 N)).map keyV).Nodup := by
+      rw [hvs, sortLeaves, (List.perm_insertionSort _ _).nodup_iff]
+      unfold admissible at hadm
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at hadm
+      exact hadm.1
+    exact (hle.and hnd).imp (fun h => Nat.lt_of_le_of_ne h.1 h.2)
+  · simp only [List.mem_map] at hv
+    obtain ⟨k, hk, rfl⟩ := hv
+    have := hb k hk; unfold keyV; omega
 
-namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+theorem sched_le (N : Nat) (hadm : admissible N = true) :
+    (schedule (sortLeaves (leavesOf N))).2.length ≤ 120 := by
+  obtain ⟨hl, hs, hlt, -, hvs⟩ := keys_facts N hadm
+  rw [← hvs]
+  refine SchedMath.schedule_reads_le _ (by rw [List.length_map, hl]) hs hlt ?_
+  rw [hvs]
+  unfold admissible at hadm
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hadm
+  exact hadm.2
 
-/-- Cycle bound after the MAC check (digest search, dig_ok, FORS, roots, layers, pack, HALT prep). -/
+/-- Cycle bound after the MAC check. -/
 def restW : Nat :=
-  (2 ^ 20 - 1 + 1) * 46 + 2 + (66 + (14 * forsTreeW + (10 + (8 * 4 + 20) + (4 * layCyc + topCyc + (2123 + 2)))))
+  (2 ^ 20 - 1 + 1) * digCyc + 2 + (34 + ((2 ^ 13 * 79 + (1 + 14 * (4 + (2 ^ 13 * 26 + 4)))) +
+    (11 + 15 * 345 + (20 + (4 * layCyc + topCyc + (2123 + 2))))))
 
 /-- Cycle bound of `signList`. -/
 def signW : Nat := 54 + (8 * 1025 + (10 + restW))
@@ -208,6 +107,7 @@ theorem region_s0 (sk : SecretKey) (cache : Cache) (m : Message) :
   have h8 : cacheNodeOff l j % 8 = 0 := by unfold cacheNodeOff; omega
   rw [s0_readWords_cache sk cache m _ 2 h8 (by omega)]; rfl
 
+set_option maxRecDepth 100000 in
 theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : MachineState)
     (hu : MacOk sk cache m u) :
     Sim image u restW (signRest (toList sk) (toList cache) (toList m)) ListPost := by
@@ -224,117 +124,171 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
     (fun r t h => ?_)
   rcases r with _ | ⟨rho, N⟩
   · obtain ⟨tpc, t5, t10⟩ := h
-    exact (Sim.pure ⟨fetch_ecall t 86 code86 (by norm_num) tpc, t5, t10⟩).mono (by omega)
+    exact (Sim.pure ⟨fetch_ecall t 141 code141 (by norm_num) tpc, t5, t10⟩).mono (by omega)
       (fun _ _ h => h)
-  · obtain ⟨tpc, tregs, tframe, hrl, hrw, ⟨ans, hN, hd⟩, hadm⟩ := h
-    subst hN
-    set N := ans.toNat % 2 ^ 184 with hNdef
-    set idx := idxOf N with hidxdef
-    have hidx : idx < 2 ^ 34 := Nat.mod_lt _ (by norm_num)
-    -- the zero buffers at `t`
-    have z0 : ∀ a, a % 8 = 0 → ZA a → (s0 sk cache m).getMem (BitVec.ofNat 64 a) = 0 := by
-      intro a h8 hz; simp only [ZA] at hz; exact s0_zero sk cache m a h8 (by omega) (by omega)
-    have zt : ∀ a, a % 8 = 0 → ZA a → t.getMem (BitVec.ofNat 64 a) = 0 := by
-      intro a h8 hz
-      have : ¬ macW a := by simp only [ZA] at hz; simp only [macW, setupW]; omega
-      have : ¬ digW a := by simp only [ZA] at hz; simp only [digW]; omega
-      rw [tframe.getMem (by simp only [ZA] at hz; omega) (by assumption),
-        fs0.getMem (by simp only [ZA] at hz; omega) (by assumption), z0 a h8 hz]
-    have zrw : ∀ a, a % 8 = 0 → ZA a → ZA (a + 8) → t.readWords (BitVec.ofNat 64 a) 2 = [0, 0] := by
-      intro a h8 h1 h2
-      rw [readWords_ofNat_two, zt a h8 h1, zt (a + 8) (by omega) h2]
-    have tS : t.readWords (BitVec.ofNat 64 0x6C0) 4 = wordsOf (toList sk) := by
-      rw [tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [digW]; omega), upbS]
-    have rgt : RegionOk (toList cache) t :=
-      ((region_s0 sk cache m).frame fs0 (by intro a ha; simp only [regionA] at ha; simp only [macW, setupW]; omega)).frame
-        tframe (by intro a ha; simp only [regionA] at ha; simp only [digW]; omega)
-    obtain ⟨tF, hsF, ctx, pcF, x8F, x18F, x22F, sigF, lo228, hi228, rF, fF⟩ :=
-      digok_run (toList sk) rho ans t tpc (by rw [tregs.get .x5, u5]) hd
-        (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA])) tS
-        (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA])) (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA]))
-        (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA]))
-    have zF : ∀ a, a % 8 = 0 → ZA a → tF.getMem (BitVec.ofNat 64 a) = 0 := by
-      intro a h8 hz
-      rw [fF.getMem (by simp only [ZA] at hz; omega) (by simp only [ZA] at hz; simp only [digokW]; omega),
-        zt a h8 hz]
-    have rgF : RegionOk (toList cache) tF :=
-      rgt.frame fF (by intro a ha; simp only [regionA] at ha; simp only [digokW]; omega)
-    refine Sim.steps hsF (Sim.bind (fors_sim (toList sk) hS N tF ctx pcF x8F x18F) (fun p t2 h2 => ?_))
-    obtain ⟨-, hl1, hl2, hopen, hrv, hroots, pc2, -, -, fregs, fframe, -, -, -, -, -⟩ := h2
-    have pc2' : t2.pc = pcOf 241 := by rw [pc2]; rfl
-    have z2 : ∀ a, a % 8 = 0 → ZA a → t2.getMem (BitVec.ofNat 64 a) = 0 := by
-      intro a h8 hz
-      rw [fframe.getMem (by simp only [ZA] at hz; omega) (by simp only [ZA] at hz; simp only [forsW]; omega),
-        zF a h8 hz]
-    have z2rw : ∀ a, a % 8 = 0 → ZA a → ZA (a + 8) → t2.readWords (BitVec.ofNat 64 a) 2 = [0, 0] := by
-      intro a h8 h1 h2
-      rw [readWords_ofNat_two, z2 a h8 h1, z2 (a + 8) (by omega) h2]
-    have st2 : Statics (toList sk) t2 := by
-      refine ⟨z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]), z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]),
-        ?_, z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]), z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]),
-        z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA])⟩
-      rw [fframe.readWords _ _ (by norm_num) (by intro i hi; simp only [forsW]; omega),
-        fF.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW]; omega), tS]
-    have rg2 : RegionOk (toList cache) t2 :=
-      rgF.frame fframe (by intro a ha; simp only [regionA] at ha; simp only [forsW]; omega)
-    have h228 := fframe.getMem (a := 0x228) (by norm_num) (by simp only [forsW]; omega)
-    refine Sim.bind (roots_sim (toList sk) (toList cache) idx hidx p.2 (by rw [hl2]) hrv t2 pc2'
-      (by rw [fregs.get .x5, ctx.x5]) (by rw [fregs.get .x22, x22F]) hroots (by rw [h228, lo228])
-      (by rw [h228, hi228, tframe.getMem (by norm_num) (by simp only [digW]; omega),
-        fs0.getMem (by norm_num) (by simp only [macW, setupW]; omega),
-        s0_zero sk cache m 0x228 (by norm_num) (by norm_num) (by omega)]; rfl)
-      (z2rw _ (by norm_num) (by simp [ZA]) (by simp [ZA])) st2 rg2) (fun M t3 h3 => ?_)
-    obtain ⟨hhead, rframe⟩ := h3
-    refine Sim.bind (layers_sim (toList sk) (toList cache) hS hcache idx hidx 4 (le_refl _) M t3 hhead)
-      (fun r2 t4 h4 => ?_)
-    rcases r2 with _ | lays
-    · obtain ⟨pc4, x45, x410⟩ := h4
-      exact (Sim.pure ⟨fetch_ecall t4 337 code337 (by norm_num) pc4, x45, x410⟩).mono (by omega)
-        (fun _ _ h => h)
-    · obtain ⟨hll, hst, pc4, x45, lframe⟩ := h4
-      obtain ⟨t5, hs5, pc5, hw5, hf5⟩ := pack_run t4 pc4
-      rw [List.drop_zero, List.take_of_length_le (by rw [packTab_length])] at hw5
-      have hf5' : Frame t4 t5 (fun x => packD ≤ x ∧ x < packD + 8 * 491) :=
-        hf5.mono (fun x hx => by simp only [packD] at hx ⊢; omega)
-      have hs6 := symRun_sound blk2798 codeAt_2798 t5 pc5 (by simp only [blk2798.res, rv_simp])
-      set t6 := blk2798.res.toState t5 with ht6
-      have hc : 2123 + blk2798.res.cycles = 2123 + 2 := rfl
-      have mem6 : ∀ a, t6.getMem a = t5.getMem a := by
-        intro a; rw [ht6, Result.toState_getMem, show blk2798.res.st.mem = [] from rfl, memEval_nil]
-      have by6 : bytesAt t6 0x2650 6404 = bytesAt t5 0x2650 6404 := by
-        unfold bytesAt; apply List.map_congr_left; intro i _
-        simp only [MachineState.getByte, mem6]
-      -- the rho and FORS parts at `t4`
-      have ft24 : Frame t2 t4 (fun a => (a = 0x220 ∨ (0x120 ≤ a ∧ a < 0x140)) ∨ layW 4 a) :=
-        rframe.trans lframe
-      have hrho4 : t4.readWords (BitVec.ofNat 64 0x2650) 2 = wordsOf rho := by
-        rw [ft24.readWords _ _ (by norm_num) (by intro i hi; simp only [layW]; omega),
-          fframe.readWords _ _ (by norm_num) (by intro i hi; simp only [forsW]; omega), sigF, hrw]
-      have hopen4 : ∀ i (hi : i < p.1.length), OpenAt t4 (0x2650 + 16 + 176 * i) p.1[i] := by
-        intro i hi
-        rw [hl1] at hi
-        exact (hopen i (by rw [hl1]; exact hi)).frame ft24 (by omega) (by
-          intro a h1 h2; simp only [layW]; omega)
-      refine (Sim.pure_steps (hs5.trans hs6) ⟨fetch_ecall t6 2800 code2800 (by norm_num) rfl,
-        by simp only [ht6, blk2798.res, rv_simp], by simp only [ht6, blk2798.res, rv_simp], ?_⟩).mono
-        (by rw [hc]) (fun _ _ h => h)
-      rw [readBuffer_bytesAt, by6, final_bytes t4 rho p.1 lays hrl hrho4 hl1 hopen4 hll hst t5 hw5 hf5']
+  obtain ⟨tpc, tregs, tframe, hrl, hrw, ⟨ans, hN, hdo⟩, hadm, hkeys, hsent⟩ := h
+  subst hN
+  set N := ans.toNat with hNdef
+  set idx := idxOf N with hidxdef
+  have hidx : idx < 2 ^ 34 := Nat.mod_lt _ (by norm_num)
+  obtain ⟨hL, hsort, hlt, hbound, hvs⟩ := keys_facts N hadm
+  have hR := sched_le N hadm
+  set L := sortKeys (keys0 N) with hLdef
+  -- the frame from the initial state to `t`
+  have fst : Frame (s0 sk cache m) t (fun a => macW a ∨ digW a) := fs0.trans tframe
+  have t5 : t.getReg .x5 = 0 := by rw [tregs.get .x5 (by decide), u5]
+  have z0 : ∀ a, a % 8 = 0 → ZA a → (s0 sk cache m).getMem (BitVec.ofNat 64 a) = 0 := by
+    intro a h8 hz; simp only [ZA] at hz; exact s0_zero sk cache m a h8 (by omega) (by omega)
+  have zt : ∀ a, a % 8 = 0 → ZA a → t.getMem (BitVec.ofNat 64 a) = 0 := by
+    intro a h8 hz
+    rw [fst.getMem (by simp only [ZA] at hz; omega)
+      (by simp only [ZA] at hz; simp only [macW, setupW, digW, anW]; omega), z0 a h8 hz]
+  have zrw : ∀ a, a % 8 = 0 → ZA a → ZA (a + 8) → t.readWords (BitVec.ofNat 64 a) 2 = [0, 0] := by
+    intro a h8 h1 h2
+    rw [readWords_ofNat_two, zt a h8 h1, zt (a + 8) (by omega) h2]
+  have tS : t.readWords (BitVec.ofNat 64 0x6C0) 4 = wordsOf (toList sk) := by
+    rw [tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [digW, anW]; omega), upbS]
+  obtain ⟨tF, hsF, lctx, plctx, pcF, x9F, capF, x22F, sigF, rF, fF⟩ :=
+    digok_run (toList sk) rho ans L t tpc t5 hdo hL hsort hlt hbound hkeys hsent
+      (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA])) tS
+      (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA])) (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA]))
+      (zrw _ (by norm_num) (by simp [ZA]) (by simp [ZA]))
+  refine Sim.steps hsF (Sim.bind (porsTree_sim (toList sk) hS idx L tF lctx plctx pcF x9F capF)
+    (fun p t2 h2 => ?_))
+  obtain ⟨pc2, x19_2, hl1, hlv, hl2, hv2, hsec2, r2, f2⟩ := h2
+  -- the schedule
+  have f02 : Frame t t2 (fun a => digokW a ∨ porsW a) := fF.trans f2
+  have sctx : SchCtx p.1 L t2 := by
+    refine ⟨hL, hsort, hlt, hbound, fun i hi => ?_, ?_, fun l hl => (hlv l hl).1, fun l hl => (hlv l hl).2.1,
+      fun l hl => (hlv l hl).2.2⟩
+    · rw [f02.getMem (by omega) (by simp only [digokW, porsW]; omega)]; exact hkeys i hi
+    · rw [f02.getMem (by norm_num) (by simp only [digokW, porsW]; omega)]; exact hsent
+  obtain ⟨k3, c3, t3, hs3, hc3, pc3, heb3, rd3, r3, f3⟩ := sched_run p.1 L t2 sctx pc2 x19_2
+  rw [hvs] at rd3 f3
+  -- the layer entry
+  set M := (p.1.getD porsH []).getD 0 [] with hMdef
+  have hM : M.length = 16 := by
+    obtain ⟨a1, a2, -⟩ := hlv 14 (by norm_num)
+    rw [hMdef, show porsH = 14 from rfl, getD_of_lt (by rw [a1]; norm_num)]
+    exact a2 _ (List.getElem_mem _)
+  have f03 : Frame t t3 (fun a => (digokW a ∨ porsW a) ∨ ((0x120 ≤ a ∧ a < 0x130) ∨
+      schW' (schedule (sortLeaves (leavesOf N))).2.length a)) := f02.trans f3
+  have fs3 : Frame (s0 sk cache m) t3 (fun a => (macW a ∨ digW a) ∨ ((digokW a ∨ porsW a) ∨ ((0x120 ≤ a ∧ a < 0x130) ∨
+      schW' (schedule (sortLeaves (leavesOf N))).2.length a))) := fst.trans f03
+  have hW3 : ∀ a, ((macW a ∨ digW a) ∨ ((digokW a ∨ porsW a) ∨ ((0x120 ≤ a ∧ a < 0x130) ∨
+      schW' (schedule (sortLeaves (leavesOf N))).2.length a))) →
+      a < 0x900 ∨ (0x3300 ≤ a ∧ a < 0x3400 + 16 * 120) ∨ 0x30000 ≤ a ∨ (0x4AE0 ≤ a ∧ a < 0x4B20) ∨
+        (0x14B00 ≤ a ∧ a < 0x14B20) := by
+    intro a ha
+    simp only [macW, setupW, digW, anW, digokW, porsW, schW'] at ha
+    omega
+  have z3 : ∀ a, a % 8 = 0 → ZA a → t3.getMem (BitVec.ofNat 64 a) = 0 := by
+    intro a h8 hz
+    have hnw : ¬ ((macW a ∨ digW a) ∨ ((digokW a ∨ porsW a) ∨ ((0x120 ≤ a ∧ a < 0x130) ∨
+        schW' (schedule (sortLeaves (leavesOf N))).2.length a))) := by
+      simp only [ZA] at hz
+      simp only [macW, setupW, digW, anW, digokW, porsW, schW']
+      omega
+    rw [fs3.getMem (by simp only [ZA] at hz; omega) hnw, z0 a h8 hz]
+  have z3rw : ∀ a, a % 8 = 0 → ZA a → ZA (a + 8) → t3.readWords (BitVec.ofNat 64 a) 2 = [0, 0] := by
+    intro a h8 h1 h2
+    rw [readWords_ofNat_two, z3 a h8 h1, z3 (a + 8) (by omega) h2]
+  have st3 : Statics (toList sk) t3 := by
+    refine ⟨z3rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]), z3rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]),
+      ?_, z3rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]), z3rw _ (by norm_num) (by simp [ZA]) (by simp [ZA]),
+      z3rw _ (by norm_num) (by simp [ZA]) (by simp [ZA])⟩
+    rw [f03.readWords _ _ (by norm_num) (by intro i hi; simp only [digokW, porsW, schW']; omega), tS]
+  have rgW : ∀ a, regionA a → ¬ ((macW a ∨ digW a) ∨ ((digokW a ∨ porsW a) ∨ ((0x120 ≤ a ∧ a < 0x130) ∨
+      schW' (schedule (sortLeaves (leavesOf N))).2.length a))) := by
+    intro a ha
+    simp only [regionA] at ha
+    simp only [macW, setupW, digW, anW, digokW, porsW, schW']
+    omega
+  have rg3 : RegionOk (toList cache) t3 := (region_s0 sk cache m).frame fs3 rgW
+  have x5_3 : t3.getReg .x5 = 0 := by rw [r3.get .x5, r2.get .x5 (by decide), rF.get .x5 (by decide), t5]
+  have x22_3 : t3.getReg .x22 = BitVec.ofNat 64 idx := by
+    rw [r3.get .x22, r2.get .x22 (by decide), x22F]
+  obtain ⟨t4, hs4, hhead, m4, r4⟩ := layer_entry (toList sk) (toList cache) idx hidx M hM t3 pc3 x5_3 x22_3
+    (by rw [heb3]; rfl) st3 rg3
+  have rhoB : rho.length = 16 := hrl
+  set vs := sortLeaves (leavesOf N) with hvsdef
+  have hvsl : vs.length = 15 := by rw [← hvs, List.length_map, hL]
+  refine (Sim.steps hs3 (Sim.steps hs4 (Sim.bind (W₂ := 2123 + 2)
+    (layers_sim (toList sk) (toList cache) hS hcache idx hidx 4 le_rfl M t4 hhead)
+    (fun r2 t5 h5 => ?_)))).mono (by generalize layCyc = A; generalize topCyc = B; omega) (fun _ _ h => h)
+  rcases r2 with _ | lays
+  · obtain ⟨pc5, x55, x510⟩ := h5
+    exact (Sim.pure ⟨fetch_ecall t5 381 code381 (by norm_num) pc5, x55, x510⟩).mono (by omega)
+      (fun _ _ h => h)
+  obtain ⟨hll, hst, pc5, x55, lframe⟩ := h5
+  obtain ⟨t6, hs6, pc6, hw6, hf6⟩ := pack_run t5 pc5
+  rw [pack_full] at hw6
+  have hf6' : Frame t5 t6 (fun x => packD ≤ x ∧ x < packD + 8 * 491) :=
+    hf6.mono (fun x hx => by simp only [packD] at hx ⊢; omega)
+  have hs7 := symRun_sound blk2841 codeAt_2841 t6 pc6 (by simp only [blk2841.res, rv_simp])
+  set t7 := blk2841.res.toState t6 with ht7
+  have hc7 : 2123 + blk2841.res.cycles = 2123 + 2 := rfl
+  have mem7 : ∀ a, t7.getMem a = t6.getMem a := by
+    intro a; rw [ht7, Result.toState_getMem, show blk2841.res.st.mem = [] from rfl, memEval_nil]
+  have by7 : bytesAt t7 0x3300 6100 = bytesAt t6 0x3300 6100 := by
+    unfold bytesAt; apply List.map_congr_left; intro i _
+    simp only [MachineState.getByte, mem7]
+  -- the frame from `t3` to `t5`
+  have f35 : Frame t3 t5 (layW 4) := fun a ha hW => by rw [lframe a ha hW, m4]
+  have nlay : ∀ a, 0x3300 ≤ a → a < 0x3300 + 2176 → ¬ layW 4 a := by
+    intro a h1 h2; simp only [layW]; omega
+  -- the head facts at `t5`
+  have hrho5 : t5.readWords (BitVec.ofNat 64 0x3300) 2 = wordsOf rho := by
+    rw [f35.readWords _ _ (by norm_num) (fun i hi => nlay _ (by omega) (by omega)),
+      f3.readWords _ _ (by norm_num) (by intro i hi; simp only [schW']; omega),
+      f2.readWords _ _ (by norm_num) (by intro i hi; simp only [porsW]; omega), sigF, hrw]
+  have hsec5 : ∀ s < 15, t5.readWords (BitVec.ofNat 64 (0x3310 + 16 * s)) 2 =
+      wordsOf (p.2.getD (vs.getD s 0) []) := by
+    intro s hs
+    rw [f35.readWords _ _ (by omega) (fun i hi => nlay _ (by omega) (by omega)),
+      f3.readWords _ _ (by omega) (by intro i hi; simp only [schW']; omega), hsec2 s hs, hvs]
+  have hrd5 : ∀ r (hr : r < (schedule vs).2.length), t5.readWords (BitVec.ofNat 64 (0x3400 + 16 * r)) 2 =
+      wordsOf (readVal p.1 (schedule vs).2[r]) := by
+    intro r hr
+    rw [f35.readWords _ _ (by omega) (fun i hi => nlay _ (by omega) (by omega))]
+    exact rd3.2.2.1 r hr
+  have hz5 : ∀ i, (schedule vs).2.length ≤ i → i < 120 →
+      t5.readWords (BitVec.ofNat 64 (0x3400 + 16 * i)) 2 = [0, 0] := by
+    intro i h1 h2
+    have hnw : ∀ k < 2, ¬ ((macW (0x3400 + 16 * i + 8 * k) ∨ digW (0x3400 + 16 * i + 8 * k)) ∨
+        ((digokW (0x3400 + 16 * i + 8 * k) ∨ porsW (0x3400 + 16 * i + 8 * k)) ∨
+        ((0x120 ≤ 0x3400 + 16 * i + 8 * k ∧ 0x3400 + 16 * i + 8 * k < 0x130) ∨
+        schW' (schedule vs).2.length (0x3400 + 16 * i + 8 * k)))) := by
+      intro k hk
+      simp only [macW, setupW, digW, anW, digokW, porsW, schW']
+      omega
+    rw [f35.readWords _ _ (by omega) (fun k hk => nlay _ (by omega) (by omega)),
+      fs3.readWords _ _ (by omega) hnw, readWords_ofNat_two,
+      s0_zero sk cache m _ (by omega) (by omega) (by omega), s0_zero sk cache m _ (by omega) (by omega) (by omega)]
+  have hslots := head_slots t5 rho vs p.1 p.2 hvsl hR hrho5 hsec5 hrd5 hz5
+  have hvals : ∀ v ∈ porsOpening vs p.1 p.2, v.length = 16 := by
+    refine length_porsOpening_vals vs p.1 p.2 hv2 (fun x hx => ?_) (fun hj hhj => ?_)
+    · rw [hl2]; rw [← hvs] at hx; exact hlt x hx
+    · obtain ⟨r, hr, rfl⟩ := List.getElem_of_mem hhj
+      exact rd3.2.2.2 r hr
+  have hhead5 := head_bytes t5 rho rhoB vs p.1 p.2 hvsl hR hvals hslots
+  refine (Sim.pure_steps (hs6.trans hs7) ⟨fetch_ecall t7 2843 code2843 (by norm_num) (by
+      simp only [ht7, blk2841.res, rv_simp]),
+    by simp only [ht7, blk2841.res, rv_simp] <;> rfl, by simp only [ht7, blk2841.res, rv_simp] <;> rfl, ?_⟩).mono
+    (by rw [hc7]) (fun _ _ h => h)
+  rw [readBuffer_bytesAt, by7, final_bytes t5 rho (porsOpening vs p.1 p.2) lays hhead5 hll hst t6 hw6 hf6']
 
 theorem signList_sim (sk : SecretKey) (cache : Cache) (m : Message) :
     Sim image (s0 sk cache m) signW (signList (toList sk) (toList cache) (toList m)) ListPost := by
   rw [signList_eq]
   exact mac_sim sk cache m _ restW ListPost (fun u hu => signRest_sim sk cache m u hu)
-    (fun t tpc t5 t10 => ⟨fetch_ecall t 89 code89 (by norm_num) tpc, t5, t10⟩)
+    (fun t tpc t5 t10 => ⟨fetch_ecall t 144 code144 (by norm_num) tpc, t5, t10⟩)
 
-end SigGolfCandidate.Sign
-
-namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 /-- Final states: at a HALT whose output is `signRef`'s value. -/
-def SignPost (a : Option (Bytes 6404)) (t : MachineState) : Prop :=
+def SignPost (a : Option (Bytes 6100)) (t : MachineState) : Prop :=
   fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 1 ∧
-  a = if t.getReg .x10 = 0 then some (readBuffer t 0x2650 6404) else none
+  a = if t.getReg .x10 = 0 then some (readBuffer t 0x3300 6100) else none
 set_option maxRecDepth 100000 in
 
 theorem signRef_sim (sk : SecretKey) (cache : Cache) (m : Message) :
@@ -349,7 +303,7 @@ theorem signRef_sim (sk : SecretKey) (cache : Cache) (m : Message) :
     rw [h4, if_pos rfl, h5]; rfl
 
 theorem signW_lt : signW + 1 < CYCLE_LIMIT := by
-  unfold signW restW forsTreeW layCyc topCyc treeCyc tleafCyc CYCLE_LIMIT; norm_num
+  unfold signW restW digCyc anCyc layCyc topCyc treeCyc tleafCyc CYCLE_LIMIT; norm_num
 
 set_option maxRecDepth 100000 in
 /-- **Refinement** (value, #hash calls, #compressions) of the `sign` phase. -/

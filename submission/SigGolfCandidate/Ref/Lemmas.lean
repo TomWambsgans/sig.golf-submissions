@@ -1,4 +1,5 @@
 import SigGolfCandidate.Ref.Scheme
+import SigGolfCandidate.Ref.Count
 
 /-!
 # Basic facts about the reference specification
@@ -7,9 +8,12 @@ import SigGolfCandidate.Ref.Scheme
   `leNat_div_mod`, `leNat_lt`;
 * lengths of the encodings (`length_tweak`, `length_le32`, ...), `pad64_eq` (padding of an input
   of known length);
-* parameter tables (`height_values`, `shiftBelow_values`);
-* expand is a bijection: `unexpandRef_expandRef`, `expandRef_unexpandRef` (and the list and
-  index-map versions).
+* the oracle input format `fmt` per input kind (`fmt_chainInput`, `fmt_nodeInput`,
+  `fmt_porsNodeInput`, `fmt_porsLeafInput`, `fmt_digestInput`, ...);
+* parameter and layout tables (`height_values`, `shiftBelow_values`, `sigLayerOff_values`,
+  `witLayerOff_values`, ...);
+* expand: `expandList` makes exactly one query (`countCalls_expandList`), and every witness it
+  returns has `witBytes = 6348` bytes (`length_of_expandOf`).
 -/
 
 namespace SigGolfCandidate.Ref
@@ -89,75 +93,6 @@ theorem ofList_toList {n : Nat} (x : Bytes n) : ofList n (toList x) = x := by
 theorem length_toList {n : Nat} (x : Bytes n) : (toList x).length = n := by
   simp [toList, SigGolf.bytes]
 
-/-- The witness permutation checked on all `6404` positions (kernel evaluation). -/
-theorem witness_check : (List.range sigBytes).all (fun i =>
-    witnessSrc (signatureSrc i) == i && decide (signatureSrc i < sigBytes) &&
-      signatureSrc (witnessSrc i) == i && decide (witnessSrc i < sigBytes)) = true := by
-  decide +kernel
-
-private theorem witness_check_at (i : Nat) (hi : i < sigBytes) :
-    witnessSrc (signatureSrc i) = i ∧ signatureSrc i < sigBytes ∧
-      signatureSrc (witnessSrc i) = i ∧ witnessSrc i < sigBytes := by
-  have h := List.all_eq_true.mp witness_check i (List.mem_range.mpr hi)
-  simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at h
-  exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
-
-theorem witnessSrc_signatureSrc : ∀ i, i < sigBytes → witnessSrc (signatureSrc i) = i :=
-  fun i hi => (witness_check_at i hi).1
-
-theorem signatureSrc_witnessSrc : ∀ i, i < sigBytes → signatureSrc (witnessSrc i) = i :=
-  fun i hi => (witness_check_at i hi).2.2.1
-
-theorem signatureSrc_lt : ∀ i, i < sigBytes → signatureSrc i < sigBytes :=
-  fun i hi => (witness_check_at i hi).2.1
-
-theorem witnessSrc_lt : ∀ i, i < sigBytes → witnessSrc i < sigBytes :=
-  fun i hi => (witness_check_at i hi).2.2.2
-
-/-- Layer offsets. -/
-theorem sigLayerOff_values :
-    (List.range (nLayers + 1)).map sigLayerOff = [2480, 3332, 4104, 4876, 5648, 6404] := by
-  decide
-theorem witLayerOff_values :
-    (List.range (nLayers + 1)).map witLayerOff = [2480, 3328, 4096, 4864, 5632, 6384] := by
-  decide
-theorem witCounters_eq : witCounters = 6384 := by decide
-
-private theorem getD_map_range (n : Nat) (f : Nat → Byte) (i : Nat) (h : i < n) :
-    ((List.range n).map f).getD i 0 = f i := by
-  rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range h]; rfl
-
-theorem length_toWitness (l : List Byte) : (toWitness l).length = sigBytes := by simp [toWitness]
-theorem length_fromWitness (l : List Byte) : (fromWitness l).length = sigBytes := by simp [fromWitness]
-
-theorem fromWitness_toWitness (l : List Byte) (h : l.length = sigBytes) :
-    fromWitness (toWitness l) = l := by
-  apply List.ext_getElem (by rw [length_fromWitness, h])
-  intro i h1 h2
-  rw [length_fromWitness] at h1
-  simp only [fromWitness, List.getElem_map, List.getElem_range, toWitness]
-  rw [getD_map_range _ _ _ (signatureSrc_lt i h1), witnessSrc_signatureSrc i h1,
-    List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h2]; rfl
-
-theorem toWitness_fromWitness (l : List Byte) (h : l.length = sigBytes) :
-    toWitness (fromWitness l) = l := by
-  apply List.ext_getElem (by rw [length_toWitness, h])
-  intro i h1 h2
-  rw [length_toWitness] at h1
-  simp only [fromWitness, List.getElem_map, List.getElem_range, toWitness]
-  rw [getD_map_range _ _ _ (witnessSrc_lt i h1), signatureSrc_witnessSrc i h1,
-    List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h2]; rfl
-
-theorem unexpandRef_expandRef (sig : Bytes 6404) : unexpandRef (expandRef sig) = sig := by
-  unfold unexpandRef expandRef
-  rw [toList_ofList _ _ (by rw [length_toWitness]; rfl), fromWitness_toWitness _ (length_toList sig),
-    ofList_toList]
-
-theorem expandRef_unexpandRef (w : Bytes 6404) : expandRef (unexpandRef w) = w := by
-  unfold unexpandRef expandRef
-  rw [toList_ofList _ _ (by rw [length_fromWitness]; rfl), toWitness_fromWitness _ (length_toList w),
-    ofList_toList]
-
 /-! ## Lengths and padding -/
 
 @[simp] theorem length_leBytes (k v : Nat) : (leBytes k v).length = k := by simp [leBytes]
@@ -202,12 +137,11 @@ theorem fmt_of_plain (x : List Byte) (h1 : ¬ IsChainFmt x) (h2 : ¬ IsNodeFmt x
     (h3 : ¬ IsDigestFmt x) : fmt x = pad64 x := by
   unfold fmt; rw [if_neg h1, if_neg h2, if_neg h3]
 
-/-- An input whose tag byte (byte 1) is none of `1, 3, 10, 12` is zero padded. -/
-theorem fmt_of_tag (x : List Byte) (h : x.getD 1 0 ∉ [byte 1, byte 3, byte 10, byte 12]) :
+/-- An input whose tag byte (byte 1) is none of `1, 3, 12` is zero padded. -/
+theorem fmt_of_tag (x : List Byte) (h : x.getD 1 0 ∉ [byte 1, byte 3, byte 12]) :
     fmt x = pad64 x := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
-  exact fmt_of_plain x (fun hc => h.1 hc.2) (fun hc => hc.2.elim h.2.1 h.2.2.1)
-    (fun hc => h.2.2.2 hc.2)
+  exact fmt_of_plain x (fun hc => h.1 hc.2) (fun hc => h.2.1 hc.2) (fun hc => h.2.2 hc.2)
 
 /-- An input of length other than `48, 64, 96` is zero padded. -/
 theorem fmt_of_length (x : List Byte) (h : x.length ≠ 48 ∧ x.length ≠ 64 ∧ x.length ≠ 96) :
@@ -218,9 +152,9 @@ theorem getD_one_thInput (t lay tau p j : Nat) (payload : List Byte) :
     (thInput (tweak t lay tau p j) payload).getD 1 0 = byte t := by
   simp [thInput, tweak]
 
-/-- `thInput` with a tag other than `1, 3, 10, 12` is zero padded. -/
+/-- `thInput` with a tag other than `1, 3, 12` is zero padded. -/
 theorem fmt_thInput (t lay tau p j : Nat) (payload : List Byte)
-    (ht : byte t ∉ [byte 1, byte 3, byte 10, byte 12]) :
+    (ht : byte t ∉ [byte 1, byte 3, byte 12]) :
     fmt (thInput (tweak t lay tau p j) payload) = pad64 (thInput (tweak t lay tau p j) payload) :=
   fmt_of_tag _ (by rw [getD_one_thInput]; exact ht)
 
@@ -273,27 +207,18 @@ theorem fmt_chainInput (lay tau e i mu : Nat) (v : Val) (hv : v.length = 16) (hm
   have : splitP (8 * i + mu - 1) = mu - 1 + 256 * i := by unfold splitP; omega
   rw [this]
 
-/-- **Node block** of `tw(t, lay, tau, lam, j) || P || pl` (`t = 3` or `10`, 32-byte payload):
-`tw(t, lay, tau, 0, heapIndex h lam j) || P || pl`, `h = height (lay mod 256)` (tag 3) or `ftsA`
-(tag 10). -/
-theorem fmt_thInput_node (t lay tau lam j : Nat) (pl : List Byte) (ht : t = 3 ∨ t = 10)
+/-- **Node block** of `tw(3, lay, tau, lam, j) || P || pl` (32-byte payload):
+`tw(3, lay, tau, 0, heapIndex h lam j) || P || pl`, `h = height (lay mod 256)`. -/
+theorem fmt_thInput_node (lay tau lam j : Nat) (pl : List Byte)
     (hpl : pl.length = 32) (hlam : lam < 2 ^ 32) (hj : j < 2 ^ 32) :
-    fmt (thInput (tweak t lay tau lam j) pl) =
-      ⟨0, ofList _ (thInput (tweak t lay tau 0
-        (heapIndex (if t = 3 then height (lay % 256) else ftsA) lam j)) pl)⟩ := by
-  have hn : IsNodeFmt (thInput (tweak t lay tau lam j) pl) := by
-    refine ⟨by simp [hpl], ?_⟩
-    rw [getD_one_thInput]; rcases ht with rfl | rfl <;> simp
+    fmt (thInput (tweak 3 lay tau lam j) pl) =
+      ⟨0, ofList _ (thInput (tweak 3 lay tau 0 (heapIndex (height (lay % 256)) lam j)) pl)⟩ := by
+  have hn : IsNodeFmt (thInput (tweak 3 lay tau lam j) pl) :=
+    ⟨by simp [hpl], getD_one_thInput _ _ _ _ _ _⟩
   rw [fmt_of_node _ hn]
   congr 2
-  have hh : nodeHeight (thInput (tweak t lay tau lam j) pl) =
-      if t = 3 then height (lay % 256) else ftsA := by
-    unfold nodeHeight
-    rw [getD_one_thInput]
-    rcases ht with rfl | rfl
-    · simp [thInput, tweak, byte_toNat]
-    · simp only [show (10 : Nat) ≠ 3 by decide, if_false]
-      rw [if_neg (by decide)]
+  have hh : nodeHeight (thInput (tweak 3 lay tau lam j) pl) = height (lay % 256) := by
+    simp [nodeHeight, thInput, tweak, byte_toNat]
   unfold nodeBlock slice
   rw [hh, thInput_split]
   have e4 : ∀ (l : List Byte) (a b c d : Byte), ([a, b, c, d] ++ l).take 4 = [a, b, c, d] :=
@@ -316,16 +241,28 @@ theorem fmt_nodeInput (lay tau lam j : Nat) (l r : Val) (hl : l.length = 16) (hr
     fmt (nodeInput lay tau lam j l r) =
       ⟨0, ofList _ (thInput (tweak 3 lay tau 0 (heapIndex (height lay) lam j)) (l ++ r))⟩ := by
   unfold nodeInput
-  rw [fmt_thInput_node _ _ _ _ _ _ (Or.inl rfl) (by simp [hl, hr]) hlam hj, if_pos rfl,
-    Nat.mod_eq_of_lt hlay]
+  rw [fmt_thInput_node _ _ _ _ _ (by simp [hl, hr]) hlam hj, Nat.mod_eq_of_lt hlay]
 
-/-- The block of a FORS node. -/
-theorem fmt_ftsNodeInput (k idx lam j : Nat) (l r : Val) (hl : l.length = 16) (hr : r.length = 16)
-    (hlam : lam < 2 ^ 32) (hj : j < 2 ^ 32) :
-    fmt (ftsNodeInput k idx lam j l r) =
-      ⟨0, ofList _ (thInput (tweak 10 k idx 0 (heapIndex ftsA lam j)) (l ++ r))⟩ := by
-  unfold ftsNodeInput
-  rw [fmt_thInput_node _ _ _ _ _ _ (Or.inr rfl) (by simp [hl, hr]) hlam hj, if_neg (by decide)]
+/-- **PORS nodes are not relabeled**: the query of `porsNodeInput idx H l r` is the input itself
+(one block), for every heap index `H`. -/
+theorem fmt_porsNodeInput (idx H : Nat) (l r : Val) (hl : l.length = 16) (hr : r.length = 16) :
+    fmt (porsNodeInput idx H l r) = ⟨0, ofList _ (porsNodeInput idx H l r)⟩ := by
+  unfold porsNodeInput
+  rw [fmt_thInput _ _ _ _ _ _ (by decide),
+    pad64_eq _ 0 (by simp [hl, hr]) (by simp [hl, hr])]
+  simp [hl, hr, zeros]
+
+/-- PORS leaves (48 bytes, tag 9) are zero padded to one block. -/
+theorem fmt_porsLeafInput (idx j : Nat) (s : Val) (hs : s.length = 16) :
+    fmt (porsLeafInput idx j s) = ⟨0, ofList _ (porsLeafInput idx j s ++ zeros 16)⟩ := by
+  unfold porsLeafInput
+  rw [fmt_thInput _ _ _ _ _ _ (by decide), pad64_eq _ 0 (by simp [hs]) (by simp [hs])]
+  simp [hs]
+
+/-- PORS secret pairs (tag 8) are zero padded. -/
+theorem fmt_porsPrfInput (S : List Byte) (idx q : Nat) :
+    fmt (porsPrfInput S idx q) = pad64 (porsPrfInput S idx q) :=
+  fmt_thInput _ _ _ _ _ _ (by decide)
 
 /-- **Digest block**: `tw(12, 0, 0, 0, 0) || rho || m` (one block). -/
 theorem fmt_digestInput (rho m : List Byte) (hr : rho.length = 16) (hm : m.length = 32) :
@@ -443,5 +380,97 @@ theorem topH_eq : topH = 11 := rfl
 theorem topN_values : (List.range (topH + 1)).map topN =
     [0, 2048, 3072, 3584, 3840, 3968, 4032, 4064, 4080, 4088, 4092, 4094] := by decide
 theorem regionBytes_eq : regionBytes = 65504 := by decide
+theorem porsT_eq : porsT = 16384 := rfl
+theorem porsSegs_eq : porsSegs = 29 := rfl
+
+/-! ## Signature and witness layout -/
+
+theorem headBytes_eq : headBytes = 2176 := rfl
+theorem sigLayerOff_values :
+    (List.range (nLayers + 1)).map sigLayerOff = [2176, 3028, 3800, 4572, 5344, 6100] := by
+  decide
+theorem sigBytes_eq_sigLayerOff : sigBytes = sigLayerOff nLayers := by decide
+theorem wStream_eq : wStream = 272 := rfl
+theorem streamBytes_eq : streamBytes = 2152 := rfl
+theorem wLayers_eq : wLayers = 2424 := rfl
+theorem witLayerOff_values :
+    (List.range (nLayers + 1)).map witLayerOff = [2424, 3272, 4040, 4808, 5576, 6328] := by
+  decide
+theorem witCounters_eq : witCounters = 6328 := by decide
+theorem witBytes_eq : witBytes = witCounters + 4 * nLayers := by decide
+
+/-! ## expand: one query, witness length -/
+
+/-- `expandList` makes exactly one oracle query (the digest). -/
+theorem countCalls_expandList (m sig : List Byte) :
+    countCalls (expandList m sig) = (fun r => (r, 1)) <$> expandList m sig := by
+  unfold expandList digest
+  simp only [bind_assoc, pure_bind]
+  rw [countCalls_bind, countCalls_H]
+  simp only [map_bind, bind_map_left, countCalls_pure, map_pure, Nat.add_zero]
+
+private theorem length_slice (l : List Byte) (off len : Nat) (h : off + len ≤ l.length) :
+    (slice l off len).length = len := by
+  simp [slice]; omega
+
+private theorem length_flatten_map_range (n k : Nat) (f : Nat → List Byte)
+    (hf : ∀ i, i < n → (f i).length = k) : ((List.range n).map f).flatten.length = n * k := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [List.range_succ, List.map_append, List.flatten_append, List.length_append,
+      ih (fun i hi => hf i (by omega))]
+    simp [hf n (by omega)]; ring
+
+private theorem length_flatten_map_range' (n : Nat) (f : Nat → List Byte) (g : Nat → Nat)
+    (hf : ∀ i, i < n → (f i).length = g i) :
+    ((List.range n).map f).flatten.length = ((List.range n).map g).sum := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [List.range_succ, List.map_append, List.flatten_append, List.length_append,
+      ih (fun i hi => hf i (by omega))]
+    simp [hf n (by omega)]
+
+/-- The witness built by `expand` has `witBytes = 6348` bytes (for a signature of `sigBytes`
+bytes and 15 sorted leaves). -/
+theorem length_witnessList (sig : List Byte) (hsig : sig.length = sigBytes) (v vs segs : List Nat)
+    (hvs : vs.length = porsK) : (witnessList sig v vs segs).length = witBytes := by
+  have hs : sig.length = 6100 := hsig
+  have hoff : ∀ lay, lay < nLayers → sigLayerOff lay + sigLayerBytes lay ≤ 6100 := by decide
+  have hitem : ∀ i, i < porsK → (sigItem sig i).length = 16 := fun i hi =>
+    length_slice _ _ _ (by rw [hs]; unfold porsK at hi; omega)
+  have hbody : ∀ lay, lay < nLayers → (sigLayerBody sig lay).length = sigLayerBytes lay - 4 :=
+    fun lay hl => length_slice _ _ _ (by
+      have := hoff lay hl; have : 4 ≤ sigLayerBytes lay := by unfold sigLayerBytes; omega
+      rw [hs]; omega)
+  have hctr : ∀ lay, lay < nLayers → (sigCounterBytes sig lay).length = 4 :=
+    fun lay hl => length_slice _ _ _ (by
+      have := hoff lay hl; have : 4 ≤ sigLayerBytes lay := by unfold sigLayerBytes; omega
+      rw [hs]; omega)
+  unfold witnessList
+  simp only [List.length_append, List.length_map, List.length_take, length_zeros, hvs,
+    length_flatten_map_range _ _ _ hitem, length_flatten_map_range _ _ _ hctr,
+    length_flatten_map_range' _ _ _ hbody]
+  rw [show (sigRho sig).length = 16 from length_slice _ _ _ (by rw [hs]; decide)]
+  have : ((List.range nLayers).map fun lay => sigLayerBytes lay - 4).sum = 3904 := by decide
+  rw [this]
+  have : min streamBytes ((segStream sig segs).length + streamBytes) = streamBytes := by omega
+  rw [this]
+  decide
+
+/-- Every witness `expandOf` returns has `witBytes = 6348` bytes. -/
+theorem length_of_expandOf (sig : List Byte) (hsig : sig.length = sigBytes) (N : Nat)
+    (w : List Byte) (h : expandOf sig N = some w) : w.length = witBytes := by
+  unfold expandOf at h
+  dsimp only at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  cases h
+  exact length_witnessList _ hsig _ _ _ (by simp [sortLeaves, leavesOf, porsK])
 
 end SigGolfCandidate.Ref

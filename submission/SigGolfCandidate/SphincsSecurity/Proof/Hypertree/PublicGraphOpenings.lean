@@ -21,12 +21,13 @@ def treeOpeningPosition (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
   if level.val = 0 then .leaf lay tree sibling
   else .node lay tree ⟨level.val - 1, by have := level.isLt; omega⟩ sibling
 
-def ftsOpeningPosition (index : Index) (tree : FtsTree) (leaf : FtsLeaf)
-    (level : Fin ftsTreeHeight) : Position :=
-  let sibling : FtsLeaf := ⟨Nat.xor (leaf.val / 2 ^ level.val) 1,
-    openingSibling_lt ftsTreeHeight leaf.val level.val level.isLt leaf.isLt⟩
-  if level.val = 0 then .ftsLeaf index tree sibling
-  else .ftsNode index tree ⟨level.val - 1, by have := level.isLt; omega⟩ sibling
+/-- The graph position of node `(level, nodeIdx)` of the PORS tree of `index`: the leaf at level `0`, else
+the node with heap index `2^(14 - level) + nodeIdx` (heap index `0`, no node, outside the tree). -/
+def ftsNodePosition (index : Index) (level nodeIdx : Nat) : Position :=
+  if level = 0 then .ftsLeaf index porsTree (ftsLeafOfNat nodeIdx)
+  else if h : ftsHeapIndex level nodeIdx < 2 ^ ftsTreeHeight then
+    .ftsNode index porsTree ⟨ftsHeapIndex level nodeIdx, h⟩
+  else .ftsNode index porsTree ⟨0, Nat.two_pow_pos _⟩
 
 theorem treeOpeningPosition_bound (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (level : Fin maxLayerHeight) :
     (treeOpeningPosition lay tree leaf level).TreeBound := by
@@ -36,13 +37,23 @@ theorem treeOpeningPosition_bound (lay : Layer) (tree : TreeIndex) (leaf : LeafI
   · simp only [Position.TreeBound, show level.val - 1 + 1 = level.val by omega]
     exact FtsProbeSimulation.sibling_node_bound maxLayerHeight leaf.val level.val level.isLt leaf.isLt
 
-theorem ftsOpeningPosition_bound (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (level : Fin ftsTreeHeight) :
-    (ftsOpeningPosition index tree leaf level).TreeBound := by
-  unfold ftsOpeningPosition
-  split_ifs with hzero
+theorem ftsNodePosition_bound (index : Index) (level nodeIdx : Nat) (hlevel : level ≤ ftsTreeHeight)
+    (hnode : nodeIdx < 2 ^ (ftsTreeHeight - level)) :
+    (ftsNodePosition index level nodeIdx).TreeBound := by
+  unfold ftsNodePosition
+  split_ifs with hzero hheap
   · trivial
-  · simp only [Position.TreeBound, show level.val - 1 + 1 = level.val by omega]
-    exact FtsProbeSimulation.sibling_node_bound ftsTreeHeight leaf.val level.val level.isLt leaf.isLt
+  · change 0 < ftsHeapIndex level nodeIdx
+    unfold ftsHeapIndex
+    have := Nat.two_pow_pos (ftsTreeHeight - level)
+    omega
+  · exfalso
+    apply hheap
+    unfold ftsHeapIndex
+    have hpow : 2 ^ (ftsTreeHeight - level) * 2 ≤ 2 ^ ftsTreeHeight := by
+      rw [← pow_succ]
+      exact Nat.pow_le_pow_right (by omega) (by omega)
+    omega
 
 theorem treeOpeningPosition_public (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (level : Fin maxLayerHeight) :
@@ -50,17 +61,18 @@ theorem treeOpeningPosition_public (words : OtsReferenceWords) (disclosed : Inde
   unfold treeOpeningPosition
   split_ifs <;> simp only [CanonicalCoordinate.Hidden, not_false_eq_true]
 
-theorem ftsOpeningPosition_public (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop)
-    (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (level : Fin ftsTreeHeight) :
-    ¬CanonicalCoordinate.Hidden words disclosed (.graph (ftsOpeningPosition index tree leaf level)) := by
-  unfold ftsOpeningPosition
+theorem ftsNodePosition_public (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop)
+    (index : Index) (level nodeIdx : Nat) :
+    ¬CanonicalCoordinate.Hidden words disclosed (.graph (ftsNodePosition index level nodeIdx)) := by
+  unfold ftsNodePosition
   split_ifs <;> simp only [CanonicalCoordinate.Hidden, not_false_eq_true]
 
 def knownTreePath (known : Labels) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) : Fin maxLayerHeight → Digest :=
   fun level => if level.val < layerHeight lay then known (.graph (treeOpeningPosition lay tree leaf level)) else 0
 
-def knownFtsPath (known : Labels) (index : Index) (leaves : IndexGroup → FtsLeaf) : FtsTree → Fin ftsTreeHeight → Digest :=
-  fun tree level => known (.graph (ftsOpeningPosition index tree (leaves (ftsIndexOf tree)) level))
+/-- The PORS tree's nodes as the public labels know them. -/
+def knownFtsNodes (known : Labels) (index : Index) : Nat → Nat → Digest :=
+  fun level nodeIdx => known (.graph (ftsNodePosition index level nodeIdx))
 
 variable (parameter : PublicParameter)
   (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
@@ -78,17 +90,29 @@ theorem canonicalGraph_treeOpening (lay : Layer) (tree : TreeIndex) (leaf : Leaf
   · rw [honestValue_node, show level.val - 1 + 1 = level.val by omega]
     rfl
 
-theorem canonicalGraph_ftsOpening (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (level : Fin ftsTreeHeight) :
-    truncateHash (canonicalGraphLabels parameter otsSecret ftsSecret f (ftsOpeningPosition index tree leaf level)) =
-      evalWithAnswerFn f (ftsNode parameter index tree (ftsSecret index tree) level.val (Nat.xor (leaf.val / 2 ^ level.val) 1)) := by
-  rw [canonicalGraphLabels_eq_honest parameter otsSecret ftsSecret f _ (ftsOpeningPosition_bound index tree leaf level)]
-  change honestValue f parameter otsSecret ftsSecret (ftsOpeningPosition index tree leaf level) = _
-  unfold ftsOpeningPosition
-  split_ifs with hzero
-  · rw [honestValue_ftsLeaf]
-    simp only [hzero, honestFtsNode]
-  · rw [honestValue_ftsNode, show level.val - 1 + 1 = level.val by omega]
-    rfl
+theorem canonicalGraph_ftsNode (index : Index) (level nodeIdx : Nat) (hlevel : level ≤ ftsTreeHeight)
+    (hnode : nodeIdx < 2 ^ (ftsTreeHeight - level)) :
+    truncateHash (canonicalGraphLabels parameter otsSecret ftsSecret f (ftsNodePosition index level nodeIdx)) =
+      honestFtsNode f parameter index porsTree (ftsSecret index porsTree) level nodeIdx := by
+  rw [canonicalGraphLabels_eq_honest parameter otsSecret ftsSecret f _
+    (ftsNodePosition_bound index level nodeIdx hlevel hnode)]
+  change honestValue f parameter otsSecret ftsSecret (ftsNodePosition index level nodeIdx) = _
+  unfold ftsNodePosition
+  split_ifs with hzero hheap
+  · subst hzero
+    rw [honestValue_ftsLeaf]
+    have hlt : nodeIdx < 2 ^ ftsTreeHeight := by simpa using hnode
+    simp only [ftsLeafOfNat, Nat.mod_eq_of_lt hlt]
+  · rw [honestValue_ftsNode _ _ _ _ _ _ _ (by
+      change 0 < ftsHeapIndex level nodeIdx
+      unfold ftsHeapIndex
+      have := Nat.two_pow_pos (ftsTreeHeight - level)
+      omega)]
+    exact (honestFtsNode_eq_heap f parameter index porsTree _ level nodeIdx hlevel hnode).symm
+  · exact absurd (ftsNodePosition_bound index level nodeIdx hlevel hnode) (by
+      unfold ftsNodePosition
+      rw [if_neg hzero, dif_neg hheap]
+      exact Nat.lt_irrefl 0)
 
 theorem knownTreePath_eq (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)
     (hagrees : PublicAgreement words disclosed known
@@ -103,15 +127,19 @@ theorem knownTreePath_eq (words : OtsReferenceWords) (disclosed : Index → FtsT
     exact canonicalGraph_treeOpening parameter otsSecret ftsSecret f lay tree leaf level
   · rfl
 
-theorem knownFtsPath_eq (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)
+/-- **The public opening.** Read off the public labels, the honest PORS opening is the specification's. -/
+theorem knownFtsOpening_eq (words : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop)
+    (known : Labels)
     (hagrees : PublicAgreement words disclosed known
       (CanonicalCoordinate.value otsSecret ftsSecret (canonicalGraphLabels parameter otsSecret ftsSecret f)))
     (index : Index) (leaves : IndexGroup → FtsLeaf) :
-    knownFtsPath known index leaves = evalWithAnswerFn f (ftsOpen parameter index leaves (ftsSecret index)) := by
-  simp only [ftsOpen, evalWithAnswerFn_sequenceFin]
-  funext tree level
-  rw [knownFtsPath, hagrees _ (ftsOpeningPosition_public words disclosed index tree (leaves (ftsIndexOf tree)) level)]
-  exact canonicalGraph_ftsOpening parameter otsSecret ftsSecret f index tree (leaves (ftsIndexOf tree)) level
+    honestFts leaves (ftsSecret index porsTree) (knownFtsNodes known index) =
+      evalWithAnswerFn f (ftsOpen parameter index leaves (ftsSecret index)) := by
+  rw [eval_ftsOpen]
+  apply honestFts_congr_tree
+  intro level nodeIdx hlevel hnode
+  rw [knownFtsNodes, hagrees _ (ftsNodePosition_public words disclosed index level nodeIdx)]
+  exact canonicalGraph_ftsNode parameter otsSecret ftsSecret f index level nodeIdx hlevel.le hnode
 
 def knownFrontier (known : Labels) (words : OtsReferenceWords) : OtsFrontierValues :=
   fun lay tree leaf chain =>

@@ -49,7 +49,7 @@ theorem certificateMonitorMass_le_messageCharge (key : SecretKey) (budget : Nat)
   · simp only [certificateMonitorMass, certificateMonitorMessageCharge, if_neg hactive, le_refl]
 
 theorem expected_certificateLengthImpl_of_record_function (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (counter : CertificateMonitorState → ENNReal) (weight : ProposalExecutionRecord input → ENNReal)
     (hadvance : ∀ length record, counter
@@ -70,7 +70,7 @@ theorem expected_certificateLengthImpl_of_record_function (key : SecretKey) (bud
     simp only [hadvance]
 
 theorem expected_certificateLengthImpl_messageCalls (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateLengthImpl key budget required stopAfter input).run state] *
       result.2.2.messageCalls) = state.2.messageCalls + certificateMonitorMessageCharge key budget input state := by
@@ -89,7 +89,7 @@ theorem expected_certificateLengthImpl_messageCalls (key : SecretKey) (budget : 
     simp only [certificateMonitorMessageCharge, if_neg hactive, add_zero]
 
 theorem expected_certificate_messageCalls {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] *
       result.2.2.messageCalls) = state.2.messageCalls +
@@ -99,7 +99,7 @@ theorem expected_certificate_messageCalls {α : Type} (key : SecretKey) (budget 
     computation state
 
 theorem expectedCertificateCharge_mono {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (first second : (OracleWorld + SigningSpec).Domain → CertificateMonitorState → ENNReal)
     (hle : ∀ input state, first input state ≤ second input state)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
@@ -112,7 +112,7 @@ theorem expectedCertificateCharge_mono {α : Type} (key : SecretKey) (budget : N
       exact add_le_add (hle input state) (ENNReal.tsum_le_tsum fun result => mul_le_mul' le_rfl (ih result.1 result.2))
 
 theorem expected_certificate_creationMass_le_messageCalls {α : Type} (key : SecretKey) (budget spent : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (cache : QueryCache HashSpec) (stopped : Bool) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run
         (cache, initialCertificateMonitor spent stopped)] * result.2.2.creationMass) ≤
@@ -124,7 +124,7 @@ theorem expected_certificate_creationMass_le_messageCalls {α : Type} (key : Sec
     (certificateMonitorMass_le_messageCharge key budget) computation _
 
 theorem expected_certificateProposal_creationMass_le_messageCalls {α : Type} (key : SecretKey) (budget spent : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (cache : QueryCache HashSpec) (stopped : Bool) :
     (∑' result, Pr[= result | (simulateQ (certificateProposalImpl key budget required stopAfter) computation).run
         ([], cache, initialCertificateMonitor spent stopped)] * result.2.2.2.creationMass) ≤

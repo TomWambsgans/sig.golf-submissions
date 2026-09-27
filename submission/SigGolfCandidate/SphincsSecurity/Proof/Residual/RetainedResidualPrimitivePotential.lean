@@ -468,7 +468,7 @@ omit parameter inputs hencoding words publicReplies selections rows in
 theorem initialMonitoredSource_joint_primitive_messages (key : SecretKey) (adversary : Adversary)
     (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
     (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
     (hparameter : key.parameter ∈ support sampleParameter)
     (hencoding : encoding ∈ referenceEncodingAuxiliarySample.support)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))

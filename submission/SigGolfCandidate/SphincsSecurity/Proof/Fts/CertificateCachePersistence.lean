@@ -7,14 +7,14 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 theorem certificateCacheMonitorUpdate_hit (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input) (hhit : state.2.2 = true) :
     (certificateCacheMonitorUpdate key budget required stopAfter input state length record).2 = true := by
   simp only [certificateCacheMonitorUpdate, hhit, Bool.true_or]
 
 theorem certificateCacheMonitorUpdate_bad_after (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hbad : CertificateCacheExceptional key record.cache) :
@@ -22,7 +22,7 @@ theorem certificateCacheMonitorUpdate_bad_after (key : SecretKey) (budget : Nat)
   simp only [certificateCacheMonitorUpdate, hbad, decide_true, Bool.or_true]
 
 theorem certificateCacheLengthImpl_support (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateCacheMonitorState)
     (result : (OracleWorld + SigningSpec).Range input × CertificateCacheMonitorState)
     (hr : result ∈ ((certificateCacheLengthImpl key budget required stopAfter input).run state).support) :
@@ -41,7 +41,7 @@ theorem certificateCacheLengthImpl_support (key : SecretKey) (budget : Nat)
     exact ⟨0, record, hrecord, rfl⟩
 
 theorem certificateCacheLength_run_hit {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateCacheMonitorState)
     (hhit : state.2.2 = true) (result : α × CertificateCacheMonitorState)
     (hr : result ∈ ((simulateQ (certificateCacheLengthImpl key budget required stopAfter) computation).run state).support) :

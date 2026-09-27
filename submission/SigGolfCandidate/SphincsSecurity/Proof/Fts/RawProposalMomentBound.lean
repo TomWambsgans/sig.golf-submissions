@@ -10,7 +10,7 @@ open _root_.OracleComp OracleSpec ENNReal
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
-theorem TargetShapeValid.empty (remaining : Finset FtsTree) : TargetShapeValid ∅ remaining := by
+theorem TargetShapeValid.empty (remaining : Finset IndexGroup) : TargetShapeValid ∅ remaining := by
   constructor <;> intro group hgroup <;> exact (Finset.notMem_empty group hgroup).elim
 
 end SphincsSecurity.Concrete
@@ -22,7 +22,7 @@ namespace SphincsSecurity.Concrete
 open _root_.OracleComp OracleSpec ENNReal
 
 noncomputable def nearUniformDigestReuseWeight : ENNReal :=
-  (1025 / 1024 : ENNReal) * ((2 ^ 118 : Nat) : ENNReal)⁻¹
+  (1025 / 1024 : ENNReal) * (((2 ^ randomnessBits : Nat) : ENNReal) * admissibleProbability)⁻¹
 
 theorem exactDigestReuseWeight_le_near_uniform_of_clean_cache (key : SecretKey) (cache : QueryCache HashSpec)
     (cap : Nat) (hcap : cap ≤ 2 ^ 127) (hcache : QueryCache.enncard cache ≤ cap)
@@ -39,11 +39,11 @@ open ENNReal
 
 theorem reuseRawEnvelope_le_binomialAverage (key : SecretKey) (reuse rate : ENNReal)
     (hrate : rate ≤ 1) (queries signatures bound : Nat) (state : CoverLogState)
-    (remaining : Finset FtsTree) (hdegree : remaining.card ≤ bound)
+    (remaining : Finset IndexGroup) (hdegree : remaining.card ≤ bound)
     (hprob : ∀ index : Index,
       (Fintype.card Index : ENNReal)⁻¹ + reuse *
         (cachedIndexMultiplicity key.parameter state.1 index +
-          (queries : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + bound + signatures) ≤ rate) :
+          (queries : ENNReal) * cachedIndexRate + bound + signatures) ≤ rate) :
     reuseRawEnvelope key reuse queries signatures state ∅ remaining ≤
       ∑ index : Index, binomialAverage rate signatures (fun count =>
         (((signingSlotsAtIndex (observedOptionalSigningViews
@@ -67,19 +67,19 @@ theorem targetProposalIndexRate_le_one : targetProposalIndexRate ≤ 1 := by
   norm_num [ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv, Index, totalHeight]
 
 theorem targetProposalRate_of_cache_bound (cache : ENNReal) (spent queries signatures bound : Nat)
-    (hqueries : spent + queries ≤ 2 ^ 127) (hsignatures : signatures ≤ signatureLimit) (hbound : bound ≤ 14)
-    (hcache : cache ≤ (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)) :
+    (hqueries : spent + queries ≤ 2 ^ 127) (hsignatures : signatures ≤ signatureLimit) (hbound : bound ≤ 15)
+    (hcache : cache ≤ (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal)) :
     (Fintype.card Index : ENNReal)⁻¹ + nearUniformDigestReuseWeight *
-      (cache + (queries : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + bound + signatures) ≤
+      (cache + (queries : ENNReal) * cachedIndexRate + bound + signatures) ≤
         targetProposalIndexRate := by
-  have hsize : cache + (queries : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + bound + signatures ≤
-      ((2 ^ 127 : Nat) : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ +
-        ((2 ^ 72 : Nat) : ENNReal) + 14 + signatureLimit := by
+  have hsize : cache + (queries : ENNReal) * cachedIndexRate + bound + signatures ≤
+      ((2 ^ 127 : Nat) : ENNReal) * cachedIndexRate +
+        ((2 ^ 72 : Nat) : ENNReal) + 15 + signatureLimit := by
     calc
-      _ ≤ (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal) +
-          (queries : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + bound + signatures := by
+      _ ≤ (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal) +
+          (queries : ENNReal) * cachedIndexRate + bound + signatures := by
         gcongr
-      _ = ((spent + queries : Nat) : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ +
+      _ = ((spent + queries : Nat) : ENNReal) * cachedIndexRate +
           ((2 ^ 72 : Nat) : ENNReal) + bound + signatures := by
         push_cast
         ring
@@ -88,18 +88,35 @@ theorem targetProposalRate_of_cache_bound (cache : ENNReal) (spent queries signa
           (add_le_add (add_le_add (mul_le_mul' (Nat.cast_le.mpr hqueries) le_rfl) le_rfl)
             (by exact_mod_cast hbound)) (Nat.cast_le.mpr hsignatures)
   apply (add_le_add le_rfl (mul_le_mul' le_rfl hsize)).trans
-  unfold nearUniformDigestReuseWeight targetProposalIndexRate targetProposalOverhead
-  norm_num only [Index, totalHeight, Fintype.card_fin, signatureLimit]
+  unfold nearUniformDigestReuseWeight targetProposalIndexRate targetProposalOverhead cachedIndexRate
+  have hp := admissibleProbability_ne_top
+  have hlow := (ENNReal.toReal_le_toReal (by simp) hp).mpr admissibleProbability_ge
+  have hhigh := (ENNReal.toReal_le_toReal hp (by simp)).mpr admissibleProbability_le
+  rw [ENNReal.toReal_inv] at hlow hhigh
+  norm_num at hlow hhigh
+  have hpos : admissibleProbability ≠ 0 := admissibleProbability_pos
+  norm_num only [Index, totalHeight, Fintype.card_fin, signatureLimit, randomnessBits]
+  have hprod : ((2 : ENNReal) ^ 128 * admissibleProbability) ≠ 0 := mul_ne_zero (by simp) hpos
+  have hprodTop : ((2 : ENNReal) ^ 128 * admissibleProbability) ≠ ⊤ := ENNReal.mul_ne_top (by simp) hp
   apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
-  simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv]
-  norm_num
+  simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv,
+    ENNReal.toReal_pow, ENNReal.toReal_ofNat, ENNReal.toReal_natCast]
+  set x := admissibleProbability.toReal
+  have hx : 0 < x := by linarith
+  have hinv : ((2 : ℝ) ^ 128 * x)⁻¹ * (2 ^ 128 * x) = 1 := inv_mul_cancel₀ (by positivity)
+  have hinvpos : 0 < ((2 : ℝ) ^ 128 * x)⁻¹ := by positivity
+  have hsmall : ((2 : ℝ) ^ 128 * x)⁻¹ * (2 ^ 72 + 15 + 2 ^ 32) ≤ 1 / 2 ^ 46 := by
+    rw [mul_comm, ← div_eq_mul_inv, div_le_div_iff₀ (by positivity) (by positivity)]
+    nlinarith
+  norm_num at hinv hinvpos hsmall ⊢
+  nlinarith [mul_pos hinvpos hx]
 
 theorem reuseRawEnvelope_le_proposalIndexAverage (key : SecretKey)
-    (spent queries signatures bound : Nat) (state : CoverLogState) (remaining : Finset FtsTree)
+    (spent queries signatures bound : Nat) (state : CoverLogState) (remaining : Finset IndexGroup)
     (hqueries : spent + queries ≤ 2 ^ 127) (hsignatures : signatures ≤ signatureLimit)
-    (hdegree : remaining.card ≤ bound) (hbound : bound ≤ 14)
+    (hdegree : remaining.card ≤ bound) (hbound : bound ≤ 15)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)) :
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal)) :
     reuseRawEnvelope key nearUniformDigestReuseWeight queries signatures state ∅ remaining ≤
       ∑ index : Index, binomialAverage targetProposalIndexRate signatures (fun count =>
         (((signingSlotsAtIndex (observedOptionalSigningViews
@@ -121,11 +138,11 @@ theorem proposalIndexAverage_le_uniformAverage (signatures proposals degree : Na
   · exact hroom
 
 theorem reuseRawEnvelope_le_uniformProposalAverage (key : SecretKey)
-    (spent queries signatures bound proposals : Nat) (state : CoverLogState) (remaining : Finset FtsTree)
+    (spent queries signatures bound proposals : Nat) (state : CoverLogState) (remaining : Finset IndexGroup)
     (consumed : Index → Nat) (hqueries : spent + queries ≤ 2 ^ 127) (hsignatures : signatures ≤ signatureLimit)
-    (hdegree : remaining.card ≤ bound) (hbound : bound ≤ 14)
+    (hdegree : remaining.card ≤ bound) (hbound : bound ≤ 15)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal))
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal))
     (hcounts : ∀ index : Index,
       (signingSlotsAtIndex (observedOptionalSigningViews
         (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2) index).card ≤ consumed index)

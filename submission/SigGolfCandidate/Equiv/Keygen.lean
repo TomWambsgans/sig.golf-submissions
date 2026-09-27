@@ -1,4 +1,4 @@
-import SigGolfCandidate.Equiv.Sign
+import SigGolfCandidate.Equiv.Layers
 
 /-!
 # Key generation (the cached top tree)

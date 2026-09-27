@@ -5,14 +5,14 @@ open ENNReal
 
 /-- The per-slot bound on the forced FTS near-certificate probability at hash budget `budget`: every omitted tree pays the average terminal certificate price, the cache exception and the proposal prefix exception. -/
 noncomputable def nearCertificateBound (budget : Nat) : ENNReal :=
-  (Fintype.card FtsTree : ENNReal) * ((budget : ENNReal) * nearCertificatePrice +
+  (Fintype.card IndexGroup : ENNReal) * ((budget : ENNReal) * nearCertificatePrice +
     ((budget : ENNReal) * certificateCacheExceptionRate + proposalPrefixExceptionBound))
 
 set_option exponentiation.threshold 1024
 
 private theorem smallRangeClosing (x : ℝ) (hlow : 1 / 2 ^ 128 ≤ x) (hhigh : x ≤ 3 / 16384) :
-    7 / 4 * x + 11 / 65536 * x + 1 / 2 ^ 700 + x ^ 2 * 2 +
-      16384 / 16381 * x * (557 * x + 14 * (x / 2 ^ 25) + 14 / 2 ^ 700) ≤ 2 * x := by
+    7 / 4 * x + 1 / 65536 * x + 1 / 2 ^ 700 + x ^ 2 * 2 +
+      16384 / 16381 * x * (1241 * x + 15 * (x / 2 ^ 25) + 15 / 2 ^ 700) ≤ 2 * x := by
   have hn : 0 ≤ x := le_trans (by positivity) hlow
   have hsq : x * x ≤ x * (3 / 16384) := mul_le_mul_of_nonneg_left hhigh hn
   have htail : (1 : ℝ) / 2 ^ 700 ≤ x / 2 ^ 572 := by
@@ -57,17 +57,17 @@ theorem small_bound_le_security127 (q : Nat) (hq : 1 ≤ q) (hsmall : q ≤ budg
       exact_mod_cast (show 16381 * 2 ^ 114 ≤ 2 ^ 128 - q by omega)
     exact_mod_cast h
   have hrate : nearCertificateBound q ≤
-      14 * ((q : ENNReal) * (((557 : ENNReal) / 14) / (2 ^ 128 : Nat)) +
+      15 * ((q : ENNReal) * (((1241 : ENNReal) / 15) / (2 ^ 128 : Nat)) +
         ((q : ENNReal) * (2 ^ 153 : ENNReal)⁻¹ + (2 ^ 700 : ENNReal)⁻¹)) := by
     unfold nearCertificateBound
-    rw [nearCertificatePrice_def, proposalPrefixExceptionBound_def, show Fintype.card FtsTree = 14 from Fintype.card_fin _,
+    rw [nearCertificatePrice_def, proposalPrefixExceptionBound_def, show Fintype.card IndexGroup = 15 from Fintype.card_fin _,
       Nat.cast_ofNat]
     gcongr
     exact certificateCacheExceptionRate_le
   refine le_trans (add_le_add (add_le_add le_rfl hsquare) (mul_le_mul' hinv (mul_le_mul' le_rfl hrate))) ?_
   apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
   simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_inv,
-    ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat, Nat.cast_pow, Nat.cast_ofNat]
+    ENNReal.toReal_pow, ENNReal.toReal_natCast, ENNReal.toReal_ofNat, ENNReal.toReal_one, Nat.cast_pow, Nat.cast_ofNat]
   have hlow : 1 / 2 ^ 128 ≤ (q : ℝ) / 2 ^ 128 := by
     apply div_le_div_of_nonneg_right _ (by positivity)
     exact_mod_cast hq

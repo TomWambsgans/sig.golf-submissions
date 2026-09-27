@@ -64,7 +64,7 @@ theorem lazyRun_signingProgram (message : Message) (state : State inputs) :
       rw [Option.elim_some, lazyRun_record_bind]
       exact runWith_pure _ _ _
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_erasure (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs) :
     (fun result => (result.1, result.2.1)) <$>

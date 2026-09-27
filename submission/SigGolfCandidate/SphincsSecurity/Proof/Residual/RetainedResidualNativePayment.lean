@@ -84,7 +84,7 @@ theorem expected_lazyWorld_hashCalls_lower (world : OracleWorld.Domain) (state :
     cases world <;> simp [hashQueryCharge, FtsProbeSimulation.messageHashCharge]
     split <;> norm_num
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 private theorem expected_signing_annotation_hashCalls (message : Message) (state : MonitoredState inputs)
     (native : SPMF (Option SigningRecord × State inputs)) :

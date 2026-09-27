@@ -49,7 +49,11 @@ def EventSecurity : Prop :=
 /-- The abstract signing budget covers the organizer lifetime (both are `2^32`). -/
 theorem lifetime_le : SigGolf.LIFETIME ≤ SphincsSecurity.signatureLimit := le_of_eq rfl
 
-/-- Everything the bridge assumes about a submission. -/
+/-- Everything the bridge assumes about a submission.
+
+The abstract signature is witness-shaped: the signer outputs `compress Σ`, expansion
+(`aExpand`, which may query the oracle and fail) recovers a witness `w` with
+`compress (witDec w) = σ`, and verification checks `witDec w` at the abstract level. -/
 structure Assumptions (submission : SigGolf.Submission) where
   /-- (A) abstract event-form security. -/
   security : EventSecurity
@@ -60,12 +64,11 @@ structure Assumptions (submission : SigGolf.Submission) where
   /-- (B) messages. -/
   msgOf : SigGolf.Message → SphincsSecurity.Message
   msgOf_injective : Function.Injective msgOf
-  /-- (B) signatures: an exact byte codec. -/
-  sigCodec : SigGolf.Bytes submission.sizes.signature ≃ SphincsSecurity.Signature
-  /-- (B) the expansion map and the witness decoder, with `witDec ∘ expandFn = sigCodec`. -/
-  expandFn : SigGolf.Bytes submission.sizes.signature → SigGolf.Bytes submission.sizes.witness
+  /-- (B) signatures. The abstract signature is witness-shaped: `compress` gives the compact
+  signature bytes the signer outputs, and `witDec` parses a witness into an abstract signature.
+  No codec law is assumed; the only link is `expand_compress` below. -/
+  compress : SphincsSecurity.Signature → SigGolf.Bytes submission.sizes.signature
   witDec : SigGolf.Bytes submission.sizes.witness → SphincsSecurity.Signature
-  witDec_expandFn : ∀ b, witDec (expandFn b) = sigCodec b
   /-- (B) public keys. -/
   pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
   /-- (B) caches: `cacheEnc` gives the bytes key generation publishes, `cacheDec` the abstract
@@ -79,6 +82,10 @@ structure Assumptions (submission : SigGolf.Submission) where
   Honest : List UInt8 → Prop
   pad_unpad : ∀ y, pad (unpad y) = y
   unpad_pad : ∀ x, Honest x → unpad (pad x) = x
+  /-- (B) the abstract expansion: it may query the oracle and may fail. -/
+  aExpand : SphincsSecurity.Message → SphincsSecurity.PublicKey →
+    SigGolf.Bytes submission.sizes.signature →
+      OracleComp AHash (Option (SigGolf.Bytes submission.sizes.witness))
   /-- (D) key generation. -/
   keygen_eq : ∀ sk, (fun r => (r.value, r.hashCalls)) <$> submission.run .keygen sk =
     (fun p => (some (pkEnc p.1.1, cacheEnc p.1.2.1), p.2)) <$>
@@ -89,15 +96,23 @@ structure Assumptions (submission : SigGolf.Submission) where
   sign_eq : ∀ sk pk cache' sk', (pk, cache', sk') ∈ support (aKeygen (seedOf sk)) →
     ∀ cache message,
       (fun r => (r.value, r.hashCalls)) <$> submission.run .sign (sk, cache, message) =
-        (fun p => (p.1.map sigCodec.symm, p.2)) <$>
+        (fun p => (p.1.map compress, p.2)) <$>
           countCalls (relabel pad
             (aSign sk' (cacheDec cache) (msgOf message)))
   sign_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ cache message, AllQ Honest (aSign sk' cache message)
-  /-- (D) expansion: no hash calls. -/
-  expand_eq : ∀ message pk signature,
-    (fun r => (r.value, r.hashCalls)) <$> submission.run .expand (message, pk, signature) =
-      pure (some (expandFn signature), 0)
+  /-- (D) expansion, for public keys produced by key generation. -/
+  expand_eq : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature,
+      (fun r => (r.value, r.hashCalls)) <$> submission.run .expand (message, pkEnc pk, signature) =
+        countCalls (relabel pad (aExpand (msgOf message) pk signature))
+  expand_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature, AllQ Honest (aExpand message pk signature)
+  /-- (B) `compress ∘ witDec` inverts expansion: on every successful run (for any oracle
+  answers), the expanded witness compresses back to the input signature. -/
+  expand_compress : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ message signature witness, some witness ∈ support (aExpand message pk signature) →
+      compress (witDec witness) = signature
   /-- (D) verification, for public keys produced by key generation. -/
   verify_eq : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ message witness,

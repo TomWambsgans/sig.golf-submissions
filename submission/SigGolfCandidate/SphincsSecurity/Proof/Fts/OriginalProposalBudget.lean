@@ -78,10 +78,12 @@ theorem targetCreationMultiplier_le_record_hashCalls (key : SecretKey)
           simp only [freshWorldTargetHashCost, signingExecutionHashCost]
           split_ifs <;> norm_num
   | inr message =>
-      have hmass := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
+      have hmass := mul_le_mul' admissibleProbability_inv_le
         (freshDigestSelectionProbability_le_one key message cache)
       calc
-        _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by simpa only [targetCreationMultiplier, mul_one] using hmass
+        _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by
+          refine (by simpa only [targetCreationMultiplier, mul_one] using hmass : _ ≤ (870 : ENNReal)).trans ?_
+          exact_mod_cast (show 870 ≤ 2 ^ ftsTreeHeight by decide)
         _ ≤ (ftsOpenHashCost : ENNReal) := Nat.cast_le.mpr two_pow_ftsTreeHeight_le_ftsOpenHashCost
         _ ≤ record.trace.hashCalls := Nat.cast_le.mpr (originalProposalRecord_sign_hashCalls key message cache record hr)
 

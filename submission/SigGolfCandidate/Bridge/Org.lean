@@ -98,8 +98,8 @@ lemma orgK_sign_lt {cache' : SphincsSecurity.TopCache} {sk' : SphincsSecurity.Se
     orgK B A sk pk (n + 1) s T =
       (liftM (countCalls (aSign sk' (B.cacheDec req.cache) (B.msgOf req.message))) :
           OracleComp AW _) >>= fun p =>
-        orgK B A sk pk n (resume (p.1.map B.sigCodec.symm))
-          (recordVC T req.message (p.1.map B.sigCodec.symm) p.2) := by
+        orgK B A sk pk n (resume (p.1.map B.compress))
+          (recordVC T req.message (p.1.map B.compress) p.2) := by
   simp only [orgK, Submission.interact, h, hk, if_true, Submission.signingOracle,
     record_eq_recordVC]
   refine (relabelW_liftM_proj B (sub.run .sign (sk, req.cache, req.message))
@@ -148,6 +148,8 @@ lemma orgK_submit_witness {cache' : SphincsSecurity.TopCache}
   rw [← relabel_verify B hkey m w]
   rfl
 
+/-- The organizer's final check of a signature-form forgery: the counted abstract expansion,
+then (on success) the counted abstract verification of the decoded witness. -/
 lemma orgK_submit_signature {cache' : SphincsSecurity.TopCache}
     {sk' : SphincsSecurity.Seeded.SecretKey}
     (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
@@ -155,28 +157,35 @@ lemma orgK_submit_signature {cache' : SphincsSecurity.TopCache}
     {σ : Bytes sub.sizes.signature}
     (h : A.step s = .submit (.signature m σ)) :
     orgK B A sk pk (n + 1) s T =
-      (liftM ((fun p => (⟨p.1 && T.freshSignature m σ, T.hashCalls + 0 + p.2⟩ : AttackResult)) <$>
-        countCalls (aVerify pk (B.msgOf m) (B.sigCodec σ))) : OracleComp AW _) := by
-  simp only [orgK, Submission.interact, h, relabelW_liftM_hash]
-  congr 1
-  rw [← B.witDec_expandFn σ, ← relabel_verify B hkey m (B.expandFn σ)]
-  congr 1
-  simp only [Submission.checkForgery]
-  refine (bind_eq_of_proj (sub.run .expand (m, B.pkEnc pk, σ)) (fun r => (r.value, r.hashCalls))
-    (fun (p : Option (Bytes sub.sizes.witness) × ℕ) =>
+      (liftM (countCalls (B.aExpand (B.msgOf m) pk σ)) : OracleComp AW _) >>= fun p =>
+        match p.1 with
+        | none => pure ⟨false, T.hashCalls + p.2⟩
+        | some w =>
+          (liftM ((fun q => (⟨q.1 && T.freshSignature m σ, T.hashCalls + p.2 + q.2⟩ :
+              AttackResult)) <$> countCalls (aVerify pk (B.msgOf m) (B.witDec w))) :
+            OracleComp AW _) := by
+  simp only [orgK, Submission.interact, h, relabelW_liftM_hash, Submission.checkForgery]
+  have hE : relabel B.unpad ((fun r => (r.value, r.hashCalls)) <$>
+      sub.run .expand (m, B.pkEnc pk, σ)) = countCalls (B.aExpand (B.msgOf m) pk σ) := by
+    erw [B.expand_eq _ pk cache' sk' hkey m σ]
+    exact relabel_unpad_countCalls B _ (B.expand_honest _ pk cache' sk' hkey _ _)
+  refine (congrArg (fun X => (liftM (relabel B.unpad X) : OracleComp AW AttackResult))
+    (bind_eq_of_proj (sub.run .expand (m, B.pkEnc pk, σ)) (fun r => (r.value, r.hashCalls))
+      (fun (p : Option (Output sub.sizes .expand) × ℕ) =>
           (match p.1 with
           | none => pure ⟨false, T.hashCalls + p.2⟩
           | some witness => (do
               let verify ← sub.run .verify (m, B.pkEnc pk, witness)
               pure ⟨verify.value.isSome && T.freshSignature m σ,
                 T.hashCalls + p.2 + verify.hashCalls⟩) : OracleComp SigGolf.HashSpec AttackResult))
-    _ ?hK).trans ?_
-  case hK =>
-    intro r
-    rcases r with ⟨v, f, c, h, hc⟩
-    cases v <;> rfl
-  erw [B.expand_eq m (B.pkEnc pk) σ]
-  rfl
+      _ (fun r => by rcases r with ⟨v, f, c, h, hc⟩; cases v <;> rfl))).trans ?_
+  refine (congrArg liftM (relabel_bind B.unpad _ _)).trans ?_
+  refine (liftM_bind _ _).trans ?_
+  rw [hE]
+  refine bind_congr fun p => ?_
+  rcases p with ⟨_ | w, c⟩
+  · rfl
+  · exact congrArg _ (relabel_verify B hkey m w _ _)
 
 variable (A)
 

@@ -19,9 +19,6 @@ theorem orderedPayload_mem_canonicalPayloadInputs (order : Bool) (left right : D
 theorem leafPayload_mem_canonicalPayloadInputs (values : ChainIndex → Digest) : leafPayload values ∈ canonicalPayloadInputs :=
   flatMap_mem_canonicalPayloadInputs (List.ofFn values) (by simp only [List.length_ofFn, le_refl])
 
-theorem ftsRootsPayload_mem_canonicalPayloadInputs (values : FtsTree → Digest) : ftsRootsPayload values ∈ canonicalPayloadInputs :=
-  flatMap_mem_canonicalPayloadInputs (List.ofFn values) (by simp only [List.length_ofFn]; decide)
-
 theorem graphInput_mem_of_payload (parameter : PublicParameter) (position : Position) (payload : HashInput)
     (hp : payload ∈ canonicalPayloadInputs) : tweakableHashInput parameter position.domain payload ∈ canonicalGraphInputs parameter := by
   classical

@@ -10,7 +10,7 @@ attribute [local irreducible] signDigestLoop
 
 theorem digestCompletion_normalizedTargetLogProduct_le_input
     (key : SecretKey) (message : Message) (before : QueryCache HashSpec)
-    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset FtsTree)
+    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset IndexGroup)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (loop : DigestLoopRecord)
     (hloop : loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before))
@@ -59,14 +59,14 @@ theorem expected_digestCompletion_normalizedTargetLogProduct_le_of_exactReuse {�
     (record : α → (Option Signature × Option FewTimeView) × QueryCache HashSpec)
     (hcompletion : ∀ loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before),
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
-    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset FtsTree)
+    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset IndexGroup)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (reuse : ENNReal) (hreuse : exactDigestReuseWeight key message before ≤ reuse) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] *
       normalizedTargetLogProduct key (record result).2 (log ++ [⟨message, (record result).1.1⟩]) payload target required) ≤
       normalizedTargetLogProduct key before log payload target required +
-        (Fintype.card Index : ENNReal)⁻¹ *
-          (∑ selected ∈ required.powerset.erase ∅, normalizedTargetLogProduct key before log payload target (required \ selected)) +
+          (∑ selected ∈ required.powerset.erase ∅,
+            signerRate target selected * normalizedTargetLogProduct key before log payload target (required \ selected)) +
         (∑ selected ∈ required.powerset.erase ∅,
           normalizedCachedTargetSubsetMatch key.parameter before (tweakableHashInput key.parameter .message payload) target selected *
             normalizedTargetLogProduct key before log payload target (required \ selected)) * reuse := by

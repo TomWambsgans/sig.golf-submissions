@@ -24,7 +24,7 @@ theorem signDigestLoop_selected_cached_output (attempts : Nat) (key : SecretKey)
       (messageDigestPayload key.root message randomness))) = truncateMessageDigest output
     rw [agreesWithFn_fromCache after houtput]
   refine ⟨output, houtput, hdigest ▸ hadmissible, ?_⟩
-  simp only [hashOutputFewTimeView, selectedFewTimeView, ← hdigest, hindex, hleaves]
+  simp only [hashOutputFewTimeView, fullDigestView, selectedFewTimeView, ← hdigest, hindex, hleaves]
 
 theorem signAfterDigest_message_cache_eq (key : SecretKey) (randomness : Randomness) (index : Index)
     (leaves : IndexGroup → FtsLeaf) (before after : QueryCache HashSpec) (signature : Option Signature)

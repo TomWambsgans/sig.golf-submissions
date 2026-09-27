@@ -95,7 +95,7 @@ def monitorView (state : MonitoredState) : CertificateMonitorState := (state.1.1
 
 def monitorKey : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0, fun _ _ => 0⟩
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 noncomputable def monitoredWorldStep (input : OracleWorld.Domain) (state : MonitoredState) :
     SPMF (AdversaryStep (.inl input) × MonitoredState) :=

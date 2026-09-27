@@ -12,7 +12,7 @@ attribute [local irreducible] signDigestLoop bankedTargetEnvelope completedTarge
 set_option backward.isDefEq.respectTransparency false
 
 noncomputable def completedSigningBankValue (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (log : QueryLog SigningSpec) (bank : HashInput → Bool) (message : Message)
+    (required : Finset IndexGroup) (log : QueryLog SigningSpec) (bank : HashInput → Bool) (message : Message)
     (result : (Option Signature × Option FewTimeView) × QueryCache HashSpec) : ENNReal :=
   let after := (result.2, log ++ [⟨message, result.1.1⟩])
   bankedTargetEnvelope key reuse budget signatures required after (completedTargetBank key required after bank) false
@@ -21,7 +21,7 @@ def proposalOfSigningRecord (message : Message) (record : SigningRecord) (cache 
     ProposalExecutionRecord (.inr message) := ⟨record.1.1, cache, record.2, record.1.2, index⟩
 
 theorem bankedProposalRecordValue_le_completedSigningBank (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (cover : CoverLogState) (bank : HashInput → Bool) (message : Message)
+    (required : Finset IndexGroup) (cover : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (record : ProposalExecutionRecord (.inr message)) (stopped : Bool) :
     bankedProposalRecordValue key reuse budget signatures required cover bank (.inr message) record stopped ≤
       completedSigningBankValue key reuse budget signatures required cover.2 bank message
@@ -32,7 +32,7 @@ theorem bankedProposalRecordValue_le_completedSigningBank (key : SecretKey) (reu
   exact bankedCacheWeight_discard_le _ _ _ _ _
 
 theorem expected_digestCompletionValue_bank_le (key : SecretKey) (reuse : ENNReal) (budget signatures : Nat)
-    (required : Finset FtsTree) (cover : CoverLogState) (bank : HashInput → Bool) (message : Message)
+    (required : Finset IndexGroup) (cover : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (known : Labels) (words : OtsReferenceWords) (selections : ReferenceFamily) (actual : Labels)
     (hsigned : SigningDigestsCached key.parameter cover.1 key.root cover.2)
     (hreuse : exactDigestReuseWeight key message cover.1 ≤ reuse) :
@@ -67,7 +67,7 @@ variable (parameter : PublicParameter) (inputs : Finset HashInput)
   (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
 
 theorem expected_lazySigning_bank_le (routing : Routing) (key : SecretKey) (hparameter : key.parameter = parameter)
-    (reuse : ENNReal) (budget signatures : Nat) (required : Finset FtsTree)
+    (reuse : ENNReal) (budget signatures : Nat) (required : Finset IndexGroup)
     (cover : CoverLogState) (bank : HashInput → Bool) (message : Message)
     (hinputs : hashInputs (signDigestLoop digestAttemptLimit key message) ⊆ inputs) (state : State inputs)
     (hcache : state.memory.external.cache = cover.1)
@@ -109,7 +109,7 @@ theorem expected_lazySigning_bank_le (routing : Routing) (key : SecretKey) (hpar
       exact mul_le_of_le_one_left' tsum_probOutput_le_one
 
 theorem expected_lazySigning_certificateMonitor_le (routing : Routing) (key : SecretKey) (hparameter : key.parameter = parameter)
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message)
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message)
     (monitor : CertificateMonitorState)
     (length : Option SigningRecord × State inputs → Nat) (index : Option SigningRecord × State inputs → Index)
     (hinputs : hashInputs (signDigestLoop digestAttemptLimit key message) ⊆ inputs) (state : State inputs)

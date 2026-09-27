@@ -179,7 +179,7 @@ theorem lazyInitialSource_hashCalls_le (parameter : PublicParameter) (hparameter
 
 variable (key : SecretKey) (adversary : Adversary) (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
   (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-  (q : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+  (q : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
 
 noncomputable def initialMonitoredSource : SPMF (Option (Forgery × Bool) × MonitoredState (gameInputs adversary)) :=
   monitoredRun key (gameInputs adversary) (canonicalEncodingInputs_subset_retainedGameInputs adversary key.parameter)

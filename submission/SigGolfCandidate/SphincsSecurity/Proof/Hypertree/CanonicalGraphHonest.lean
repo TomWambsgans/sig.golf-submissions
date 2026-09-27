@@ -7,7 +7,7 @@ namespace Position
 
 def TreeBound : Position → Prop
   | .node _ _ level index => 2 ^ (level.val + 1) * (index.val + 1) ≤ 2 ^ maxLayerHeight
-  | .ftsNode _ _ level index => 2 ^ (level.val + 1) * (index.val + 1) ≤ 2 ^ ftsTreeHeight
+  | .ftsNode _ _ heap => 0 < heap.val
   | _ => True
 
 theorem TreeBound.valid (position : Position) (h : position.TreeBound) : position.Valid := by
@@ -19,14 +19,8 @@ theorem TreeBound.valid (position : Position) (h : position.TreeBound) : positio
       change 2 ^ (level.val + 1) * (index.val + 1) ≤ 2 ^ maxLayerHeight at h
       change 2 * index.val + 1 < 2 ^ maxLayerHeight
       omega
-  | ftsNode index tree level node =>
-      have hpow : 0 < (2 : Nat) ^ level.val := pow_pos (by decide) _
-      have hmul := Nat.mul_le_mul_right (node.val + 1) (show 2 ≤ 2 ^ (level.val + 1) by
-        rw [pow_succ]; omega)
-      change 2 ^ (level.val + 1) * (node.val + 1) ≤ 2 ^ ftsTreeHeight at h
-      change 2 * node.val + 1 < 2 ^ ftsTreeHeight
-      omega
-  | chain | leaf | ftsLeaf | ftsRoots => trivial
+  | ftsNode index tree heap => exact h
+  | chain | leaf | ftsLeaf => trivial
 
 private theorem treeBound_children_arithmetic (height level index : Nat)
     (h : 2 ^ (level + 1) * (index + 1) ≤ 2 ^ height) :
@@ -59,19 +53,13 @@ theorem TreeBound.child {position child : Position} (h : position.TreeBound)
           first | exact bounds.1 | exact bounds.2
       · rcases List.mem_pair.mp hchild with hchild | hchild <;> subst child <;> trivial
   | ftsLeaf => simp [children] at hchild
-  | ftsNode index tree level node =>
-      have hvalid : 2 * node.val + 1 < 2 ^ ftsTreeHeight := TreeBound.valid _ h
-      rw [children, dif_pos hvalid] at hchild
-      split_ifs at hchild with hlevel
-      · have bounds := treeBound_children_arithmetic ftsTreeHeight level.val node.val h
-        rcases List.mem_pair.mp hchild with hchild | hchild <;> subst child <;>
-          simp only [TreeBound, show level.val - 1 + 1 = level.val by omega] <;>
-          first | exact bounds.1 | exact bounds.2
+  | ftsNode index tree heap =>
+      have hpos : 0 < heap.val := h
+      rw [children, dif_pos hpos] at hchild
+      split_ifs at hchild with hidx
+      · rcases List.mem_pair.mp hchild with hchild | hchild <;> subst child <;>
+          simp only [TreeBound] <;> omega
       · rcases List.mem_pair.mp hchild with hchild | hchild <;> subst child <;> trivial
-  | ftsRoots index =>
-      simp only [children, List.mem_ofFn] at hchild
-      obtain ⟨tree, rfl⟩ := hchild
-      norm_num [TreeBound, ftsTreeHeight]
 
 end Position
 

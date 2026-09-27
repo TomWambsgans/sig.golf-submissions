@@ -6,7 +6,7 @@ open _root_.OracleComp OracleSpec ENNReal
 attribute [local instance] Classical.propDecidable
 
 theorem expected_certificateLengthImpl_potential_le (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateLengthImpl key budget required stopAfter input).run state] *
       certificateMonitorPotential key budget required result.2) ≤
@@ -54,7 +54,7 @@ theorem expected_certificateLengthImpl_potential_le (key : SecretKey) (budget : 
     exact certificateBankCount_le_bankedCacheWeight _ _ _ _ _
 
 theorem expected_certificateLengthImpl_of_advance_constant (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (counter : CertificateMonitorState → ENNReal) (value : ENNReal)
     (hadvance : ∀ length record, counter
@@ -65,7 +65,7 @@ theorem expected_certificateLengthImpl_of_advance_constant (key : SecretKey) (bu
     simp only [hadvance, ENNReal.tsum_mul_right, PMF.probOutput_eq_apply, PMF.tsum_coe, one_mul]
 
 theorem expected_certificateLengthImpl_creationCost (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateLengthImpl key budget required stopAfter input).run state] * result.2.2.creationCost) =
       state.2.creationCost + certificateMonitorCharge key budget required input state :=
@@ -73,7 +73,7 @@ theorem expected_certificateLengthImpl_creationCost (key : SecretKey) (budget : 
     (fun current => current.2.creationCost) _ (certificateMonitorUpdate_creationCost key budget required stopAfter input state)
 
 theorem expected_certificateLengthImpl_creationMass (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (certificateLengthImpl key budget required stopAfter input).run state] * result.2.2.creationMass) =
       state.2.creationMass + certificateMonitorMass key budget input state :=
@@ -81,7 +81,7 @@ theorem expected_certificateLengthImpl_creationMass (key : SecretKey) (budget : 
     (fun current => current.2.creationMass) _ (certificateMonitorUpdate_creationMass key budget required stopAfter input state)
 
 noncomputable def expectedCertificateCharge {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (charge : (OracleWorld + SigningSpec).Domain → CertificateMonitorState → ENNReal)
     (computation : OracleComp (OracleWorld + SigningSpec) α) : CertificateMonitorState → ENNReal :=
   OracleComp.construct (fun _ _ => 0)
@@ -90,13 +90,13 @@ noncomputable def expectedCertificateCharge {α : Type} (key : SecretKey) (budge
         next result.1 result.2) computation
 
 @[simp] theorem expectedCertificateCharge_pure {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (charge : (OracleWorld + SigningSpec).Domain → CertificateMonitorState → ENNReal)
     (value : α) (state : CertificateMonitorState) :
     expectedCertificateCharge key budget required stopAfter charge (pure value) state = 0 := rfl
 
 theorem expectedCertificateCharge_query_bind {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (charge : (OracleWorld + SigningSpec).Domain → CertificateMonitorState → ENNReal)
     (input : (OracleWorld + SigningSpec).Domain)
     (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) α)
@@ -107,7 +107,7 @@ theorem expectedCertificateCharge_query_bind {α : Type} (key : SecretKey) (budg
           expectedCertificateCharge key budget required stopAfter charge (next result.1) result.2 := rfl
 
 theorem expected_certificate_accumulator {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (counter : CertificateMonitorState → ENNReal)
     (charge : (OracleWorld + SigningSpec).Domain → CertificateMonitorState → ENNReal)
     (hstep : ∀ input state,
@@ -126,7 +126,7 @@ theorem expected_certificate_accumulator {α : Type} (key : SecretKey) (budget :
       rw [hstep, add_assoc]
 
 theorem expected_certificate_creationCost {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] * result.2.2.creationCost) =
       state.2.creationCost +
@@ -136,7 +136,7 @@ theorem expected_certificate_creationCost {α : Type} (key : SecretKey) (budget 
     computation state
 
 theorem expected_certificate_creationMass {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] * result.2.2.creationMass) =
       state.2.creationMass + expectedCertificateCharge key budget required stopAfter (certificateMonitorMass key budget) computation state :=
@@ -145,7 +145,7 @@ theorem expected_certificate_creationMass {α : Type} (key : SecretKey) (budget 
     computation state
 
 theorem expected_certificate_potential_le_initial_add_charge {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] *
       certificateMonitorPotential key budget required result.2) ≤
@@ -176,7 +176,7 @@ theorem expected_certificate_potential_le_initial_add_charge {α : Type} (key : 
         _ = _ := by rw [add_assoc]
 
 theorem expected_certificate_count_le_initial_add_charge {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run state] *
       certificateBankCount result.2.2.bank) ≤
@@ -186,7 +186,7 @@ theorem expected_certificate_count_le_initial_add_charge {α : Type} (key : Secr
   exact ENNReal.tsum_le_tsum fun result => mul_le_mul' le_rfl (certificateBankCount_le_bankedCacheWeight _ _ _ _ _)
 
 theorem expected_certificate_count_le_creationCost {α : Type} (key : SecretKey) (budget spent : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (cache : QueryCache HashSpec) (stopped : Bool)
     (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input → cache input = none) :
     (∑' result, Pr[= result | (simulateQ (certificateLengthImpl key budget required stopAfter) computation).run
@@ -200,7 +200,7 @@ theorem expected_certificate_count_le_creationCost {α : Type} (key : SecretKey)
   simpa only [initialCertificateMonitor, zero_add] using h
 
 theorem expected_certificateProposal_count_le_creationCost {α : Type} (key : SecretKey) (budget spent : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (cache : QueryCache HashSpec) (stopped : Bool)
     (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input → cache input = none) :
     (∑' result, Pr[= result | (simulateQ (certificateProposalImpl key budget required stopAfter) computation).run

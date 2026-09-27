@@ -9,17 +9,18 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 noncomputable def newTargetEnvelopeCharge (key : SecretKey) (before after : QueryCache HashSpec)
-    (log : QueryLog SigningSpec) (uniform reuse arrival : ENNReal) (queries signings : Nat)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) : ENNReal :=
+    (log : QueryLog SigningSpec) (reuse : ENNReal) (queries signings : Nat)
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) : ENNReal :=
   cacheMessageWeight key.parameter (fun input target => if before input = none then
-    targetShapeEnvelope uniform reuse arrival queries signings (targetShapeMoments key after log (payloadOf input) target) groups remaining else 0) after
+    targetShapeEnvelope (signerRate target) reuse (arrivalRate target) queries signings
+      (targetShapeMoments key after log (payloadOf input) target) groups remaining else 0) after
 
 theorem newTargetEnvelopeCharge_of_no_new (key : SecretKey) (before after : QueryCache HashSpec)
-    (log : QueryLog SigningSpec) (uniform reuse arrival : ENNReal) (queries signings : Nat)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree)
+    (log : QueryLog SigningSpec) (reuse : ENNReal) (queries signings : Nat)
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup)
     (hnone : ∀ payload output, before (tweakableHashInput key.parameter .message payload) = none →
       after (tweakableHashInput key.parameter .message payload) = some output → ¬ Admissible (truncateMessageDigest output)) :
-    newTargetEnvelopeCharge key before after log uniform reuse arrival queries signings groups remaining = 0 := by
+    newTargetEnvelopeCharge key before after log reuse queries signings groups remaining = 0 := by
   apply ENNReal.tsum_eq_zero.mpr
   intro input
   unfold cacheMessageEntryWeight

@@ -16,7 +16,7 @@ set_option backward.isDefEq.respectTransparency false
 abbrev ProposalState (inputs : Finset HashInput) := List Index × MonitoredState inputs
 
 theorem monitoredSigningResult_completed {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message) (length : Nat)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message) (length : Nat)
     (fallback : Index) (before : MonitoredState inputs) (result : Option SigningRecord × State inputs) :
     monitoredSigningResult key budget required stopAfter message
         (length, (nativeSigningView result).elim fallback Prod.fst) before result =
@@ -30,7 +30,7 @@ theorem monitoredSigningResult_completed {inputs : Finset HashInput} (key : Secr
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem completedNativeSigning_monitored (message : Message) (length : Nat) (state : MonitoredState inputs) :
     (fun result => monitoredSigningResult key budget required stopAfter message (length, result.2) state result.1) <$>

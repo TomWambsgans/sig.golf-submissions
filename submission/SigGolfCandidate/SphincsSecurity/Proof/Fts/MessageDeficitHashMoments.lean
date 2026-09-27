@@ -7,27 +7,25 @@ namespace SphincsSecurity
 
 open OracleComp OracleSpec ENNReal
 
-theorem messageDeficit_secondMoment_le (score : ℝ) :
-    (1 / 1024 : ℝ) * max (score - 1023) 0 ^ 2 +
-      (1023 / 1024 : ℝ) * max (score + 1) 0 ^ 2 ≤ max score 0 ^ 2 + 1023 := by
-  calc
-    _ ≤ (1 / 1024 : ℝ) * (max score 0 - 1023) ^ 2 + (1023 / 1024 : ℝ) * (max score 0 + 1) ^ 2 := by
-      apply add_le_add
-      · exact mul_le_mul_of_nonneg_left (positivePart_shift_even_le score (-1023) 2 (by decide)) (by norm_num)
-      · exact mul_le_mul_of_nonneg_left (positivePart_shift_even_le score 1 2 (by decide)) (by norm_num)
-    _ = _ := by ring
-
 theorem messageDeficit_secondMoment_ennreal (score : ℝ) :
-    (1024 : ENNReal)⁻¹ * positiveScoreMoment (score - 1023) 2 +
-      (1 - (1024 : ENNReal)⁻¹) * positiveScoreMoment (score + 1) 2 ≤ positiveScoreMoment score 2 + 1023 := by
-  have hsub : (1 - (1024 : ENNReal)⁻¹).toReal = (1023 / 1024 : ℝ) := by
-    rw [ENNReal.toReal_sub_of_le (by norm_num) (by finiteness)]
-    norm_num [ENNReal.toReal_inv]
-  apply (ENNReal.toReal_le_toReal (by unfold positiveScoreMoment; finiteness) (by unfold positiveScoreMoment; finiteness)).mp
-  rw [ENNReal.toReal_add (by unfold positiveScoreMoment; finiteness) (by unfold positiveScoreMoment; finiteness),
-    ENNReal.toReal_add (positiveScoreMoment_ne_top _ _) (by finiteness)]
-  simpa only [ENNReal.toReal_mul, hsub, ENNReal.toReal_inv, ENNReal.toReal_ofNat, positiveScoreMoment,
-    ENNReal.toReal_ofReal (pow_nonneg (le_max_right _ _) _), one_div] using messageDeficit_secondMoment_le score
+    Concrete.admissibleProbability * positiveScoreMoment (score + (Concrete.admissibleProbability.toReal - 1)) 2 +
+      (1 - Concrete.admissibleProbability) * positiveScoreMoment (score + Concrete.admissibleProbability.toReal) 2 ≤
+        positiveScoreMoment score 2 + 1 := by
+  have hp := Concrete.admissibleProbability_le_one
+  have hq : 1 - Concrete.admissibleProbability ≤ 1 := tsub_le_self
+  have h := Concrete.bernoulliExcess_secondMoment_ennreal score (1 - Concrete.admissibleProbability) hq
+  have hsub : (1 - Concrete.admissibleProbability).toReal = 1 - Concrete.admissibleProbability.toReal := by
+    rw [ENNReal.toReal_sub_of_le hp (by simp), ENNReal.toReal_one]
+  have hback : 1 - (1 - Concrete.admissibleProbability) = Concrete.admissibleProbability :=
+    ENNReal.sub_sub_cancel (by simp) hp
+  rw [hsub, hback] at h
+  calc
+    _ = (1 - Concrete.admissibleProbability) * positiveScoreMoment (score + (1 - (1 - Concrete.admissibleProbability.toReal))) 2 +
+        Concrete.admissibleProbability * positiveScoreMoment (score + -(1 - Concrete.admissibleProbability.toReal)) 2 := by
+      rw [add_comm]
+      congr 3 <;> ring
+    _ ≤ positiveScoreMoment score 2 + (1 - Concrete.admissibleProbability) := h
+    _ ≤ _ := add_le_add le_rfl hq
 
 end SphincsSecurity
 
@@ -40,19 +38,20 @@ attribute [local irreducible] messageDeficitScore positiveScoreMoment messageDef
 set_option backward.isDefEq.respectTransparency false
 
 theorem probEvent_uniformHashOutput_admissible :
-    Pr[fun output => Admissible (truncateMessageDigest output) | ($ᵗ HashOutput : ProbComp HashOutput)] = (1024 : ENNReal)⁻¹ := by
-  simpa only [and_true, probEvent_True_eq_sub, probFailure_of_liftM_PMF, tsub_zero, mul_one,
-    Concrete.signAttemptResultOfOutput_ne_none_iff, ftsTreeHeight, Nat.reducePow, Nat.cast_ofNat] using
-    Concrete.probEvent_uniformHashOutput_admissible_view (fun _ => True)
+    Pr[fun output => Admissible (truncateMessageDigest output) | ($ᵗ HashOutput : ProbComp HashOutput)] =
+      Concrete.admissibleProbability := by
+  have h := Concrete.probEvent_uniformHashOutput_admissible_view (fun _ => True)
+  simp only [and_true, Concrete.signAttemptResultOfOutput_ne_none_iff] at h
+  rw [h, probEvent_True_eq_sub, Concrete.probFailure_signerViewSample, tsub_zero, mul_one]
 
 private theorem expected_admissible_choice (accepted rejected : ENNReal) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       (if Admissible (truncateMessageDigest output) then accepted else rejected)) =
-      (1024 : ENNReal)⁻¹ * accepted + (1 - (1024 : ENNReal)⁻¹) * rejected := by
-  have hnot : Pr[fun output => ¬Admissible (truncateMessageDigest output) | ($ᵗ HashOutput : ProbComp HashOutput)] = 1 - (1024 : ENNReal)⁻¹ := by
+      Concrete.admissibleProbability * accepted + (1 - Concrete.admissibleProbability) * rejected := by
+  have hnot : Pr[fun output => ¬Admissible (truncateMessageDigest output) | ($ᵗ HashOutput : ProbComp HashOutput)] = 1 - Concrete.admissibleProbability := by
     have h := probEvent_compl ($ᵗ HashOutput : ProbComp HashOutput) (fun output => Admissible (truncateMessageDigest output))
     rw [probFailure_of_liftM_PMF, tsub_zero, probEvent_uniformHashOutput_admissible, add_comm] at h
-    exact ENNReal.eq_sub_of_add_eq' (by finiteness) h
+    exact ENNReal.eq_sub_of_add_eq' (by simp) h
   have hsplit (output : HashOutput) :
       Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] * (if Admissible (truncateMessageDigest output) then accepted else rejected) =
         (if Admissible (truncateMessageDigest output) then Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] else 0) * accepted +
@@ -63,8 +62,8 @@ private theorem expected_admissible_choice (accepted rejected : ENNReal) :
 private theorem expected_messageDeficitMoment_at (parameter : PublicParameter) (root : Digest) (message : Message)
     (cache : QueryCache HashSpec) (hfinite : Finite cache) (input : HashInput) (hfresh : cache input = none)
     (hat : MessageInputAt parameter root message input) (power : Nat) (charge : ENNReal)
-    (hshift : (1024 : ENNReal)⁻¹ * positiveScoreMoment (messageDeficitScore parameter root message cache - 1023) power +
-      (1 - (1024 : ENNReal)⁻¹) * positiveScoreMoment (messageDeficitScore parameter root message cache + 1) power ≤
+    (hshift : Concrete.admissibleProbability * positiveScoreMoment (messageDeficitScore parameter root message cache + (Concrete.admissibleProbability.toReal - 1)) power +
+      (1 - Concrete.admissibleProbability) * positiveScoreMoment (messageDeficitScore parameter root message cache + Concrete.admissibleProbability.toReal) power ≤
       positiveScoreMoment (messageDeficitScore parameter root message cache) power + charge) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       messageDeficitMoment parameter root (cache.cacheQuery input output) power) ≤ messageDeficitMoment parameter root cache power + charge := by
@@ -73,8 +72,8 @@ private theorem expected_messageDeficitMoment_at (parameter : PublicParameter) (
     unfold messageDeficitMoment
     exact (Finset.add_sum_erase _ _ (Finset.mem_univ message)).symm
   have hafter (output : HashOutput) : messageDeficitMoment parameter root (cache.cacheQuery input output) power =
-      (if Admissible (truncateMessageDigest output) then positiveScoreMoment (messageDeficitScore parameter root message cache - 1023) power
-       else positiveScoreMoment (messageDeficitScore parameter root message cache + 1) power) + rest := by
+      (if Admissible (truncateMessageDigest output) then positiveScoreMoment (messageDeficitScore parameter root message cache + (Concrete.admissibleProbability.toReal - 1)) power
+       else positiveScoreMoment (messageDeficitScore parameter root message cache + Concrete.admissibleProbability.toReal) power) + rest := by
     unfold messageDeficitMoment
     rw [← Finset.add_sum_erase _ _ (Finset.mem_univ message)]
     apply congrArg₂ (· + ·)
@@ -103,10 +102,10 @@ private theorem expected_messageDeficitMoment_other (parameter : PublicParameter
 theorem expected_messageDeficitMoment_second_le (parameter : PublicParameter) (root : Digest)
     (cache : QueryCache HashSpec) (hfinite : Finite cache) (input : HashInput) (hfresh : cache input = none) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
-      messageDeficitMoment parameter root (cache.cacheQuery input output) 2) ≤ messageDeficitMoment parameter root cache 2 + 1023 := by
+      messageDeficitMoment parameter root (cache.cacheQuery input output) 2) ≤ messageDeficitMoment parameter root cache 2 + 1 := by
   by_cases hat : ∃ message, MessageInputAt parameter root message input
   · obtain ⟨message, hat⟩ := hat
-    exact expected_messageDeficitMoment_at parameter root message cache hfinite input hfresh hat 2 1023
+    exact expected_messageDeficitMoment_at parameter root message cache hfinite input hfresh hat 2 1
       (messageDeficit_secondMoment_ennreal _)
   · rw [expected_messageDeficitMoment_other parameter root cache hfinite input hfresh hat]
     exact le_self_add

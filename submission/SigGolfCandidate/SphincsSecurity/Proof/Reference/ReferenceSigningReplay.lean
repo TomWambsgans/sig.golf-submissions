@@ -15,7 +15,7 @@ theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (
     (hfull : FullyHonestOpening f cache key index leaves signature)
     (hreference : ∀ lay, ReferenceLayerOpening f key words selections index signature lay) :
     (publicSignPlan known words selections signature.randomness index leaves).1.map
-      (fun plan => plan.finish (fun tree => key.ftsSecret index tree (leaves (ftsIndexOf tree)))) = some signature := by
+      (fun plan => plan.finish leaves (fun slot => key.ftsSecret index porsTree (leaves slot))) = some signature := by
   have hfrontier := knownFrontier_eq key.otsSecret key.ftsSecret _ words disclosed known hagrees
   rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root key.top] at hfrontier
   let parts : Layer → LayerPart := fun lay => (signature.counter lay, signature.chainValue lay,
@@ -28,11 +28,11 @@ theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (
       funext chain
       exact (hvalues chain).symm
     simp only [publicSignLayer, referenceSelectionResult, hselected, Option.map_some, hchain, ← hcounter, parts]
-  have hftsPath : knownFtsPath known index leaves = signature.ftsPath := by
-    rw [knownFtsPath_eq key.parameter key.otsSecret key.ftsSecret f words disclosed known hagrees]
-    funext tree level
-    simp only [ftsOpen, evalWithAnswerFn_sequenceFin]
-    exact ((hfull.2.1 tree).2 level.val level.isLt).symm
+  have hfts : honestFtsOfSlots leaves (fun slot => key.ftsSecret index porsTree (leaves slot))
+      (knownFtsNodes known index) = signature.fts := by
+    rw [honestFtsOfSlots_comp, knownFtsOpening_eq key.parameter key.otsSecret key.ftsSecret f words disclosed known
+      hagrees index leaves]
+    exact hfull.2.1.symm
   have hparts : (fun lay => LayerSignature.ofPadded lay (parts lay)) = signature.layers := by
     funext lay
     apply LayerSignature.ext
@@ -46,13 +46,8 @@ theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (
       obtain ⟨_, _, _, hpath⟩ := (hfull.1 lay).1
       simpa only [signaturePath, dif_pos level.isLt, Fin.eta, honestNode] using
         (hpath level.val level.isLt).symm
-  simp only [publicSignPlan, hlayers, sequenceFin_some, Option.map_some, hftsPath, PublicSigningPlan.finish, parts]
-  congr 1
-  change Signature.mk signature.randomness (fun tree => key.ftsSecret index tree (leaves (ftsIndexOf tree)))
-    signature.ftsPath (fun lay => LayerSignature.ofPadded lay (parts lay)) = signature
-  have hsecrets : (fun tree => key.ftsSecret index tree (leaves (ftsIndexOf tree))) = signature.ftsSecret :=
-    funext fun tree => ((hfull.2.1 tree).1).symm
-  rw [hsecrets, hparts]
+  simp only [publicSignPlan, hlayers, sequenceFin_some, Option.map_some, PublicSigningPlan.finish]
+  rw [hfts, hparts]
 
 theorem honest_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id) (htop : KeyTopHonest f key)
     (dummy : OtsReferenceWords)

@@ -17,7 +17,7 @@ set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 attribute [local irreducible] lazyRun environment ResidualByteFrontend.jointSigningProgram
   certificateMonitorUpdate monitoredSigningResult
@@ -66,10 +66,8 @@ theorem monitoredStep_creationBudget (input : (OracleWorld + SigningSpec).Domain
       simp only [monitoredSigningResult]
       apply creationBudget_update key budget required stopAfter (.inr message) (monitorView state) annotation.1 _ hbefore
       change targetCreationMultiplier key state.1.memory.external.cache (.inr message) ≤ record.2.hashCalls
-      have hp := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
-        (freshDigestSelectionProbability_le_one key message state.1.memory.external.cache)
       calc
-        _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by simpa only [targetCreationMultiplier, mul_one] using hp
+        _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := targetCreationMultiplier_sign_le key _ message
         _ ≤ (ftsOpenHashCost : ENNReal) := Nat.cast_le.mpr two_pow_ftsTreeHeight_le_ftsOpenHashCost
         _ ≤ record.2.hashCalls := Nat.cast_le.mpr hmin
 

@@ -11,7 +11,7 @@ def CertificateGameExceptional (result : CertificateCacheGameResult) : Prop :=
     ProposalPrefixExceptional result.2.2.2.1.proposals result.2.2.2.1.log.length
 
 theorem expected_certificateCacheGame_project (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool)
     (weight : CertificateGameResult → ENNReal) :
     (∑' result, Pr[= result | certificateCacheGame adversary budget required stopAfter stopped] *
       weight (certificateCacheGameProject result)) =

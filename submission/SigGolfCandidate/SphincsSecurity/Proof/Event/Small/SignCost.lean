@@ -167,7 +167,7 @@ theorem fixed_sign_cost (parameter : PublicParameter) (f : QueryImpl HashSpec Id
   omega
 
 
-theorem ftsOpenHashCost_eq : ftsOpenHashCost = 28659 := by
+theorem ftsOpenHashCost_eq : ftsOpenHashCost = 32767 := by
   rw [ftsOpenHashCost_def]
   decide
 
@@ -175,12 +175,12 @@ theorem keygenHashCost_eq : keygenHashCost = 606207 := by
   rw [keygenHashCost_def, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
-theorem signHashBound_eq : signHashBound = 25079790 := by
+theorem signHashBound_eq : signHashBound = 25083898 := by
   rw [signHashBound, ftsOpenHashCost_eq, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
 /-- The ratio between the largest and the least cost of a signing request, rounded up. -/
-def signRatio : Nat := 450
+def signRatio : Nat := 254
 
 theorem signHashBound_le : signHashBound ≤ signRatio * signCharge := by
   rw [signHashBound_eq, signCharge_eq, signRatio]

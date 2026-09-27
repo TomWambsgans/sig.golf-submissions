@@ -15,7 +15,7 @@ theorem initialMonitoredSource_strong_certificate (key : SecretKey) (adversary :
     (dummy : OtsReferenceWords) (hdummy : ∀ lay tree leaf, OtsCode.Valid (dummy lay tree leaf))
     (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
     (hroot : key.root = knownRoot (initialKnown (referenceFamilyWords encoding.selections dummy) exposed))
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
     (forgery : Forgery) (after : MonitoredState (gameInputs adversary))
     (hresult : initialMonitoredSource key adversary encoding dummy exposed high budget required stopAfter stopped
       (some (forgery, true), after) ≠ 0)

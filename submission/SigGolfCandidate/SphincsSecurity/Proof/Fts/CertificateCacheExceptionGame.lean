@@ -12,7 +12,7 @@ abbrev CertificateCacheGameResult := RetainedRestResult × (List Index × Certif
 def certificateCacheGameProject (result : CertificateCacheGameResult) : CertificateGameResult :=
   (result.1, result.2.1, certificateCacheMonitorProject result.2.2)
 
-noncomputable def certificateCacheGame (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+noncomputable def certificateCacheGame (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) : PMF CertificateCacheGameResult := do
   let generated ← (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)
   let key := generated.1.1.2
@@ -20,7 +20,7 @@ noncomputable def certificateCacheGame (adversary : Adversary) (budget : Nat) (r
     (retainedGameRestComputation adversary generated.1.1.1)).run
       ([], generated.2, initialCertificateMonitor generated.1.2.hashCalls stopped, false)
 
-theorem certificateCacheGame_project (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateCacheGame_project (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     certificateCacheGameProject <$> certificateCacheGame adversary budget required stopAfter stopped =
       certificateGame adversary budget required stopAfter stopped := by

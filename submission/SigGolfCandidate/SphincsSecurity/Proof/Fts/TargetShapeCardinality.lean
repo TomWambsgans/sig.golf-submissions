@@ -50,11 +50,11 @@ theorem targetTreeLower_lift (moments : TargetIndexVector) :
   rw [sum_nonempty_sdiff_eq_proper remaining (fun kept => moments groups.card kept.card)]
   exact sum_proper_subsets_card remaining (moments groups.card)
 
-theorem targetReuseStep_lift (moments : TargetIndexVector) (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree)
+theorem targetReuseStep_lift (moments : TargetIndexVector) (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup)
     (hvalid : TargetShapeValid groups remaining) :
     targetReuseStep (liftTargetIndexVector moments) groups remaining = liftTargetIndexVector (targetIndexReuseStep moments) groups remaining := by
   unfold targetReuseStep liftTargetIndexVector
-  have hcard (selected : Finset FtsTree) (hselected : selected ∈ remaining.powerset.erase ∅) : (insert selected groups).card = groups.card + 1 :=
+  have hcard (selected : Finset IndexGroup) (hselected : selected ∈ remaining.powerset.erase ∅) : (insert selected groups).card = groups.card + 1 :=
     Finset.card_insert_of_notMem (hvalid.new_group (Finset.nonempty_iff_ne_empty.mpr (Finset.mem_erase.mp hselected).1)
       (Finset.mem_powerset.mp (Finset.mem_erase.mp hselected).2))
   rw [Finset.sum_congr rfl (fun selected hselected => congrArg (fun power => moments power (remaining \ selected).card) (hcard selected hselected))]

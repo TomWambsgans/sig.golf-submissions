@@ -89,7 +89,7 @@ def M2w : Word := 0xf03f03f03f03f03f#64
 
 /-- Registers constant in all phases after the prologue. -/
 def baseK : List (Reg × Word) :=
-  [(.x5, 0), (.x18, 0x1000), (.x19, 0x2000), (.x6, 1), (.x7, 2), (.x8, 3), (.x9, 4), (.x13, 5)]
+  [(.x5, 0), (.x18, 0x1000), (.x19, 0x1978), (.x6, 1), (.x7, 2), (.x8, 3), (.x9, 4), (.x13, 5)]
 
 /-- FORS phase: also `K16`. -/
 def gkF : List (Reg × Word) := baseK ++ [(.x24, 0x10000)]
@@ -106,7 +106,7 @@ def pSlots : List Nat := [0x10, 0x18, 0xD0, 0xD8, 0x110, 0x118, 0x1D0, 0x1D8, 0x
   0x350, 0x358]
 
 def WitOK (wl : List Byte) (s : MachineState) : Prop :=
-  ∀ j, j < 801 → s.getMem (BitVec.ofNat 64 (0x800 + 8 * j)) = w64 (slice wl (8 * j) 8)
+  ∀ j, j < 880 → s.getMem (BitVec.ofNat 64 (0x800 + 8 * j)) = w64 (slice wl (8 * j) 8)
 
 def PkOK (pk : List Byte) (s : MachineState) : Prop :=
   s.getMem 0xA0 = w64 (pk.take 8) ∧ s.getMem 0xA8 = w64 (pk.drop 8)

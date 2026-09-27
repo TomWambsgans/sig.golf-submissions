@@ -81,7 +81,7 @@ theorem lazyByteRun_world_cacheSizeBound (routing : Routing) (input : OracleWorl
       exact (checkedHashResult_cacheSize key inputs hencoding words publicReplies selections rows routing actual seed ⟨input, hin⟩ state hcovered).trans
         (add_le_add hbound le_rfl)
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_cacheSizeBound (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hvalid : MonitoredValid inputs state) (hinputs : requestInputs key input ⊆ inputs)

@@ -118,7 +118,7 @@ theorem entIdx_spec (c : CCtx) (i : Nat) (hi : i < 42) :
 
 def tabOk (lay i : Nat) : Bool :=
   decide (tabAddr lay i % 4 = 0) && decide (0x1000 ≤ tabAddr lay i) &&
-    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 275)) && decide (bVal lay i < 2 ^ 32) &&
+    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 279)) && decide (bVal lay i < 2 ^ 32) &&
     decide (nextPc' lay i = s1Pc lay i + 15) &&
     (!(decide (i + 1 < 42) && !hasPrep (i + 1)) || bVal lay (i + 1) == bVal lay i)
 
@@ -131,7 +131,7 @@ theorem tabOk_at (lay i : Nat) (hl : lay < 5) (hi : i < 42) : tabOk lay i = true
     (List.mem_range.mpr hi)
 
 theorem tabOk_spec {lay i : Nat} (h : tabOk lay i = true) :
-    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 275) ∧
+    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 279) ∧
       bVal lay i < 2 ^ 32 ∧ (i + 1 < 42 → hasPrep (i + 1) = false → bVal lay (i + 1) = bVal lay i) ∧
       nextPc' lay i = s1Pc lay i + 15 := by
   simp only [tabOk, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true',

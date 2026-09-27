@@ -18,7 +18,7 @@ variable (parameter : PublicParameter) (root : Digest)
   (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (labels : CanonicalGraphLabels)
   (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs parameter ⊆ inputs)
   (selections : ReferenceFamily) (rows : CanonicalEncodingRows) (dummy : OtsReferenceWords) (slot : Nat)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem bind_const_of_eq {A B : Type} (law : SPMF A) (next : A → SPMF B) (after : SPMF B) (hnext : ∀ value, next value = after)
     (hconst : (law >>= fun _ => after) = after) : (law >>= next) = after := by

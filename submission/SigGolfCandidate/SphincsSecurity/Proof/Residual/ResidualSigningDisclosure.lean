@@ -53,15 +53,15 @@ def jointCompleteSigningRecord (record : PublicSigningRecord) :
     OracleComp (World inputs) ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) :=
   match record.1.1, record.1.2 with
   | some plan, some view => do
-      let secrets ← sequenceFin fun tree => jointDisclosure (.ftsStart view.1 tree (view.2 tree))
-      pure ((some (plan.finish secrets), some view), record.2)
+      let secrets ← sequenceFin fun slot => jointDisclosure (.ftsStart view.1 porsTree (view.2 slot))
+      pure ((some (plan.finish view.2 secrets), some view), record.2)
   | _, _ => pure ((none, record.1.2), record.2)
 
 def jointCompletedSigningState (environment : AdaptiveResidualLabels.Environment (ControlSpec inputs) CanonicalCoordinate inputs ExternalMemory)
     (labels : CanonicalCoordinate → Digest) (record : PublicSigningRecord)
     (state : State inputs) : State inputs :=
   match record.1.1, record.1.2 with
-  | some _, some view => jointDisclosureSequenceState environment labels (fun tree => .ftsStart view.1 tree (view.2 tree)) state
+  | some _, some view => jointDisclosureSequenceState environment labels (fun slot => .ftsStart view.1 porsTree (view.2 slot)) state
   | _, _ => state
 
 theorem observedRun_jointCompleteSigningRecord

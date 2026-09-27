@@ -37,7 +37,7 @@ theorem treeNode_succ_eq (parameter : PublicParameter) (lay : Layer) (tree : Tre
 theorem ftsNode_zero_eq (parameter : PublicParameter) (index : Index) (tree : FtsTree)
     (secret : FtsLeaf → Digest) (nodeIdx : Nat) :
     ftsNode (m := m) parameter index tree secret 0 nodeIdx
-      = ftsLeafHash parameter index tree (ftsLeafOfNat nodeIdx) (secret (ftsLeafOfNat nodeIdx)) := rfl
+      = ftsLeafHash parameter index tree (ftsLeafOfNat nodeIdx).val (secret (ftsLeafOfNat nodeIdx)) := rfl
 
 theorem ftsNode_succ_eq (parameter : PublicParameter) (index : Index) (tree : FtsTree)
     (secret : FtsLeaf → Digest) (level nodeIdx : Nat) :
@@ -45,7 +45,7 @@ theorem ftsNode_succ_eq (parameter : PublicParameter) (index : Index) (tree : Ft
       = (do
           let left ← ftsNode parameter index tree secret level (2 * nodeIdx)
           let right ← ftsNode parameter index tree secret level (2 * nodeIdx + 1)
-          tweakableHash parameter (.ftsNode index tree (level + 1) nodeIdx)
+          tweakableHash parameter (.ftsNode index tree (ftsHeapIndex (level + 1) nodeIdx))
             (nodePayload left right)) := rfl
 
 @[simp]
@@ -64,24 +64,6 @@ theorem treeFold_succ_eq (parameter : PublicParameter) (lay : Layer) (tree : Tre
           else
             tweakableHash parameter (.node lay tree (levels + 1) (leaf.val / 2 ^ (levels + 1)))
               (nodePayload current (path levels))) := rfl
-
-@[simp]
-theorem ftsFold_zero_eq (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (leaf : FtsLeaf) (path : Fin ftsTreeHeight → Digest) (value : Digest) :
-    ftsFold (m := m) parameter index tree leaf path 0 value = pure value := rfl
-
-theorem ftsFold_succ_eq (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (leaf : FtsLeaf) (path : Fin ftsTreeHeight → Digest) (levels : Nat) (value : Digest) :
-    ftsFold (m := m) parameter index tree leaf path (levels + 1) value
-      = (do
-          let current ← ftsFold parameter index tree leaf path levels value
-          let sibling := if hlevel : levels < ftsTreeHeight then path ⟨levels, hlevel⟩ else 0
-          if leaf.val.testBit levels then
-            tweakableHash parameter (.ftsNode index tree (levels + 1) (leaf.val / 2 ^ (levels + 1)))
-              (nodePayload sibling current)
-          else
-            tweakableHash parameter (.ftsNode index tree (levels + 1) (leaf.val / 2 ^ (levels + 1)))
-              (nodePayload current sibling)) := rfl
 
 @[simp]
 theorem verifyLayers_zero_eq (parameter : PublicParameter) (index : Index) (signature : Signature)
@@ -119,25 +101,25 @@ theorem verifyCore_eq (publicKey : PublicKey) (message : Message) (signature : S
     verifyCore (m := m) publicKey message signature
       = (do
           let digest ← messageDigest publicKey.parameter publicKey.root message signature.randomness
-          if ¬ Admissible digest then
-            return false
-          else
-            let ftsPublicKey ← ftsRecover publicKey.parameter (digestIndex digest)
-              (digestLeaves digest) signature.ftsSecret signature.ftsPath
-            match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
-                ftsPublicKey with
-            | none => return false
-            | some root => return decide (root = publicKey.root)) := by
+          match ← ftsRecover publicKey.parameter (digestIndex digest)
+              (slotValue (digestLeaves digest)) signature.fts with
+          | none => return false
+          | some ftsPublicKey =>
+              match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
+                  ftsPublicKey with
+              | none => return false
+              | some root => return decide (root = publicKey.root)) := by
   unfold verifyCore
   apply bind_congr
   intro digest
-  split
-  · rfl
-  · apply bind_congr
-    intro key
-    apply bind_congr
-    intro result
-    cases result <;> rfl
+  apply bind_congr
+  intro key
+  cases key with
+  | none => rfl
+  | some key =>
+      apply bind_congr
+      intro result
+      cases result <;> rfl
 
 theorem verify_eq_ite (publicKey : PublicKey) (message : Message) (signature : Signature) :
     verify (m := m) publicKey message signature
@@ -148,15 +130,14 @@ theorem verify_eq (publicKey : PublicKey) (message : Message) (signature : Signa
     verify (m := m) publicKey message signature
       = (do
           let digest ← messageDigest publicKey.parameter publicKey.root message signature.randomness
-          if ¬ Admissible digest then
-            return false
-          else
-            let ftsPublicKey ← ftsRecover publicKey.parameter (digestIndex digest)
-              (digestLeaves digest) signature.ftsSecret signature.ftsPath
-            match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
-                ftsPublicKey with
-            | none => return false
-            | some root => return decide (root = publicKey.root)) := by
+          match ← ftsRecover publicKey.parameter (digestIndex digest)
+              (slotValue (digestLeaves digest)) signature.fts with
+          | none => return false
+          | some ftsPublicKey =>
+              match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
+                  ftsPublicKey with
+              | none => return false
+              | some root => return decide (root = publicKey.root)) := by
   rw [verify_eq_ite, if_pos hcounters, verifyCore_eq]
 
 theorem verify_eq_of_not_counters (publicKey : PublicKey) (message : Message) (signature : Signature)
@@ -186,8 +167,9 @@ example : (List.ofFn fun lay : Layer => heightAbove lay) = [0, 11, 17, 23, 29] :
 
 example : (List.ofFn fun lay : Layer => heightBelow lay) = [23, 17, 11, 5, 0] := by decide
 
-/-- The digest is `h + k * a = 184` bits and has to fit in one oracle output. -/
-example : messageDigestBits = 184 ∧ messageDigestBits ≤ hashOutputBits := by decide
+/-- The digest is the whole oracle output: `h + k * 14 = 244` bits are read, and `12` are unused. -/
+example : messageDigestBits = 256 ∧ totalHeight + ftsOpenings * ftsTreeHeight ≤ messageDigestBits := by
+  decide
 
 theorem treeIndexAt_val (index : Index) (lay : Layer) :
     (treeIndexAt index lay).val = index.val / 2 ^ (totalHeight - heightAbove lay) := rfl

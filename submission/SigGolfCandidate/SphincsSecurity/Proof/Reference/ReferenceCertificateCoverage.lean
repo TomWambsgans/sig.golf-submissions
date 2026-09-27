@@ -59,7 +59,7 @@ theorem boundaryEval_verify_message (key : SecretKey) (f : QueryImpl HashSpec Id
   exact List.mem_singleton_self _
 
 theorem certificate_to_message_record (key : SecretKey) (f : QueryImpl HashSpec Id)
-    (before : (Forgery × QueryLog SigningSpec) × SigningBoundaryTrace) (trace : Trace) (required : Finset FtsTree)
+    (before : (Forgery × QueryLog SigningSpec) × SigningBoundaryTrace) (trace : Trace) (required : Finset IndexGroup)
     (hcounters : CountersInRange before.1.1.signature)
     (horigin : ∀ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ before.1.2 →
       ReferenceSigningWitness.SignatureOrigin key f message signature before.2)
@@ -136,7 +136,7 @@ theorem referenceForgeryRest_certificate_atRoot (key : SecretKey) (f : QueryImpl
     (dummy : OtsReferenceWords) (adversary : Adversary) (before : AdversaryTrace)
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary))
-    (trace : Trace) (required : Finset FtsTree) (hcounters : CountersInRange before.1.1.1.signature)
+    (trace : Trace) (required : Finset IndexGroup) (hcounters : CountersInRange before.1.1.1.signature)
     (hcertificate : TargetCertificateAt (keyAtRoot f key root) required
       (ReferenceFtsCoverage.transcriptCache f before.1.2 trace, before.1.1.2)
       (signingInput (keyAtRoot f key root) before.1.1.1.message before.1.1.1.signature)) :

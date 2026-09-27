@@ -20,7 +20,7 @@ theorem monitorResources_mono (monitor : CertificateMonitor) (before after : Mem
     (hmessage : before.messageCalls.length ≤ after.messageCalls.length) : MonitorResources monitor after :=
   ⟨h.1.trans hhash, h.2.1.trans (Nat.cast_le.mpr hhash), h.2.2.trans hmessage⟩
 
-theorem monitorResources_update (key : SecretKey) (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+theorem monitorResources_update (key : SecretKey) (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) {inputs : Finset HashInput} (state : MonitoredState inputs)
     (length : Nat) (record : ProposalExecutionRecord input) (after : Memory)
     (hresources : MonitorResources state.2 state.1.memory)
@@ -41,7 +41,7 @@ theorem monitorResources_update (key : SecretKey) (budget : Nat) (required : Fin
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 attribute [local irreducible] lazyRun environment ResidualByteFrontend.jointSigningProgram
   certificateMonitorUpdate monitorView monitoredSigningResult
@@ -106,10 +106,8 @@ theorem monitoredStep_resources (input : (OracleWorld + SigningSpec).Domain)
       · rw [hm]; rfl
       · rw [hm]; rfl
       · change targetCreationMultiplier key state.1.memory.external.cache (.inr message) ≤ record.2.hashCalls
-        have hp := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal)))
-          (freshDigestSelectionProbability_le_one key message state.1.memory.external.cache)
         calc
-          _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := by simpa only [targetCreationMultiplier, mul_one] using hp
+          _ ≤ ((2 ^ ftsTreeHeight : Nat) : ENNReal) := targetCreationMultiplier_sign_le key _ message
           _ ≤ (ftsOpenHashCost : ENNReal) := Nat.cast_le.mpr two_pow_ftsTreeHeight_le_ftsOpenHashCost
           _ ≤ record.2.hashCalls := Nat.cast_le.mpr hmin
 

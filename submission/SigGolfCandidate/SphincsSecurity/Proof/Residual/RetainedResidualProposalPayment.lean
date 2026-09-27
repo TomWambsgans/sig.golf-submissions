@@ -11,7 +11,7 @@ set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 noncomputable def expectedProposalPayment
     (charge : (OracleWorld + SigningSpec).Domain → ProposalState inputs → ENNReal)

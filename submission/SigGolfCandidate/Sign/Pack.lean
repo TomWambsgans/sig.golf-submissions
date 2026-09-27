@@ -23,7 +23,7 @@ theorem packTab_length : packTab.length = 491 := by decide +kernel
 /-- Table sanity (checked by the kernel). -/
 theorem packTab_ok : packTab.all (fun e => decide (e.1 ≤ 2) &&
     (if e.1 = 0 then decide (e.2.1 % 8 = 0) else decide (e.2.1 % 4 = 0 ∧ e.2.2 % 4 = 0)) &&
-    decide (e.2.1 + 8 < 0x2650 ∧ e.2.2 + 8 < 0x2650)) = true := by decide +kernel
+    decide (e.2.1 + 8 < 0x3300 ∧ e.2.2 + 8 < 0x3300)) = true := by decide +kernel
 
 /-- The stage address of byte `i` of the dword of entry `e`. -/
 def srcA (e : Nat × Nat × Nat) (i : Nat) : Nat :=
@@ -39,7 +39,7 @@ theorem packDW_byte (t : MachineState) (e : Nat × Nat × Nat) (he : e ∈ packT
   have hbo : ∀ a, a % 4 = 0 → a + 8 < 2 ^ 64 → byteOffset (BitVec.ofNat 64 a) = 0 ∨
       byteOffset (BitVec.ofNat 64 a) = 4 := by
     intro a ha hb; rw [byteOffset_ofNat (by omega)]; omega
-  have hgb : ∀ a j, a % 4 = 0 → a + 8 < 0x2650 → j < 4 →
+  have hgb : ∀ a j, a % 4 = 0 → a + 8 < 0x3300 → j < 4 →
       extractByte (t.getMem (alignToDword (BitVec.ofNat 64 a))) (byteOffset (BitVec.ofNat 64 a) + j) =
         t.getByte (BitVec.ofNat 64 (a + j)) := by
     intro a j ha hb hj
@@ -72,15 +72,15 @@ theorem packTab_kind2 : ∀ j < 490, (packTab.getD j (0, 0, 0)).1 ≠ 2 := by
 
 /-- **Pack**: the signature layer region after the pack, as stage bytes. -/
 theorem pack_bytes (t u : MachineState)
-    (hw : u.readWords (BitVec.ofNat 64 (0x2650 + 2480)) 491 = packTab.map (packDW t)) :
-    bytesAt u (0x2650 + 2480) 3924 =
+    (hw : u.readWords (BitVec.ofNat 64 (0x3300 + 2176)) 491 = packTab.map (packDW t)) :
+    bytesAt u (0x3300 + 2176) 3924 =
       (List.range 3924).map (fun p =>
         t.getByte (BitVec.ofNat 64 (srcA (packTab.getD (p / 8) (0, 0, 0)) (p % 8)))) := by
   apply List.ext_getElem (by simp)
   intro p h1 h2
   simp only [length_bytesAt] at h1
   simp only [bytesAt, List.getElem_map, List.getElem_range]
-  rw [show 0x2650 + 2480 + p = (0x2650 + 2480 + 8 * (p / 8)) + p % 8 by omega,
+  rw [show 0x3300 + 2176 + p = (0x3300 + 2176 + 8 * (p / 8)) + p % 8 by omega,
     getByte_aligned' _ _ _ (by omega) (by omega) (by omega),
     getMem_of_readWords _ 491 _ (p / 8) _ hw (by omega)]
   have hmem : packTab.getD (p / 8) (0, 0, 0) ∈ packTab := by
@@ -142,8 +142,8 @@ theorem pack_addrs : (List.range 3924).map (fun p => srcA (packTab.getD (p / 8) 
   rw [getElem_blocks8]
 
 theorem pack_layers (t u : MachineState)
-    (hw : u.readWords (BitVec.ofNat 64 (0x2650 + 2480)) 491 = packTab.map (packDW t)) :
-    bytesAt u (0x2650 + 2480) 3924 =
+    (hw : u.readWords (BitVec.ofNat 64 (0x3300 + 2176)) 491 = packTab.map (packDW t)) :
+    bytesAt u (0x3300 + 2176) 3924 =
       (List.range 5).flatMap (fun l => bytesAt t (0x900 + 856 * l) 4 ++
         bytesAt t (0x900 + 856 * l + 8) (672 + 16 * height l)) := by
   rw [pack_bytes t u hw]

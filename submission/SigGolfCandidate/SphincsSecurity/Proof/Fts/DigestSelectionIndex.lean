@@ -17,7 +17,7 @@ theorem uniform_view_index_weight_expectation (weight : Index → ENNReal) :
       Pr[= index | ($ᵗ Index : ProbComp Index)] := by
     intro index
     exact congrArg (fun distribution => distribution index)
-      (evalSPMF_map_fst_uniformSample_prod (α := Index) (β := FtsTree → FtsLeaf))
+      (evalSPMF_map_fst_uniformSample_prod (α := Index) (β := IndexGroup → FtsLeaf))
   rw [← tsum_probOutput_map_mul (mx := ($ᵗ FewTimeView : ProbComp FewTimeView))
     (f := fun source : FewTimeView => source.1) (g := weight)]
   simp only [hmarginal, probOutput_uniformSample, tsum_fintype, div_eq_mul_inv, Finset.sum_mul]
@@ -97,7 +97,7 @@ theorem probEvent_selectedLoopView_eq_fresh_add_cached (key : SecretKey) (messag
     (cache : QueryCache HashSpec) (P : FewTimeView → Prop) :
     Pr[fun result => ∃ view, selectedLoopView? result = some view ∧ P view |
       (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run cache] =
-      freshDigestSelectionProbability key message cache * Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] +
+      freshDigestSelectionProbability key message cache * Pr[P | signerViewSample] +
         cachedMessageEntryCountWhere cache key.parameter key.root message P * exactDigestReuseWeight key message cache := by
   unfold freshDigestSelectionProbability
   rw [← probEvent_signDigestLoop_freshSelected_eq_mass_mul_uniform digestAttemptLimit key message cache cache P
@@ -134,7 +134,7 @@ theorem probOutput_completeSelectedLoopIndex (key : SecretKey) (message : Messag
   have hnone (result : DigestLoopRecord) : (selectedLoopView? result).map Prod.fst = none ↔ result.1 = none := by
     cases hresult : result.1 <;> simp [selectedLoopView?, hresult]
   simp only [hcomplete, hselected, hnone] at h
-  rw [probEvent_selectedLoopView_eq_fresh_add_cached, probEvent_uniform_view_index] at h
+  rw [probEvent_selectedLoopView_eq_fresh_add_cached, probEvent_signerView_index] at h
   simpa only [probEvent_eq_eq_probOutput, probOutput_uniformSample, digestExhaustionProbability,
     add_mul, add_assoc, add_comm, add_left_comm] using h
 
@@ -159,7 +159,7 @@ theorem probOutput_completeSelectedLoopIndex_le_proposalRate (key : SecretKey) (
     (cache : QueryCache HashSpec) (spent : Nat) (hspent : spent ≤ 2 ^ 127)
     (hcache : QueryCache.enncard cache ≤ spent) (hclean : ¬ MessageDeficitExceptional key cache)
     (hindex : ∀ index, cachedIndexMultiplicity key.parameter cache index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal)) (index : Index) :
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal)) (index : Index) :
     Pr[= index | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run cache >>=
       fun result => completeSelectedIndex (selectedLoopView? result)] ≤ targetProposalIndexRate := by
   apply (probOutput_completeSelectedLoopIndex_le key message cache index).trans

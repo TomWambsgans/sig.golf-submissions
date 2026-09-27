@@ -4,7 +4,10 @@ import SigGolfCandidate.Bridge.Org
 # The reduction adversary and the abstract experiment
 
 `reduction B A rounds` runs the organizer adversary `A` inside the abstract SUF-CMA game. A signing
-request `(m, cache bytes)` becomes the abstract request `⟨msgOf m, cacheDec bytes⟩`.
+request `(m, cache bytes)` becomes the abstract request `⟨msgOf m, cacheDec bytes⟩`. A
+signature-form submission `(m, σ)` is expanded by the adversary itself: it runs `aExpand (msgOf m)
+pk σ` through its own hash oracle (so these queries are counted exactly as the organizer counts
+expansion's queries) and submits `⟨msgOf m, witDec w⟩` on success.
 -/
 
 open OracleSpec OracleComp SigGolf
@@ -18,34 +21,50 @@ abbrev ASpec := AW + RequestSpec
 
 variable {sub : Submission} (B : Assumptions sub) (A : Adversary sub.sizes)
 
-/-- A fixed forgery returned when the organizer adversary never submits. -/
-def dummyForgery : SphincsSecurity.Forgery := ⟨B.msgOf 0, B.sigCodec 0⟩
+/-- A fixed forgery returned when the organizer adversary never submits (or its signature fails
+to expand). -/
+def dummyForgery : SphincsSecurity.Forgery := ⟨B.msgOf 0, B.witDec 0⟩
 
-/-- Replay of the organizer interaction: fuel, adversary state, number of signing requests. -/
-def advLoop : ℕ → A.State → ℕ → OracleComp ASpec SphincsSecurity.Forgery
+/-- The abstract forgery for a signature-form submission, from the result of the simulated
+expansion. -/
+def sigForgery (m : Message) : Option (Bytes sub.sizes.witness) → SphincsSecurity.Forgery
+  | none => dummyForgery B
+  | some w => ⟨B.msgOf m, B.witDec w⟩
+
+/-- Run an `AHash` computation through the adversary's hash oracle. -/
+def liftH {α : Type} (X : OracleComp AHash α) : OracleComp ASpec α :=
+  simulateQ (fun t => (liftM (ASpec.query (Sum.inl (Sum.inr t))) : OracleComp ASpec (BitVec 256))) X
+
+/-- Replay of the organizer interaction against the abstract public key `pk`: fuel, adversary
+state, number of signing requests. A signature-form submission is expanded by running the
+abstract expansion through the adversary's own hash oracle. -/
+def advLoop (pk : SphincsSecurity.PublicKey) :
+    ℕ → A.State → ℕ → OracleComp ASpec SphincsSecurity.Forgery
   | 0, _, _ => pure (dummyForgery B)
   | n + 1, s, k =>
     match A.step s with
     | .submit (.witness m w) => pure ⟨B.msgOf m, B.witDec w⟩
-    | .submit (.signature m σ) => pure ⟨B.msgOf m, B.sigCodec σ⟩
+    | .submit (.signature m σ) => do
+        let r ← liftH (B.aExpand (B.msgOf m) pk σ)
+        pure (sigForgery B m r)
     | .hash y resume => do
         let a ← (liftM (ASpec.query (Sum.inl (Sum.inr (B.unpad y)))) : OracleComp ASpec (BitVec 256))
-        advLoop n (resume a) k
+        advLoop pk n (resume a) k
     | .sign req resume =>
         if k < LIFETIME then do
           let r ← (liftM (ASpec.query
               (Sum.inr ⟨B.msgOf req.message, B.cacheDec req.cache⟩)) :
             OracleComp ASpec (Option SphincsSecurity.Signature))
-          advLoop n (resume (r.map B.sigCodec.symm)) (k + 1)
+          advLoop pk n (resume (r.map B.compress)) (k + 1)
         else pure (dummyForgery B)
     | .sample m resume => do
         let u ← (liftM (ASpec.query (Sum.inl (Sum.inl m))) : OracleComp ASpec (Fin (m + 1)))
-        advLoop n (resume u) k
-    | .step next => advLoop n next k
+        advLoop pk n (resume u) k
+    | .step next => advLoop pk n next k
 
 /-- The reduction: an abstract SUF-CMA adversary built from an organizer adversary. -/
 def reduction (rounds : ℕ) : SphincsSecurity.Security.Adversary where
-  main pk cache := advLoop B A rounds (A.initial (B.pkEnc pk) (B.cacheEnc cache)) 0
+  main pk cache := advLoop B A pk rounds (A.initial (B.pkEnc pk) (B.cacheEnc cache)) 0
 
 /-- Logged signing, typed over `AW`. -/
 def aSigningOracle (sk : SphincsSecurity.Seeded.SecretKey) :
@@ -105,6 +124,19 @@ lemma advRun_inr_bind (sk : SphincsSecurity.Seeded.SecretKey) {α : Type}
         (fun p => (p.1, [⟨req, u⟩] ++ p.2)) <$> advRun sk (f u) := by
   simp [advRun, advImpl, aSigningOracle, WriterT.run_bind, QueryImpl.add]
 
+lemma advRun_liftH_bind (sk : SphincsSecurity.Seeded.SecretKey) {α β : Type}
+    (X : OracleComp AHash α) (f : α → OracleComp ASpec β) :
+    advRun sk (liftH X >>= f) =
+      (liftM X : OracleComp AW _) >>= fun a => advRun sk (f a) := by
+  induction X using OracleComp.inductionOn with
+  | pure x => simp [liftH]
+  | query_bind t k ih =>
+    have e : (liftM (AHash.query t : OracleComp AHash _) : OracleComp AW _) =
+        (AW.query (Sum.inr t) : OracleComp AW _) := rfl
+    simp only [liftH, simulateQ_bind, simulateQ_spec_query, bind_assoc] at ih ⊢
+    rw [advRun_inl_bind, liftM_bind, e, bind_assoc]
+    exact bind_congr fun u => ih u
+
 /-- The rest of the abstract game after key generation, counted from `c`, with signing log
 prefix `lg`. -/
 noncomputable def absK (sk : SphincsSecurity.Seeded.SecretKey) (pk : SphincsSecurity.PublicKey)
@@ -112,7 +144,7 @@ noncomputable def absK (sk : SphincsSecurity.Seeded.SecretKey) (pk : SphincsSecu
     OracleComp AW (Bool × ℕ) :=
   countFrom costW (do
     let ((forgery, log) : SphincsSecurity.Forgery × QueryLog RequestSpec) ←
-      advRun sk (advLoop B A n s k)
+      advRun sk (advLoop B A pk n s k)
     let verified ← (liftM (aVerify pk forgery.message forgery.signature) : OracleComp AW _)
     return decide (SphincsSecurity.RequestTranscript.Valid (lg ++ log) ∧
       ¬SphincsSecurity.RequestTranscript.Contains (lg ++ log) forgery) && verified) c
@@ -166,7 +198,7 @@ lemma absK_sign_lt {n : ℕ} {s : A.State} {k : ℕ} {lg : QueryLog RequestSpec}
     absK B A sk pk (n + 1) s k lg c =
       (liftM (countFrom (fun _ => 1) (aSign sk (B.cacheDec req.cache) (B.msgOf req.message)) c) :
           OracleComp AW _) >>=
-        fun p => absK B A sk pk n (resume (p.1.map B.sigCodec.symm)) (k + 1)
+        fun p => absK B A sk pk n (resume (p.1.map B.compress)) (k + 1)
           (lg ++ [⟨⟨B.msgOf req.message, B.cacheDec req.cache⟩, p.1⟩]) p.2 := by
   unfold absK
   simp only [advLoop, h, hk, if_true]
@@ -189,11 +221,16 @@ lemma absK_submit_witness {n : ℕ} {s : A.State} {k : ℕ} {lg : QueryLog Reque
 lemma absK_submit_signature {n : ℕ} {s : A.State} {k : ℕ} {lg : QueryLog RequestSpec} {c : ℕ}
     {m : Message} {σ : Bytes sub.sizes.signature} (h : A.step s = .submit (.signature m σ)) :
     absK B A sk pk (n + 1) s k lg c =
-      (fun p => (decide (SphincsSecurity.RequestTranscript.Valid lg ∧
-          ¬SphincsSecurity.RequestTranscript.Contains lg ⟨B.msgOf m, B.sigCodec σ⟩) && p.1, p.2)) <$>
-        (liftM (countFrom (fun _ => 1) (aVerify pk (B.msgOf m) (B.sigCodec σ)) c) : OracleComp AW _) := by
+      (liftM (countFrom (fun _ => 1) (B.aExpand (B.msgOf m) pk σ) c) : OracleComp AW _) >>= fun p =>
+        (fun q => (decide (SphincsSecurity.RequestTranscript.Valid lg ∧
+            ¬SphincsSecurity.RequestTranscript.Contains lg (sigForgery B m p.1)) && q.1, q.2)) <$>
+          (liftM (countFrom (fun _ => 1) (aVerify pk (sigForgery B m p.1).message
+            (sigForgery B m p.1).signature) p.2) : OracleComp AW _) := by
   unfold absK
-  simp only [advLoop, h, advRun_pure, pure_bind, List.append_nil]
+  simp only [advLoop, h]
+  rw [advRun_liftH_bind, bind_assoc, countFrom_bind, countFrom_liftM_hash _ (fun _ => rfl)]
+  refine bind_congr fun p => ?_
+  simp only [advRun_pure, pure_bind, List.append_nil]
   rw [map_eq_bind_pure_comp, countFrom_bind, countFrom_liftM_hash _ (fun _ => rfl)]
   rfl
 

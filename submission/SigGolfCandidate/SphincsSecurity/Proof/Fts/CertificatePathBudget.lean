@@ -8,7 +8,7 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 theorem certificateLengthImpl_support (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (result : (OracleWorld + SigningSpec).Range input × CertificateMonitorState)
     (hr : result ∈ ((certificateLengthImpl key budget required stopAfter input).run state).support) :
@@ -27,7 +27,7 @@ theorem certificateLengthImpl_support (key : SecretKey) (budget : Nat)
     exact ⟨0, record, hrecord, rfl⟩
 
 theorem certificateMonitorUpdate_le_hashCalls (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hr : record ∈ (originalProposalRecord key input state.1).support) :
@@ -42,7 +42,7 @@ theorem certificateMonitorUpdate_le_hashCalls (key : SecretKey) (budget : Nat)
     exact ⟨Nat.le_add_right _ _, le_self_add⟩
 
 theorem certificateLength_run_cost_le {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (q : Nat)
     (state : CertificateMonitorState)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key) computation) state.1 q) (result : α × CertificateMonitorState)
@@ -74,7 +74,7 @@ theorem certificateLength_run_cost_le {α : Type} (key : SecretKey) (budget : Na
             rw [add_assoc, ← Nat.cast_add, Nat.add_sub_of_le hquery.1]
 
 theorem certificateProposal_run_cost_le {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (q : Nat)
     (state : List Index × CertificateMonitorState)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key) computation) state.2.1 q) (result : α × (List Index × CertificateMonitorState))

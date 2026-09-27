@@ -10,7 +10,7 @@ theorem probEvent_signDigestAttemptPrefix_fresh_le_admissibility
     (key : SecretKey) (message : Message) (reference cache : QueryCache HashSpec)
     (hinvariant : OnlyRejectedNewMessageEntries reference cache key message) :
     Pr[FreshDigestAttempt reference key message | signDigestAttemptPrefix key message cache] ≤
-      ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ := by
+      admissibleProbability := by
   rw [signDigestAttemptPrefix]
   apply probEvent_bind_le_of_forall_le
   intro randomness _
@@ -44,7 +44,7 @@ theorem probEvent_signDigestLoop_fresh_le_attempts_mul_admissibility
     (hinvariant : OnlyRejectedNewMessageEntries reference cache key message) :
     Pr[fun result => freshSelectedLoopView? reference key message result ≠ none |
       (simulateQ romImpl (signDigestLoop attempts key message)).run cache] ≤
-      digestAttemptExpectation attempts key message cache * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ := by
+      digestAttemptExpectation attempts key message cache * admissibleProbability := by
   induction attempts generalizing cache with
   | zero => simp [signDigestLoop, freshSelectedLoopView?, digestAttemptExpectation]
   | succ attempts ih =>

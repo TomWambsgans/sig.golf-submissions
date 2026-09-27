@@ -12,31 +12,24 @@ def AdmissibleIndexOutput (index : Index) (output : HashOutput) : Prop :=
 
 theorem probEvent_uniformHashOutput_admissible_index (index : Index) :
     Pr[AdmissibleIndexOutput index | ($ᵗ HashOutput : ProbComp HashOutput)] =
-      ((2 ^ 44 : Nat) : ENNReal)⁻¹ := by
+      cachedIndexRate := by
   change Pr[fun output : HashOutput =>
     Admissible (truncateMessageDigest output) ∧ (hashOutputFewTimeView output).1 = index |
       ($ᵗ HashOutput : ProbComp HashOutput)] = _
   have h := probEvent_uniformHashOutput_admissible_view (fun view => view.1 = index)
-  rw [probEvent_uniform_view_index] at h
-  have hcard : Fintype.card Index = 2 ^ 34 := Fintype.card_fin _
-  calc
-    _ = ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹ := by
-      simpa only [signAttemptResultOfOutput_ne_none_iff] using h
-    _ = _ := by
-      rw [hcard]
-      apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
-      norm_num [ftsTreeHeight, ENNReal.toReal_mul, ENNReal.toReal_inv]
+  rw [probEvent_signerView_index] at h
+  simpa only [signAttemptResultOfOutput_ne_none_iff, cachedIndexRate] using h
 
 theorem expected_uniformHashOutput_index_choice (index : Index) (accepted rejected : ENNReal) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       (if AdmissibleIndexOutput index output then accepted else rejected)) =
-      ((2 ^ 44 : Nat) : ENNReal)⁻¹ * accepted +
-        (1 - ((2 ^ 44 : Nat) : ENNReal)⁻¹) * rejected := by
+      cachedIndexRate * accepted +
+        (1 - cachedIndexRate) * rejected := by
   have hnot : Pr[fun output => ¬ AdmissibleIndexOutput index output |
-      ($ᵗ HashOutput : ProbComp HashOutput)] = 1 - ((2 ^ 44 : Nat) : ENNReal)⁻¹ := by
+      ($ᵗ HashOutput : ProbComp HashOutput)] = 1 - cachedIndexRate := by
     have h := probEvent_compl ($ᵗ HashOutput : ProbComp HashOutput) (AdmissibleIndexOutput index)
     rw [probFailure_of_liftM_PMF, tsub_zero, probEvent_uniformHashOutput_admissible_index, add_comm] at h
-    exact ENNReal.eq_sub_of_add_eq' (by finiteness) h
+    exact ENNReal.eq_sub_of_add_eq' (by simp) h
   have hsplit (output : HashOutput) :
       Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
           (if AdmissibleIndexOutput index output then accepted else rejected) =
@@ -47,7 +40,7 @@ theorem expected_uniformHashOutput_index_choice (index : Index) (accepted reject
   simp_rw [hsplit, ENNReal.tsum_add, ENNReal.tsum_mul_right, ← probEvent_eq_tsum_ite,
     probEvent_uniformHashOutput_admissible_index, hnot]
 
-private theorem bernoulliExcess_secondMoment_ennreal (score : ℝ) (probability : ENNReal)
+theorem bernoulliExcess_secondMoment_ennreal (score : ℝ) (probability : ENNReal)
     (hprob : probability ≤ 1) :
     probability * positiveScoreMoment (score + (1 - probability.toReal)) 2 +
         (1 - probability) * positiveScoreMoment (score + (-probability.toReal)) 2 ≤
@@ -87,25 +80,23 @@ theorem expected_cachedIndexScore_second_le (parameter : PublicParameter)
     (index : Index) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       positiveScoreMoment (cachedIndexExcessScore parameter (cache.cacheQuery input output) index) 2) ≤
-        positiveScoreMoment (cachedIndexExcessScore parameter cache index) 2 + ((2 ^ 44 : Nat) : ENNReal)⁻¹ := by
+        positiveScoreMoment (cachedIndexExcessScore parameter cache index) 2 + cachedIndexRate := by
   by_cases hmessage : FtsProbeSimulation.MessageHashInput parameter input
   · simp_rw [cachedIndexExcessScore_cacheQuery parameter cache hfinite input _ hfresh index,
       hmessage, true_and]
     have hchoice (output : HashOutput) :
         positiveScoreMoment (cachedIndexExcessScore parameter cache index +
           (if Admissible (truncateMessageDigest output) ∧ (hashOutputFewTimeView output).1 = index then 1 else 0) -
-          (2 ^ 44 : ℝ)⁻¹) 2 =
+          cachedIndexRate.toReal) 2 =
         if AdmissibleIndexOutput index output then
-          positiveScoreMoment (cachedIndexExcessScore parameter cache index + (1 - (2 ^ 44 : ℝ)⁻¹)) 2
-        else positiveScoreMoment (cachedIndexExcessScore parameter cache index + (-(2 ^ 44 : ℝ)⁻¹)) 2 := by
+          positiveScoreMoment (cachedIndexExcessScore parameter cache index + (1 - cachedIndexRate.toReal)) 2
+        else positiveScoreMoment (cachedIndexExcessScore parameter cache index + (-cachedIndexRate.toReal)) 2 := by
       unfold AdmissibleIndexOutput
       split_ifs <;> congr 1 <;> ring
     simp_rw [hchoice]
     rw [expected_uniformHashOutput_index_choice]
-    have h := bernoulliExcess_secondMoment_ennreal (cachedIndexExcessScore parameter cache index)
-      ((2 ^ 44 : Nat) : ENNReal)⁻¹ (by norm_num)
-    simpa only [ENNReal.toReal_inv, ENNReal.toReal_natCast, ENNReal.toReal_pow, ENNReal.toReal_ofNat,
-      Nat.cast_pow, Nat.cast_ofNat] using h
+    exact bernoulliExcess_secondMoment_ennreal (cachedIndexExcessScore parameter cache index)
+      cachedIndexRate cachedIndexRate_le_one
   · exact (expected_cachedIndexScore_nonmessage_le parameter cache hfinite input hfresh hmessage index 2).trans le_self_add
 
 end SphincsSecurity.Concrete

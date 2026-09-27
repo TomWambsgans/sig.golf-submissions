@@ -18,7 +18,7 @@ theorem hash16_bind_eq {β : Type} (x : List Byte) (f : Val → OracleComp HashS
   simp only [Ref.hash16, Ref.H, bind_assoc, pure_bind]
 
 theorem digest_bind_eq {β : Type} (rho m : List Byte) (f : Nat → OracleComp HashSpec β) :
-    digest rho m >>= f = qry (fmt (digestInput rho m)) >>= fun a => f (a.toNat % 2 ^ 184) := by
+    digest rho m >>= f = qry (fmt (digestInput rho m)) >>= fun a => f a.toNat := by
   simp only [digest, Ref.H, bind_assoc, pure_bind]
 
 /-- Averaging a function bounded by a two-valued one. -/
@@ -128,7 +128,7 @@ theorem dig_inj (m : List Byte) (hm : m.length = 32) {rho rho' : List Byte} (hr 
 
 /-- The rejection probability of one fresh digest. -/
 noncomputable def rhoD : ℝ≥0∞ :=
-  Pr[fun u : BitVec 256 => ¬ admissible (u.toNat % 2 ^ 184) = true |
+  Pr[fun u : BitVec 256 => ¬ admissible u.toNat = true |
     ($ᵗ BitVec 256 : ProbComp (BitVec 256))]
 
 /-- The collision allowance per digest trial (at most `2^20` earlier randomizers). -/
@@ -177,9 +177,9 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
           (∀ a', a + 1 ≤ a' → a' < 2 ^ 32 → c2 (fmt (rndInput S m a')) = none) →
           (∀ rho', rho'.length = 16 → rho' ∉ R' → c2 (fmt (digestInput rho' m)) = none) →
           ∀ v : BitVec 256,
-          V z (if admissible (v.toNat % 2 ^ 184) = true then
-              pure (some (rho, v.toNat % 2 ^ 184)) else searchDigest S m (a + 1) n) c2 ≤
-            if admissible (v.toNat % 2 ^ 184) = true then 1 else b := by
+          V z (if admissible v.toNat = true then
+              pure (some (rho, v.toNat)) else searchDigest S m (a + 1) n) c2 ≤
+            if admissible v.toNat = true then 1 else b := by
         intro R' c2 hR' h1 h2 v
         split
         · simp
@@ -206,7 +206,7 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
           rw [hc1dig]; exact hdig rho hrho hmem
         rw [expectedValue_ro_fresh _ _ hfresh]
         refine mul_le_mul' (hz1 _ hb2) ?_
-        refine (ev_ite_le (fun v : BitVec 256 => ¬ admissible (v.toNat % 2 ^ 184) = true) b 1 _
+        refine (ev_ite_le (fun v : BitVec 256 => ¬ admissible v.toNat = true) b 1 _
           fun v => ?_).trans ?_
         · refine (hk (insert rho R) _ ((Finset.card_insert_le _ _).trans (by omega)) ?_ ?_ v).trans
             (by split <;> simp_all)
@@ -219,7 +219,7 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
             dsimp only
             rw [QueryCache.cacheQuery_of_ne _ _ (fun h' => hn.1 (dig_inj m hm hl hrho h')), hc1dig]
             exact hdig rho' hl hn.2
-        · rw [probEvent_not_uniform (fun v : BitVec 256 => ¬ admissible (v.toNat % 2 ^ 184) = true),
+        · rw [probEvent_not_uniform (fun v : BitVec 256 => ¬ admissible v.toNat = true),
             mul_one]
           exact le_rfl
     -- average over the randomizer

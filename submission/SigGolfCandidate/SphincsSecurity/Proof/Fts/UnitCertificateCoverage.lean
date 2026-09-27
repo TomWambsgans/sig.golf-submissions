@@ -23,12 +23,13 @@ open _root_.OracleComp ENNReal
 set_option backward.isDefEq.respectTransparency false
 
 private theorem unit_excess_le_square_with_mean (value mean : ENNReal) (hvalue : value ≠ ⊤)
-    (hmean : mean ≤ 1 / 5) :
-    (16 / 5 : ENNReal) * (value - 1) + 2 * mean * value ≤ value ^ 2 + mean ^ 2 := by
+    (hmean : mean ≤ 1 / 2) :
+    2 * (value - 1) + 2 * mean * value ≤ value ^ 2 + mean ^ 2 := by
   have hm : mean ≠ ⊤ := ne_top_of_le_ne_top (by finiteness) hmean
-  have hmr : mean.toReal ≤ 1 / 5 := by
+  have hmr : mean.toReal ≤ 1 / 2 := by
     have h := (ENNReal.toReal_le_toReal hm (by finiteness)).mpr hmean
     simpa only [ENNReal.toReal_div, ENNReal.toReal_one, ENNReal.toReal_ofNat] using h
+  have hm0 : 0 ≤ mean.toReal := ENNReal.toReal_nonneg
   by_cases hsmall : value ≤ 1
   · rw [tsub_eq_zero_of_le hsmall, mul_zero, zero_add]
     apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
@@ -39,11 +40,11 @@ private theorem unit_excess_le_square_with_mean (value mean : ENNReal) (hvalue :
     apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
     simp (disch := finiteness) only [ENNReal.toReal_add, ENNReal.toReal_mul, ENNReal.toReal_pow,
       ENNReal.toReal_sub_of_le hlarge hvalue, ENNReal.toReal_one, ENNReal.toReal_div, ENNReal.toReal_ofNat]
-    nlinarith [sq_nonneg (value.toReal - mean.toReal - 8 / 5)]
+    nlinarith [sq_nonneg (value.toReal - mean.toReal - 1)]
 
 theorem uniformWordAverage_fixedFull_unit_excess_le :
     uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word - 1) ≤
-      (11 / 2 ^ 16 : ENNReal) := by
+      (1 / 2 ^ 16 : ENNReal) := by
   let mean := uniformWordAverage fixedProposalLength fixedFullProposalPrice
   have hm : mean ≠ ⊤ := ne_top_of_le_ne_top (by finiteness) uniformWordAverage_fixedFull_mean_le
   have h := uniformWordAverage_mono fixedProposalLength (fun word =>
@@ -51,27 +52,27 @@ theorem uniformWordAverage_fixedFull_unit_excess_le :
       uniformWordAverage_fixedFull_mean_le)
   rw [uniformWordAverage_add, uniformWordAverage_add,
     uniformWordAverage_mul_left, uniformWordAverage_mul_left, uniformWordAverage_const] at h
-  have hcancel : (16 / 5 : ENNReal) *
-      uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word - 1) ≤ 13 / 25000 := by
+  have hcancel : (2 : ENNReal) *
+      uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word - 1) ≤ 1 / 40000 := by
     apply ENNReal.le_of_add_le_add_right (a := 2 * mean ^ 2) (by finiteness)
     calc
-      _ = (16 / 5 : ENNReal) *
+      _ = (2 : ENNReal) *
           uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word - 1) +
             2 * mean * uniformWordAverage fixedProposalLength fixedFullProposalPrice := by
         change _ = _ + 2 * mean * mean
         ring
       _ ≤ uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word ^ 2) + mean ^ 2 := h
-      _ ≤ (mean ^ 2 + 13 / 25000) + mean ^ 2 :=
+      _ ≤ (mean ^ 2 + 1 / 40000) + mean ^ 2 :=
         add_le_add uniformWordAverage_fixedFull_secondMoment_le le_rfl
       _ = _ := by ring
-  have hunit : (5 / 16 : ENNReal) * (16 / 5) = 1 := by
+  have hunit : (1 / 2 : ENNReal) * 2 = 1 := by
     apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
     norm_num [ENNReal.toReal_mul, ENNReal.toReal_div]
   calc
-    _ = (5 / 16 : ENNReal) * ((16 / 5) *
+    _ = (1 / 2 : ENNReal) * (2 *
         uniformWordAverage fixedProposalLength (fun word => fixedFullProposalPrice word - 1)) := by
       rw [← mul_assoc, hunit, one_mul]
-    _ ≤ (5 / 16 : ENNReal) * (13 / 25000) := mul_le_mul' le_rfl hcancel
+    _ ≤ (1 / 2 : ENNReal) * (1 / 40000) := mul_le_mul' le_rfl hcancel
     _ ≤ _ := by
       apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
       norm_num [ENNReal.toReal_mul, ENNReal.toReal_div, ENNReal.toReal_pow]
@@ -86,7 +87,7 @@ theorem uniformWordAverage_full_price_excess_le :
   simp_rw [hscale]
   rw [uniformWordAverage_mul_left]
   calc
-    _ ≤ (2 ^ 128 : ENNReal)⁻¹ * (11 / 2 ^ 16 : ENNReal) :=
+    _ ≤ (2 ^ 128 : ENNReal)⁻¹ * (1 / 2 ^ 16 : ENNReal) :=
       mul_le_mul' le_rfl uniformWordAverage_fixedFull_unit_excess_le
     _ = _ := by
       rw [fullCertificateExcessRate_def]

@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Residual.RetainedResidualContext
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.ExtractFts
 namespace SphincsSecurity.Concrete.RetainedResidual
 
 open _root_.OracleComp OracleSpec CanonicalProbeRouting
@@ -183,96 +184,57 @@ theorem Compatible.layer_reference {inputs : Finset HashInput} {context : Contex
       obtain ⟨hmessage, hcounter⟩ := List.append_inj hpayload (by simp [digestBytes_length])
       exact ⟨selected, rfl, (digestBytes_injective hmessage).symm, (bytesLE_injective hcounter).symm, hvalues, hpath⟩
 
-theorem Compatible.ftsTree_honest {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
-    (hcompatible : Compatible context memory) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest) (tree : FtsTree)
-    (hfold : ftsFoldValue context.oracle context.key.parameter index tree (leaves (ftsIndexOf tree)) (paths tree)
-      (truncateHash (context.oracle (tweakableHashInput context.key.parameter
-        (.ftsLeaf index tree (leaves (ftsIndexOf tree))) (digestBytes (secrets tree))))) ftsTreeHeight =
-      honestFtsNode context.oracle context.key.parameter index tree (context.key.ftsSecret index tree) ftsTreeHeight 0)
-    (hrun : CachedRun memory.external.cache context.oracle (ftsRecover context.key.parameter index leaves secrets paths)) :
-    secrets tree = context.key.ftsSecret index tree (leaves (ftsIndexOf tree)) ∧
-      ∀ level (hlevel : level < ftsTreeHeight), paths tree ⟨level, hlevel⟩ =
-        honestFtsNode context.oracle context.key.parameter index tree (context.key.ftsSecret index tree) level
-          (Nat.xor ((leaves (ftsIndexOf tree)).val / 2 ^ level) 1) := by
-  let leafIdx := leaves (ftsIndexOf tree)
-  let leafValue := truncateHash (context.oracle (tweakableHashInput context.key.parameter
-    (.ftsLeaf index tree leafIdx) (digestBytes (secrets tree))))
-  have hroot : leafIdx.val / 2 ^ ftsTreeHeight = 0 := Nat.div_eq_of_lt leafIdx.isLt
-  rcases ftsFold_extract context.oracle context.key.parameter index tree (context.key.ftsSecret index tree)
-      leafIdx (paths tree) leafValue ftsTreeHeight (le_refl _) (by simpa only [leafIdx, leafValue, hroot] using hfold) with
-    ⟨hleafValue, hpath⟩ | ⟨level, hlevel, hhit⟩
-  · rcases ftsLeaf_extract context.oracle context.key.parameter index tree (context.key.ftsSecret index tree)
-      leafIdx (secrets tree) hleafValue with hsecret | hhit
-    · refine ⟨hsecret, ?_⟩
-      intro level hlevel
-      simpa only [ftsSibling, dif_pos hlevel, leafIdx] using hpath level hlevel
-    · apply False.elim
-      apply hcompatible.not_payload_collision (.ftsLeaf index tree leafIdx) (by trivial) _
-      · simpa only [honestPayload] using fun heq => hhit.1 (digestBytes_injective heq)
-      · exact hrun _ (ftsRecover_leaf_query_mem context.oracle context.key.parameter index leaves secrets paths tree)
-      · simpa only [Position.domain, honestValue_ftsLeaf] using hhit.2
-  · have hnodeIdx : leafIdx.val / 2 ^ (level + 1) < 2 ^ ftsTreeHeight :=
-      lt_of_le_of_lt (Nat.div_le_self _ _) leafIdx.isLt
-    apply False.elim
-    apply hcompatible.not_payload_collision (.ftsNode index tree ⟨level, hlevel⟩ ⟨_, hnodeIdx⟩)
-      (foldPosition_bound ftsTreeHeight level leafIdx.val hlevel leafIdx.isLt) _ hhit.1
-    · exact hrun _ (ftsRecover_fold_query_mem context.oracle context.key.parameter index leaves secrets paths tree level hlevel)
-    · simpa only [Position.domain, honestValue_ftsNode] using hhit.2
+/-- The stack machine's hits are structural matches, which a compatible memory does not hold. -/
+theorem Compatible.not_ftsHit {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
+    (hcompatible : Compatible context memory) (index : Index) (input : HashInput)
+    (hcached : memory.external.cache input ≠ none)
+    (hhit : PorsMachine.Hit context.oracle context.key.parameter index (context.key.ftsSecret index porsTree) input) :
+    False := by
+  rcases hhit with ⟨heap, left, right, hpos, hlt, rfl, hne, hvalue⟩ | ⟨leaf, candidate, rfl, hne, hvalue⟩
+  · apply hcompatible.not_payload_collision (.ftsNode index porsTree ⟨heap, hlt⟩) hpos (nodePayload left right) hne
+      hcached
+    rw [honestValue_ftsNode _ _ _ _ index porsTree ⟨heap, hlt⟩ hpos]
+    exact hvalue
+  · apply hcompatible.not_payload_collision (.ftsLeaf index porsTree leaf) trivial (digestBytes candidate)
+      (fun h => hne (digestBytes_injective h)) hcached
+    rw [honestValue_ftsLeaf, ← honestFtsHeap_leaf]
+    exact hvalue
 
+/-- **The crude route's PORS extraction.** An accepted stack machine reaching the honest root, all of whose
+queries a compatible memory holds, ran on the honest opening, and hashed every opened leaf's true secret. -/
 theorem Compatible.ftsRecover_honest {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
-    (hcompatible : Compatible context memory) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (hrecover : evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index leaves secrets paths) =
-      honestFtsKey context.oracle context.key.parameter index (context.key.ftsSecret index))
-    (hrun : CachedRun memory.external.cache context.oracle (ftsRecover context.key.parameter index leaves secrets paths)) :
-    ∀ tree, secrets tree = context.key.ftsSecret index tree (leaves (ftsIndexOf tree)) ∧
-      ∀ level (hlevel : level < ftsTreeHeight), paths tree ⟨level, hlevel⟩ =
-        honestFtsNode context.oracle context.key.parameter index tree (context.key.ftsSecret index tree) level
-          (Nat.xor ((leaves (ftsIndexOf tree)).val / 2 ^ level) 1) := by
-  let roots : FtsTree → Digest := fun tree => evalWithAnswerFn context.oracle
-    (ftsFold context.key.parameter index tree (leaves (ftsIndexOf tree)) (paths tree) ftsTreeHeight
-      (evalWithAnswerFn context.oracle (ftsLeafHash context.key.parameter index tree (leaves (ftsIndexOf tree)) (secrets tree))))
-  by_cases hpayload : ftsRootsPayload roots =
-      honestPayload context.oracle context.key.parameter context.key.otsSecret context.key.ftsSecret (.ftsRoots index)
-  · have hrootValues : roots = fun tree =>
-        honestFtsNode context.oracle context.key.parameter index tree (context.key.ftsSecret index tree) ftsTreeHeight 0 := by
-      apply ftsRootsPayload_injective
-      simpa only [roots, honestPayload] using hpayload
-    intro tree
-    apply hcompatible.ftsTree_honest index leaves secrets paths tree _ hrun
-    have := congrFun hrootValues tree
-    simpa only [roots, evalWithAnswerFn_bind, ftsLeafHash, eval_tweakableHash, ftsFoldValue] using this
-  · apply False.elim
-    apply hcompatible.not_payload_collision (.ftsRoots index) (by trivial) _ hpayload
-    · apply hrun
-      have hmem := ftsRecover_roots_query_mem context.oracle context.key.parameter index leaves secrets paths
-      convert hmem using 1
-      all_goals simp [roots, Position.domain]
-    · rw [honestValue_ftsRoots]
-      simp only [ftsRecover, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin, eval_tweakableHash] at hrecover
-      change truncateHash (context.oracle (tweakableHashInput context.key.parameter (.ftsRoots index)
-        (ftsRootsPayload roots))) = _
-      dsimp only [roots]
-      simpa only [evalWithAnswerFn_bind] using hrecover
+    (hcompatible : Compatible context memory) (index : Index) (leaves : IndexGroup → FtsLeaf) (fts : FtsSignature)
+    (hrecover : evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index (slotValue leaves) fts) =
+      some (honestFtsKey context.oracle context.key.parameter index (context.key.ftsSecret index)))
+    (hrun : CachedRun memory.external.cache context.oracle
+      (ftsRecover context.key.parameter index (slotValue leaves) fts)) :
+    AdmissibleLeaves leaves ∧
+      fts = evalWithAnswerFn context.oracle (ftsOpen context.key.parameter index leaves (context.key.ftsSecret index)) ∧
+      ∀ slot, memory.external.cache (tweakableHashInput context.key.parameter
+        (.ftsLeaf index porsTree (leaves slot).val)
+        (digestBytes (context.key.ftsSecret index porsTree (leaves slot)))) ≠ none := by
+  obtain ⟨hadmissible, hcase⟩ :=
+    ftsRecover_extract context.oracle context.key.parameter index leaves (context.key.ftsSecret index) fts hrecover
+  rcases hcase with ⟨hopen, hqueries⟩ | ⟨input, hinput, hhit⟩
+  · exact ⟨hadmissible, hopen, fun slot => hrun _ (hqueries slot)⟩
+  · exact (hcompatible.not_ftsHit index input (hrun _ hinput) hhit).elim
 
+/-- The opened leaves of an accepted honest opening are disclosed: their true secrets were queried, and a
+compatible memory hides no queried input's child. -/
 theorem Compatible.ftsRecover_disclosed {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
-    (hcompatible : Compatible context memory) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secrets : FtsTree → Digest) (paths : FtsTree → Fin ftsTreeHeight → Digest)
-    (hrecover : evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index leaves secrets paths) =
-      honestFtsKey context.oracle context.key.parameter index (context.key.ftsSecret index))
-    (hrun : CachedRun memory.external.cache context.oracle (ftsRecover context.key.parameter index leaves secrets paths)) :
-    ∀ tree, memory.routing.disclosed index tree (leaves (ftsIndexOf tree)) := by
-  have hhonest := hcompatible.ftsRecover_honest index leaves secrets paths hrecover hrun
-  intro tree
+    (hcompatible : Compatible context memory) (index : Index) (leaves : IndexGroup → FtsLeaf) (fts : FtsSignature)
+    (hrecover : evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index (slotValue leaves) fts) =
+      some (honestFtsKey context.oracle context.key.parameter index (context.key.ftsSecret index)))
+    (hrun : CachedRun memory.external.cache context.oracle
+      (ftsRecover context.key.parameter index (slotValue leaves) fts)) :
+    ∀ slot, memory.routing.disclosed index porsTree (leaves slot) := by
+  obtain ⟨_, _, hqueried⟩ := hcompatible.ftsRecover_honest index leaves fts hrecover hrun
+  intro slot
   by_contra hhidden
-  apply hcompatible.no_hidden_input (.ftsLeaf index tree (leaves (ftsIndexOf tree)))
+  apply hcompatible.no_hidden_input (.ftsLeaf index porsTree (leaves slot))
   · rw [context.input_honest _ (by trivial)]
-    change memory.external.cache (tweakableHashInput context.key.parameter (.ftsLeaf index tree (leaves (ftsIndexOf tree)))
-      (digestBytes (context.key.ftsSecret index tree (leaves (ftsIndexOf tree))))) ≠ none
-    rw [← (hhonest tree).1]
-    exact hrun _ (ftsRecover_leaf_query_mem context.oracle context.key.parameter index leaves secrets paths tree)
-  · exact ⟨.ftsStart index tree (leaves (ftsIndexOf tree)), List.mem_singleton_self _, hhidden⟩
+    exact hqueried slot
+  · exact ⟨.ftsStart index porsTree (leaves slot), List.mem_singleton_self _, hhidden⟩
 
 theorem Context.layer_message {inputs : Finset HashInput} (context : Context inputs) (index : Index) (lay : Layer) :
     canonicalGraphMessage context.graph ⟨lay, treeIndexAt index lay, leafIndexAt index lay⟩ =

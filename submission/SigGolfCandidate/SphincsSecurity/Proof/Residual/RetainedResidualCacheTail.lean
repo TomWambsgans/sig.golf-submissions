@@ -13,7 +13,7 @@ set_option backward.isDefEq.respectTransparency false
 theorem exceptionHistoryRun_cache_le_budget (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (words : OtsReferenceWords)
     (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-    (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     {Result : Type} (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : ExceptionHistoryState inputs) (hvalid : MonitoredValid inputs state.1)
     (hinputs : sourceInputs key computation ⊆ inputs) (hbound : CacheSizeBound state.1.1.memory)

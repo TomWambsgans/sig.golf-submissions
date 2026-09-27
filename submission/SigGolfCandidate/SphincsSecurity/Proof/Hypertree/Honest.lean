@@ -1,5 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.ExtractFts
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.HonestFts
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.ExtractOts
 import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.Position
 /-!
@@ -7,13 +7,14 @@ import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.Position
 
 One payload per position, one input, one value, all as functions of an answer function and the
 sampled secrets. Nothing here is a recursion: each family reads the honest computation the statement
-already defines, `honestChain`, `honestNode` and `honestFtsNode`, so the value at a position is
+already defines, `honestChain`, `honestNode` and `honestFtsHeap` (the PORS tree in heap coordinates,
+`Fts/HonestFts`), so the value at a position is
 whatever those say. What the accounting needs of them is `honestPayload_congr`: the payload at a
 position is a function of the values at its children, so two answer functions that agree on the
 children agree on the input, which is what pins the honest structure to a cache.
 
 `Valid` excludes the positions `Position` over-approximates, a node whose children would fall
-outside the index width. They carry no honest meaning, and excluding them is what keeps
+outside the index width, and the PORS heap index `0`. They carry no honest meaning, and excluding them is what keeps
 `honestPayload_congr` true of every position the accounting settles.
 -/
 
@@ -24,18 +25,6 @@ open OracleComp
 namespace Concrete
 
 variable (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
-
-/-- The value the honest forest's root hash carries. -/
-def honestFtsKey (index : Index) (secret : FtsTree → FtsLeaf → Digest) : Digest :=
-  evalWithAnswerFn f (ftsKey parameter index secret)
-
-theorem honestFtsKey_eq (index : Index) (secret : FtsTree → FtsLeaf → Digest) :
-    honestFtsKey f parameter index secret
-      = truncateHash (f (tweakableHashInput parameter (.ftsRoots index)
-          (ftsRootsPayload fun tree =>
-            honestFtsNode f parameter index tree (secret tree) ftsTreeHeight 0))) := by
-  simp only [honestFtsKey, ftsKey, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin,
-    eval_tweakableHash, honestFtsNode]
 
 theorem honestChain_zero (lay : Layer) (tree : TreeIndex) (leafIdx : LeafIndex)
     (chainIdx : ChainIndex) (secret : Digest) :
@@ -62,15 +51,10 @@ noncomputable def honestPayload : Position → HashInput
         (Concrete.honestNode f parameter lay tree (otsSecret lay tree) level.val
           (2 * nodeIdx.val + 1))
   | .ftsLeaf index tree leafIdx => Concrete.digestBytes (ftsSecret index tree leafIdx)
-  | .ftsNode index tree level nodeIdx =>
+  | .ftsNode index tree heap =>
       Concrete.nodePayload
-        (Concrete.honestFtsNode f parameter index tree (ftsSecret index tree) level.val
-          (2 * nodeIdx.val))
-        (Concrete.honestFtsNode f parameter index tree (ftsSecret index tree) level.val
-          (2 * nodeIdx.val + 1))
-  | .ftsRoots index =>
-      Concrete.ftsRootsPayload fun tree =>
-        Concrete.honestFtsNode f parameter index tree (ftsSecret index tree) ftsTreeHeight 0
+        (Concrete.honestFtsHeap f parameter index tree (ftsSecret index tree) (2 * heap.val))
+        (Concrete.honestFtsHeap f parameter index tree (ftsSecret index tree) (2 * heap.val + 1))
 
 /-- The input the honest key hashes at a position. -/
 noncomputable def honestInput (p : Position) : HashInput :=
@@ -112,20 +96,21 @@ theorem honestValue_ftsLeaf (index : Index) (tree : FtsTree) (leafIdx : FtsLeaf)
   rw [Concrete.honestFtsNode_zero f parameter index tree (ftsSecret index tree) leafIdx]
   rfl
 
-theorem honestValue_ftsNode (index : Index) (tree : FtsTree) (level : Fin ftsTreeHeight)
-    (nodeIdx : FtsLeaf) :
-    honestValue f parameter otsSecret ftsSecret (.ftsNode index tree level nodeIdx)
-      = Concrete.honestFtsNode f parameter index tree (ftsSecret index tree) (level.val + 1)
-          nodeIdx.val := by
-  rw [Concrete.honestFtsNode_succ f parameter index tree (ftsSecret index tree) level.val
-    nodeIdx.val]
+theorem honestValue_ftsNode (index : Index) (tree : FtsTree) (heap : Fin (2 ^ ftsTreeHeight))
+    (hpos : 0 < heap.val) :
+    honestValue f parameter otsSecret ftsSecret (.ftsNode index tree heap)
+      = Concrete.honestFtsHeap f parameter index tree (ftsSecret index tree) heap.val := by
+  rw [Concrete.honestFtsHeap_node f parameter index tree (ftsSecret index tree) heap.val hpos heap.isLt]
   rfl
 
-theorem honestValue_ftsRoots (index : Index) :
-    honestValue f parameter otsSecret ftsSecret (.ftsRoots index)
+/-- The root of the PORS tree of an instance: heap index `1`. -/
+def Position.ftsRoot (index : Index) : Position := .ftsNode index Concrete.porsTree ⟨1, by decide⟩
+
+theorem honestValue_ftsRoot (index : Index) :
+    honestValue f parameter otsSecret ftsSecret (Position.ftsRoot index)
       = Concrete.honestFtsKey f parameter index (ftsSecret index) := by
-  rw [Concrete.honestFtsKey_eq f parameter index (ftsSecret index)]
-  rfl
+  rw [Position.ftsRoot, honestValue_ftsNode f parameter otsSecret ftsSecret index _ _ (by decide),
+    Concrete.honestFtsKey_eq_heap]
 
 /-! ### The payload is a concatenation of the values below
 
@@ -139,7 +124,7 @@ determines each of them.
 width. Nothing honest lives there, and the accounting never settles one. -/
 def Position.Valid : Position → Prop
   | .node _ _ _ nodeIdx => 2 * nodeIdx.val + 1 < 2 ^ maxLayerHeight
-  | .ftsNode _ _ _ nodeIdx => 2 * nodeIdx.val + 1 < 2 ^ ftsTreeHeight
+  | .ftsNode _ _ heap => 0 < heap.val
   | _ => True
 
 /-- The values at a position's children. -/
@@ -214,35 +199,29 @@ theorem honestPayload_eq_slots {p : Position} (hvalid : p.Valid) :
         rw [honestValue_node, honestValue_node, show level.val - 1 + 1 = level.val from by omega]
   | ftsLeaf index tree leafIdx =>
       simp [slots, honestPayload]
-  | ftsNode index tree level nodeIdx =>
+  | ftsNode index tree heap =>
       simp only [Position.Valid] at hvalid
-      rcases Nat.eq_zero_or_pos level.val with hlevel | hlevel
-      · have hchildren : (Position.ftsNode index tree level nodeIdx).children
-            = [.ftsLeaf index tree ⟨2 * nodeIdx.val, by omega⟩,
-              .ftsLeaf index tree ⟨2 * nodeIdx.val + 1, by omega⟩] := by
-          rw [Position.children, dif_pos hvalid, dif_neg (by omega)]
+      have hheap := heap.isLt
+      have heven : (2 : Nat) ^ ftsTreeHeight = 2 * 2 ^ (ftsTreeHeight - 1) := rfl
+      by_cases hidx : 2 * heap.val + 1 < 2 ^ ftsTreeHeight
+      · have hchildren : (Position.ftsNode index tree heap).children
+            = [.ftsNode index tree ⟨2 * heap.val, by omega⟩,
+              .ftsNode index tree ⟨2 * heap.val + 1, hidx⟩] := by
+          rw [Position.children, dif_pos hvalid, dif_pos hidx]
         simp only [slots, childValues, hchildren, List.map_cons, List.map_nil, List.flatMap_cons,
           List.flatMap_nil, List.append_nil, honestPayload, Concrete.nodePayload]
-        rw [honestValue_ftsLeaf, honestValue_ftsLeaf, hlevel]
-      · have hchildren : (Position.ftsNode index tree level nodeIdx).children
-            = [.ftsNode index tree ⟨level.val - 1, by have := level.isLt; omega⟩
-                ⟨2 * nodeIdx.val, by omega⟩,
-              .ftsNode index tree ⟨level.val - 1, by have := level.isLt; omega⟩
-                ⟨2 * nodeIdx.val + 1, by omega⟩] := by
-          rw [Position.children, dif_pos hvalid, dif_pos hlevel]
+        rw [honestValue_ftsNode _ _ _ _ _ _ _ (by simp only; omega),
+          honestValue_ftsNode _ _ _ _ _ _ _ (by simp only; omega)]
+      · have hchildren : (Position.ftsNode index tree heap).children
+            = [.ftsLeaf index tree ⟨2 * heap.val - 2 ^ ftsTreeHeight, by omega⟩,
+              .ftsLeaf index tree ⟨2 * heap.val + 1 - 2 ^ ftsTreeHeight, by omega⟩] := by
+          rw [Position.children, dif_pos hvalid, dif_neg hidx]
         simp only [slots, childValues, hchildren, List.map_cons, List.map_nil, List.flatMap_cons,
           List.flatMap_nil, List.append_nil, honestPayload, Concrete.nodePayload]
-        rw [honestValue_ftsNode, honestValue_ftsNode,
-          show level.val - 1 + 1 = level.val from by omega]
-  | ftsRoots index =>
-      have hslots : slots f parameter otsSecret ftsSecret (.ftsRoots index)
-          = List.ofFn fun tree : FtsTree => honestValue f parameter otsSecret ftsSecret
-              (.ftsNode index tree ⟨ftsTreeHeight - 1, by decide⟩ ⟨0, by positivity⟩) := by
-        simp only [slots, childValues, Position.children, List.map_ofFn, Function.comp_def]
-      rw [hslots]
-      simp only [honestPayload, Concrete.ftsRootsPayload]
-      refine congrArg _ (congrArg _ (funext fun tree => ?_))
-      rw [honestValue_ftsNode]
-      rfl
+        rw [honestValue_ftsLeaf, honestValue_ftsLeaf, ← Concrete.honestFtsHeap_leaf,
+          ← Concrete.honestFtsHeap_leaf]
+        simp only
+        rw [show 2 ^ ftsTreeHeight + (2 * heap.val - 2 ^ ftsTreeHeight) = 2 * heap.val by omega,
+          show 2 ^ ftsTreeHeight + (2 * heap.val + 1 - 2 ^ ftsTreeHeight) = 2 * heap.val + 1 by omega]
 
 end SphincsSecurity

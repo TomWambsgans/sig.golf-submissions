@@ -7,7 +7,7 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 def CoveredFewTimeView {n : Nat} (views : Fin n → Option FewTimeView) (target : FewTimeView) : Prop :=
-  ∀ tree, ∃ slot view, views slot = some view ∧ view.1 = target.1 ∧ view.2 tree = target.2 tree
+  ∀ tree, ∃ slot view, views slot = some view ∧ view.1 = target.1 ∧ target.2 tree ∈ Set.range view.2
 
 noncomputable def signingSlotsAtIndex {n : Nat} (views : Fin n → Option FewTimeView) (index : Index) : Finset (Fin n) :=
   Finset.univ.filter (fun slot => ∃ view, views slot = some view ∧ view.1 = index)

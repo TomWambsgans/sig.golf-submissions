@@ -25,18 +25,25 @@ theorem verify_classification (f : QueryImpl HashSpec Id) (key : SecretKey) (wor
       ContainsRun f trace (messageDigest key.parameter key.root message signature.randomness) ∧ Admissible digest ∧
       ((FullyHonestOpening f (recordedCache f trace) key (digestIndex digest) (digestLeaves digest) signature ∧
         (∀ lay, ReferenceLayerOpening f key words selections (digestIndex digest) signature lay) ∧
-        ∀ tree, FtsVerifierWitness.TrueSecretQuery f key (digestIndex digest) tree (digestLeaves digest (ftsIndexOf tree)) trace) ∨
+        ∀ slot, FtsVerifierWitness.TrueSecretQuery f key (digestIndex digest) (digestLeaves digest slot) trace) ∨
         LayerException f key words messages selections trace ∨ FtsVerifierWitness.Exception f key (digestIndex digest) trace) := by
-  obtain ⟨digest, hd, hdrun, ha, hlayers, hftsrun, hlayersrun⟩ := verify_extract ⟨key.root, key.parameter⟩ message signature hverify hrun.cached
-  refine ⟨digest, hd, (recordedCache_run_iff f trace _).mp hdrun, ha, ?_⟩
-  rcases hypertree_classification f key words messages selections (digestIndex digest) (digestLeaves digest) signature trace
+  obtain ⟨digest, hd, hdrun, ftsPublicKey, hfts, hlayers, hftsrun, hlayersrun⟩ :=
+    verify_extract ⟨key.root, key.parameter⟩ message signature hverify hrun.cached
+  refine ⟨digest, hd, (recordedCache_run_iff f trace _).mp hdrun, ?_⟩
+  have hftsrun' := (recordedCache_run_iff f trace _).mp hftsrun
+  rcases hypertree_classification f key words messages selections (digestIndex digest) ftsPublicKey signature trace
       (fun lay => hvalid lay _ _) (hmessages (digestIndex digest)) hroot hlayers ((recordedCache_run_iff f trace _).mp hlayersrun)
-      with ⟨hfts, hopenings⟩ | he
-  · rcases FtsVerifierWitness.recover_classification f key (digestIndex digest) (digestLeaves digest) signature.ftsSecret signature.ftsPath trace hfts
-        ((recordedCache_run_iff f trace _).mp hftsrun) with ⟨hftsOpening, hqueries⟩ | he
+      with ⟨hkey, hopenings⟩ | he
+  · rw [hkey] at hfts
+    obtain ⟨hadmissible, hcase⟩ := FtsVerifierWitness.recover_classification f key (digestIndex digest)
+      (digestLeaves digest) signature.fts trace hfts hftsrun'
+    refine ⟨hadmissible, ?_⟩
+    rcases hcase with ⟨hftsOpening, hqueries⟩ | he
     · refine Or.inl ⟨?_, fun lay => (hopenings lay).1, hqueries⟩
       exact ⟨fun lay => ⟨(hopenings lay).1.honest, (hopenings lay).2⟩, hftsOpening, hftsrun⟩
     · exact Or.inr (Or.inr he)
-  · exact Or.inr (Or.inl he)
+  · -- a layer exception: admissibility still comes from the accepted stack machine
+    exact ⟨PorsMachine.ftsRecover_admissible f key.parameter (digestIndex digest) (digestLeaves digest) signature.fts
+      ftsPublicKey hfts, Or.inr (Or.inl he)⟩
 
 end SphincsSecurity.Concrete.OtsVerifierWitness

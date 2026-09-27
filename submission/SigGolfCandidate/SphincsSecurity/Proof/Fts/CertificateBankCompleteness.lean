@@ -6,13 +6,13 @@ open _root_.OracleComp OracleSpec ENNReal
 open FtsProbeSimulation (retainedGameRestComputation)
 set_option backward.isDefEq.respectTransparency false
 
-def CertificateBankComplete (key : SecretKey) (required : Finset FtsTree)
+def CertificateBankComplete (key : SecretKey) (required : Finset IndexGroup)
     (state : CertificateMonitorState) : Prop :=
   ∀ input, TargetCertificateAt key required (certificateMonitorCoverState state) input →
     state.2.bank input = true
 
 theorem certificateMonitorUpdate_bank_complete (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (halive : (certificateMonitorUpdate key budget required stopAfter input state length record).stopped = false) :
@@ -27,7 +27,7 @@ theorem certificateMonitorUpdate_bank_complete (key : SecretKey) (budget : Nat)
     contradiction
 
 theorem certificateLength_run_bank_complete {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : CertificateMonitorState)
     (hbank : state.2.stopped = false → CertificateBankComplete key required state)
     (result : α × CertificateMonitorState)
@@ -48,7 +48,7 @@ theorem certificateLength_run_bank_complete {α : Type} (key : SecretKey) (budge
         certificateMonitorUpdate_bank_complete key budget required stopAfter input state length record h) result hr halive
 
 theorem certificateCacheProposal_run_bank_complete {α : Type} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (computation : OracleComp (OracleWorld + SigningSpec) α) (state : List Index × CertificateCacheMonitorState)
     (hbank : state.2.2.1.stopped = false →
       CertificateBankComplete key required (certificateCacheMonitorProject state.2))
@@ -65,7 +65,7 @@ theorem certificateCacheProposal_run_bank_complete {α : Type} (key : SecretKey)
     (certificateCacheMonitorProject state.2) hbank _ hm' halive
 
 theorem initialCertificateMonitor_bank_complete (key : SecretKey) (spent : Nat)
-    (required : Finset FtsTree) (cache : QueryCache HashSpec) (stopped : Bool)
+    (required : Finset IndexGroup) (cache : QueryCache HashSpec) (stopped : Bool)
     (hnone : ∀ input, FtsProbeSimulation.MessageHashInput key.parameter input → cache input = none) :
     CertificateBankComplete key required (cache, initialCertificateMonitor spent stopped) := by
   rintro input ⟨output, houtput, hmessage, _⟩
@@ -74,7 +74,7 @@ theorem initialCertificateMonitor_bank_complete (key : SecretKey) (spent : Nat)
   contradiction
 
 theorem certificateCacheProposal_rest_clean_certificate (adversary : Adversary) (publicKey : PublicKey)
-    (key : SecretKey) (budget q spent : Nat) (required : Finset FtsTree) (hbudget : budget ≤ 2 ^ 127)
+    (key : SecretKey) (budget q spent : Nat) (required : Finset IndexGroup) (hbudget : budget ≤ 2 ^ 127)
     (cache : QueryCache HashSpec)
     (hbound : HashQueryBound (simulateQ (expandedAdversaryImpl key)
       (retainedGameRestComputation adversary publicKey)) cache q) (hroom : spent + q ≤ budget)

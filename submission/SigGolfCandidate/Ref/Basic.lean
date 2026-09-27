@@ -1,22 +1,30 @@
 import SigGolf
 import SigGolfCandidate.CacheBytes
+import Mathlib.Data.List.Sort
 
 /-!
 # SPHINCS-golf reference specification: primitives
 
-Byte-level primitives of the reference specification (`work/py-opt7/ref.py`,
-`work/design/SPEC-v4.md`, `work/py-opt7/PROGRAMS.md`):
+Byte-level primitives of the reference specification (PORS+FP variant: `work/py-pors/ref.py`,
+`work/design/SPEC-pors.md`, `work/py-pors/PROGRAMS.md`):
 
 * byte encodings (little endian) and conversions between `List Byte` and `Bytes n`;
 * the parameters;
 * the 16-byte tweak;
 * `pad64` (zero padding to whole 64-byte blocks), the oracle input format `fmt` (chain inputs
-  `tw || P || v` become `tw' || 0^32 || v` with the split position `p'`; node inputs (tags 3, 10)
-  get the heap index `2^(h - lam) + j`; the digest input becomes `tw || rho || m`; everything else
-  `pad64`), and the hash wrappers `H`, `hash16`, `th`;
+  `tw || P || v` become `tw' || 0^32 || v` with the split position `p'`; hypertree node inputs
+  (tag 3) get the heap index `2^(h - lam) + j`; the digest input becomes `tw || rho || m`;
+  everything else `pad64`), and the hash wrappers `H`, `hash16`, `th`;
 * every per-hash input format (`*Input`), the exact byte list *before* padding;
-* digest split (`idxOf`, `uOf`, `admissible`), routing (`route`), digit decoding
+* digest split (`idxOf`, `leafOf`, `leavesOf`), the PORS index functions (`bitLen`,
+  `octopusSize`, `sortLeaves`, `admissible`, `schedule`), routing (`route`), digit decoding
   (`decodeDigits`).
+
+**PORS nodes (tag 10) are written directly in their real block form** `enc(10, 0, idx, 0, H) ||
+P || L || R` with the heap index `H` in the `j` field (`porsNodeInput idx H l r`), so `fmt` is the
+identity (zero padding of a 64-byte input) on them: `ref.f_query` relabels the signer's
+`tw(10, 0, idx, lam, j)` to exactly this block with `H = 2^(14 - lam) + j`, and `ref.node_query`
+queries it for every `H` (also `H = 0`, out of the honest range). Only tag 3 is relabeled.
 
 All values (secrets, chain values, nodes, roots, `rho`) are `Val = List Byte` of length 16.
 Byte `i` of a `Bytes n` (a `BitVec (8 n)`) is bits `8 i .. 8 i + 7` (as `SigGolf.bytes`), so
@@ -61,11 +69,11 @@ def answerBytes (k : Nat) (a : BitVec 256) : List Byte :=
 /-- `l[off .. off + len)`. -/
 def slice (l : List Byte) (off len : Nat) : List Byte := (l.drop off).take len
 
-/-! ## Parameters (SPEC-v4.md) -/
+/-! ## Parameters (SPEC-pors.md) -/
 
 def nChains : Nat := 42
 /-- The WOTS target sum (the 42 3-bit digits of an accepted encoding sum to it). -/
-def targetSum : Nat := 184
+def targetSum : Nat := 182
 /-- Old name of `targetSum`. -/
 abbrev target : Nat := targetSum
 /-- The number of hypertree layers `d`. -/
@@ -73,14 +81,24 @@ def nLayers : Nat := 5
 /-- The layer heights, layer 0 (the cached top tree) first. -/
 def heights : List Nat := [11, 6, 6, 6, 5]
 def totalH : Nat := 34
-def ftsA : Nat := 10
-/-- Number of opened FORS trees (`k - 1`; tree 14 is the pinned group `u_14 = 0`). -/
-def ftsTrees : Nat := 14
+/-- PORS tree height (`POR_H`). -/
+def porsH : Nat := 14
+/-- Opened PORS leaves per signature (`POR_K`). -/
+def porsK : Nat := 15
+/-- PORS leaves (`POR_T = 2^14`). -/
+def porsT : Nat := 2 ^ porsH
+/-- Authentication-node slots (`POR_M`, the octopus bound). -/
+def porsM : Nat := 120
+/-- Schedule segments (`POR_SEGS = 2 k - 1`: one per leaf start, one per merge). -/
+def porsSegs : Nat := 2 * porsK - 1
 /-- Digest trials `A_max`. -/
 def aMax : Nat := 2 ^ 20
 /-- The counter limit `C_max`: the signer tries `c < cMax`, the verifier rejects `c ≥ cMax`. -/
 def cMax : Nat := 2 ^ 22
-def sigBytes : Nat := 6404
+/-- Signature bytes `S`. -/
+def sigBytes : Nat := 6100
+/-- Witness bytes `W`. -/
+def witBytes : Nat := 6348
 
 /-- Height of hypertree layer `lay` (layer 0 = top): `heights[lay]`. -/
 def height (lay : Nat) : Nat := heights.getD lay 0
@@ -150,12 +168,12 @@ def IsChainFmt (x : List Byte) : Prop := x.length = 48 ∧ x.getD 1 0 = byte 1
 instance (x : List Byte) : Decidable (IsChainFmt x) :=
   inferInstanceAs (Decidable (x.length = 48 ∧ x.getD 1 0 = byte 1))
 
-/-- Tree / FORS node inputs: 64 bytes with tag byte `3` or `10`. -/
-def IsNodeFmt (x : List Byte) : Prop :=
-  x.length = 64 ∧ (x.getD 1 0 = byte 3 ∨ x.getD 1 0 = byte 10)
+/-- Hypertree node inputs: 64 bytes with tag byte `3`. (PORS nodes, tag 10, are not relabeled:
+their inputs already carry the heap index, see `porsNodeInput`.) -/
+def IsNodeFmt (x : List Byte) : Prop := x.length = 64 ∧ x.getD 1 0 = byte 3
 
 instance (x : List Byte) : Decidable (IsNodeFmt x) :=
-  inferInstanceAs (Decidable (x.length = 64 ∧ (x.getD 1 0 = byte 3 ∨ x.getD 1 0 = byte 10)))
+  inferInstanceAs (Decidable (x.length = 64 ∧ x.getD 1 0 = byte 3))
 
 /-- Message digest inputs: 96 bytes with tag byte `12`. -/
 def IsDigestFmt (x : List Byte) : Prop := x.length = 96 ∧ x.getD 1 0 = byte 12
@@ -170,9 +188,8 @@ def splitP (p : Nat) : Nat := p % 8 + 256 * (p / 8)
 /-- The heap index `2^(h - lam) + j` of node `j` of level `lam` of a tree of height `h`. -/
 def heapIndex (h lam j : Nat) : Nat := 2 ^ (h - lam) + j
 
-/-- The height of the tree of a node input: `height lay` (tag 3, `lay` = byte 2) or `ftsA` (tag 10). -/
-def nodeHeight (x : List Byte) : Nat :=
-  if x.getD 1 0 = byte 3 then height (x.getD 2 0).toNat else ftsA
+/-- The height of the tree of a (tag 3) node input: `height lay`, `lay` = byte 2. -/
+def nodeHeight (x : List Byte) : Nat := height (x.getD 2 0).toNat
 
 /-- The 64-byte block of a chain input `x = tw || P || v`: `tw' || 0^32 || v`, `tw'` = `tw` with
 the `p` field (bytes 4..8) replaced by `splitP p`. -/
@@ -188,9 +205,11 @@ def nodeBlock (x : List Byte) : List Byte :=
 /-- The block of a digest input `tw || P || rho || 0^16 || m`: `tw || rho || m`. -/
 def digestBlock (x : List Byte) : List Byte := x.take 16 ++ slice x 32 16 ++ x.drop 64
 
-/-- **The oracle input format** `f` (`PROGRAMS.md`, FORMAT; `ref.f_query`): chain inputs, node
-inputs (tags 3, 10) and digest inputs become the one-block `chainBlock`, `nodeBlock`,
-`digestBlock`; every other input is zero padded (`pad64`). -/
+/-- **The oracle input format** `f` (`PROGRAMS.md`, FORMAT; `ref.f_query`): chain inputs, hypertree
+node inputs (tag 3) and digest inputs become the one-block `chainBlock`, `nodeBlock`,
+`digestBlock`; every other input is zero padded (`pad64`). PORS node inputs (tag 10) are built
+in their relabeled form already (`porsNodeInput`), so zero padding (the identity on 64 bytes)
+is exactly `ref.f_query` on the signer's tag-10 inputs and `ref.node_query`'s raw blocks. -/
 def fmt (x : List Byte) : Query :=
   if IsChainFmt x then ⟨0, ofList _ (chainBlock x)⟩
   else if IsNodeFmt x then ⟨0, ofList _ (nodeBlock x)⟩
@@ -223,8 +242,8 @@ def th (tw payload : List Byte) : OracleComp HashSpec Val := hash16 (thInput tw 
 
 /-! ## Hash input formats (exact byte lists before padding)
 
-Hypertree formats take `(lay, tau, e)` = (layer, tree, leaf) first; FORS formats take
-`(k, idx)` = (tree kappa, instance). -/
+Hypertree formats take `(lay, tau, e)` = (layer, tree, leaf) first; PORS formats take the
+instance `idx` first. -/
 
 /-- WOTS secrets of chain pair `i` (chains `2i`, `2i+1`) of leaf `e`: `tw(0, lay, tau, i, e) || P || S`
 (64 bytes; queried with `prf2`). -/
@@ -249,20 +268,17 @@ def encInput (lay tau e : Nat) (M : Val) (c : Nat) : List Byte :=
 /-- Randomizer trial `a`: `tw(7, 0, 0, a, 0) || P || S || m` (96 bytes). -/
 def rndInput (S m : List Byte) (a : Nat) : List Byte := thInput (tweak 7 0 0 a 0) (S ++ m)
 
-/-- FORS secrets of leaf pair `j` (leaves `2j`, `2j+1`) of tree `k`: `tw(8, k, idx, 0, j) || P || S`
+/-- PORS secrets of leaf pair `q` (leaves `2q`, `2q+1`): `tw(8, 0, idx, 0, q) || P || S`
 (64 bytes; queried with `prf2`). -/
-def ftsPrfInput (S : List Byte) (k idx j : Nat) : List Byte := thInput (tweak 8 k idx 0 j) S
+def porsPrfInput (S : List Byte) (idx q : Nat) : List Byte := thInput (tweak 8 0 idx 0 q) S
 
-/-- FORS leaf `j` of tree `k`: `tw(9, k, idx, 0, j) || P || s` (48 bytes). -/
-def ftsLeafInput (k idx j : Nat) (s : Val) : List Byte := thInput (tweak 9 k idx 0 j) s
+/-- PORS leaf `j`: `tw(9, 0, idx, 0, j) || P || s` (48 bytes, zero padded, not relabeled). -/
+def porsLeafInput (idx j : Nat) (s : Val) : List Byte := thInput (tweak 9 0 idx 0 j) s
 
-/-- FORS node `j` of level `lam`: `tw(10, k, idx, lam, j) || P || l || r` (64 bytes). -/
-def ftsNodeInput (k idx lam j : Nat) (l r : Val) : List Byte :=
-  thInput (tweak 10 k idx lam j) (l ++ r)
-
-/-- FORS key: `tw(11, 0, idx, 0, 0) || P || root_0 .. root_13` (256 bytes). -/
-def rootsInput (idx : Nat) (roots : List Val) : List Byte :=
-  thInput (tweak 11 0 idx 0 0) roots.flatten
+/-- PORS node with heap index `H`: `enc(10, 0, idx, 0, H) || P || l || r` (64 bytes). This is the
+real block of `ref.node_query` (for every `H`; `le32` keeps `H mod 2^32`), and of the signer's
+node `(lam, j)` after `ref.f_query` for `H = 2^(14 - lam) + j`. -/
+def porsNodeInput (idx H : Nat) (l r : Val) : List Byte := thInput (tweak 10 0 idx 0 H) (l ++ r)
 
 /-- Message digest: `tw(12, 0, 0, 0, 0) || P || rho || 0^16 || m` (96 bytes). -/
 def digestInput (rho m : List Byte) : List Byte := thInput (tweak 12 0 0 0 0) (rho ++ zeros 16 ++ m)
@@ -276,19 +292,75 @@ def macInput (S region : List Byte) : List Byte := thInput (tweak 14 0 0 0 0) (S
 
 /-! ## Digest, index split, digit decoding -/
 
-/-- `N = Truncate_184(H(digestInput rho m))` (the first 23 bytes, little endian). -/
+/-- `N` = the full 256-bit answer of `H(digestInput rho m)` (little endian, `ref.message_digest`). -/
 def digest (rho m : List Byte) : OracleComp HashSpec Nat := do
   let a ← H (digestInput rho m)
-  pure (a.toNat % 2 ^ 184)
+  pure a.toNat
 
 /-- `idx = N mod 2^34`. -/
 def idxOf (N : Nat) : Nat := N % 2 ^ totalH
 
-/-- `u_k = floor(N / 2^(34 + 10k)) mod 2^10`. -/
-def uOf (N k : Nat) : Nat := N / 2 ^ (totalH + ftsA * k) % 2 ^ ftsA
+/-- Leaf index `r` (digest slot `r < 15`): `v_r = floor(N / 2^(34 + 14 r)) mod 2^14`. -/
+def leafOf (N r : Nat) : Nat := N / 2 ^ (totalH + porsH * r) % 2 ^ porsH
 
-/-- Admissible iff `u_14 = 0`. -/
-def admissible (N : Nat) : Bool := uOf N 14 == 0
+/-- The 15 leaf indices `v_0 .. v_14` of a digest, in digest-slot order (`ref.split_digest`). -/
+def leavesOf (N : Nat) : List Nat := (List.range porsK).map (leafOf N)
+
+/-- Python's `int.bit_length`: `0` for `0`, else `floor(log2 x) + 1`. -/
+def bitLen (x : Nat) : Nat := if x = 0 then 0 else Nat.log2 x + 1
+
+/-- `ref.octopus_size vs = 14 + sum_{s ≥ 1} bitlen(vs[s-1] xor vs[s]) - 2 (|vs| - 1)`, written as
+`14 + 2 + sum - 2 |vs|` (equal whenever Python's value is `≥ 0`, which it always is on sorted
+distinct lists; the Nat truncation to `0` does not change any comparison `≤ 120` either). -/
+def octopusSize (vs : List Nat) : Nat :=
+  porsH + 2 + (List.zipWith (fun a b => bitLen (a ^^^ b)) vs vs.tail).sum - 2 * vs.length
+
+/-- `sorted(v)` (ascending). -/
+def sortLeaves (v : List Nat) : List Nat := v.insertionSort (· ≤ ·)
+
+/-- `ref.admissible`: the 15 leaf indices of `N` are pairwise distinct and their octopus (in
+sorted order) has at most `porsM = 120` nodes. -/
+def admissible (N : Nat) : Bool :=
+  decide (leavesOf N).Nodup && decide (octopusSize (sortLeaves (leavesOf N)) ≤ porsM)
+
+/-! ### The honest stack-machine schedule (`ref.schedule`) -/
+
+/-- State of `ref.schedule`: segment bytes, read positions `(height, node index)`, and the stack
+of pending sibling heap indices (head = top, i.e. Python's `stack[-1]`). -/
+structure SchedState where
+  segs : List Nat
+  reads : List (Nat × Nat)
+  stack : List Nat
+deriving DecidableEq, Repr
+
+/-- One height `h` of the inner `while h < top` loop of leaf processing; state
+`(st, E, cnt, t)`. If the stack top equals `E`: emit the segment `cnt | 16 | 32 t`, pop, go up
+(`t` = bit 0 of the new `E`); else record the witness sibling `(h, (E xor 1) - 2^14 / 2^h)`,
+count it, go up. -/
+def schedStep (x : SchedState × Nat × Nat × Nat) (h : Nat) : SchedState × Nat × Nat × Nat :=
+  let (st, E, cnt, t) := x
+  match st.stack with
+  | Q :: rest =>
+    if Q = E then ({ st with segs := st.segs ++ [cnt ||| 16 ||| 32 * t], stack := rest },
+      E / 2, 0, E / 2 % 2)
+    else ({ st with reads := st.reads ++ [(h, (E ^^^ 1) - porsT / 2 ^ h)] }, E / 2, cnt + 1, t)
+  | [] => ({ st with reads := st.reads ++ [(h, (E ^^^ 1) - porsT / 2 ^ h)] }, E / 2, cnt + 1, t)
+
+/-- Leaf `s` of the sorted leaves `vs` (`k = |vs|`): `E = 2^14 | vs[s]`, heights
+`0 .. top - 1` with `top = bitlen(vs[s] xor vs[s+1]) - 1` (`s + 1 < k`) or `14`; then the leaf's
+last segment `cnt | 32 t`; push `E xor 1` unless `s` is the last leaf. -/
+def schedLeaf (vs : List Nat) (st : SchedState) (s : Nat) : SchedState :=
+  let k := vs.length
+  let E := porsT ||| vs.getD s 0
+  let top := if s + 1 < k then bitLen (vs.getD s 0 ^^^ vs.getD (s + 1) 0) - 1 else porsH
+  let (st, E, cnt, t) := (List.range top).foldl schedStep (st, E, 0, E % 2)
+  let st := { st with segs := st.segs ++ [cnt ||| 32 * t] }
+  if s + 1 < k then { st with stack := (E ^^^ 1) :: st.stack } else st
+
+/-- `ref.schedule vs`: (segment bytes, read positions) of the sorted leaves `vs`. -/
+def schedule (vs : List Nat) : List Nat × List (Nat × Nat) :=
+  let st := (List.range vs.length).foldl (schedLeaf vs) ⟨[], [], []⟩
+  (st.segs, st.reads)
 
 /-- The 21 3-bit digits of a 64-bit word: `(d >> 3r) & 7`, `r = 0..20`. -/
 def digitsOfWord (d : Nat) : List Nat := (List.range 21).map fun r => d / 8 ^ r % 8

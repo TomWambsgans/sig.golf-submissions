@@ -11,7 +11,7 @@ set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_bind_const {Other : Type} (input : (OracleWorld + SigningSpec).Domain)
     (state : MonitoredState inputs) (ha : ∀ coordinate, (state.1.candidates coordinate).Nonempty) (after : SPMF Other) :

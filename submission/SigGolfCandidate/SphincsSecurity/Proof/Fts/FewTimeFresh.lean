@@ -2,12 +2,15 @@ import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeLoop
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimePadding
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeSignerView
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.AdmissibleCount
 /-!
 # Fresh signer views
 
 During a digest retry loop, every message input added after the loop's reference cache contains an
 inadmissible answer. Thus a successful input absent from the reference cache is answered freshly,
-and its retained few-time view has the uniform distribution even after all failed retries.
+and its retained few-time view has the law `signerViewSample` (uniform over the admissible views) even
+after all failed retries. A fresh answer is admissible with probability `admissibleProbability`, and its
+view is uniform over all views.
 -/
 
 namespace SphincsSecurity.Concrete
@@ -15,7 +18,7 @@ namespace SphincsSecurity.Concrete
 open OracleComp OracleSpec ENNReal
 
 abbrev HashOutputRest :=
-  FtsLeaf × BitVec (hashOutputBits - messageDigestBits)
+  DigestUnusedBits × BitVec (hashOutputBits - messageDigestBits)
 
 def reorderHashOutputCoordinates :
     (HashOutputRest × FewTimeView) ≃ HashOutputCoordinates where
@@ -66,54 +69,189 @@ theorem evalDist_uniformHashOutputCoordinates_bind_reordered {Result : Type}
         reorderHashOutputCoordinates, Function.comp_apply]
       rfl
 
-theorem probEvent_uniformDigestCoordinates_admissible_view
-    (P : FewTimeView → Prop) :
-    Pr[fun coordinates : FewTimeView × FtsLeaf => coordinates.2 = 0 ∧ P coordinates.1 |
-      ($ᵗ (FewTimeView × FtsLeaf) : ProbComp (FewTimeView × FtsLeaf))] =
-      ((2 ^ ftsTreeHeight : Nat) : ℝ≥0∞)⁻¹ *
-        Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] := by
-  change Pr[fun coordinates : FewTimeView × FtsLeaf =>
-      coordinates.2 = 0 ∧ P coordinates.1 |
-    Prod.mk <$> ($ᵗ FewTimeView : ProbComp FewTimeView) <*>
-      ($ᵗ FtsLeaf : ProbComp FtsLeaf)] = _
+/-! ### The law of an accepted fresh view -/
+
+/-- The views whose leaves are admissible. -/
+abbrev AdmissibleView := {view : FewTimeView // AdmissibleLeaves view.2}
+
+def admissibleViewEquiv : AdmissibleView ≃ Index × {leaves : IndexGroup → FtsLeaf // AdmissibleLeaves leaves} where
+  toFun view := (view.1.1, ⟨view.1.2, view.2⟩)
+  invFun value := ⟨(value.1, value.2.1), value.2.2⟩
+  left_inv _ := rfl
+  right_inv _ := rfl
+
+theorem card_admissibleView :
+    (Fintype.card AdmissibleView : ENNReal) = admissibleProbability * Fintype.card FewTimeView := by
+  rw [Fintype.card_congr admissibleViewEquiv, Fintype.card_prod, Fintype.card_subtype, Nat.cast_mul,
+    card_admissibleLeaves_eq_mul, Fintype.card_prod, Nat.cast_mul]
+  ring
+
+instance : Nonempty AdmissibleView := by
+  apply Fintype.card_pos_iff.mp
+  have h : (Fintype.card AdmissibleView : ENNReal) ≠ 0 := by
+    rw [card_admissibleView]
+    exact mul_ne_zero admissibleProbability_pos (by simp)
+  exact Nat.pos_of_ne_zero (by exact_mod_cast h)
+
+noncomputable instance : SampleableType AdmissibleView := SampleableType.ofFintype AdmissibleView
+
+/-- The law of the view of a fresh accepted digest: uniform over the admissible views. -/
+noncomputable irreducible_def signerViewSample : ProbComp FewTimeView :=
+  Subtype.val <$> ($ᵗ AdmissibleView : ProbComp AdmissibleView)
+
+theorem probOutput_signerViewSample (view : FewTimeView) :
+    Pr[= view | signerViewSample] =
+      if AdmissibleLeaves view.2 then (admissibleProbability * Fintype.card FewTimeView)⁻¹ else 0 := by
+  rw [signerViewSample_def]
+  split_ifs with hview
+  · rw [show view = (⟨view, hview⟩ : AdmissibleView).val from rfl,
+      probOutput_map_injective _ Subtype.val_injective, probOutput_uniformSample, card_admissibleView]
+  · rw [probOutput_map_eq_tsum_ite]
+    apply ENNReal.tsum_eq_zero.mpr
+    intro other
+    rw [if_neg]
+    rintro rfl
+    exact hview other.2
+
+theorem probFailure_signerViewSample : Pr[⊥ | signerViewSample] = 0 := by
+  rw [signerViewSample_def, probFailure_map]
+  exact probFailure_uniformSample AdmissibleView
+
+theorem probEvent_signerView_index (index : Index) :
+    Pr[fun view : FewTimeView => view.1 = index | signerViewSample] = (Fintype.card Index : ENNReal)⁻¹ := by
+  classical
+  rw [probEvent_eq_tsum_ite, tsum_fintype, Fintype.sum_prod_type]
+  rw [Finset.sum_eq_single index (fun other _ hother =>
+    Finset.sum_eq_zero (fun leaves _ => if_neg hother)) (fun h => (h (Finset.mem_univ _)).elim)]
+  simp only [if_true, probOutput_signerViewSample]
+  rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul, card_admissibleLeaves_eq_mul]
+  have hcard : (Fintype.card FewTimeView : ENNReal) =
+      (Fintype.card Index : ENNReal) * Fintype.card (IndexGroup → FtsLeaf) := by
+    rw [Fintype.card_prod, Nat.cast_mul]
+  rw [hcard, ENNReal.mul_inv (Or.inl admissibleProbability_pos) (Or.inl admissibleProbability_ne_top),
+    ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp))]
   calc
-    _ = Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] *
-          Pr[fun leaf : FtsLeaf => leaf = 0 |
-            ($ᵗ FtsLeaf : ProbComp FtsLeaf)] := by
-      apply probEvent_seq_map_eq_mul
-      intro view _hview leaf _hleaf
-      simp [and_comm]
-    _ = Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] *
-          ((2 ^ ftsTreeHeight : Nat) : ℝ≥0∞)⁻¹ := by
-      rw [probEvent_eq_eq_probOutput, probOutput_uniformSample, Fintype.card_fin]
-    _ = _ := by rw [mul_comm]
+    _ = (admissibleProbability * admissibleProbability⁻¹) *
+        ((Fintype.card (IndexGroup → FtsLeaf) : ENNReal) * (Fintype.card (IndexGroup → FtsLeaf) : ENNReal)⁻¹) *
+          (Fintype.card Index : ENNReal)⁻¹ := by ring
+    _ = _ := by
+      rw [ENNReal.mul_inv_cancel admissibleProbability_pos admissibleProbability_ne_top,
+        ENNReal.mul_inv_cancel (by simp) (by simp), one_mul, one_mul]
+
+theorem probOutput_uniformFewTimeView (view : FewTimeView) :
+    Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] = (Fintype.card FewTimeView : ENNReal)⁻¹ :=
+  probOutput_uniformSample FewTimeView view
+
+/-- A uniform view is admissible with probability `p`, and then has the signer's law. -/
+theorem probOutput_uniformFewTimeView_admissible (view : FewTimeView) :
+    (if AdmissibleLeaves view.2 then Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] else 0) =
+      admissibleProbability * Pr[= view | signerViewSample] := by
+  rw [probOutput_signerViewSample, probOutput_uniformFewTimeView]
+  split_ifs
+  · rw [ENNReal.mul_inv (Or.inl admissibleProbability_pos) (Or.inl admissibleProbability_ne_top), ← mul_assoc,
+      ENNReal.mul_inv_cancel admissibleProbability_pos admissibleProbability_ne_top, one_mul]
+  · rw [mul_zero]
+
+theorem probEvent_uniformFewTimeView_admissible (P : FewTimeView → Prop) :
+    Pr[fun view => AdmissibleLeaves view.2 ∧ P view | ($ᵗ FewTimeView : ProbComp FewTimeView)] =
+      admissibleProbability * Pr[P | signerViewSample] := by
+  classical
+  rw [probEvent_eq_tsum_ite, probEvent_eq_tsum_ite, ← ENNReal.tsum_mul_left]
+  apply tsum_congr
+  intro view
+  by_cases hP : P view
+  · by_cases hadm : AdmissibleLeaves view.2
+    · simp only [hP, hadm, and_self, if_true]
+      have h := probOutput_uniformFewTimeView_admissible view
+      rw [if_pos hadm] at h
+      exact h
+    · have h := probOutput_uniformFewTimeView_admissible view
+      rw [if_neg hadm] at h
+      simp only [hP, hadm, and_true, if_false, if_true]
+      exact h
+  · simp [hP]
+
+theorem probEvent_uniformFewTimeView_admissible_eq :
+    Pr[fun view => AdmissibleLeaves view.2 | ($ᵗ FewTimeView : ProbComp FewTimeView)] = admissibleProbability := by
+  have h := probEvent_uniformFewTimeView_admissible (fun _ => True)
+  simp only [and_true] at h
+  rw [h]
+  simp
+
+theorem probEvent_uniformFewTimeView_not_admissible :
+    Pr[fun view => ¬ AdmissibleLeaves view.2 | ($ᵗ FewTimeView : ProbComp FewTimeView)] =
+      1 - admissibleProbability := by
+  have hc := probEvent_compl ($ᵗ FewTimeView : ProbComp FewTimeView) (fun view => AdmissibleLeaves view.2)
+  rw [probEvent_uniformFewTimeView_admissible_eq] at hc
+  simp only [probFailure_uniformSample, tsub_zero] at hc
+  exact ENNReal.eq_sub_of_add_eq admissibleProbability_ne_top ((add_comm _ _).trans hc)
+
+/-- One fresh attempt of a retry loop: an admissible uniform view is selected (and has the signer's law),
+a rejected one continues with a continuation bounded by the same bound. -/
+theorem probEvent_uniformFewTimeView_bind_le {α : Type} (g : FewTimeView → ProbComp α) (Q : α → Prop)
+    (P : FewTimeView → Prop) [DecidablePred P] (bound : ENNReal) (hbound : Pr[P | signerViewSample] ≤ bound)
+    (hadmissible : ∀ view, AdmissibleLeaves view.2 → Pr[Q | g view] ≤ if P view then 1 else 0)
+    (hrejected : ∀ view, ¬ AdmissibleLeaves view.2 → Pr[Q | g view] ≤ bound) :
+    Pr[Q | ($ᵗ FewTimeView : ProbComp FewTimeView) >>= g] ≤ bound := by
+  classical
+  rw [probEvent_bind_eq_tsum]
+  calc
+    _ ≤ ∑' view, Pr[= view | ($ᵗ FewTimeView : ProbComp FewTimeView)] *
+        ((if AdmissibleLeaves view.2 ∧ P view then 1 else 0) + (if AdmissibleLeaves view.2 then 0 else bound)) := by
+      apply ENNReal.tsum_le_tsum
+      intro view
+      apply mul_le_mul' le_rfl
+      by_cases h : AdmissibleLeaves view.2
+      · simpa [h] using hadmissible view h
+      · simpa [h] using hrejected view h
+    _ = Pr[fun view => AdmissibleLeaves view.2 ∧ P view | ($ᵗ FewTimeView : ProbComp FewTimeView)] +
+        Pr[fun view => ¬ AdmissibleLeaves view.2 | ($ᵗ FewTimeView : ProbComp FewTimeView)] * bound := by
+      simp only [mul_add, ENNReal.tsum_add]
+      congr 1
+      · rw [probEvent_eq_tsum_ite]
+        apply tsum_congr
+        intro view
+        split_ifs <;> simp
+      · rw [probEvent_eq_tsum_ite, ← ENNReal.tsum_mul_right]
+        apply tsum_congr
+        intro view
+        split_ifs <;> simp
+    _ ≤ admissibleProbability * bound + (1 - admissibleProbability) * bound := by
+      rw [probEvent_uniformFewTimeView_admissible, probEvent_uniformFewTimeView_not_admissible]
+      gcongr
+    _ = bound := by
+      rw [← add_mul, add_tsub_cancel_of_le admissibleProbability_le_one, one_mul]
 
 set_option maxRecDepth 100000 in
+theorem probEvent_uniformHashOutput_view (P : FewTimeView → Prop) :
+    Pr[fun output : HashOutput => P (hashOutputFewTimeView output) | ($ᵗ HashOutput : ProbComp HashOutput)] =
+      Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] := by
+  let coordinates : HashOutput → FewTimeView × DigestUnusedBits := fun output =>
+    digestCoordinates (truncateMessageDigest output)
+  calc
+    Pr[fun output : HashOutput => P (hashOutputFewTimeView output) | ($ᵗ HashOutput : ProbComp HashOutput)] =
+        Pr[fun value => P value.1 | coordinates <$> ($ᵗ HashOutput : ProbComp HashOutput)] := by
+      rw [probEvent_map]
+      rfl
+    _ = Pr[fun value => P value.1 |
+        ($ᵗ (FewTimeView × DigestUnusedBits) : ProbComp (FewTimeView × DigestUnusedBits))] :=
+      probEvent_congr' (fun _ _ => Iff.rfl) (by
+        simpa only [coordinates] using evalDist_hashOutput_digestCoordinates_uniform)
+    _ = Pr[P | Prod.fst <$> ($ᵗ (FewTimeView × DigestUnusedBits) : ProbComp (FewTimeView × DigestUnusedBits))] := by
+      rw [probEvent_map]
+      rfl
+    _ = _ := probEvent_congr' (fun _ _ => Iff.rfl) evalSPMF_map_fst_uniformSample_prod
+
 theorem probEvent_uniformHashOutput_admissible_view
     (P : FewTimeView → Prop) :
     Pr[fun output : HashOutput =>
       signAttemptResultOfOutput output ≠ none ∧ P (hashOutputFewTimeView output) |
       ($ᵗ HashOutput : ProbComp HashOutput)] =
-      ((2 ^ ftsTreeHeight : Nat) : ℝ≥0∞)⁻¹ *
-        Pr[P | ($ᵗ FewTimeView : ProbComp FewTimeView)] := by
-  let coordinates : HashOutput → FewTimeView × FtsLeaf := fun output =>
-    digestCoordinates (truncateMessageDigest output)
-  let event : FewTimeView × FtsLeaf → Prop := fun value => value.2 = 0 ∧ P value.1
-  calc
-    Pr[fun output : HashOutput =>
-        signAttemptResultOfOutput output ≠ none ∧ P (hashOutputFewTimeView output) |
-        ($ᵗ HashOutput : ProbComp HashOutput)] =
-        Pr[event | coordinates <$> ($ᵗ HashOutput : ProbComp HashOutput)] := by
-      rw [probEvent_map]
-      congr 1
-      funext output
-      rw [signAttemptResultOfOutput_ne_none_iff]
-      rfl
-    _ = Pr[event |
-        ($ᵗ (FewTimeView × FtsLeaf) : ProbComp (FewTimeView × FtsLeaf))] :=
-      probEvent_congr' (fun _ _ => Iff.rfl) (by
-        simpa only [coordinates] using evalDist_hashOutput_digestCoordinates_uniform)
-    _ = _ := probEvent_uniformDigestCoordinates_admissible_view P
+      admissibleProbability * Pr[P | signerViewSample] := by
+  rw [← probEvent_uniformFewTimeView_admissible, ← probEvent_uniformHashOutput_view]
+  congr 1
+  funext output
+  rw [signAttemptResultOfOutput_ne_none_iff, admissible_iff_view]
 
 def OnlyRejectedNewMessageEntries (referenceCache workingCache : QueryCache HashSpec)
     (secretKey : SecretKey) (message : Message) : Prop :=

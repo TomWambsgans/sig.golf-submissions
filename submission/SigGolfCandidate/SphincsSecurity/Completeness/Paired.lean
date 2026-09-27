@@ -4,7 +4,7 @@ import SigGolfCandidate.SphincsSecurity.Proof.Scheme.BuildEval
 # The paired builders, evaluated
 
 The seeded signer derives the secrets of two chains (or two few-time leaves) with one query and walks
-the pair's members right after it. Under a fixed answer function `f` the order of the work does not
+the pair's members right after it (for the PORS tree: the two leaf hashes). Under a fixed answer function `f` the order of the work does not
 matter, only what each member is handed: member `2k` gets the first half of the pair's answer and
 member `2k + 1` the second. So each paired builder evaluates to its per-secret counterpart run with
 the secrets `unpairedOts f g` (resp. `unpairedFts f g`) read off the evaluated pair getter `g`, and
@@ -118,31 +118,19 @@ theorem eval_buildLayerTreePaired (parameter : PublicParameter) (lay : Layer) (t
   rw [evalWithAnswerFn_bind, eval_buildLayerTablePaired]
   rfl
 
-/-! ## The forest -/
+/-! ## The PORS tree -/
 
-theorem eval_buildFtsTreePaired (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (g : FtsPair → OracleComp HashSpec (Digest × Digest)) (leaf : FtsLeaf) :
-    evalWithAnswerFn f (buildFtsTreePaired parameter index tree g leaf)
-      = evalWithAnswerFn f (buildFtsTree parameter index tree
-          (fun leaf => pure (unpairedFts f g leaf)) leaf) := by
+theorem eval_buildFtsTreePaired (parameter : PublicParameter) (index : Index)
+    (g : FtsPair → OracleComp HashSpec (Digest × Digest)) :
+    evalWithAnswerFn f (buildFtsTreePaired parameter index g)
+      = evalWithAnswerFn f (buildFtsTree parameter index (fun leaf => pure (unpairedFts f g leaf))) := by
   have hleaves := unpairFtsLeaves_map
     (fun leaf (secret : Digest) =>
-      (secret, evalWithAnswerFn f (ftsLeafHash parameter index tree leaf secret)))
+      (secret, evalWithAnswerFn f (ftsLeafHash parameter index porsTree leaf.val secret)))
     (fun pair => evalWithAnswerFn f (g pair))
   unfold buildFtsTreePaired buildFtsTree
   simp only [evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin, evalWithAnswerFn_pure,
     hleaves _ (fun _ => rfl), unpairedFts]
-
-theorem eval_buildForestPaired (parameter : PublicParameter) (index : Index)
-    (g : FtsTree → FtsPair → OracleComp HashSpec (Digest × Digest)) (leaves : IndexGroup → FtsLeaf) :
-    evalWithAnswerFn f (buildForestPaired parameter index g leaves)
-      = evalWithAnswerFn f (buildForest parameter index
-          (fun tree leaf => pure (unpairedFts f (g tree) leaf)) leaves) := by
-  unfold buildForestPaired buildForest
-  refine eval_bind_congr f ?_ (fun _ => rfl)
-  rw [evalWithAnswerFn_sequenceFin, evalWithAnswerFn_sequenceFin]
-  funext tree
-  exact eval_buildFtsTreePaired f parameter index tree (g tree) (leaves (ftsIndexOf tree))
 
 /-! ## Signing -/
 
@@ -216,8 +204,8 @@ theorem eval_signFromPaired (parameter : PublicParameter) (index : Index)
           (fun lay tree leaf chainIdx => pure (unpairedOts f (otsGet lay tree leaf) chainIdx))
           topNode randomness leaves) := by
   unfold signFromPaired signFrom
-  refine eval_bind_congr f (eval_buildForestPaired f _ _ _ _) (fun forest => ?_)
-  rcases forest with ⟨secrets, ftsPath, ftsPublicKey⟩
+  refine eval_bind_congr f (eval_buildFtsTreePaired f _ _ _) (fun tree => ?_)
+  rcases tree with ⟨secrets, table⟩
   exact eval_bind_congr f (eval_signLayersPaired f _ _ _ _ _ _) (fun _ => rfl)
 
 end SphincsSecurity.Completeness

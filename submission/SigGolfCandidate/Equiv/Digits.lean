@@ -119,46 +119,71 @@ theorem decodeDigits_dv (d : Digest) :
     · rw [if_neg (by exact hv), if_neg (fun h => hv h.2.2)]; rfl
   · rw [if_neg hb, if_neg (fun h => hb ⟨(bit63 d).mp h.1, (bit127 d).mp h.2.1⟩)]; rfl
 
-/-! ## The message digest -/
+/-! ## The message digest (PORS+FP: the full 256-bit answer) -/
 
-open SphincsSecurity (MessageDigest IndexGroup FtsLeaf)
-
-/-- The leaf groups of a digest as the reference reads them (zero past the last group). -/
-def uFun (leaves : IndexGroup → FtsLeaf) (k : Nat) : Nat :=
-  if h : k < SphincsSecurity.ftsTrees then (leaves ⟨k, h⟩).val else 0
+open SphincsSecurity (MessageDigest IndexGroup FtsLeaf SlotCode)
 
 theorem truncateMessageDigest_toNat (a : BitVec 256) :
-    (SphincsSecurity.truncateMessageDigest a).toNat = a.toNat % 2 ^ 184 := by
-  simp [SphincsSecurity.truncateMessageDigest, SphincsSecurity.messageDigestBits,
-    SphincsSecurity.totalHeight, SphincsSecurity.ftsTrees, SphincsSecurity.ftsTreeHeight]
+    (SphincsSecurity.truncateMessageDigest a).toNat = a.toNat := by
+  simp [SphincsSecurity.truncateMessageDigest, SphincsSecurity.messageDigestBits]
 
-theorem idxOf_eq (d : MessageDigest) : Ref.idxOf d.toNat = (SphincsSecurity.Concrete.digestIndex d).val := by
+theorem idxOf_eq (d : MessageDigest) :
+    Ref.idxOf d.toNat = (SphincsSecurity.Concrete.digestIndex d).val := by
   simp [Ref.idxOf, SphincsSecurity.Concrete.digestIndex, Ref.totalH, SphincsSecurity.totalHeight]
 
-theorem uOf_eq (d : MessageDigest) : Ref.uOf d.toNat = uFun (SphincsSecurity.Concrete.digestLeaves d) := by
-  funext k
-  unfold uFun Ref.uOf
-  split_ifs with hk
-  · simp [SphincsSecurity.Concrete.digestLeaves, Ref.totalH, SphincsSecurity.totalHeight, Ref.ftsA,
-      SphincsSecurity.ftsTreeHeight, Nat.shiftRight_eq_div_pow]
-  · have h := d.isLt
-    simp only [SphincsSecurity.messageDigestBits, SphincsSecurity.totalHeight, SphincsSecurity.ftsTrees,
-      SphincsSecurity.ftsTreeHeight] at h hk
-    simp only [Ref.totalH, Ref.ftsA]
-    have h2 : d.toNat < 2 ^ (34 + 10 * k) :=
-      lt_of_lt_of_le h (Nat.pow_le_pow_right (by omega) (by omega))
-    rw [Nat.div_eq_of_lt h2]
+theorem leafOf_eq (d : MessageDigest) (r : IndexGroup) :
+    Ref.leafOf d.toNat r.val = (SphincsSecurity.Concrete.digestLeaves d r).val := by
+  simp [Ref.leafOf, SphincsSecurity.Concrete.digestLeaves, Ref.totalH, SphincsSecurity.totalHeight,
+    Ref.porsH, SphincsSecurity.ftsTreeHeight, Nat.shiftRight_eq_div_pow]
+
+/-- The reference's leaf list is the abstract slot map, slot by slot. -/
+theorem leavesOf_eq (d : MessageDigest) :
+    Ref.leavesOf d.toNat = List.ofFn fun r => (SphincsSecurity.Concrete.digestLeaves d r).val := by
+  unfold Ref.leavesOf
+  rw [map_range_eq_ofFn]
+  exact List.ofFn_inj.mpr (funext fun r => leafOf_eq d r)
+
+/-- The verifier's leaf value of a slot code (`IND = v ++ [2^14]`) is `slotValue`. -/
+theorem slotValue_eq (leaves : IndexGroup → FtsLeaf) (c : SlotCode) :
+    ((List.ofFn fun r => (leaves r).val) ++ [Ref.porsT]).getD c.val 0 =
+      SphincsSecurity.Concrete.slotValue leaves c := by
+  unfold SphincsSecurity.Concrete.slotValue
+  split
+  · next h =>
+    rw [List.getD_eq_getElem?_getD, List.getElem?_append_left (by simpa using h)]
+    simp [h]
+  · next h =>
+    have hc := c.isLt
+    simp only [SphincsSecurity.ftsOpenings] at h hc
+    rw [List.getD_eq_getElem?_getD, List.getElem?_append_right (by simp [SphincsSecurity.ftsOpenings]; omega)]
+    have : c.val = 15 := by omega
+    rw [this]
     rfl
+
+theorem bitLen_eq : Ref.bitLen = SphincsSecurity.Concrete.bitLength := rfl
+
+theorem octopusSize_eq : Ref.octopusSize = SphincsSecurity.Concrete.octopusSize := rfl
+
+/-- Sorting the leaf values is sorting the slots by value, then reading the values. -/
+theorem sortLeaves_eq (leaves : IndexGroup → FtsLeaf) :
+    Ref.sortLeaves (List.ofFn fun r => (leaves r).val) =
+      SphincsSecurity.Concrete.sortedLeaves leaves := by
+  unfold Ref.sortLeaves SphincsSecurity.Concrete.sortedLeaves SphincsSecurity.Concrete.sortedSlots
+  rw [List.ofFn_eq_map]
+  exact (List.map_insertionSort (fun r r' : IndexGroup => (leaves r).val ≤ (leaves r').val)
+    (fun a b : Nat => a ≤ b) (fun r => (leaves r).val) _ (fun a _ b _ => Iff.rfl)).symm
 
 theorem admissible_eq (d : MessageDigest) :
     Ref.admissible d.toNat = decide (SphincsSecurity.Concrete.Admissible d) := by
-  unfold Ref.admissible
-  rw [uOf_eq]
-  have e : uFun (SphincsSecurity.Concrete.digestLeaves d) 14 =
-      (SphincsSecurity.Concrete.digestLeaves d SphincsSecurity.Concrete.lastIndexGroup).val :=
-    dif_pos (by decide)
-  rw [e, Bool.eq_iff_iff, beq_iff_eq, decide_eq_true_iff]
-  show _ ↔ SphincsSecurity.Concrete.digestLeaves d SphincsSecurity.Concrete.lastIndexGroup = 0
-  exact ⟨fun h => Fin.ext h, fun h => by rw [h]; rfl⟩
+  unfold Ref.admissible SphincsSecurity.Concrete.Admissible SphincsSecurity.Concrete.AdmissibleLeaves
+  rw [leavesOf_eq, sortLeaves_eq, octopusSize_eq]
+  have hn : (List.ofFn fun r => (SphincsSecurity.Concrete.digestLeaves d r).val).Nodup ↔
+      Function.Injective (SphincsSecurity.Concrete.digestLeaves d) := by
+    rw [List.nodup_ofFn]
+    exact ⟨fun h a b e => h (congrArg Fin.val e), fun h a b e => h (Fin.ext e)⟩
+  by_cases h1 : Function.Injective (SphincsSecurity.Concrete.digestLeaves d) <;>
+    by_cases h2 : SphincsSecurity.Concrete.octopusSize
+      (SphincsSecurity.Concrete.sortedLeaves (SphincsSecurity.Concrete.digestLeaves d)) ≤ 120 <;>
+    simp [hn, h1, h2, Ref.porsM, SphincsSecurity.ftsAuthCapacity]
 
 end SigGolfCandidate.Equiv

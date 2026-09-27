@@ -18,7 +18,7 @@ noncomputable def originalCertificateSource (adversary : Adversary) : ProbComp O
     (retainedGameRestComputation adversary generated.1.1)).run generated.2
   pure (generated.1.2, result)
 
-noncomputable def certificateContextGame (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+noncomputable def certificateContextGame (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) : PMF CertificateContextResult := do
   let generated ← (liftM (boundaryRun 0 scheme.keygen ∅) : PMF _)
   let key := generated.1.1.2
@@ -27,13 +27,13 @@ noncomputable def certificateContextGame (adversary : Adversary) (budget : Nat) 
       ([], generated.2, initialCertificateMonitor generated.1.2.hashCalls stopped, false)
   pure (key, result)
 
-theorem certificateContextGame_project (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateContextGame_project (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     Prod.snd <$> certificateContextGame adversary budget required stopAfter stopped =
       certificateCacheGame adversary budget required stopAfter stopped := by
   simp only [certificateContextGame, certificateCacheGame, map_bind, map_pure, bind_pure]
 
-theorem certificateCacheProposal_original {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem certificateCacheProposal_original {Result : Type} (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (state : List Index × CertificateCacheMonitorState) :
     (fun result => (result.1, result.2.2.1)) <$>
@@ -45,7 +45,7 @@ theorem certificateCacheProposal_original {Result : Type} (key : SecretKey) (bud
 def CertificateContextResult.original (result : CertificateContextResult) : OriginalCertificateResult :=
   (result.1, result.2.1, result.2.2.2.1)
 
-theorem certificateContextGame_original (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateContextGame_original (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     CertificateContextResult.original <$> certificateContextGame adversary budget required stopAfter stopped =
       (liftM (originalCertificateSource adversary) : PMF _) := by
@@ -169,7 +169,7 @@ noncomputable def originalCertificateMessageCost (adversary : Adversary) : ENNRe
     expectedBoundaryMessageCalls generated.1.2.parameter
       (simulateQ (expandedAdversaryImpl generated.1.2) (retainedGameRestComputation adversary generated.1.1)) generated.2
 
-theorem certificateContextGame_messageCalls_le_original (adversary : Adversary) (budget : Nat) (required : Finset FtsTree)
+theorem certificateContextGame_messageCalls_le_original (adversary : Adversary) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : SecretKey → CertificateStopRule) (stopped : Bool) :
     (∑' result, Pr[= result | certificateContextGame adversary budget required stopAfter stopped] *
       (result.2.2.2.2.1.messageCalls : ENNReal)) ≤ originalCertificateMessageCost adversary := by

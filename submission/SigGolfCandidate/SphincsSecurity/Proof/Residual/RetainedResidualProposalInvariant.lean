@@ -25,7 +25,7 @@ def ProposalInvariant {inputs : Finset HashInput} (key : SecretKey) (total : Nat
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget total : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget total : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredWorldResult_proposalInvariant (input : OracleWorld.Domain) (state : ProposalState inputs)
     (hinputs : requestInputs key (.inl input) ⊆ inputs) (hvalid : MonitoredValid inputs state.2)

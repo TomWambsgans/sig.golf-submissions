@@ -43,20 +43,17 @@ theorem Compatible.layer_frame_reference {inputs : Finset HashInput} {context : 
 theorem Compatible.hypertree_honest {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
     (hcompatible : Compatible context memory) (hdummy : ∀ lay tree leaf, OtsCode.Valid (context.dummy lay tree leaf))
     (hroot : context.key.root = canonicalGraphRoot context.graph) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (signature : Signature)
+    (signature : Signature) (ftsPublicKey : Digest)
+    (hfts : evalWithAnswerFn context.oracle
+      (ftsRecover context.key.parameter index (slotValue leaves) signature.fts) = some ftsPublicKey)
     (hverify : evalWithAnswerFn context.oracle
-      (verifyLayers context.key.parameter index signature numLayers
-        (evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index leaves signature.ftsSecret signature.ftsPath))) =
-      some context.key.root)
+      (verifyLayers context.key.parameter index signature numLayers ftsPublicKey) = some context.key.root)
     (hlayersRun : CachedRun memory.external.cache context.oracle
-      (verifyLayers context.key.parameter index signature numLayers
-        (evalWithAnswerFn context.oracle (ftsRecover context.key.parameter index leaves signature.ftsSecret signature.ftsPath))))
+      (verifyLayers context.key.parameter index signature numLayers ftsPublicKey))
     (hftsRun : CachedRun memory.external.cache context.oracle
-      (ftsRecover context.key.parameter index leaves signature.ftsSecret signature.ftsPath)) :
-    FullyHonestOpening context.oracle memory.external.cache context.key index leaves signature ∧
-      ∀ tree, memory.routing.disclosed index tree (leaves (ftsIndexOf tree)) := by
-  let ftsPublicKey := evalWithAnswerFn context.oracle
-    (ftsRecover context.key.parameter index leaves signature.ftsSecret signature.ftsPath)
+      (ftsRecover context.key.parameter index (slotValue leaves) signature.fts)) :
+    AdmissibleLeaves leaves ∧ FullyHonestOpening context.oracle memory.external.cache context.key index leaves signature ∧
+      ∀ slot, memory.routing.disclosed index porsTree (leaves slot) := by
   have hwalk := hypertree_walk (f := context.oracle) (cache := memory.external.cache) context.key index signature
     (fun lay => HonestLayerOpening context.oracle context.key.parameter context.key.otsSecret lay
         (treeIndexAt index lay) (leafIndexAt index lay) (evalWithAnswerFn context.oracle (layerMessage context.key index lay))
@@ -71,9 +68,10 @@ theorem Compatible.hypertree_honest {inputs : Finset HashInput} {context : Conte
   have hftsKey : ftsPublicKey = honestFtsKey context.oracle context.key.parameter index (context.key.ftsSecret index) := by
     rw [hwalk.2, layerMessage_bottomLayer]
     rfl
-  have hftsHonest := hcompatible.ftsRecover_honest index leaves signature.ftsSecret signature.ftsPath hftsKey hftsRun
-  exact ⟨⟨hwalk.1, hftsHonest, hftsRun⟩,
-    hcompatible.ftsRecover_disclosed index leaves signature.ftsSecret signature.ftsPath hftsKey hftsRun⟩
+  rw [hftsKey] at hfts
+  obtain ⟨hadmissible, hftsHonest, _⟩ := hcompatible.ftsRecover_honest index leaves signature.fts hfts hftsRun
+  exact ⟨hadmissible, ⟨hwalk.1, hftsHonest, hftsRun⟩,
+    hcompatible.ftsRecover_disclosed index leaves signature.fts hfts hftsRun⟩
 
 theorem Compatible.verify_honest {inputs : Finset HashInput} {context : Context inputs} {memory : Memory}
     (hcompatible : Compatible context memory) (hdummy : ∀ lay tree leaf, OtsCode.Valid (context.dummy lay tree leaf))
@@ -84,10 +82,11 @@ theorem Compatible.verify_honest {inputs : Finset HashInput} {context : Context 
       CachedRun memory.external.cache context.oracle (messageDigest context.key.parameter context.key.root message signature.randomness) ∧
       Admissible digest ∧
       FullyHonestOpening context.oracle memory.external.cache context.key (digestIndex digest) (digestLeaves digest) signature ∧
-      ∀ tree, memory.routing.disclosed (digestIndex digest) tree (digestLeaves digest (ftsIndexOf tree)) := by
-  obtain ⟨digest, hdigest, hdigestRun, hadmissible, hlayers, hftsRun, hlayersRun⟩ :=
+      ∀ slot, memory.routing.disclosed (digestIndex digest) porsTree (digestLeaves digest slot) := by
+  obtain ⟨digest, hdigest, hdigestRun, ftsPublicKey, hfts, hlayers, hftsRun, hlayersRun⟩ :=
     verify_extract ⟨context.key.root, context.key.parameter⟩ message signature hverify hrun
-  exact ⟨digest, hdigest, hdigestRun, hadmissible,
-    hcompatible.hypertree_honest hdummy hroot (digestIndex digest) (digestLeaves digest) signature hlayers hlayersRun hftsRun⟩
+  obtain ⟨hadmissible, hfull, hdisclosed⟩ := hcompatible.hypertree_honest hdummy hroot (digestIndex digest)
+    (digestLeaves digest) signature ftsPublicKey hfts hlayers hlayersRun hftsRun
+  exact ⟨digest, hdigest, hdigestRun, hadmissible, hfull, hdisclosed⟩
 
 end SphincsSecurity.Concrete.RetainedResidual

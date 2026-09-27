@@ -13,8 +13,8 @@ theorem stirlingPowerMoment_ne_top (rate : ENNReal) (hrate : rate ≠ ⊤) (degr
 
 set_option maxHeartbeats 5000000 in
 theorem stirlingPowerMoment_full_mean_le :
-    (2 ^ 34 : ENNReal) * (2 ^ 56 : ENNReal)⁻¹ * stirlingPowerMoment (19 / 50) 14 ≤ 1 / 5 := by
-  have hm := stirlingPowerMoment_ne_top (19 / 50) (by finiteness) 14
+    (2 ^ 34 : ENNReal) * ((15 ^ 15 : ENNReal) / 2 ^ 116) * stirlingPowerMoment (19 / 50) 15 ≤ 1 / 2 := by
+  have hm := stirlingPowerMoment_ne_top (19 / 50) (by finiteness) 15
   apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
   simp only [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_div,
     ENNReal.toReal_ofNat, ENNReal.toReal_one]
@@ -24,10 +24,10 @@ theorem stirlingPowerMoment_full_mean_le :
     ENNReal.toReal_natCast]
   norm_num [Finset.sum_range_succ, Nat.stirlingSecond]
 
-set_option maxHeartbeats 5000000 in
+set_option maxHeartbeats 20000000 in
 theorem stirlingPowerMoment_full_variance_le :
-    (2 ^ 34 : ENNReal) * (2 ^ 112 : ENNReal)⁻¹ * stirlingPowerMoment (19 / 50) 28 ≤ 13 / 25000 := by
-  have hm := stirlingPowerMoment_ne_top (19 / 50) (by finiteness) 28
+    (2 ^ 34 : ENNReal) * ((15 ^ 15 : ENNReal) / 2 ^ 116) ^ 2 * stirlingPowerMoment (19 / 50) 30 ≤ 1 / 40000 := by
+  have hm := stirlingPowerMoment_ne_top (19 / 50) (by finiteness) 30
   apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
   simp only [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_div,
     ENNReal.toReal_ofNat]

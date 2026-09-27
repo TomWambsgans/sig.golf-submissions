@@ -1,6 +1,7 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Ots.ExtractOts
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.ExtractFts
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.HonestFts
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Schedule
 import SigGolfCandidate.SphincsSecurity.Proof.LayerAssembly
 /-!
 # The builders compute the specification
@@ -286,34 +287,35 @@ theorem keyTopHonest_withTop (key : SecretKey) :
     KeyTopHonest f { key with top := honestTop f key.parameter (key.otsSecret topLayer rootTree) } :=
   keyTopHonest_of_eq f _ rfl
 
-/-! ### The forest -/
+/-! ### The PORS tree -/
 
-theorem eval_buildFtsTree (parameter : PublicParameter) (index : Index) (tree : FtsTree)
-    (secret : FtsLeaf → OracleComp HashSpec Digest) (leaf : FtsLeaf) :
-    let result := evalWithAnswerFn f (buildFtsTree parameter index tree secret leaf)
+/-- **The PORS tree, built once.** The secrets it read and, at every node `(level, nodeIdx)` of the tree,
+the specification's node. -/
+theorem eval_buildFtsTree (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → OracleComp HashSpec Digest) :
+    let result := evalWithAnswerFn f (buildFtsTree parameter index secret)
     let table := fun leaf => evalWithAnswerFn f (secret leaf)
-    result.1 = table leaf
-      ∧ (∀ level, level < ftsTreeHeight →
-          result.2.1 level = honestFtsNode f parameter index tree table level
-            (Nat.xor (leaf.val / 2 ^ level) 1))
-      ∧ result.2.2 = honestFtsNode f parameter index tree table ftsTreeHeight 0 := by
+    result.1 = table
+      ∧ ∀ level, level ≤ ftsTreeHeight → ∀ nodeIdx, nodeIdx < 2 ^ (ftsTreeHeight - level) →
+          result.2 level nodeIdx = honestFtsNode f parameter index porsTree table level nodeIdx := by
   intro result table
   have htable : ∀ level, level ≤ ftsTreeHeight → ∀ nodeIdx, nodeIdx < 2 ^ (ftsTreeHeight - level) →
       evalWithAnswerFn f (buildLevels
         (fun level nodeIdx left right =>
-          tweakableHash parameter (.ftsNode index tree level nodeIdx) (nodePayload left right))
+          tweakableHash parameter (.ftsNode index porsTree (ftsHeapIndex level nodeIdx))
+            (nodePayload left right))
         ftsTreeHeight
         (fun nodeIdx => if h : nodeIdx < 2 ^ ftsTreeHeight then
           ((evalWithAnswerFn f (sequenceFin fun leafIdx : FtsLeaf => do
             let value ← secret leafIdx
-            let hashed ← ftsLeafHash parameter index tree leafIdx value
+            let hashed ← ftsLeafHash parameter index porsTree leafIdx.val value
             return (value, hashed))) ⟨nodeIdx, h⟩).2 else 0)
         ftsTreeHeight) level nodeIdx
-        = honestFtsNode f parameter index tree table level nodeIdx := by
-    apply eval_buildLevels f _ _ _ (fun level nodeIdx => honestFtsNode f parameter index tree table level nodeIdx)
+        = honestFtsNode f parameter index porsTree table level nodeIdx := by
+    apply eval_buildLevels f _ _ _ (fun level nodeIdx => honestFtsNode f parameter index porsTree table level nodeIdx)
     · intro nodeIdx hnodeIdx
       rw [dif_pos hnodeIdx]
-      have h := honestFtsNode_zero f parameter index tree table ⟨nodeIdx, hnodeIdx⟩
+      have h := honestFtsNode_zero f parameter index porsTree table ⟨nodeIdx, hnodeIdx⟩
       simp only [evalWithAnswerFn_sequenceFin, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
         ftsLeafHash, eval_tweakableHash] at h ⊢
       exact h.symm
@@ -321,34 +323,33 @@ theorem eval_buildFtsTree (parameter : PublicParameter) (index : Index) (tree : 
       rw [eval_tweakableHash, honestFtsNode_succ]
     · exact le_rfl
   simp only [result, buildFtsTree, evalWithAnswerFn_bind, evalWithAnswerFn_pure]
-  refine ⟨?_, ?_, ?_⟩
+  refine ⟨?_, ?_⟩
   · simp only [evalWithAnswerFn_sequenceFin, evalWithAnswerFn_bind, evalWithAnswerFn_pure, table]
-  · intro level hlevel
-    exact htable level hlevel.le _ (xor_div_lt leaf.isLt hlevel)
-  · exact htable _ le_rfl 0 (by simp)
+  · exact htable
 
-/-- **The forest, built once.** The opened secrets, the specification's opening and the
-specification's few-time key. -/
-theorem eval_buildForest (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → OracleComp HashSpec Digest) (leaves : IndexGroup → FtsLeaf) :
-    let result := evalWithAnswerFn f (buildForest parameter index secret leaves)
-    let table := fun tree leaf => evalWithAnswerFn f (secret tree leaf)
-    result.1 = (fun tree => table tree (leaves (ftsIndexOf tree)))
-      ∧ result.2.1 = evalWithAnswerFn f (ftsOpen parameter index leaves table)
-      ∧ result.2.2 = evalWithAnswerFn f (ftsKey parameter index table) := by
+/-- The specification's opening is the honest opening over the specification's tree. -/
+theorem eval_ftsOpen (parameter : PublicParameter) (index : Index) (leaves : IndexGroup → FtsLeaf)
+    (secret : FtsTree → FtsLeaf → Digest) :
+    evalWithAnswerFn f (ftsOpen parameter index leaves secret)
+      = honestFts leaves (secret porsTree) (honestFtsNode f parameter index porsTree (secret porsTree)) := by
+  simp only [ftsOpen, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin, evalWithAnswerFn_pure]
+  rfl
+
+/-- **The PORS signer computes the specification.** The opening the signer reads off its built tree is
+the specification's opening, and the tree's root is the specification's key. -/
+theorem eval_buildFtsTree_open (parameter : PublicParameter) (index : Index)
+    (secret : FtsLeaf → OracleComp HashSpec Digest) (leaves : IndexGroup → FtsLeaf) :
+    let result := evalWithAnswerFn f (buildFtsTree parameter index secret)
+    let table := fun (_ : FtsTree) leaf => evalWithAnswerFn f (secret leaf)
+    honestFts leaves result.1 result.2 = evalWithAnswerFn f (ftsOpen parameter index leaves table)
+      ∧ result.2 ftsTreeHeight 0 = evalWithAnswerFn f (ftsKey parameter index table) := by
   intro result table
-  have htree := fun tree => eval_buildFtsTree f parameter index tree (secret tree) (leaves (ftsIndexOf tree))
-  simp only [result, buildForest, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
-    evalWithAnswerFn_sequenceFin]
-  refine ⟨?_, ?_, ?_⟩
-  · funext tree
-    exact (htree tree).1
-  · simp only [ftsOpen, evalWithAnswerFn_sequenceFin]
-    funext tree level
-    exact (htree tree).2.1 level.val level.isLt
-  · simp only [ftsKey, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin, eval_tweakableHash]
-    congr 3
-    exact congrArg ftsRootsPayload (funext fun tree => (htree tree).2.2)
+  obtain ⟨hsecrets, hnodes⟩ := eval_buildFtsTree f parameter index secret
+  refine ⟨?_, ?_⟩
+  · rw [eval_ftsOpen, hsecrets]
+    exact honestFts_congr_tree leaves _ _ _ fun level nodeIdx hlevel hnode =>
+      hnodes level hlevel.le nodeIdx hnode
+  · exact hnodes ftsTreeHeight le_rfl 0 (by simp)
 
 /-! ### The layers -/
 
@@ -535,8 +536,7 @@ def signatureValue (key : SecretKey) (randomness : Randomness) (index : Index)
     (leaves : IndexGroup → FtsLeaf) : Option Signature :=
   (sequenceFin (m := Option) fun lay => evalWithAnswerFn f (signLayer key index lay)).map fun parts =>
     { randomness := randomness
-      ftsSecret := fun tree => key.ftsSecret index tree (leaves (ftsIndexOf tree))
-      ftsPath := evalWithAnswerFn f (ftsOpen key.parameter index leaves (key.ftsSecret index))
+      fts := evalWithAnswerFn f (ftsOpen key.parameter index leaves (key.ftsSecret index))
       layers := fun lay => LayerSignature.ofPadded lay (parts lay) }
 
 theorem layerMessage_bottomLayer_eq (key : SecretKey) (index : Index) :
@@ -555,19 +555,21 @@ theorem eval_signFrom (key : SecretKey) (index : Index)
     (randomness : Randomness) (leaves : IndexGroup → FtsLeaf) :
     evalWithAnswerFn f (signFrom key.parameter index ftsGet otsGet topGet randomness leaves) =
       signatureValue f key randomness index leaves := by
-  have hforest := eval_buildForest f key.parameter index ftsGet leaves
-  have htable : (fun tree leaf => evalWithAnswerFn f (ftsGet tree leaf)) = key.ftsSecret index := by
+  have hforest := eval_buildFtsTree_open f key.parameter index (ftsGet porsTree) leaves
+  have htable : (fun (_ : FtsTree) leaf => evalWithAnswerFn f (ftsGet porsTree leaf)) = key.ftsSecret index := by
     funext tree leaf
-    exact hfts tree leaf
+    rw [Subsingleton.elim tree porsTree]
+    exact hfts porsTree leaf
   rw [htable] at hforest
   unfold signFrom
   rw [evalWithAnswerFn_bind]
   revert hforest
-  generalize evalWithAnswerFn f (buildForest key.parameter index ftsGet leaves) = forest
-  rcases forest with ⟨secrets, ftsPath, ftsPublicKey⟩
-  rintro ⟨hsecrets, hpath, hkey⟩
-  simp only at hsecrets hpath hkey
-  have hlayers := eval_signLayers f key index otsGet hots topGet htop numLayers le_rfl ftsPublicKey (by
+  generalize evalWithAnswerFn f (buildFtsTree key.parameter index (ftsGet porsTree)) = built
+  rcases built with ⟨secrets, table⟩
+  rintro ⟨hopen, hkey⟩
+  simp only at hopen hkey
+  have hlayers := eval_signLayers f key index otsGet hots topGet htop numLayers le_rfl
+      (table ftsTreeHeight 0) (by
     intro _
     rw [hkey]
     change _ = evalWithAnswerFn f (layerMessage key index bottomLayer)
@@ -576,7 +578,7 @@ theorem eval_signFrom (key : SecretKey) (index : Index)
   unfold signatureValue
   rw [sequenceFin_option_eq]
   revert hlayers
-  cases evalWithAnswerFn f (signLayers key.parameter index otsGet topGet numLayers ftsPublicKey) with
+  cases evalWithAnswerFn f (signLayers key.parameter index otsGet topGet numLayers (table ftsTreeHeight 0)) with
   | none =>
       rintro ⟨lay, _, hnone⟩
       rw [dif_neg (fun hall => by have := hall lay; rw [hnone] at this; simp at this)]
@@ -588,7 +590,7 @@ theorem eval_signFrom (key : SecretKey) (index : Index)
         rfl
       rw [dif_pos hall]
       simp only [evalWithAnswerFn_pure, Option.map_some, Option.some.injEq]
-      rw [hsecrets, hpath]
+      rw [hopen]
       congr 1
       funext lay
       rw [LayerOutput.toSignature_eq]

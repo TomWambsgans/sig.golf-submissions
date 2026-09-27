@@ -6,7 +6,7 @@ namespace SphincsSecurity.Concrete
 open _root_.OracleComp ENNReal
 
 noncomputable def fixedCertificateGame (adversary : Adversary) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule) :
+    (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule) :
     PMF (CertificateGameResult × List Index) :=
   certificateTerminalGame adversary budget required
     (fun key input state length record =>
@@ -20,7 +20,7 @@ theorem uniformWordAverage_eq_independent {α : Type} [SampleableType α] [Finty
   simp only [uniformWordAverage, probOutput_def, evalDist_sampleUniformProposalWord, PMF.evalSPMF_eq]
 
 theorem expected_fixedCertificateGame_count_le_message_excess (adversary : Adversary)
-    (q : Nat) (required : Finset FtsTree) (stopAfter : SecretKey → CertificateStopRule)
+    (q : Nat) (required : Finset IndexGroup) (stopAfter : SecretKey → CertificateStopRule)
     (hbudget : q ≤ 2 ^ 127) (hbound : HasHashQueryBound scheme adversary q) (baseline : ENNReal) :
     (∑' result, Pr[= result | fixedCertificateGame adversary q required stopAfter] *
       certificateBankCount result.1.2.2.2.bank) ≤
@@ -67,26 +67,25 @@ theorem expected_fixedCertificateGame_count_le_message_excess (adversary : Adver
       rw [uniformWordAverage_eq_independent]
       exact expected_certificateTerminalGame_mass_payoff_le adversary q required _ false fixedProposalLength hbound _
 
-private theorem terminalCertificatePrice_factor (required : Finset FtsTree) (word : List Index) :
+private theorem terminalCertificatePrice_factor (required : Finset IndexGroup) (word : List Index) :
     terminalCertificatePrice required word =
-      ((((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) *
-        targetCertificateScale required) * proposalPowerSum required.card word := by
+      ((Fintype.card Index : ENNReal)⁻¹ * targetCertificateScale required) * proposalPowerSum required.card word := by
   unfold terminalCertificatePrice proposalPowerSum
   ring
 
 theorem terminalCertificatePrice_full (word : List Index) :
     terminalCertificatePrice Finset.univ word = (2 ^ 128 : ENNReal)⁻¹ * fixedFullProposalPrice word := by
-  have htrees : Fintype.card FtsTree = 14 := Fintype.card_fin _
+  have hslots : Fintype.card IndexGroup = 15 := by simp [ftsOpenings]
   have hindex : Fintype.card Index = 2 ^ 34 := Fintype.card_fin _
-  have hleaf : Fintype.card FtsLeaf = 2 ^ 10 := Fintype.card_fin _
-  rw [terminalCertificatePrice_factor, Finset.card_univ, htrees]
+  have hleaf : Fintype.card FtsLeaf = 2 ^ 14 := by simp [ftsTreeHeight]
+  rw [terminalCertificatePrice_factor, Finset.card_univ, hslots]
   have hcoefficient :
-      ((((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) *
-        targetCertificateScale Finset.univ) = (2 ^ 128 : ENNReal)⁻¹ * (2 ^ 56 : ENNReal)⁻¹ := by
-    unfold targetCertificateScale
-    rw [Finset.card_univ, htrees, hindex, hleaf]
+      ((Fintype.card Index : ENNReal)⁻¹ * targetCertificateScale Finset.univ) =
+        (2 ^ 128 : ENNReal)⁻¹ * ((15 ^ 15 : ENNReal) / 2 ^ 116) := by
+    unfold targetCertificateScale coverScale
+    rw [Finset.card_univ, hslots, hindex, hleaf]
     apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
-    norm_num [ftsTreeHeight, ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_pow]
+    norm_num [ftsOpenings, ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_pow, ENNReal.toReal_div]
   rw [hcoefficient, fixedFullProposalPrice, mul_assoc]
 
 end SphincsSecurity.Concrete

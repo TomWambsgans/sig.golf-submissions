@@ -9,7 +9,7 @@ def ProposalPrefixExceptional (proposals completed : Nat) : Prop :=
   targetProposalOverhead * completed + (proposalPrefixSlack : ENNReal) < (proposals : ENNReal)
 
 theorem proposalPrefixStop_eq_after_exception (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state) :

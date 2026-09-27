@@ -1,5 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
-import SigGolfCandidate.SphincsSecurity.Proof.Fts.SigningProposalRecord
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.BoundaryTrace
 
 /-! ## JointProbeMessageHashBudget -/
 

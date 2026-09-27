@@ -22,7 +22,8 @@ theorem layerMessagePosition_treeBound (index : Index) (lay : Layer) :
     have hle := layerHeight_le ⟨lay.val + 1, hbelow⟩
     rw [Nat.sub_add_cancel hpos]
     exact Nat.pow_le_pow_right (by omega) hle
-  · trivial
+  · show 0 < 1
+    omega
 
 theorem canonicalGraphMessage_eq (key : SecretKey) (f : QueryImpl HashSpec Id) (position : EncodingPosition) :
     canonicalGraphMessage (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) position =

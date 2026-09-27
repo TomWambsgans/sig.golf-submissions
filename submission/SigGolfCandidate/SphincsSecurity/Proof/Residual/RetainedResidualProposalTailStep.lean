@@ -9,7 +9,7 @@ attribute [local instance] Classical.propDecidable
 attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instFintypePosition hashInputs sourceInputs
 set_option backward.isDefEq.respectTransparency false
 
-private theorem update_log_cap (key : SecretKey) (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+private theorem update_log_cap (key : SecretKey) (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) (length : Nat) (record : ProposalExecutionRecord input)
     (hcap : state.2.log.length ≤ signatureLimit) :
     (certificateMonitorUpdate key budget required stopAfter input state length record).log.length ≤ signatureLimit := by
@@ -22,7 +22,7 @@ private theorem update_log_cap (key : SecretKey) (budget : Nat) (required : Fins
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_log_cap (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hcap : state.2.log.length ≤ signatureLimit)

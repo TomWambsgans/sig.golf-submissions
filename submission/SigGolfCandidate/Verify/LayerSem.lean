@@ -15,10 +15,10 @@ structure LCtx where
   lay : Nat
   idx : Nat
 
-def LCtx.ok (L : LCtx) : Prop := L.lay < 5 ∧ L.idx < 2 ^ 34 ∧ L.wl.length = 6404
+def LCtx.ok (L : LCtx) : Prop := L.lay < 5 ∧ L.idx < 2 ^ 34 ∧ L.wl.length = 6348
 def LCtx.e (L : LCtx) : Nat := L.idx / 2 ^ layS L.lay % 2 ^ heightL L.lay
 def LCtx.tau (L : LCtx) : Nat := L.idx / 2 ^ (layS L.lay + heightL L.lay)
-def LCtx.gk (L : LCtx) : List (Reg × Word) := if L.lay = 4 then gkF else gkL
+def LCtx.gk (_L : LCtx) : List (Reg × Word) := gkL
 
 /-- At the start of the precode of layer `lay` (either stream), with the message `M` in EB+32. -/
 def LayerIn (L : LCtx) (M : Val) (s : MachineState) : Prop :=
@@ -26,7 +26,7 @@ def LayerIn (L : LCtx) (M : Val) (s : MachineState) : Prop :=
   s.getReg (routeReg L.lay) = BitVec.ofNat 64 (routeIn L.idx L.lay) ∧
   s.getMem (BitVec.ofNat 64 0x120) = vw0 M ∧ s.getMem (BitVec.ofNat 64 0x128) = vw1 M ∧
   M.length = 16 ∧ (L.lay < 4 → CBZ s) ∧ (s.getMem (BitVec.ofNat 64 0xC0)).toNat / 2 ^ 48 = 0 ∧
-  ∃ t, t < 2 ∧ s.pc = pcOf (preStart L.lay t)
+  ∃ t, t < nCopy L.lay ∧ s.pc = pcOf (preStart L.lay t)
 
 /-- After the encoding hash (answer `a` in EO). -/
 def EncOut (L : LCtx) (t : Nat) (a : BitVec 256) (s : MachineState) : Prop :=
@@ -44,7 +44,7 @@ section
 variable {lay : Nat} (hl : lay < 5)
 include hl
 
-theorem lc_stream {t : Nat} (ht : t < 2) :
+theorem lc_stream {t : Nat} (ht : t < nCopy lay) :
     specB gkL (runAt (preK lay) [] (preStart lay t) []) (specA lay t) (bK lay) [] = true ∧
     specB gkL (runAt (bK lay) [] (encPc lay t + 1) [.br false, .br false, .jmp]) (specBok lay t)
       (chKa lay) [.x22, .x23, .x30, .x31] = true ∧
@@ -79,7 +79,7 @@ theorem hWord_lt (lay : Nat) (h : lay < 5) : hWord lay < 2 ^ 32 := by unfold hWo
 /-! ## Route and encoding -/
 
 theorem enc_step (L : LCtx) (hL : L.ok) (M : Val) (s : MachineState) (hs : LayerIn L M s) :
-    ∃ t, t < 2 ∧ ∃ u, Steps image s (stepsA L.lay) (stepsA L.lay) u ∧
+    ∃ t, t < nCopy L.lay ∧ ∃ u, Steps image s (stepsA L.lay) (stepsA L.lay) u ∧
       fetch image u = some (.base .ECALL) ∧ u.getReg .x5 = 0 ∧ hashArgumentsValid u = true ∧
       hashInput u = pad64 (encInput L.lay L.tau L.e M (witCounter L.wl L.lay)) ∧
       ∀ a, EncOut L t a (writeHash u a) := by
@@ -229,7 +229,7 @@ theorem setup_word (lay : Nat) (hlay : lay < 5) (s : MachineState)
   norm_num at hw h48 ⊢
   omega
 
-theorem encpost_step (L : LCtx) (hL : L.ok) (t : Nat) (ht : t < 2) (a : BitVec 256) (s : MachineState)
+theorem encpost_step (L : LCtx) (hL : L.ok) (t : Nat) (ht : t < nCopy L.lay) (a : BitVec 256) (s : MachineState)
     (hs : EncOut L t a s) :
     (decodeDigits (answerBytes 16 a) = none →
       ∃ k, k ≤ 27 ∧ ∃ u, Steps image s k k u ∧ fetch image u = some (.base .ECALL) ∧

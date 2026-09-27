@@ -97,31 +97,39 @@ def treePath (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
     else
       pure 0
 
-/-- `Y^{idx,kappa}_{level,nodeIdx}`, one tree of the forest. -/
+/-- `Y^{idx}_{level,nodeIdx}`, the PORS tree of an instance; node `(level, nodeIdx)` is hashed under its heap
+index `2^(14 - level) + nodeIdx`. -/
 def ftsNode (parameter : PublicParameter) (index : Index) (tree : FtsTree)
     (secret : FtsLeaf → Digest) : Nat → Nat → m Digest
   | 0, nodeIdx => do
       let leaf := ftsLeafOfNat nodeIdx
-      ftsLeafHash parameter index tree leaf (secret leaf)
+      ftsLeafHash parameter index tree leaf.val (secret leaf)
   | level + 1, nodeIdx => do
       let left ← ftsNode parameter index tree secret level (2 * nodeIdx)
       let right ← ftsNode parameter index tree secret level (2 * nodeIdx + 1)
-      tweakableHash parameter (.ftsNode index tree (level + 1) nodeIdx) (nodePayload left right)
+      tweakableHash parameter (.ftsNode index tree (ftsHeapIndex (level + 1) nodeIdx))
+        (nodePayload left right)
 
-/-- `FtsKey(P, idx)`, the hash of the forest's `k - 1` roots. -/
+/-- `FtsKey(P, idx)`, the root of the instance's PORS tree. -/
 def ftsKey (parameter : PublicParameter) (index : Index)
-    (secret : FtsTree → FtsLeaf → Digest) : m Digest := do
-  let roots ← sequenceFin fun tree =>
-    ftsNode parameter index tree (secret tree) ftsTreeHeight 0
-  tweakableHash parameter (.ftsRoots index) (ftsRootsPayload roots)
+    (secret : FtsTree → FtsLeaf → Digest) : m Digest :=
+  ftsNode parameter index porsTree (secret porsTree) ftsTreeHeight 0
 
-/-- `FtsOpen`: the opened secrets and, per tree, the `a` siblings of the opened leaf. -/
+/-- `FtsOpen`: the PORS signature of the leaves: the slots in leaf order, the opened secrets, and the honest
+schedule's segments, each authentication node computed at its read position. -/
 def ftsOpen (parameter : PublicParameter) (index : Index) (leaves : IndexGroup → FtsLeaf)
-    (secret : FtsTree → FtsLeaf → Digest) : m (FtsTree → Fin ftsTreeHeight → Digest) :=
-  sequenceFin fun tree =>
-    sequenceFin fun level =>
-      ftsNode parameter index tree (secret tree) level.val
-        (Nat.xor ((leaves (ftsIndexOf tree)).val / 2 ^ level.val) 1)
+    (secret : FtsTree → FtsLeaf → Digest) : m FtsSignature := do
+  let slots := sortedSlots leaves
+  let plan := schedule (sortedLeaves leaves)
+  let segments ← sequenceFin fun j : Fin ftsSegments => do
+    let segment := plan.getD j.val default
+    let nodes ← sequenceFin (n := segment.folds.val) fun i =>
+      let position := segment.reads.getD i.val (0, 0)
+      ftsNode parameter index porsTree (secret porsTree) position.1 position.2
+    return segment.toSegment nodes
+  return { perm := fun s => (slots.getD s.val ⟨0, by decide⟩).castSucc
+           secrets := fun s => secret porsTree (leaves (slots.getD s.val ⟨0, by decide⟩))
+           segments := segments }
 
 /-- The public parameter is the constant `P = 0`. -/
 noncomputable def sampleParameter : ProbComp PublicParameter :=
@@ -169,7 +177,7 @@ def signAttempt (secretKey : SecretKey) (message : Message) (randomness : Random
   else
     return none
 
-/-- The digest loop: at most `digestAttemptLimit` attempts, each sampling a fresh randomizer, stopping at the first admissible digest. It takes `2^a` attempts on average. -/
+/-- The digest loop: at most `digestAttemptLimit` attempts, each sampling a fresh randomizer, stopping at the first admissible digest (about `2^9.76` attempts on average). -/
 noncomputable def signDigestLoop : Nat → SecretKey → Message →
     OracleComp OracleWorld (Option (Randomness × Index × (IndexGroup → FtsLeaf)))
   | 0, _secretKey, _message => pure none
@@ -182,7 +190,7 @@ noncomputable def signDigestLoop : Nat → SecretKey → Message →
       | some (index, leaves) => pure (some (randomness, index, leaves))
       | none => signDigestLoop attempts secretKey message
 
-/-- The message layer `lay` signs: the root of the tree below it, or the few-time public key at the bottom. Every layer's message is fixed by the index alone, which is what makes the layers independent. -/
+/-- The message layer `lay` signs: the root of the tree below it, or the PORS root at the bottom. Every layer's message is fixed by the index alone, which is what makes the layers independent. -/
 def layerMessage (secretKey : SecretKey) (index : Index) (lay : Layer) : m Digest :=
   if hbelow : lay.val + 1 < numLayers then
     let below : Layer := ⟨lay.val + 1, hbelow⟩
@@ -203,14 +211,14 @@ def signLayer (secretKey : SecretKey) (index : Index) (lay : Layer) :
       let path ← treePath secretKey.parameter lay tree (secretKey.otsSecret lay tree) leaf
       return some (counter, values, path)
 
-/-- `Sig` after the digest loop, from table secrets: the forest built once, then the layers from the bottom up, each a counter search and its tree built once, and the top layer's path read from the key's node table. This mirrors `Seeded.signChecked` query for query, except for the secret and mask derivations. -/
+/-- `Sig` after the digest loop, from table secrets: the PORS tree built once, then the layers from the bottom up, each a counter search and its tree built once, and the top layer's path read from the key's node table. This mirrors `Seeded.signChecked` query for query, except for the secret and mask derivations. -/
 def signAfterDigest (secretKey : SecretKey) (randomness : Randomness) (index : Index)
     (leaves : IndexGroup → FtsLeaf) : OracleComp HashSpec (Option Signature) :=
   signFrom secretKey.parameter index (fun tree leaf => pure (secretKey.ftsSecret index tree leaf))
     (fun lay tree leaf chainIdx => pure (secretKey.otsSecret lay tree leaf chainIdx))
     (fun level nodeIdx => pure (secretKey.top level nodeIdx)) randomness leaves
 
-/-- `Sig(sk, m)`: the digest loop, then the forest and the layers, or nothing as soon as one search fails. -/
+/-- `Sig(sk, m)`: the digest loop, then the PORS tree and the layers, or nothing as soon as one search fails. -/
 noncomputable def sign (secretKey : SecretKey) (message : Message) :
     OracleComp OracleWorld (Option Signature) := do
   match ← signDigestLoop digestAttemptLimit secretKey message with

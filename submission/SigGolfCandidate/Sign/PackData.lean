@@ -4,7 +4,7 @@ import SigGolfCandidate.Sign.Code
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
-/-- For each signature dword `SIG + 2480 + 8 j`: (kind, lo, hi) stage addresses of its 4-byte
+/-- For each signature dword `SIG + 2176 + 8 j`: (kind, lo, hi) stage addresses of its 4-byte
 halves (kind 0: one `ld` of `lo`; 1: two `lwu`; 2: last dword, one `lwu`). -/
 def packTab : List (Nat × Nat × Nat) := [
   (1, 2304, 2312), (1, 2316, 2320), (1, 2324, 2328), (1, 2332, 2336), (1, 2340, 2344), (1, 2348, 2352), (1, 2356, 2360), (1, 2364, 2368),

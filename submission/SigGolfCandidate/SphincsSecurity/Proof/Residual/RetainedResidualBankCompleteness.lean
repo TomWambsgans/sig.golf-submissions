@@ -10,11 +10,11 @@ attribute [local irreducible] canonicalEncodingInputs canonicalGraphInputs instF
   signDigestLoop
 set_option backward.isDefEq.respectTransparency false
 
-def MonitoredBankComplete {inputs : Finset HashInput} (key : SecretKey) (required : Finset FtsTree)
+def MonitoredBankComplete {inputs : Finset HashInput} (key : SecretKey) (required : Finset IndexGroup)
     (state : MonitoredState inputs) : Prop :=
   state.2.stopped = false → state.2.log = state.1.memory.log ∧ CertificateBankComplete key required (monitorView state)
 
-private theorem update_active_of_alive (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+private theorem update_active_of_alive (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (halive : (certificateMonitorUpdate key budget required stopAfter input state length record).stopped = false) :
@@ -23,7 +23,7 @@ private theorem update_active_of_alive (key : SecretKey) (budget : Nat) (require
   rw [certificateMonitorUpdate_inactive key budget required stopAfter input state length record h] at halive
   contradiction
 
-private theorem update_log_of_alive (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+private theorem update_log_of_alive (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState)
     (length : Nat) (record : ProposalExecutionRecord input)
     (halive : (certificateMonitorUpdate key budget required stopAfter input state length record).stopped = false) :
@@ -32,7 +32,7 @@ private theorem update_log_of_alive (key : SecretKey) (budget : Nat) (required :
   rw [certificateMonitorUpdate, if_pos (update_active_of_alive key budget required stopAfter input state length record halive)]
 
 theorem monitoredWorldResult_bank_complete {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (before : MonitoredState inputs) (hbefore : MonitoredBankComplete key required before)
     (result : Option (OracleWorld.Range input) × State inputs) (hlog : result.2.memory.log = before.1.memory.log) :
     MonitoredBankComplete key required (monitoredWorldResult key budget required stopAfter input before result).2 := by
@@ -54,7 +54,7 @@ theorem monitoredWorldResult_bank_complete {inputs : Finset HashInput} (key : Se
           (proposalOfWorldResult key.parameter input (answer, after.memory.external.cache)) halive
 
 theorem monitoredSigningResult_bank_complete {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message) (annotation : Nat × Index)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message) (annotation : Nat × Index)
     (before : MonitoredState inputs) (hbefore : MonitoredBankComplete key required before)
     (result : Option SigningRecord × State inputs) (hlog : result.2.memory.log = before.1.memory.log) :
     MonitoredBankComplete key required (monitoredSigningResult key budget required stopAfter message annotation before result).2 := by
@@ -97,7 +97,7 @@ theorem lazyRun_externalProgram_log {Result : Type} (computation : OracleComp Or
   rw [externalProgram, lazyRun_routing_bind] at hresult
   exact lazyRun_embed_log key inputs hencoding words publicReplies selections rows _ _ state ha result hresult
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_bank_complete (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (ha : ∀ coordinate, (state.1.candidates coordinate).Nonempty) (hbefore : MonitoredBankComplete key required state)

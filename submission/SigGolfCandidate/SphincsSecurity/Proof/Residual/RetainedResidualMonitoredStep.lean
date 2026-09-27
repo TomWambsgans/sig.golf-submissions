@@ -24,7 +24,7 @@ noncomputable def signingAnnotation (key : SecretKey) (budget : Nat) (message : 
   lengths.bind fun length => (PMF.uniformOfFintype Index).map (length, ·)
 
 noncomputable def monitoredWorldResult {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (before : MonitoredState inputs) (result : Option (OracleWorld.Range input) × State inputs) :
     Option (OracleWorld.Range input) × MonitoredState inputs :=
   (result.1, result.2, result.1.elim { before.2 with stopped := true } fun answer =>
@@ -32,7 +32,7 @@ noncomputable def monitoredWorldResult {inputs : Finset HashInput} (key : Secret
       (proposalOfWorldResult key.parameter input (answer, result.2.memory.external.cache)))
 
 noncomputable def monitoredSigningResult {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message)
     (annotation : Nat × Index) (before : MonitoredState inputs) (result : Option SigningRecord × State inputs) :
     Option (Option Signature) × MonitoredState inputs :=
   match result.1 with
@@ -43,7 +43,7 @@ noncomputable def monitoredSigningResult {inputs : Finset HashInput} (key : Secr
           (proposalOfSigningRecord message record result.2.memory.external.cache (record.1.2.elim annotation.2 Prod.fst)))
 
 theorem monitoredWorldResult_potential {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (before : MonitoredState inputs) (result : Option (OracleWorld.Range input) × State inputs) :
     certificateMonitorPotential key budget required
       (monitorView (monitoredWorldResult key budget required stopAfter input before result).2) =
@@ -55,7 +55,7 @@ theorem monitoredWorldResult_potential {inputs : Finset HashInput} (key : Secret
   | some answer => rfl
 
 theorem monitoredSigningResult_some_potential {inputs : Finset HashInput} (key : SecretKey) (budget : Nat)
-    (required : Finset FtsTree) (stopAfter : CertificateStopRule) (message : Message) (annotation : Nat × Index)
+    (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (message : Message) (annotation : Nat × Index)
     (before : MonitoredState inputs) (record : SigningRecord) (after : State inputs) :
     certificateMonitorPotential key budget required
       (monitorView (monitoredSigningResult key budget required stopAfter message annotation before (some record, after)).2) =
@@ -65,7 +65,7 @@ theorem monitoredSigningResult_some_potential {inputs : Finset HashInput} (key :
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 noncomputable def monitoredStep :
     (input : (OracleWorld + SigningSpec).Domain) → MonitoredState inputs →

@@ -1,65 +1,56 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.SubsetTargetAssignment
+import SigGolfCandidate.SphincsSecurity.Proof.Fts.TargetShapeLeafAverage
+/-!
+# Coverage by one source, as a function of the target's leaves
+
+A source (the view of a signed or cached digest) opens the leaves in its fifteen slots. Slot `i` of a
+target on the same index is covered when the target's leaf `t_i` is one of them. As a function of the
+target's leaf vector, the coverage of a coordinate set is a product of single-coordinate indicators.
+-/
+
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
 attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
-theorem sum_leaf_partial_product (required : Finset FtsTree) (weight : FtsTree → FtsLeaf → Nat) :
-    (∑ leaves : FtsTree → FtsLeaf, ∏ tree ∈ required, weight tree (leaves tree)) =
-      Fintype.card FtsLeaf ^ (Fintype.card FtsTree - required.card) * ∏ tree ∈ required, ∑ leaf : FtsLeaf, weight tree leaf := by
-  have hprod (leaves : FtsTree → FtsLeaf) := Fintype.prod_ite_mem required (fun tree => weight tree (leaves tree))
-  simp only [← hprod]
-  rw [← Fintype.prod_sum (fun tree leaf => if tree ∈ required then weight tree leaf else 1)]
-  have hsum (tree : FtsTree) : (∑ leaf : FtsLeaf, if tree ∈ required then weight tree leaf else 1) =
-      if tree ∈ required then ∑ leaf : FtsLeaf, weight tree leaf else Fintype.card FtsLeaf := by
-    split_ifs <;> simp only [Finset.sum_const, Finset.card_univ, smul_eq_mul, mul_one]
-  simp only [hsum]
-  rw [← Finset.prod_sdiff (Finset.subset_univ required)]
-  rw [Finset.prod_ite_of_true (fun tree ht => ht), Finset.prod_ite_of_false (fun tree ht => (Finset.mem_sdiff.mp ht).2)]
-  simp only [Finset.prod_const, Finset.card_sdiff_of_subset (Finset.subset_univ required), Finset.card_univ]
+/-- The leaves a source opens. -/
+noncomputable def openedLeaves (source : FewTimeView) : Finset FtsLeaf := Finset.univ.image source.2
 
-theorem sourceSubsetMatch_index (target : FewTimeView) (required : Finset FtsTree) (hne : required.Nonempty)
-    (index : Index) (leaves : FtsTree → FtsLeaf) :
-    sourceSubsetMatch target (index, leaves) required =
-      if index = target.1 then ∏ tree ∈ required, (if leaves tree = target.2 tree then 1 else 0) else 0 := by
-  by_cases hi : index = target.1
-  · simp only [sourceSubsetMatch, sourceTreeMatch, hi, true_and, if_true]
-  · obtain ⟨tree, htree⟩ := hne
-    simp only [sourceSubsetMatch, sourceTreeMatch, hi, false_and, if_false]
-    exact Finset.prod_eq_zero htree rfl
+theorem mem_openedLeaves_iff {source : FewTimeView} {leaf : FtsLeaf} :
+    leaf ∈ openedLeaves source ↔ leaf ∈ Set.range source.2 := by
+  simp [openedLeaves]
 
-theorem sum_sourceSubsetMatch (target : FewTimeView) (required : Finset FtsTree) (hne : required.Nonempty) :
-    (∑ source : FewTimeView, sourceSubsetMatch target source required) =
-      Fintype.card FtsLeaf ^ (Fintype.card FtsTree - required.card) := by
-  rw [Fintype.sum_prod_type]
-  simp only [sourceSubsetMatch_index target required hne, Finset.sum_ite_irrel, Finset.sum_const_zero,
-    Finset.sum_ite_eq', Finset.mem_univ, if_true]
-  rw [sum_leaf_partial_product required (fun tree leaf => if leaf = target.2 tree then 1 else 0)]
-  simp only [Finset.sum_ite_eq', Finset.mem_univ, if_true, Finset.prod_const_one, mul_one]
+theorem card_openedLeaves_le (source : FewTimeView) : (openedLeaves source).card ≤ ftsOpenings := by
+  unfold openedLeaves
+  exact Finset.card_image_le.trans (by simp)
 
-theorem expected_sourceSubsetMatch (target : FewTimeView) (required : Finset FtsTree) (hne : required.Nonempty) :
-    (∑' source, Pr[= source | ($ᵗ FewTimeView : ProbComp FewTimeView)] * (sourceSubsetMatch target source required : ENNReal)) =
-      (Fintype.card FtsLeaf ^ (Fintype.card FtsTree - required.card) : Nat) / (Fintype.card FewTimeView : ENNReal) := by
-  simp only [probOutput_uniformSample, tsum_fintype]
-  rw [← Finset.mul_sum, ← Nat.cast_sum, sum_sourceSubsetMatch target required hne]
-  exact mul_comm _ _
+theorem sourceSubsetMatch_leaves (index : Index) (leaves : IndexGroup → FtsLeaf) (source : FewTimeView)
+    (required : Finset IndexGroup) (hne : required.Nonempty) :
+    (sourceSubsetMatch (index, leaves) source required : ENNReal) =
+      (if source.1 = index then 1 else 0) *
+        ∏ i ∈ required, (if leaves i ∈ openedLeaves source then (1 : ENNReal) else 0) := by
+  unfold sourceSubsetMatch sourceTreeMatch
+  rw [Nat.cast_prod]
+  by_cases hindex : source.1 = index
+  · simp only [hindex, true_and, if_true, one_mul, mem_openedLeaves_iff]
+    apply Finset.prod_congr rfl
+    intro i _
+    split_ifs <;> simp
+  · obtain ⟨i, hi⟩ := hne
+    simp only [hindex, false_and, if_false, zero_mul, Nat.cast_zero]
+    exact Finset.prod_eq_zero hi rfl
 
-theorem normalized_expected_sourceSubsetMatch (target : FewTimeView) (required : Finset FtsTree) (hne : required.Nonempty) :
-    (Fintype.card FtsLeaf ^ required.card : Nat) *
-      (∑' source, Pr[= source | ($ᵗ FewTimeView : ProbComp FewTimeView)] * (sourceSubsetMatch target source required : ENNReal)) =
-      (Fintype.card Index : ENNReal)⁻¹ := by
-  have hcard : Fintype.card FewTimeView = Fintype.card FtsLeaf ^ Fintype.card FtsTree * Fintype.card Index := by
-    simp only [FewTimeView, Fintype.card_prod, Fintype.card_fun]
-    exact mul_comm _ _
-  have hle : required.card ≤ Fintype.card FtsTree := Finset.card_le_univ required
-  have hexp : required.card + (Fintype.card FtsTree - required.card) = Fintype.card FtsTree := by omega
-  have hzero : ((Fintype.card FtsLeaf ^ Fintype.card FtsTree : Nat) : ENNReal) ≠ 0 :=
-    Nat.cast_ne_zero.mpr (pow_ne_zero _ (ne_of_gt (Fintype.card_pos)))
-  have hfinite : ((Fintype.card FtsLeaf ^ Fintype.card FtsTree : Nat) : ENNReal) ≠ ∞ := ENNReal.natCast_ne_top _
-  rw [expected_sourceSubsetMatch target required hne, div_eq_mul_inv, ← mul_assoc, ← Nat.cast_mul, ← pow_add, hexp, hcard,
-    Nat.cast_mul, ENNReal.mul_inv (Or.inl hzero) (Or.inl hfinite),
-    ← mul_assoc, ENNReal.mul_inv_cancel hzero hfinite, one_mul]
+theorem sourceSubsetMatch_local (index : Index) (source : FewTimeView) (required : Finset IndexGroup) :
+    LocalTo required (fun leaves : IndexGroup → FtsLeaf =>
+      (sourceSubsetMatch (index, leaves) source required : ENNReal)) := by
+  intro first second hagree
+  dsimp only
+  unfold sourceSubsetMatch sourceTreeMatch
+  congr 1
+  apply Finset.prod_congr rfl
+  intro i hi
+  simp only [hagree i hi]
 
 end SphincsSecurity.Concrete

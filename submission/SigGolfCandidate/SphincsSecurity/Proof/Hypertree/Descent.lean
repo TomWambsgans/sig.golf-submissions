@@ -26,6 +26,9 @@ theorem counters_of_verify (publicKey : PublicKey) (message : Message) (signatur
   rw [verify_eq_of_not_counters publicKey message signature hcounters] at hverify
   simp at hverify
 
+/-- An accepted signature: its digest, the PORS root the stack machine accepts (admissibility of the
+digest is a property of an accepting `ftsRecover` run, proved with the PORS extraction), and the hypertree
+walk from that root to the public root, each with its cached run. -/
 theorem verify_extract (publicKey : PublicKey) (message : Message) (signature : Signature)
     (hverify : evalWithAnswerFn f (verify publicKey message signature) = true)
     (hrun : CachedRun cache f (verify publicKey message signature)) :
@@ -34,63 +37,63 @@ theorem verify_extract (publicKey : PublicKey) (message : Message) (signature : 
           (messageDigest publicKey.parameter publicKey.root message signature.randomness) = digest
         ∧ CachedRun cache f
           (messageDigest publicKey.parameter publicKey.root message signature.randomness)
-        ∧ Admissible digest
-        ∧ let index := digestIndex digest
-          let leaves := digestLeaves digest
-          let ftsPublicKey := evalWithAnswerFn f
-            (ftsRecover publicKey.parameter index leaves signature.ftsSecret signature.ftsPath)
-          evalWithAnswerFn f
-              (verifyLayers publicKey.parameter index signature numLayers ftsPublicKey)
+        ∧ ∃ ftsPublicKey : Digest,
+          evalWithAnswerFn f (ftsRecover publicKey.parameter (digestIndex digest)
+              (slotValue (digestLeaves digest)) signature.fts) = some ftsPublicKey
+            ∧ evalWithAnswerFn f
+              (verifyLayers publicKey.parameter (digestIndex digest) signature numLayers ftsPublicKey)
               = some publicKey.root
+            ∧ CachedRun cache f (ftsRecover publicKey.parameter (digestIndex digest)
+              (slotValue (digestLeaves digest)) signature.fts)
             ∧ CachedRun cache f
-              (ftsRecover publicKey.parameter index leaves signature.ftsSecret signature.ftsPath)
-            ∧ CachedRun cache f
-              (verifyLayers publicKey.parameter index signature numLayers ftsPublicKey) := by
+              (verifyLayers publicKey.parameter (digestIndex digest) signature numLayers ftsPublicKey) := by
   have hcounters := counters_of_verify publicKey message signature hverify
   let digest := evalWithAnswerFn f
     (messageDigest publicKey.parameter publicKey.root message signature.randomness)
-  have hadmissible : Admissible digest := by
-    by_contra hnot
-    rw [verify_eq _ _ _ hcounters, evalWithAnswerFn_bind] at hverify
-    simp only [digest] at hnot
-    rw [if_pos hnot] at hverify
-    simp at hverify
-  let index := digestIndex digest
-  let leaves := digestLeaves digest
-  let ftsPublicKey := evalWithAnswerFn f
-    (ftsRecover publicKey.parameter index leaves signature.ftsSecret signature.ftsPath)
-  have hlayers : evalWithAnswerFn f
-      (verifyLayers publicKey.parameter index signature numLayers ftsPublicKey)
-      = some publicKey.root := by
-    rw [verify_eq _ _ _ hcounters, evalWithAnswerFn_bind] at hverify
-    simp only [digest, hadmissible, not_true_eq_false, if_false, evalWithAnswerFn_bind] at hverify
-    cases hresult : evalWithAnswerFn f
-        (verifyLayers publicKey.parameter index signature numLayers ftsPublicKey) with
-    | none =>
-        rw [hresult] at hverify
-        simp at hverify
-    | some root =>
-        rw [hresult] at hverify
-        simp only [evalWithAnswerFn_pure, decide_eq_true_eq] at hverify
-        simp [hverify]
-  rw [verify_eq _ _ _ hcounters] at hrun
+  rw [verify_eq _ _ _ hcounters] at hverify hrun
+  rw [evalWithAnswerFn_bind] at hverify
   have hmessageRun := hrun.bind_left
   have hafterDigest := hrun.bind_right
-  simp only [digest, hadmissible, not_true_eq_false, if_false] at hafterDigest
-  change CachedRun cache f (do
-    let ftsPublicKey ←
-      ftsRecover publicKey.parameter index leaves signature.ftsSecret signature.ftsPath
-    match ← verifyLayers publicKey.parameter index signature numLayers ftsPublicKey with
+  change evalWithAnswerFn f (do
+    match ← ftsRecover publicKey.parameter (digestIndex digest) (slotValue (digestLeaves digest))
+        signature.fts with
     | none => pure false
-    | some root => pure (decide (root = publicKey.root))) at hafterDigest
-  have hfts : CachedRun cache f
-      (ftsRecover publicKey.parameter index leaves signature.ftsSecret signature.ftsPath) :=
-    hafterDigest.bind_left
-  have hlayersRun : CachedRun cache f
-      (verifyLayers publicKey.parameter index signature numLayers ftsPublicKey) := by
-    have := hafterDigest.bind_right.bind_left
-    simpa only [ftsPublicKey] using this
-  exact ⟨digest, rfl, hmessageRun, hadmissible, hlayers, hfts, hlayersRun⟩
+    | some ftsPublicKey =>
+        match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
+            ftsPublicKey with
+        | none => pure false
+        | some root => pure (decide (root = publicKey.root))) = true at hverify
+  change CachedRun cache f (do
+    match ← ftsRecover publicKey.parameter (digestIndex digest) (slotValue (digestLeaves digest))
+        signature.fts with
+    | none => pure false
+    | some ftsPublicKey =>
+        match ← verifyLayers publicKey.parameter (digestIndex digest) signature numLayers
+            ftsPublicKey with
+        | none => pure false
+        | some root => pure (decide (root = publicKey.root))) at hafterDigest
+  have hfts := hafterDigest.bind_left
+  rw [evalWithAnswerFn_bind] at hverify
+  have hafterFts := hafterDigest.bind_right
+  revert hverify hafterFts
+  cases hkey : evalWithAnswerFn f (ftsRecover publicKey.parameter (digestIndex digest)
+      (slotValue (digestLeaves digest)) signature.fts) with
+  | none => intro hverify; simp at hverify
+  | some ftsPublicKey =>
+      intro hverify hafterFts
+      simp only at hverify hafterFts
+      rw [evalWithAnswerFn_bind] at hverify
+      have hlayersRun := hafterFts.bind_left
+      refine ⟨digest, rfl, hmessageRun, ftsPublicKey, hkey, ?_, hfts, hlayersRun⟩
+      cases hresult : evalWithAnswerFn f
+          (verifyLayers publicKey.parameter (digestIndex digest) signature numLayers ftsPublicKey) with
+      | none =>
+          rw [hresult] at hverify
+          simp at hverify
+      | some root =>
+          rw [hresult] at hverify
+          simp only [evalWithAnswerFn_pure, decide_eq_true_eq] at hverify
+          simp [hverify]
 
 theorem verifyLayers_succ_extract_cached (index : Index) (signature : Signature)
     (remaining : Nat) (hlayer : remaining < numLayers) (message target : Digest)

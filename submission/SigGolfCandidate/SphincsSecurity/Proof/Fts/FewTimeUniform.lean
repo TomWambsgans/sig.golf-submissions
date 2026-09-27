@@ -1,153 +1,105 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Fts.FewTimeProbability
 import SigGolfCandidate.SphincsSecurity.Proof.Scheme.Guess
+import SigGolfCandidate.SphincsSecurity.Proof.Scheme.HashOutputSplit
 /-!
 # Uniform few-time views
 
-The low 166 bits of a fresh oracle answer are exactly the 26-bit index and the fourteen 10-bit
-few-time leaf coordinates used by a coverage pattern. Splitting an answer into low and high bits is
-bijective, as is decoding those low bits into a few-time view, so the induced view is uniform.
+The low 244 bits of a fresh oracle answer are exactly the 34-bit index and the fifteen 14-bit
+leaf slots of the digest. Splitting an answer into these and its unused high bits is bijective, so the
+induced view is uniform.
 -/
 
 namespace SphincsSecurity
 
 open OracleComp OracleSpec ENNReal
 
-def splitHashOutput (width : Nat) (output : HashOutput) :
-    BitVec width × BitVec (hashOutputBits - width) :=
-  (output.extractLsb' 0 width,
-    output.extractLsb' width (hashOutputBits - width))
-
-theorem splitHashOutput_injective {width : Nat} (hwidth : width ≤ hashOutputBits) :
-    Function.Injective (splitHashOutput width) := by
-  intro left right heq
-  apply hashOutput_eq_of_extract hwidth
-  · exact congrArg Prod.fst heq
-  · exact congrArg Prod.snd heq
-
-theorem splitHashOutput_bijective {width : Nat} (hwidth : width ≤ hashOutputBits) :
-    Function.Bijective (splitHashOutput width) := by
-  apply (Fintype.bijective_iff_injective_and_card _).2
-  refine ⟨splitHashOutput_injective hwidth, ?_⟩
-  rw [Fintype.card_prod, Fintype.card_bitVec, Fintype.card_bitVec, Fintype.card_bitVec, ← pow_add]
-  congr
-  omega
-
-noncomputable def splitHashOutputEquiv (width : Nat) (hwidth : width ≤ hashOutputBits) :
-    HashOutput ≃ BitVec width × BitVec (hashOutputBits - width) :=
-  Equiv.ofBijective (splitHashOutput width) (splitHashOutput_bijective hwidth)
-
-theorem evalDist_hashOutput_extract_uniform {width : Nat} (hwidth : width ≤ hashOutputBits) :
-    𝒮[(fun output : HashOutput => output.extractLsb' 0 width) <$>
-        ($ᵗ HashOutput : ProbComp HashOutput)] =
-      𝒮[($ᵗ BitVec width : ProbComp (BitVec width))] := by
-  let split := splitHashOutput width
-  have hmap :
-      (fun output : HashOutput => output.extractLsb' 0 width) <$>
-          ($ᵗ HashOutput : ProbComp HashOutput) =
-        Prod.fst <$> (split <$> ($ᵗ HashOutput : ProbComp HashOutput)) := by
-    simp [Functor.map_map, split, splitHashOutput]
-  rw [hmap]
-  have hsplit :
-      𝒮[split <$> ($ᵗ HashOutput : ProbComp HashOutput)] =
-        𝒮[($ᵗ (BitVec width × BitVec (hashOutputBits - width)) :
-          ProbComp (BitVec width × BitVec (hashOutputBits - width)))] :=
-    evalSPMF_map_bijective_uniform_cross
-      (α := HashOutput) (β := BitVec width × BitVec (hashOutputBits - width))
-      split (splitHashOutput_bijective hwidth)
-  rw [evalSPMF_map, hsplit, ← evalSPMF_map]
-  exact evalSPMF_map_fst_uniformSample_prod
-
 namespace Concrete
-
-def hashOutputFewTimeView (output : HashOutput) : FewTimeView :=
-  (digestIndex (truncateMessageDigest output),
-    fun tree => digestLeaves (truncateMessageDigest output) (ftsIndexOf tree))
 
 abbrev FullDigestView := Index × (IndexGroup → FtsLeaf)
 
 def fullDigestView (digest : MessageDigest) : FullDigestView :=
   (digestIndex digest, digestLeaves digest)
 
-theorem fullDigestView_injective : Function.Injective fullDigestView := by
+/-- The index and the fifteen leaf slots of an answer's digest. -/
+def hashOutputFewTimeView (output : HashOutput) : FewTimeView :=
+  fullDigestView (truncateMessageDigest output)
+
+/-- The digest bits `244 .. 255`, which the scheme does not read. -/
+abbrev DigestUnusedBits := BitVec (messageDigestBits - (totalHeight + ftsTreeHeight * ftsOpenings))
+
+def digestUnusedBits (digest : MessageDigest) : DigestUnusedBits :=
+  digest.extractLsb' (totalHeight + ftsTreeHeight * ftsOpenings) (messageDigestBits - (totalHeight + ftsTreeHeight * ftsOpenings))
+
+def digestCoordinates (digest : MessageDigest) : FewTimeView × DigestUnusedBits :=
+  (fullDigestView digest, digestUnusedBits digest)
+
+theorem digestCoordinates_injective : Function.Injective digestCoordinates := by
   intro left right heq
   apply BitVec.eq_of_getLsbD_eq
   intro position hposition
+  have hbits : messageDigestBits = 256 := rfl
   by_cases hindex : position < totalHeight
-  · have hcomponent := congrArg (fun view : FullDigestView => BitVec.ofFin view.1) heq
+  · have hcomponent := congrArg (fun view : FewTimeView × DigestUnusedBits => BitVec.ofFin view.1.1) heq
     have hbit := congrArg (fun bits : BitVec totalHeight => bits.getLsbD position) hcomponent
-    simpa [fullDigestView, digestIndex, BitVec.getLsbD_extractLsb', hindex] using hbit
-  · let treeIndex := (position - totalHeight) / ftsTreeHeight
-    have htreeIndex : treeIndex < ftsTrees := by
-      have hposition' : position < 184 := by
-        simpa [messageDigestBits, totalHeight, ftsTrees, ftsTreeHeight] using hposition
-      have hindex' : 34 ≤ position := by
-        simpa [totalHeight] using Nat.le_of_not_gt hindex
-      simp only [treeIndex, ftsTrees, ftsTreeHeight, totalHeight]
-      omega
-    let tree : IndexGroup := ⟨treeIndex, htreeIndex⟩
-    let within := (position - totalHeight) % ftsTreeHeight
-    have hwithin : within < ftsTreeHeight := by
-      simp only [within, ftsTreeHeight]
-      omega
-    have hoffset : totalHeight + ftsTreeHeight * tree.val + within = position := by
-      have hindex' : totalHeight ≤ position := Nat.le_of_not_gt hindex
-      simp only [tree, treeIndex, within]
-      calc
-        totalHeight + ftsTreeHeight * ((position - totalHeight) / ftsTreeHeight) +
-            (position - totalHeight) % ftsTreeHeight =
-            totalHeight + ((position - totalHeight) % ftsTreeHeight +
-              ftsTreeHeight * ((position - totalHeight) / ftsTreeHeight)) := by omega
-        _ = totalHeight + (position - totalHeight) := by rw [Nat.mod_add_div]
-        _ = position := Nat.add_sub_of_le hindex'
-    have hcomponent := congrArg (fun view : FullDigestView => BitVec.ofFin (view.2 tree)) heq
-    change left.extractLsb' (totalHeight + ftsTreeHeight * tree.val) ftsTreeHeight =
-      right.extractLsb' (totalHeight + ftsTreeHeight * tree.val) ftsTreeHeight at hcomponent
-    have hbit := congrArg (fun bits : BitVec ftsTreeHeight => bits.getLsbD within) hcomponent
-    simp only [BitVec.getLsbD_extractLsb', hwithin, decide_true, Bool.true_and] at hbit
-    rwa [hoffset] at hbit
+    simpa [digestCoordinates, fullDigestView, digestIndex, BitVec.getLsbD_extractLsb', hindex] using hbit
+  · by_cases hslots : position < totalHeight + ftsTreeHeight * ftsOpenings
+    · let treeIndex := (position - totalHeight) / ftsTreeHeight
+      have htreeIndex : treeIndex < ftsOpenings := by
+        have hslots' : position < 244 := by simpa [totalHeight, ftsTreeHeight, ftsOpenings] using hslots
+        have hindex' : 34 ≤ position := by
+          simpa [totalHeight] using Nat.le_of_not_gt hindex
+        simp only [treeIndex, ftsOpenings, ftsTreeHeight, totalHeight]
+        omega
+      let tree : IndexGroup := ⟨treeIndex, htreeIndex⟩
+      let within := (position - totalHeight) % ftsTreeHeight
+      have hwithin : within < ftsTreeHeight := by
+        simp only [within, ftsTreeHeight]
+        omega
+      have hoffset : totalHeight + ftsTreeHeight * tree.val + within = position := by
+        have hindex' : totalHeight ≤ position := Nat.le_of_not_gt hindex
+        simp only [tree, treeIndex, within]
+        calc
+          totalHeight + ftsTreeHeight * ((position - totalHeight) / ftsTreeHeight) +
+              (position - totalHeight) % ftsTreeHeight =
+              totalHeight + ((position - totalHeight) % ftsTreeHeight +
+                ftsTreeHeight * ((position - totalHeight) / ftsTreeHeight)) := by omega
+          _ = totalHeight + (position - totalHeight) := by rw [Nat.mod_add_div]
+          _ = position := Nat.add_sub_of_le hindex'
+      have hcomponent := congrArg (fun view : FewTimeView × DigestUnusedBits => BitVec.ofFin (view.1.2 tree)) heq
+      change left.extractLsb' (totalHeight + ftsTreeHeight * tree.val) ftsTreeHeight =
+        right.extractLsb' (totalHeight + ftsTreeHeight * tree.val) ftsTreeHeight at hcomponent
+      have hbit := congrArg (fun bits : BitVec ftsTreeHeight => bits.getLsbD within) hcomponent
+      simp only [BitVec.getLsbD_extractLsb', hwithin, decide_true, Bool.true_and] at hbit
+      rwa [hoffset] at hbit
+    · have hcomponent := congrArg (fun view : FewTimeView × DigestUnusedBits => view.2) heq
+      change digestUnusedBits left = digestUnusedBits right at hcomponent
+      have hlow : totalHeight + ftsTreeHeight * ftsOpenings ≤ position := Nat.le_of_not_gt hslots
+      have hwithin : position - (totalHeight + ftsTreeHeight * ftsOpenings) <
+          messageDigestBits - (totalHeight + ftsTreeHeight * ftsOpenings) := by
+        rw [hbits] at hposition ⊢
+        simp only [totalHeight, ftsTreeHeight, ftsOpenings] at hlow ⊢
+        omega
+      have hbit := congrArg (fun bits : DigestUnusedBits =>
+        bits.getLsbD (position - (totalHeight + ftsTreeHeight * ftsOpenings))) hcomponent
+      simp only [digestUnusedBits, BitVec.getLsbD_extractLsb', hwithin, decide_true, Bool.true_and,
+        Nat.add_sub_of_le hlow] at hbit
+      exact hbit
 
-theorem fullDigestView_bijective : Function.Bijective fullDigestView := by
+theorem digestCoordinates_bijective : Function.Bijective digestCoordinates := by
   apply (Fintype.bijective_iff_injective_and_card _).2
-  refine ⟨fullDigestView_injective, ?_⟩
-  simp only [Fintype.card_bitVec, Fintype.card_prod, Fintype.card_fin, Fintype.card_fun,
-    ← pow_mul, ← pow_add]
+  refine ⟨digestCoordinates_injective, ?_⟩
+  simp only [Fintype.card_bitVec, Fintype.card_prod, Fintype.card_fun, Fintype.card_fin]
   rfl
 
-def splitFullDigestView (view : FullDigestView) : FewTimeView × FtsLeaf :=
-  ((view.1, fun tree => view.2 (ftsIndexOf tree)), view.2 lastIndexGroup)
-
-theorem splitFullDigestView_injective : Function.Injective splitFullDigestView := by
-  intro left right heq
-  apply Prod.ext
-  · exact congrArg (fun view : FewTimeView × FtsLeaf => view.1.1) heq
-  · funext tree
-    rcases indexGroup_eq_ftsIndexOf_or_last tree with ⟨ftsTree, rfl⟩ | rfl
-    · have hfunctions := congrArg (fun view : FewTimeView × FtsLeaf => view.1.2) heq
-      exact congrFun hfunctions ftsTree
-    · exact congrArg Prod.snd heq
-
-theorem splitFullDigestView_bijective : Function.Bijective splitFullDigestView := by
-  apply (Fintype.bijective_iff_injective_and_card _).2
-  refine ⟨splitFullDigestView_injective, ?_⟩
-  simp only [Fintype.card_prod, Fintype.card_fin, Fintype.card_fun,
-    fewTimeView_card, ← pow_mul, ← pow_add]
-  norm_num [totalHeight, ftsTreeHeight, ftsTrees]
-
-def digestCoordinates (digest : MessageDigest) : FewTimeView × FtsLeaf :=
-  splitFullDigestView (fullDigestView digest)
-
-theorem digestCoordinates_bijective : Function.Bijective digestCoordinates :=
-  splitFullDigestView_bijective.comp fullDigestView_bijective
-
-noncomputable def digestCoordinatesEquiv : MessageDigest ≃ FewTimeView × FtsLeaf :=
+noncomputable def digestCoordinatesEquiv : MessageDigest ≃ FewTimeView × DigestUnusedBits :=
   Equiv.ofBijective digestCoordinates digestCoordinates_bijective
 
 set_option maxRecDepth 100000 in
 theorem evalDist_hashOutput_digestCoordinates_uniform :
     𝒮[(fun output : HashOutput => digestCoordinates (truncateMessageDigest output)) <$>
         ($ᵗ HashOutput : ProbComp HashOutput)] =
-      𝒮[($ᵗ (FewTimeView × FtsLeaf) : ProbComp (FewTimeView × FtsLeaf))] := by
+      𝒮[($ᵗ (FewTimeView × DigestUnusedBits) : ProbComp (FewTimeView × DigestUnusedBits))] := by
   calc
     𝒮[(fun output : HashOutput => digestCoordinates (truncateMessageDigest output)) <$>
         ($ᵗ HashOutput : ProbComp HashOutput)] =
@@ -163,14 +115,14 @@ theorem evalDist_hashOutput_digestCoordinates_uniform :
     _ = 𝒮[digestCoordinates <$>
           ($ᵗ MessageDigest : ProbComp MessageDigest)] := by
       rw [evalSPMF_map]
-    _ = 𝒮[($ᵗ (FewTimeView × FtsLeaf) :
-          ProbComp (FewTimeView × FtsLeaf))] :=
+    _ = 𝒮[($ᵗ (FewTimeView × DigestUnusedBits) :
+          ProbComp (FewTimeView × DigestUnusedBits))] :=
       evalSPMF_map_bijective_uniform_cross
-        (α := MessageDigest) (β := FewTimeView × FtsLeaf)
+        (α := MessageDigest) (β := FewTimeView × DigestUnusedBits)
         digestCoordinates digestCoordinates_bijective
 
 abbrev HashOutputCoordinates :=
-  (FewTimeView × FtsLeaf) × BitVec (hashOutputBits - messageDigestBits)
+  (FewTimeView × DigestUnusedBits) × BitVec (hashOutputBits - messageDigestBits)
 
 noncomputable def hashOutputCoordinatesEquiv : HashOutput ≃ HashOutputCoordinates :=
   (splitHashOutputEquiv messageDigestBits
@@ -181,7 +133,7 @@ noncomputable def hashOutputCoordinatesEquiv : HashOutput ≃ HashOutputCoordina
 theorem hashOutputCoordinatesEquiv_apply (output : HashOutput) :
     hashOutputCoordinatesEquiv output =
       ((hashOutputFewTimeView output,
-          digestLeaves (truncateMessageDigest output) lastIndexGroup),
+          digestUnusedBits (truncateMessageDigest output)),
         output.extractLsb' messageDigestBits (hashOutputBits - messageDigestBits)) := rfl
 
 set_option maxRecDepth 100000 in
@@ -245,32 +197,27 @@ theorem hashOutputCoordinatesEquiv_symm_view (coordinates : HashOutputCoordinate
     (truncateMessageDigest (hashOutputCoordinatesEquiv.symm coordinates))).1 = coordinates.1.1
   exact congrArg Prod.fst (hashOutputCoordinatesEquiv_symm_digestCoordinates coordinates)
 
-theorem hashOutputCoordinatesEquiv_symm_lastLeaf (coordinates : HashOutputCoordinates) :
-    digestLeaves (truncateMessageDigest (hashOutputCoordinatesEquiv.symm coordinates))
-        lastIndexGroup = coordinates.1.2 := by
-  change (digestCoordinates
-    (truncateMessageDigest (hashOutputCoordinatesEquiv.symm coordinates))).2 = coordinates.1.2
-  exact congrArg Prod.snd (hashOutputCoordinatesEquiv_symm_digestCoordinates coordinates)
-
 theorem signAttemptResultOfOutput_ne_none_iff (output : HashOutput) :
     signAttemptResultOfOutput output ≠ none ↔
       Admissible (truncateMessageDigest output) := by
   simp only [signAttemptResultOfOutput]
   split <;> simp_all
 
+theorem admissible_iff_view (output : HashOutput) :
+    Admissible (truncateMessageDigest output) ↔ AdmissibleLeaves (hashOutputFewTimeView output).2 := Iff.rfl
+
 theorem signAttemptResultOfOutput_coordinates_ne_none_iff
     (coordinates : HashOutputCoordinates) :
     signAttemptResultOfOutput (hashOutputCoordinatesEquiv.symm coordinates) ≠ none ↔
-      coordinates.1.2 = 0 := by
-  rw [signAttemptResultOfOutput_ne_none_iff, Admissible,
-    hashOutputCoordinatesEquiv_symm_lastLeaf]
+      AdmissibleLeaves coordinates.1.1.2 := by
+  rw [signAttemptResultOfOutput_ne_none_iff, admissible_iff_view, hashOutputCoordinatesEquiv_symm_view]
 
 theorem signAttemptResultOfOutput_coordinates_view
     (coordinates : HashOutputCoordinates) (index : Index)
     (leaves : IndexGroup → FtsLeaf)
     (hresult : signAttemptResultOfOutput (hashOutputCoordinatesEquiv.symm coordinates) =
       some (index, leaves)) :
-    (index, fun tree => leaves (ftsIndexOf tree)) = coordinates.1.1 := by
+    (index, leaves) = coordinates.1.1 := by
   let output := hashOutputCoordinatesEquiv.symm coordinates
   simp only [signAttemptResultOfOutput] at hresult
   split at hresult
@@ -282,10 +229,10 @@ theorem signAttemptResultOfOutput_coordinates_view
 theorem signAttemptResultOfOutput_view (output : HashOutput) (index : Index)
     (leaves : IndexGroup → FtsLeaf)
     (hresult : signAttemptResultOfOutput output = some (index, leaves)) :
-    (index, fun tree => leaves (ftsIndexOf tree)) = hashOutputFewTimeView output := by
+    (index, leaves) = hashOutputFewTimeView output := by
   let coordinates := hashOutputCoordinatesEquiv output
   calc
-    (index, fun tree => leaves (ftsIndexOf tree)) = coordinates.1.1 := by
+    (index, leaves) = coordinates.1.1 := by
       apply signAttemptResultOfOutput_coordinates_view coordinates index leaves
       simpa [coordinates] using hresult
     _ = hashOutputFewTimeView output := by

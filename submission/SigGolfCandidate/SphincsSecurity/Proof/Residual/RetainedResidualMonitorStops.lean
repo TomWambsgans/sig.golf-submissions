@@ -12,7 +12,7 @@ set_option backward.isDefEq.respectTransparency false
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_record (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hvalid : MonitoredValid inputs state) (hinputs : requestInputs key input ⊆ inputs)
@@ -103,7 +103,7 @@ theorem monitoredStep_ready_after (input : (OracleWorld + SigningSpec).Domain) (
   exact ⟨hsigned', proposalCacheBound_of_no_cache_exception key _ (Finite.of_enncard_le hsize') _
     (hcost.trans hbudget) hsize' hclean, hcost⟩
 
-private theorem update_stopped_eq (key : SecretKey) (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+private theorem update_stopped_eq (key : SecretKey) (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
     (input : (OracleWorld + SigningSpec).Domain) (state : CertificateMonitorState) (length : Nat) (record : ProposalExecutionRecord input)
     (hactive : CertificateMonitorActive key budget input state)
     (hready : CertificateMonitorReady key budget

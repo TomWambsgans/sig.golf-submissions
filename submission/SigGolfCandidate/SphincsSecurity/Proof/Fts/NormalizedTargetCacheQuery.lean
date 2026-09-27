@@ -9,25 +9,28 @@ attribute [local instance] Classical.propDecidable
 set_option backward.isDefEq.respectTransparency false
 
 noncomputable def normalizedCachedTargetSubsetMatch (parameter : PublicParameter) (cache : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (required : Finset FtsTree) : ENNReal :=
-  (Fintype.card FtsLeaf ^ required.card : Nat) * cachedTargetSubsetMatch parameter cache targetInput target required
+    (targetInput : HashInput) (target : FewTimeView) (required : Finset IndexGroup) : ENNReal :=
+  coverNormalization ^ required.card * cachedTargetSubsetMatch parameter cache targetInput target required
 
 noncomputable def normalizedTargetCacheProduct (parameter : PublicParameter) (cache : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree) : ENNReal :=
+    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup) : ENNReal :=
   ∏ slot : Fin m, normalizedCachedTargetSubsetMatch parameter cache targetInput target (groups slot)
 
 theorem normalizedCachedTargetSubsetMatch_eq_weight (parameter : PublicParameter) (cache : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (required : Finset FtsTree) :
+    (targetInput : HashInput) (target : FewTimeView) (required : Finset IndexGroup) :
     normalizedCachedTargetSubsetMatch parameter cache targetInput target required =
       cacheMessageWeight parameter (fun input source => if input = targetInput then 0 else normalizedSourceSubsetMatch target source required) cache := by
   unfold normalizedCachedTargetSubsetMatch cachedTargetSubsetMatch
   rw [mul_comm, ← cacheMessageWeight_mul_right]
   congr 1
   funext input source
-  split_ifs <;> simp only [normalizedSourceSubsetMatch, zero_mul, mul_comm]
+  split_ifs
+  · rw [zero_mul]
+  · simp only [normalizedSourceSubsetMatch]
+    ring
 
 theorem normalizedCachedTargetSubsetMatch_cacheQuery (parameter : PublicParameter) (before : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (required : Finset FtsTree) (input : HashInput) (output : HashOutput)
+    (targetInput : HashInput) (target : FewTimeView) (required : Finset IndexGroup) (input : HashInput) (output : HashOutput)
     (hfresh : before input = none) (hmessage : FtsProbeSimulation.MessageHashInput parameter input) (hne : input ≠ targetInput) :
     normalizedCachedTargetSubsetMatch parameter (before.cacheQuery input output) targetInput target required =
       normalizedCachedTargetSubsetMatch parameter before targetInput target required +
@@ -36,7 +39,7 @@ theorem normalizedCachedTargetSubsetMatch_cacheQuery (parameter : PublicParamete
     hmessage, true_and, if_neg hne, mul_add, mul_ite, mul_zero, normalizedSourceSubsetMatch]
 
 theorem normalizedTargetCacheProduct_cacheQuery (parameter : PublicParameter) (before : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree)
+    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup)
     (input : HashInput) (output : HashOutput)
     (hfresh : before input = none) (hmessage : FtsProbeSimulation.MessageHashInput parameter input) (hne : input ≠ targetInput) :
     normalizedTargetCacheProduct parameter (before.cacheQuery input output) targetInput target groups =
@@ -64,16 +67,16 @@ theorem normalizedTargetCacheProduct_cacheQuery (parameter : PublicParameter) (b
     exact Finset.prod_eq_zero hslot rfl
 
 theorem expected_normalizedTargetCacheProduct_cacheQuery (parameter : PublicParameter) (before : QueryCache HashSpec)
-    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree)
+    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup)
     (hgroups : ∀ slot, (groups slot).Nonempty) (hdisjoint : Pairwise (fun i j => Disjoint (groups i) (groups j)))
     (input : HashInput) (hfresh : before input = none)
     (hmessage : FtsProbeSimulation.MessageHashInput parameter input) (hne : input ≠ targetInput) :
     (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)] *
       normalizedTargetCacheProduct parameter (before.cacheQuery input output) targetInput target groups) =
       normalizedTargetCacheProduct parameter before targetInput target groups +
-        (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) *
           ∑ selected ∈ (Finset.univ : Finset (Fin m)).powerset.erase ∅,
-            ∏ slot ∈ (Finset.univ : Finset (Fin m)) \ selected, normalizedCachedTargetSubsetMatch parameter before targetInput target (groups slot) := by
+            arrivalRate target (selected.biUnion groups) *
+              ∏ slot ∈ (Finset.univ : Finset (Fin m)) \ selected, normalizedCachedTargetSubsetMatch parameter before targetInput target (groups slot) := by
   have hmass : (∑' output, Pr[= output | ($ᵗ HashOutput : ProbComp HashOutput)]) = 1 := tsum_probOutput_eq_one' (by simp)
   simp only [normalizedTargetCacheProduct_cacheQuery parameter before targetInput target groups input _ hfresh hmessage hne,
     mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right, hmass, one_mul, Finset.mul_sum]
@@ -84,7 +87,6 @@ theorem expected_normalizedTargetCacheProduct_cacheQuery (parameter : PublicPara
   simp only [← mul_assoc, ENNReal.tsum_mul_right]
   congr 1
   exact expected_hash_normalizedSourceSubsetMatch_prod target groups selected
-    (Finset.nonempty_iff_ne_empty.mpr (Finset.mem_erase.mp hselected).1)
-    (fun slot _ => hgroups slot) (fun i _ j _ hij => hdisjoint hij)
+    (fun i _ j _ hij => hdisjoint hij)
 
 end SphincsSecurity.Concrete

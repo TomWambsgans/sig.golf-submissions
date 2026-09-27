@@ -5,12 +5,12 @@ import SigGolfCandidate.Budget.Bytes
 
 `Spec` facts (query predicate, compressions, results) for the reference functions: every
 value is at most 16 bytes long, so every query length (and hence its block count) is bounded;
-the tree builders only query tweak types `0..3` (hypertree) or `8..11` (FORS), the counter search
+the tree builders only query tweak types `0..3` (hypertree) or `8..10` (PORS), the counter search
 only type `4` at its layer, and the digest search only types `7` and `12`.
 
-Compressions: a WOTS chain 8, an OTS leaf `42 * 8 + 11 = 347`, a tree of height `h`
-`347 * 2^h + 2^h - 1`, a FORS tree `2 * 1024 + 1023 = 3071`, the FORS part `14 * 3071`, the roots
-hash 4. (v5 values: leaf `21 + 294 + 11 = 326`, FORS tree `512·3 + 1023 = 2559`, keygen 674814.)
+Compressions: an OTS leaf `21 + 2 * 21 * 7 + 11 = 326` (paired secrets), a tree of height `h`
+`326 * 2^h + 2^h - 1`, keygen 674814, the PORS tree `2^13 * 3 + (2^14 - 1) = 40959` (paired
+secrets, two leaves per pair, then the levels).
 -/
 
 namespace SigGolfCandidate.Budget
@@ -111,8 +111,8 @@ theorem spec_hash16_bind {P : Query → Prop} {β : Type} {R : β → Prop} (x :
 
 /-- Hypertree queries: tweak types `0..3`. -/
 def PT (q : Query) : Prop := qbyte q 1 ≤ 3
-/-- FORS queries: tweak types `8..11`. -/
-def PF (q : Query) : Prop := 8 ≤ qbyte q 1 ∧ qbyte q 1 ≤ 11
+/-- PORS queries: tweak types `8..10`. -/
+def PP (q : Query) : Prop := 8 ≤ qbyte q 1 ∧ qbyte q 1 ≤ 10
 
 /-! ## Trees -/
 
@@ -127,11 +127,11 @@ theorem nodeOK_nodeInput (lay tau : Nat) : NodeOK PT (nodeInput lay tau) := by
   · unfold PT nodeInput; rw [qbyte_tag]
   · simp [nodeInput]; omega
 
-theorem nodeOK_ftsNodeInput (k idx : Nat) : NodeOK PF (ftsNodeInput k idx) := by
+theorem nodeOK_porsNodeFmt (idx : Nat) : NodeOK PP (porsNodeFmt idx) := by
   intro lam j l r hl hr
   refine ⟨?_, ?_⟩
-  · unfold PF ftsNodeInput; rw [qbyte_tag]; omega
-  · simp [ftsNodeInput]; omega
+  · unfold PP porsNodeFmt porsNodeInput; rw [qbyte_tag]; omega
+  · simp [porsNodeFmt, porsNodeInput]; omega
 
 theorem spec_buildLevel {P : Query → Prop} {node : NodeFmt} (hn : NodeOK P node) (lam : Nat)
     (level : List Val) (hl : AllShort level) :
@@ -317,8 +317,6 @@ theorem spec_maskLevel {P : Query → Prop} (hP : ∀ q, qbyte q 1 = 13 → P q)
     (fun mk hmk => Spec.pure _ 0 ⟨by simp [hacc.1], hacc.2.append (length_xorBytes_le _ _ hmk)⟩)
     le_rfl
 
-theorem topH_eq : topH = 11 := by decide
-
 theorem topN_succ (l : Nat) : topN (l + 1) = topN l + 2 ^ (topH - l) := by
   simp [topN, List.range_succ]
 
@@ -363,76 +361,51 @@ theorem spec_keygenRef (sk : Bytes 32) :
     · unfold macInput; rw [qbyte_tag]
     · simp only [macInput, length_thInput, length_tweak, List.length_append, hS]; omega
 
-/-! ## FORS -/
+/-! ## PORS -/
 
-theorem spec_buildFtsLeaves (S : List Byte) (hS : S.length = 32) (k idx a u : Nat) :
-    Spec PF (fun r : List Val × Val => r.1.length = 2 * (2 ^ a / 2) ∧ AllShort r.1)
-      (2 ^ a / 2 * 3) (buildFtsLeaves S k idx a u) := by
-  unfold buildFtsLeaves
-  refine Spec.foldlM_range_le (P := PF) (2 ^ a / 2) _
-    (fun i (st : List Val × Val) => st.1.length = 2 * i ∧ AllShort st.1) (fun _ => 3) ([], [])
-    ⟨rfl, AllShort.nil⟩ (fun j _ st hst => ?_) (fun _ h => h) (by simp)
-  refine spec_prf2 (ftsPrfInput S k idx j) ?_
-    (blocksFmt_le _ 1 (by simp [ftsPrfInput, hS]) le_rfl) (l := 2)
+theorem spec_buildPorsLeaves (S : List Byte) (hS : S.length = 32) (idx : Nat) :
+    Spec PP (fun r : List Val × List Val => r.1.length = porsT ∧ AllShort r.1)
+      (porsT / 2 * 3) (buildPorsLeaves S idx) := by
+  unfold buildPorsLeaves
+  refine Spec.foldlM_range_le (P := PP) (porsT / 2) _
+    (fun i (st : List Val × List Val) => st.1.length = 2 * i ∧ AllShort st.1) (fun _ => 3) ([], [])
+    ⟨rfl, AllShort.nil⟩ (fun q _ st hst => ?_)
+    (fun _ h => ⟨by rw [h.1]; decide, h.2⟩) (by simp)
+  refine spec_prf2 (porsPrfInput S idx q) ?_
+    (blocksFmt_le _ 1 (by simp [porsPrfInput, thInput, hS]) le_rfl) (l := 2)
     (fun s hs0 hs1 => ?_) (show 1 + 2 ≤ 3 by omega)
-  · unfold PF ftsPrfInput; rw [qbyte_tag]; omega
+  · unfold PP porsPrfInput; rw [qbyte_tag]; omega
   obtain ⟨s0, s1⟩ := s
   dsimp only at hs0 hs1 ⊢
-  refine spec_hash16_bind (ftsLeafInput k idx (2 * j) s0) ?_
-    (blocksFmt_le _ 1 (by simp [ftsLeafInput]; omega) le_rfl) (l := 1)
+  refine spec_hash16_bind (porsLeafInput idx (2 * q) s0) ?_
+    (blocksFmt_le _ 1 (by simp [porsLeafInput, thInput]; omega) le_rfl) (l := 1)
     (fun l0 hl0 => ?_) le_rfl
-  · unfold PF ftsLeafInput; rw [qbyte_tag]; omega
-  refine spec_hash16_bind (ftsLeafInput k idx (2 * j + 1) s1) ?_
-    (blocksFmt_le _ 1 (by simp [ftsLeafInput]; omega) le_rfl)
+  · unfold PP porsLeafInput; rw [qbyte_tag]; omega
+  refine spec_hash16_bind (porsLeafInput idx (2 * q + 1) s1) ?_
+    (blocksFmt_le _ 1 (by simp [porsLeafInput, thInput]; omega) le_rfl)
     (fun l1 hl1 => Spec.pure _ 0 ⟨by simp [hst.1]; omega, fun w hw => ?_⟩) le_rfl
-  · unfold PF ftsLeafInput; rw [qbyte_tag]; omega
+  · unfold PP porsLeafInput; rw [qbyte_tag]; omega
   simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
   rcases hw with hw | rfl | rfl
   · exact hst.2 w hw
   · omega
   · omega
 
-/-- Compressions of a FORS tree of height `a`. -/
-def ftsCost (a : Nat) : Nat := 2 ^ a / 2 * 3 + (2 ^ a - 1)
+/-- Compressions of the PORS tree: `2^13` paired secret queries and `2^14` leaves, then
+`2^14 - 1` nodes. -/
+def porsCost : Nat := porsT / 2 * 3 + (2 ^ porsH - 1)
 
-theorem spec_buildFtsTree (S : List Byte) (hS : S.length = 32) (k idx a u : Nat) (ha : 1 ≤ a) :
-    Spec PF (fun r : Val × List Val × Val => r.2.2.length ≤ 16) (ftsCost a)
-      (buildFtsTree S k idx a u) := by
-  unfold buildFtsTree ftsCost
-  refine (spec_buildFtsLeaves S hS k idx a u).bind (fun r hr => ?_)
-  obtain ⟨leaves, s⟩ := r
-  have hlen : leaves.length = 2 ^ a := by
-    rw [hr.1]
-    obtain ⟨b, rfl⟩ : ∃ b, a = b + 1 := ⟨a - 1, by omega⟩
-    rw [pow_succ, Nat.mul_div_cancel _ (by norm_num), Nat.mul_comm]
-  refine (spec_buildLevels (nodeOK_ftsNodeInput k idx) u a leaves hlen hr.2).bind' (l := 0)
-    (fun r' hr' => ?_) (by omega)
-  obtain ⟨root, path⟩ := r'
-  exact Spec.pure _ 0 hr'
+theorem porsCost_eq : porsCost = 40959 := by decide
 
-theorem spec_signFors (S : List Byte) (hS : S.length = 32) (N : Nat) :
-    Spec PF (fun r : List (Val × List Val) × List Val => r.2.length = 14 ∧ AllShort r.2)
-      (14 * ftsCost 10) (signFors S N) := by
-  unfold signFors
-  refine Spec.foldlM_range_le (P := PF) ftsTrees _
-    (fun i (st : List (Val × List Val) × List Val) => st.2.length = i ∧ AllShort st.2)
-    (fun _ => ftsCost 10) ([], []) ⟨rfl, AllShort.nil⟩ (fun i _ st hst => ?_)
-    (fun _ h => by simpa [ftsTrees] using h) (by simp [ftsTrees])
-  refine (spec_buildFtsTree S hS i (idxOf N) ftsA (uOf N i) (by decide)).bind' (l := 0)
-    (fun r hr => ?_) (by simp [ftsA])
-  obtain ⟨s, path, root⟩ := r
-  exact Spec.pure _ 0 ⟨by simp [hst.1], hst.2.append hr⟩
-
-theorem ftsCost_10 : ftsCost 10 = 2559 := by decide
-
-/-- The FORS key hash: 4 blocks. -/
-theorem roots_ok (idx : Nat) (roots : List Val) (h1 : roots.length = 14) (h2 : AllShort roots) :
-    PF (fmt (rootsInput idx roots)) ∧ (fmt (rootsInput idx roots)).blocks ≤ 4 := by
-  refine ⟨?_, blocksFmt_le _ 4 ?_ (by omega)⟩
-  · unfold PF rootsInput; rw [qbyte_tag]; omega
-  · have := length_flatten_le h2
-    simp only [rootsInput, length_thInput, length_tweak, h1] at this ⊢
-    omega
+/-- The PORS tree: PORS queries only, `porsCost` compressions, a short root. -/
+theorem spec_buildPorsTree (S : List Byte) (hS : S.length = 32) (idx : Nat) :
+    Spec PP (fun r : List (List Val) × List Val => ((r.1.getD porsH []).getD 0 []).length ≤ 16)
+      porsCost (buildPorsTree S idx) := by
+  unfold buildPorsTree porsCost
+  refine (spec_buildPorsLeaves S hS idx).bind (fun r hr => ?_)
+  obtain ⟨leaves, secrets⟩ := r
+  refine (spec_buildAllLevels (nodeOK_porsNodeFmt idx) porsH leaves hr.1 hr.2).bind' (l := 0)
+    (fun levels hl => Spec.pure _ 0 (getD_len_le (hl porsH le_rfl).2 0)) (by omega)
 
 /-! ## Searches -/
 
@@ -497,7 +470,7 @@ theorem spec_searchDigest (S m : List Byte) (hS : S.length = 32) (hm : m.length 
     obtain ⟨h1, h2⟩ := rnd_ok S m hS hm a
     refine spec_hash16_bind _ h1 h2 (l := 1 + 3 * n) (fun rho hrho => ?_) (by omega)
     obtain ⟨h3, h4⟩ := dig_ok rho m hrho hm
-    show Spec PD _ _ (qry (fmt (digestInput rho m)) >>= fun b => Pure.pure (b.toNat % 2 ^ 184)
+    show Spec PD _ _ (qry (fmt (digestInput rho m)) >>= fun b => Pure.pure b.toNat
       >>= fun N => if admissible N = true then Pure.pure (some (rho, N))
         else searchDigest S m (a + 1) n)
     refine Spec.qry_bind h3 (k := 3 * n) (fun u => ?_) (by omega)

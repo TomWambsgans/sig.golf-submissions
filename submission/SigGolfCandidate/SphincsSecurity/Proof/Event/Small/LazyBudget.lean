@@ -74,14 +74,19 @@ theorem digestAttemptExpectation_le (key : SecretKey) (message : Message) (cache
     (hcache : QueryCache.enncard cache ≤ 2 ^ 126) :
     digestAttemptExpectation digestAttemptLimit key message cache ≤ 2 ^ 11 := by
   have hrate : ((2 ^ 11 : ENNReal))⁻¹ ≤ (1 - (2 ^ 127 : ENNReal) * ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) *
-      ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ := by
-    apply le_of_eq
-    apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by
-      apply ENNReal.mul_ne_top (by finiteness) (by finiteness))).mp
-    rw [ENNReal.toReal_mul, ENNReal.toReal_sub_of_le (by
-      apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
-      norm_num [randomnessBits, ENNReal.toReal_mul, ENNReal.toReal_inv]) (by finiteness)]
-    norm_num [randomnessBits, ftsTreeHeight, ENNReal.toReal_mul, ENNReal.toReal_inv]
+      admissibleProbability := by
+    have hhalf : (1 - (2 ^ 127 : ENNReal) * ((2 ^ randomnessBits : Nat) : ENNReal)⁻¹) = 2⁻¹ := by
+      apply (ENNReal.toReal_eq_toReal_iff' (by finiteness) (by finiteness)).mp
+      rw [ENNReal.toReal_sub_of_le (by
+        apply (ENNReal.toReal_le_toReal (by finiteness) (by finiteness)).mp
+        norm_num [randomnessBits, ENNReal.toReal_mul, ENNReal.toReal_inv]) (by finiteness)]
+      norm_num [randomnessBits, ENNReal.toReal_mul, ENNReal.toReal_inv]
+    rw [hhalf]
+    calc
+      ((2 ^ 11 : ENNReal))⁻¹ ≤ 2⁻¹ * (870 : ENNReal)⁻¹ := by
+        rw [← ENNReal.mul_inv (Or.inl (by norm_num)) (Or.inl (by norm_num))]
+        exact ENNReal.inv_le_inv.mpr (by norm_num)
+      _ ≤ _ := mul_le_mul' le_rfl admissibleProbability_ge
   have hbudget : cachedMessageEntryCount cache key.parameter key.root message + (digestAttemptLimit : ENNReal) ≤ 2 ^ 127 := by
     refine (add_le_add (cachedMessageEntryCount_le_enncard cache key.parameter key.root message) le_rfl).trans ?_
     refine (add_le_add hcache le_rfl).trans ?_

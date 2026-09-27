@@ -36,14 +36,14 @@ set_option backward.isDefEq.respectTransparency false
 
 noncomputable def targetMixedSigningGrowth (key : SecretKey) (before after : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree) : ENNReal :=
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup) : ENNReal :=
   (normalizedTargetCacheProduct key.parameter after (tweakableHashInput key.parameter .message payload) target groups -
     normalizedTargetCacheProduct key.parameter before (tweakableHashInput key.parameter .message payload) target groups) *
       normalizedTargetLogProduct key after log payload target required
 
 noncomputable def newTargetMixedGrowthWeight (key : SecretKey) (before : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree) (source : FewTimeView) : ENNReal :=
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup) (source : FewTimeView) : ENNReal :=
   targetMixedGrowthPolynomial
     (fun slot => normalizedCachedTargetSubsetMatch key.parameter before (tweakableHashInput key.parameter .message payload) target (groups slot))
     (normalizedTargetLogMatch key before log payload target) groups required target source
@@ -114,7 +114,7 @@ theorem digestCompletion_targetCacheProduct_le_of_fresh (key : SecretKey) (messa
     (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf)
     (hselected : loop.1 = some (randomness, index, leaves))
     (hfresh : before (tweakableHashInput key.parameter .message (messageDigestPayload key.root message randomness)) = none)
-    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree) :
+    (targetInput : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup) :
     normalizedTargetCacheProduct key.parameter result.2 targetInput target groups ≤
       normalizedTargetCacheProduct key.parameter before targetInput target groups +
         targetCacheArrivalPolynomial (fun slot => normalizedCachedTargetSubsetMatch key.parameter before targetInput target (groups slot))
@@ -130,7 +130,7 @@ theorem digestCompletion_targetCacheProduct_le_of_fresh (key : SecretKey) (messa
   split_ifs; exact bot_le; exact le_rfl
 
 theorem digestCompletion_targetLogProduct_le_view (key : SecretKey) (message : Message) (before : QueryCache HashSpec)
-    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset FtsTree)
+    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (required : Finset IndexGroup)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (loop : DigestLoopRecord)
     (hloop : loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before))
@@ -157,7 +157,7 @@ theorem digestCompletion_targetLogProduct_le_view (key : SecretKey) (message : M
     _ = _ := normalizedTargetLogProduct_add_increment key before log payload target required (selectedFewTimeView index leaves)
 
 theorem digestCompletion_targetMixedGrowth_le_freshInput (key : SecretKey) (message : Message) (before : QueryCache HashSpec)
-    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree) (required : Finset FtsTree)
+    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup)
     (hsigned : SigningDigestsCached key.parameter before key.root log)
     (loop : DigestLoopRecord)
     (hloop : loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before))
@@ -197,12 +197,12 @@ theorem expected_digestCompletion_targetMixedGrowth_le_freshMass {α : Type}
     (record : α → (Option Signature × Option FewTimeView) × QueryCache HashSpec)
     (hcompletion : ∀ loop ∈ support ((simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before),
       ∀ result ∈ support (finish loop), DigestCompletionPreservesMessages key loop (record result))
-    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (groups : Fin m → Finset FtsTree) (required : Finset FtsTree)
+    (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView) (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup)
     (hsigned : SigningDigestsCached key.parameter before key.root log) :
     (∑' result, Pr[= result | (simulateQ romImpl (signDigestLoop digestAttemptLimit key message)).run before >>= finish] *
       targetMixedSigningGrowth key before (record result).2 (log ++ [⟨message, (record result).1.1⟩]) payload target groups required) ≤
       freshDigestSelectionProbability key message before *
-        ∑' source, Pr[= source | ($ᵗ FewTimeView : ProbComp FewTimeView)] * newTargetMixedGrowthWeight key before log payload target groups required source :=
+        ∑' source, Pr[= source | signerViewSample] * newTargetMixedGrowthWeight key before log payload target groups required source :=
   expected_digestCompletion_freshCost_le key message before finish _ _ (fun loop hl result hr =>
     digestCompletion_targetMixedGrowth_le_freshInput key message before log payload target groups required hsigned
       loop hl (record result) (hcompletion loop hl result hr))

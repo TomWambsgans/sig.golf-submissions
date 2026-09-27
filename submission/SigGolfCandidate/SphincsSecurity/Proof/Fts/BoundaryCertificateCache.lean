@@ -111,7 +111,7 @@ theorem eligibleSigningView?_some_mono (parameter : PublicParameter) (root : Dig
             have ha : messageAnswers parameter after (messageDigestPayload root entry.1 signature.randomness) = some output := hcache ho
             simpa only [ha, ho] using hview
 
-theorem TargetCertificateAt.mono {key : SecretKey} {required : Finset FtsTree}
+theorem TargetCertificateAt.mono {key : SecretKey} {required : Finset IndexGroup}
     {before after : QueryCache HashSpec} {log : QueryLog SigningSpec} {input : HashInput}
     (h : TargetCertificateAt key required (before, log) input) (hcache : before ≤ after) :
     TargetCertificateAt key required (after, log) input := by

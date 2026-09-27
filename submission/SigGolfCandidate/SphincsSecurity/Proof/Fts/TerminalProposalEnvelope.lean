@@ -5,8 +5,8 @@ namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec ENNReal
 
-noncomputable def terminalCertificatePrice (required : Finset FtsTree) (word : List Index) : ENNReal :=
-  (((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹ * (Fintype.card Index : ENNReal)⁻¹) *
+noncomputable def terminalCertificatePrice (required : Finset IndexGroup) (word : List Index) : ENNReal :=
+  (Fintype.card Index : ENNReal)⁻¹ *
     (∑ index : Index, (word.count index : ENNReal) ^ required.card) * targetCertificateScale required
 
 theorem terminalProposalPotential_eq_uniform_suffix (total : Nat) (consumed : List Index)
@@ -41,16 +41,16 @@ theorem targetProposalPrefix_length_le (completed total : Nat) (consumed : List 
     _ ≤ targetProposalOverhead * completed + (proposalPrefixSlack : ENNReal) := hprefix
     _ ≤ targetProposalOverhead * signatureLimit + (proposalPrefixSlack : ENNReal) :=
       add_le_add (mul_le_mul' le_rfl (Nat.cast_le.mpr hcompleted)) le_rfl
-    _ ≤ targetProposalOverhead * signatureLimit + (proposalPrefixSlack : ENNReal) + 13 := le_self_add
+    _ ≤ targetProposalOverhead * signatureLimit + (proposalPrefixSlack : ENNReal) + 14 := le_self_add
     _ = (fixedProposalLength : ENNReal) := targetProposalPoolMinimum_eq
     _ ≤ (total : ENNReal) := by exact_mod_cast htotal
 
 theorem reuseRawEnvelope_le_terminalProposalPotential (key : SecretKey)
-    (spent queries completed total : Nat) (state : CoverLogState) (required : Finset FtsTree)
+    (spent queries completed total : Nat) (state : CoverLogState) (required : Finset IndexGroup)
     (consumed : List Index) (hqueries : spent + queries ≤ 2 ^ 127)
     (hcompleted : completed ≤ signatureLimit)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal))
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal))
     (hcounts : ∀ index : Index,
       (signingSlotsAtIndex (observedOptionalSigningViews
         (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2) index).card ≤ consumed.count index)
@@ -65,11 +65,11 @@ theorem reuseRawEnvelope_le_terminalProposalPotential (key : SecretKey)
     hqueries hcompleted hcache hcounts htotal hprefix
 
 theorem targetCreationPrice_le_terminalProposalPotential (key : SecretKey)
-    (spent queries completed total : Nat) (state : CoverLogState) (required : Finset FtsTree)
+    (spent queries completed total : Nat) (state : CoverLogState) (required : Finset IndexGroup)
     (consumed : List Index) (hqueries : spent + queries ≤ 2 ^ 127)
     (hcompleted : completed ≤ signatureLimit)
     (hcache : ∀ index : Index, cachedIndexMultiplicity key.parameter state.1 index ≤
-      (spent : ENNReal) * ((2 ^ 44 : Nat) : ENNReal)⁻¹ + ((2 ^ 72 : Nat) : ENNReal))
+      (spent : ENNReal) * cachedIndexRate + ((2 ^ 72 : Nat) : ENNReal))
     (hcounts : ∀ index : Index,
       (signingSlotsAtIndex (observedOptionalSigningViews
         (FtsProbeSimulation.messageAnswers key.parameter state.1) key.root state.2) index).card ≤ consumed.count index)
@@ -84,7 +84,7 @@ theorem targetCreationPrice_le_terminalProposalPotential (key : SecretKey)
       hqueries hcompleted hcache hcounts htotal hprefix)) le_rfl
 
 theorem certificateMonitorCharge_le_terminalPrice (key : SecretKey) (budget total : Nat)
-    (required : Finset FtsTree) (input : (OracleWorld + SigningSpec).Domain)
+    (required : Finset IndexGroup) (input : (OracleWorld + SigningSpec).Domain)
     (state : CertificateMonitorState) (consumed : List Index) (hbudget : budget ≤ 2 ^ 127)
     (hcompleted : state.2.log.length ≤ signatureLimit)
     (hcounts : ∀ index : Index,

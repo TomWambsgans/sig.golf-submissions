@@ -97,7 +97,6 @@ theorem nodeB_spec {image : Image} {L : Nat} (hcode : CodeAt image (pcOf (L + 17
 def nodeFmt (tt lay tau : Nat) : NodeFmt := fun lam j l r => thInput (tweak tt lay tau lam j) (l ++ r)
 
 theorem nodeInput_eq (lay tau : Nat) : nodeInput lay tau = nodeFmt 3 lay tau := rfl
-theorem ftsNodeInput_eq (k idx : Nat) : ftsNodeInput k idx = nodeFmt 10 k idx := rfl
 
 /-- The node-loop state facts (`NB` buffer, registers) at iteration `j`. -/
 structure NodeCtx where

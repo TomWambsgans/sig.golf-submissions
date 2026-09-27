@@ -38,7 +38,7 @@ theorem certificateCacheExceptionWeight_messageAnswers_le (key : SecretKey) (bef
     have hm : cachedIndexMultiplicity key.parameter before index = cachedIndexMultiplicity key.parameter after index :=
       cacheMessageWeight_messageAnswers_congr key.parameter before after hanswers _
     simp only [cachedIndexExcessScore, ← hm]
-    exact sub_le_sub_left (div_le_div_of_nonneg_right hcardReal (by positivity)) _
+    exact sub_le_sub_left (mul_le_mul_of_nonneg_right hcardReal ENNReal.toReal_nonneg) _
   unfold certificateCacheExceptionWeight
   rw [← messageDeficitMoment_messageAnswers key.parameter key.root before after hanswers]
   exact add_le_add le_rfl (ENNReal.div_le_div_right hindex _)

@@ -147,7 +147,7 @@ noncomputable def nativeMessageCharge (key : SecretKey) (input : (OracleWorld + 
   | .inl world => hashQueryCharge (messageHashCharge key.parameter) state.1 world
   | .inr message => digestAttemptExpectation digestAttemptLimit key message state.1
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredSigningResult_cache (message : Message) (annotation : Nat × Index)
     (state : MonitoredState inputs) (raw : Option SigningRecord × State inputs) :

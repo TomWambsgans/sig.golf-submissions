@@ -141,24 +141,14 @@ theorem erases_buildLayerTree (lay : Layer) (tree : TreeIndex)
   exact (Erases.sequenceFin known _ _ fun _ =>
     erases_buildLeaf parameter lay tree _ (h _) _).bind _ _ fun _ => .refl _ _
 
-theorem erases_buildFtsTree (index : Index) (tree : FtsTree)
+theorem erases_buildFtsTree (index : Index)
     {left right : FtsLeaf → OracleComp HashSpec Digest}
-    (h : ∀ leaf, Erases known (left leaf) (right leaf)) (leaf : FtsLeaf) :
-    Erases known (buildFtsTree parameter index tree left leaf)
-      (buildFtsTree parameter index tree right leaf) := by
+    (h : ∀ leaf, Erases known (left leaf) (right leaf)) :
+    Erases known (buildFtsTree parameter index left)
+      (buildFtsTree parameter index right) := by
   unfold buildFtsTree
   exact (Erases.sequenceFin known _ _ fun leaf =>
     (h leaf).bind _ _ fun _ => .refl _ _).bind _ _ fun _ => .refl _ _
-
-theorem erases_buildForest (index : Index)
-    {left right : FtsTree → FtsLeaf → OracleComp HashSpec Digest}
-    (h : ∀ tree leaf, Erases known (left tree leaf) (right tree leaf))
-    (leaves : IndexGroup → FtsLeaf) :
-    Erases known (buildForest parameter index left leaves)
-      (buildForest parameter index right leaves) := by
-  unfold buildForest
-  exact (Erases.sequenceFin known _ _ fun tree =>
-    erases_buildFtsTree parameter index tree (h tree) _).bind _ _ fun _ => .refl _ _
 
 theorem erases_signTopLayer (index : Index)
     {left right : LeafIndex → ChainIndex → OracleComp HashSpec Digest}
@@ -220,8 +210,8 @@ theorem erases_signFrom (index : Index)
     Erases known (signFrom parameter index ftsLeft otsLeft topLeft randomness leaves)
       (signFrom parameter index ftsRight otsRight topRight randomness leaves) := by
   unfold signFrom
-  apply (erases_buildForest parameter index hfts leaves).bind
-  rintro ⟨secrets, path, key⟩
+  apply (erases_buildFtsTree parameter index (hfts porsTree)).bind
+  rintro ⟨secrets, table⟩
   apply (erases_signLayers parameter index hots htop _ _).bind
   intro parts
   cases parts <;> exact .pure _
@@ -254,24 +244,14 @@ theorem erases_buildLayerTreePaired (lay : Layer) (tree : TreeIndex)
   unfold buildLayerTreePaired
   exact (erases_buildLayerTablePaired parameter lay tree h leaf digits).bind _ _ fun _ => .refl _ _
 
-theorem erases_buildFtsTreePaired (index : Index) (tree : FtsTree)
+theorem erases_buildFtsTreePaired (index : Index)
     {left right : FtsPair → OracleComp HashSpec (Digest × Digest)}
-    (h : ∀ pair, Erases known (left pair) (right pair)) (leaf : FtsLeaf) :
-    Erases known (buildFtsTreePaired parameter index tree left leaf)
-      (buildFtsTreePaired parameter index tree right leaf) := by
+    (h : ∀ pair, Erases known (left pair) (right pair)) :
+    Erases known (buildFtsTreePaired parameter index left)
+      (buildFtsTreePaired parameter index right) := by
   unfold buildFtsTreePaired
   exact (Erases.sequenceFin known _ _ fun pair =>
     (h pair).bind _ _ fun _ => .refl _ _).bind _ _ fun _ => .refl _ _
-
-theorem erases_buildForestPaired (index : Index)
-    {left right : FtsTree → FtsPair → OracleComp HashSpec (Digest × Digest)}
-    (h : ∀ tree pair, Erases known (left tree pair) (right tree pair))
-    (leaves : IndexGroup → FtsLeaf) :
-    Erases known (buildForestPaired parameter index left leaves)
-      (buildForestPaired parameter index right leaves) := by
-  unfold buildForestPaired
-  exact (Erases.sequenceFin known _ _ fun tree =>
-    erases_buildFtsTreePaired parameter index tree (h tree) _).bind _ _ fun _ => .refl _ _
 
 theorem erases_signTopLayerPaired (index : Index)
     {left right : LeafIndex → ChainPair → OracleComp HashSpec (Digest × Digest)}
@@ -333,8 +313,8 @@ theorem erases_signFromPaired (index : Index)
     Erases known (signFromPaired parameter index ftsLeft otsLeft topLeft randomness leaves)
       (signFromPaired parameter index ftsRight otsRight topRight randomness leaves) := by
   unfold signFromPaired
-  apply (erases_buildForestPaired parameter index hfts leaves).bind
-  rintro ⟨secrets, path, key⟩
+  apply (erases_buildFtsTreePaired parameter index (hfts porsTree)).bind
+  rintro ⟨secrets, table⟩
   apply (erases_signLayersPaired parameter index hots htop _ _).bind
   intro parts
   cases parts <;> exact .pure _

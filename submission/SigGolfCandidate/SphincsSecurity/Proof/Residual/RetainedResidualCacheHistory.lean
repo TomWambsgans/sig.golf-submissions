@@ -14,7 +14,7 @@ noncomputable def cacheHistoryWeight {inputs : Finset HashInput} (key : SecretKe
 
 variable (key : SecretKey) (inputs : Finset HashInput) (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs)
   (words : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
-  (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+  (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem expected_exceptionHistoryStep_cacheWeight_le (input : (OracleWorld + SigningSpec).Domain) (state : ExceptionHistoryState inputs)
     (hvalid : MonitoredValid inputs state.1) (hinputs : requestInputs key input ⊆ inputs) (hbound : CacheSizeBound state.1.1.memory) :

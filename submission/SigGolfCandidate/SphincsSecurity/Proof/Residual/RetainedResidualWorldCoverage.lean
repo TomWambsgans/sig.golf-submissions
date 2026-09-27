@@ -15,7 +15,7 @@ noncomputable def proposalOfWorldResult (parameter : PublicParameter) (input : O
     (result : OracleWorld.Range input × QueryCache HashSpec) : ProposalExecutionRecord (.inl input) :=
   ⟨result.1, result.2, signingBoundaryTrace parameter input result.1, none, 0⟩
 
-noncomputable def worldMonitorValue (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+noncomputable def worldMonitorValue (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain) (monitor : CertificateMonitorState)
     (length : Nat) (result : Option (OracleWorld.Range input) × QueryCache HashSpec) : ENNReal :=
   result.1.elim (certificateBankCount monitor.2.bank) fun answer =>
@@ -23,7 +23,7 @@ noncomputable def worldMonitorValue (key : SecretKey) (budget : Nat) (required :
       (originalProposalAdvance (certificateMonitorUpdate key budget required stopAfter) (.inl input) monitor length
         (proposalOfWorldResult key.parameter input (answer, result.2)))
 
-theorem worldMonitorValue_le_of_messageHistory (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+theorem worldMonitorValue_le_of_messageHistory (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain) (monitor : CertificateMonitorState)
     (length : Nat) (result : Option (OracleWorld.Range input) × QueryCache HashSpec)
     (hcache : messageAnswers key.parameter result.2 = messageAnswers key.parameter monitor.1) :
@@ -51,7 +51,7 @@ variable (parameter : PublicParameter) (inputs : Finset HashInput)
   (publicReplies : CanonicalGraphLabels) (selections : ReferenceFamily) (rows : CanonicalEncodingRows)
 
 theorem expected_lazyWorld_nonmessage_certificateMonitor_le (routing : Routing)
-    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : HashInput) (hin : input ∈ inputs)
     (hmessage : ¬MessageHashInput parameter input) (monitor : CertificateMonitorState)
     (length : Option HashOutput × State inputs → Nat) (state : State inputs)
@@ -80,7 +80,7 @@ theorem expected_lazyWorld_nonmessage_certificateMonitor_le (routing : Routing)
       exact mul_le_of_le_one_left' tsum_probOutput_le_one
 
 theorem expected_lazyWorld_message_certificateMonitor_le (routing : Routing)
-    (key : SecretKey) (budget : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (hinputs : hashInputs (liftM (OracleWorld.query input)) ⊆ inputs)
     (hmessage : ∀ hash, input = .inr hash → MessageHashInput parameter hash)
@@ -138,7 +138,7 @@ theorem expected_lazyWorld_message_certificateMonitor_le (routing : Routing)
     exact (mul_le_of_le_one_left' tsum_probOutput_le_one).trans (certificateBankCount_le_bankedCacheWeight _ _ _ _ _)
 
 theorem expected_lazyWorld_certificateMonitor_le (routing : Routing)
-    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (hinputs : hashInputs (liftM (OracleWorld.query input)) ⊆ inputs)
     (monitor : CertificateMonitorState) (length : Option (OracleWorld.Range input) × State inputs → Nat)
@@ -164,7 +164,7 @@ theorem expected_lazyWorld_certificateMonitor_le (routing : Routing)
           key hparameter budget required stopAfter hash hin hmessage monitor length state hcache ha hcovered).trans le_self_add
 
 theorem expected_externalProgram_certificateMonitor_le
-    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset FtsTree)
+    (key : SecretKey) (hparameter : key.parameter = parameter) (budget : Nat) (required : Finset IndexGroup)
     (stopAfter : CertificateStopRule) (input : OracleWorld.Domain)
     (hinputs : hashInputs (liftM (OracleWorld.query input)) ⊆ inputs)
     (monitor : CertificateMonitorState) (length : Option (OracleWorld.Range input) × State inputs → Nat)

@@ -83,13 +83,13 @@ theorem getD_flatten16 : ∀ (vs : List Val), (∀ v ∈ vs, v.length = 16) → 
 /-- The cache buffer: the tag (the full answer `a`), the masked region, zeros. -/
 theorem readBuffer_cache_eq (t : MachineState) (a : BitVec 256) (masked : List Val)
     (hlen : masked.length = 4094)
-    (htag : ∀ k < 4, t.getMem (BitVec.ofNat 64 (0x44A0 + 8 * k)) = a.extractLsb' (64 * k) 64)
+    (htag : ∀ k < 4, t.getMem (BitVec.ofNat 64 (0x4B00 + 8 * k)) = a.extractLsb' (64 * k) 64)
     (hreg : Vals t REGION masked)
-    (hz : ∀ A, 0x144A0 ≤ A → A < 0x244A0 → A % 8 = 0 → t.getMem (BitVec.ofNat 64 A) = 0) :
-    readBuffer t 0x44A0 CACHE_BYTES =
+    (hz : ∀ A, 0x14B00 ≤ A → A < 0x24B00 → A % 8 = 0 → t.getMem (BitVec.ofNat 64 A) = 0) :
+    readBuffer t 0x4B00 CACHE_BYTES =
       ofList CACHE_BYTES (toList (n := 32) a ++ masked.flatten ++ zeros (cacheBytes - 32 - regionBytes)) := by
   have hfl : masked.flatten.length = 65504 := by rw [length_flatten16 _ hreg.1, hlen]
-  suffices hl : (List.range CACHE_BYTES).map (fun i => t.getByte (BitVec.ofNat 64 (0x44A0 + i))) =
+  suffices hl : (List.range CACHE_BYTES).map (fun i => t.getByte (BitVec.ofNat 64 (0x4B00 + i))) =
       toList (n := 32) a ++ masked.flatten ++ zeros (cacheBytes - 32 - regionBytes) by
     rw [readBuffer_eq, ofList, hl]
   apply List.ext_getElem (by
@@ -104,8 +104,8 @@ theorem readBuffer_cache_eq (t : MachineState) (a : BitVec 256) (masked : List V
   · rw [List.getElem_append_left (by simp [hfl, toList, SigGolf.bytes]; omega),
       List.getElem_append_left (by simp [toList, SigGolf.bytes]; omega)]
     simp only [toList, SigGolf.bytes, List.getElem_map, List.getElem_range]
-    rw [show 0x44A0 + i - (0x44A0 + i) % 8 = 0x44A0 + 8 * (i / 8) by omega,
-      htag (i / 8) (by omega), show (0x44A0 + i) % 8 = i % 8 by omega,
+    rw [show 0x4B00 + i - (0x4B00 + i) % 8 = 0x4B00 + 8 * (i / 8) by omega,
+      htag (i / 8) (by omega), show (0x4B00 + i) % 8 = i % 8 by omega,
       extractByte_extractLsb a (i / 8) (i % 8) (by omega), show 8 * (i / 8) + i % 8 = i by omega]
   · by_cases hir : i < 32 + 65504
     · rw [List.getElem_append_left (by simp [hfl, toList, SigGolf.bytes]; omega),
@@ -120,12 +120,12 @@ theorem readBuffer_cache_eq (t : MachineState) (a : BitVec 256) (masked : List V
         List.getElem?_eq_getElem (by rw [hfl]; omega), Option.getD_some, getD_lt' masked _ [] hm] at hfg
       rw [hfg]
       by_cases hlo : (i - 32) % 16 < 8
-      · rw [show 0x44A0 + i - (0x44A0 + i) % 8 = REGION + 16 * ((i - 32) / 16) by unfold REGION; omega,
+      · rw [show 0x4B00 + i - (0x4B00 + i) % 8 = REGION + 16 * ((i - 32) / 16) by unfold REGION; omega,
           hv.1, lo, show BitVec.ofNat 64 (leNat masked[(i - 32) / 16]) =
             BitVec.ofNat 64 (leNat masked[(i - 32) / 16] / 2 ^ (64 * 0)) by simp,
           extractByte_ofNat_leNat _ 0 _ (by omega)]
         congr 1; omega
-      · rw [show 0x44A0 + i - (0x44A0 + i) % 8 = REGION + 16 * ((i - 32) / 16) + 8 by unfold REGION; omega,
+      · rw [show 0x4B00 + i - (0x4B00 + i) % 8 = REGION + 16 * ((i - 32) / 16) + 8 by unfold REGION; omega,
           hv.2, hi_def, show leNat masked[(i - 32) / 16] / 2 ^ 64 =
             leNat masked[(i - 32) / 16] / 2 ^ (64 * 1) by simp,
           extractByte_ofNat_leNat _ 1 _ (by omega)]
@@ -144,10 +144,10 @@ theorem leNat_map_zero (n : Nat) : leNat ((List.range n).map fun _ => (0 : Byte)
 
 /-- The cache buffer is zero. -/
 theorem readBuffer_cache (t : MachineState)
-    (h : ∀ A, 0x44A0 ≤ A → A < 0x244A0 → t.getMem (BitVec.ofNat 64 A) = 0) :
-    readBuffer t 0x44A0 CACHE_BYTES = 0 := by
+    (h : ∀ A, 0x4B00 ≤ A → A < 0x24B00 → t.getMem (BitVec.ofNat 64 A) = 0) :
+    readBuffer t 0x4B00 CACHE_BYTES = 0 := by
   rw [readBuffer_eq]
-  have : (List.range CACHE_BYTES).map (fun i => t.getByte (BitVec.ofNat 64 (0x44A0 + i))) =
+  have : (List.range CACHE_BYTES).map (fun i => t.getByte (BitVec.ofNat 64 (0x4B00 + i))) =
       (List.range CACHE_BYTES).map fun _ => (0 : Byte) := by
     apply List.map_congr_left
     intro i hi

@@ -168,7 +168,7 @@ theorem node_xsim (W : List Word) (k : Nat) (hk : k < 11) (levels : List (List V
   have hblk : (pad64 (nodeInput 0 0 (k + 1) j ((levels.getD k []).getD (2 * j) []) ((levels.getD k []).getD (2 * j + 1) []))).blocks = 1 := by
     simp only [Query.blocks, pad64, padBlocks, nodeInput, thInput, List.length_append, length_tweak,
       length_P, hll, hrl]
-  have D16 : REGION + 16 * lvOff (k + 1) + 16 * j + 32 < 0x144C0 + 8 := by unfold REGION; omega
+  have D16 : REGION + 16 * lvOff (k + 1) + 16 * j + 32 < 0x14B20 + 8 := by unfold REGION; omega
   refine (XSim.steps hst (XSim.hash16_bind
     (x := nodeInput 0 0 (k + 1) j ((levels.getD k []).getD (2 * j) []) ((levels.getD k []).getD (2 * j + 1) []))
     (k := 2) (c := 2) (n := 0) (b := 0)

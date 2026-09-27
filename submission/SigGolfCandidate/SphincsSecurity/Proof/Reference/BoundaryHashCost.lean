@@ -1,5 +1,6 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Base.Prelude
 import SigGolfCandidate.SphincsSecurity.Proof.Reference.BoundaryMessageCost
+import SigGolfCandidate.SphincsSecurity.Proof.Reference.QueryBound
 namespace SphincsSecurity.Concrete
 
 open _root_.OracleComp OracleSpec

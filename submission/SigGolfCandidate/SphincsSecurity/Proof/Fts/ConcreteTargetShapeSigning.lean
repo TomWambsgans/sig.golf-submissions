@@ -14,7 +14,7 @@ set_option backward.isDefEq.respectTransparency false
 
 noncomputable def normalizedTargetMixedMoment (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Fin m → Finset FtsTree) (required : Finset FtsTree) : ENNReal :=
+    (groups : Fin m → Finset IndexGroup) (required : Finset IndexGroup) : ENNReal :=
   normalizedTargetCacheProduct key.parameter cache (tweakableHashInput key.parameter .message payload) target groups *
     normalizedTargetLogProduct key cache log payload target required
 
@@ -35,14 +35,14 @@ noncomputable def targetShapeMoments (key : SecretKey) (cache : QueryCache HashS
 
 theorem targetShapeMoments_eq_indexed (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetShapeMoments key cache log payload target groups remaining =
       normalizedTargetMixedMoment key cache log payload target (targetGroupAt groups) remaining := by
   simp only [targetShapeMoments, normalizedTargetMixedMoment, normalizedTargetCacheProduct, prod_targetGroupAt]
 
 theorem targetShapeMoments_cacheLower_eq (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     targetCacheLower (targetShapeMoments key cache log payload target) groups remaining =
       (∑ removed ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase ∅,
         ∏ slot ∈ (Finset.univ : Finset (Fin groups.card)) \ removed,
@@ -53,7 +53,7 @@ theorem targetShapeMoments_cacheLower_eq (key : SecretKey) (cache : QueryCache H
 
 theorem targetShapeMoments_reuse_eq (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) (hvalid : TargetShapeValid groups remaining) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) (hvalid : TargetShapeValid groups remaining) :
     targetReuseStep (targetShapeMoments key cache log payload target) groups remaining =
       (∏ group ∈ groups, normalizedCachedTargetSubsetMatch key.parameter cache
         (tweakableHashInput key.parameter .message payload) target group) *
@@ -70,7 +70,7 @@ theorem targetShapeMoments_reuse_eq (key : SecretKey) (cache : QueryCache HashSp
 
 theorem targetShapeMoments_cross_eq (key : SecretKey) (cache : QueryCache HashSpec)
     (log : QueryLog SigningSpec) (payload : HashInput) (target : FewTimeView)
-    (groups : Finset (Finset FtsTree)) (remaining : Finset FtsTree) :
+    (groups : Finset (Finset IndexGroup)) (remaining : Finset IndexGroup) :
     (∑ removed ∈ (Finset.univ : Finset (Fin groups.card)).powerset.erase ∅,
       ∑ trees ∈ remaining.powerset,
         (∏ slot ∈ (Finset.univ : Finset (Fin groups.card)) \ removed,

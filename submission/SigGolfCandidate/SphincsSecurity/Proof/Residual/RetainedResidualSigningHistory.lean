@@ -29,7 +29,7 @@ structure SigningHistory (key : SecretKey) (oracle : QueryImpl HashSpec Id) (mem
     SignatureOrigin key oracle memory.external.cache message signature
   disclosed : ∀ index tree leaf, memory.routing.disclosed index tree leaf →
     ∃ message signature, (⟨message, some signature⟩ : SigningEntry) ∈ memory.log ∧
-      index = (signingView key oracle message signature).1 ∧ leaf = (signingView key oracle message signature).2 tree
+      index = (signingView key oracle message signature).1 ∧ leaf ∈ Set.range (signingView key oracle message signature).2
 
 private theorem cacheFold_present (entries : List (HashInput × HashOutput)) (cache : ExternalCache)
     (input : HashInput) (hcache : cache input ≠ none) :
@@ -87,7 +87,7 @@ theorem SigningHistory.applyBoundary {key : SecretKey} {oracle : QueryImpl HashS
 private theorem disclosed_afterSigning (routing : InterleavedResidual.Routing) (record : SigningRecord)
     (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (h : (routing.afterSigning record).disclosed index tree leaf) :
     routing.disclosed index tree leaf ∨ ∃ signature view, record.1.1 = some signature ∧ record.1.2 = some view ∧
-      index = view.1 ∧ leaf = view.2 tree := by
+      index = view.1 ∧ leaf ∈ Set.range view.2 := by
   rcases record with ⟨⟨signature, view⟩, trace⟩
   cases signature with
   | none => exact Or.inl h
@@ -95,9 +95,9 @@ private theorem disclosed_afterSigning (routing : InterleavedResidual.Routing) (
       cases view with
       | none => exact Or.inl h
       | some view =>
-          rcases h with hold | hnew
+          rcases h with hold | ⟨hindex, s, hs⟩
           · exact Or.inl hold
-          · exact Or.inr ⟨signature, view, rfl, rfl, hnew⟩
+          · exact Or.inr ⟨signature, view, rfl, rfl, hindex, _, hs.symm⟩
 
 theorem SigningHistory.recordSigning {key : SecretKey} {oracle : QueryImpl HashSpec Id} {memory : Memory}
     (hhistory : SigningHistory key oracle memory) (message : Message) (record : SigningRecord)

@@ -38,11 +38,11 @@ theorem targetCreationMultiplier_sign_le_digestAttempts (key : SecretKey) (messa
     targetCreationMultiplier key cache (.inr message) ≤ digestAttemptExpectation digestAttemptLimit key message cache := by
   have h := probEvent_signDigestLoop_fresh_le_attempts_mul_admissibility digestAttemptLimit key message cache cache
     (onlyRejectedNewMessageEntries_self cache key message)
-  have hs := mul_le_mul' (le_refl (((2 ^ ftsTreeHeight : Nat) : ENNReal))) h
-  have hc : (((2 ^ ftsTreeHeight : Nat) : ENNReal) *
-      (digestAttemptExpectation digestAttemptLimit key message cache * ((2 ^ ftsTreeHeight : Nat) : ENNReal)⁻¹)) =
+  have hs := mul_le_mul' (le_refl admissibleProbability⁻¹) h
+  have hc : (admissibleProbability⁻¹ *
+      (digestAttemptExpectation digestAttemptLimit key message cache * admissibleProbability)) =
       digestAttemptExpectation digestAttemptLimit key message cache := by
-    rw [mul_left_comm, ENNReal.mul_inv_cancel (by positivity) (by finiteness), mul_one]
+    rw [mul_left_comm, ENNReal.inv_mul_cancel admissibleProbability_pos admissibleProbability_ne_top, mul_one]
   rw [hc] at hs
   exact hs
 
@@ -107,7 +107,7 @@ theorem certificateMonitorMass_le_monitoredMessageCharge (key : SecretKey) (budg
     | inr message => exact targetCreationMultiplier_sign_le_digestAttempts key message state.1
   · simp only [certificateMonitorMass, monitoredMessageCharge.eq_def, if_neg ha, le_refl]
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 attribute [local irreducible] certificateMonitorUpdate certificateMonitorCharge certificateMonitorMass
   monitorView monitoredSigningResult monitoredMessageCharge

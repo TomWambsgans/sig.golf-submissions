@@ -14,7 +14,6 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.R
 def nodeF (t f2 tau : Nat) : NodeFmt := fun lam j l r => thInput (tweak t f2 tau lam j) (l ++ r)
 
 theorem nodeInput_eq (lay tau : Nat) : nodeInput lay tau = nodeF 3 lay tau := rfl
-theorem ftsNodeInput_eq (k idx : Nat) : ftsNodeInput k idx = nodeF 10 k idx := rfl
 
 theorem pad64_nodeF (t f2 tau lam j : Nat) (l r : Val) (hl : l.length = 16)
     (hr : r.length = 16) :
@@ -44,8 +43,8 @@ structure FCtx where
   dst : Nat
 
 def FCtx.ok (fc : FCtx) : Prop :=
-  2 ≤ fc.h ∧ fc.h ≤ 11 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 6404 ∧
-  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 6404 ∧ safeDest fc.dst = true ∧
+  2 ≤ fc.h ∧ fc.h ≤ 11 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 6348 ∧
+  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 6348 ∧ safeDest fc.dst = true ∧
   (fc.dst + 32 ≤ 0x1C0 ∨ 0x210 ≤ fc.dst) ∧ fc.a1 < 2 ^ 20
 
 def FCtx.lo0 (fc : FCtx) : Nat := 1 + 256 * fc.t + 65536 * fc.f2 + 2 ^ 24 * (fc.tau / 2 ^ 32 % 256)
@@ -198,8 +197,8 @@ theorem heap_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam < fc.h) : fc.h
   have h3 : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
   unfold FCtx.heap; omega
 
-/-- A node's tree height as the oracle format reads it. -/
-def NodeH (fc : FCtx) : Prop := (fc.t = 3 ∧ fc.h = height (fc.f2 % 256)) ∨ (fc.t = 10 ∧ fc.h = ftsA)
+/-- A node's tree height as the oracle format reads it (hypertree nodes, tag 3). -/
+def NodeH (fc : FCtx) : Prop := fc.t = 3 ∧ fc.h = height (fc.f2 % 256)
 
 theorem fmt_input (fc : FCtx) (hfc : fc.ok) (hn : NodeH fc) (lam : Nat) (hlam : lam < fc.h) (v : Val)
     (hv : v.length = 16) : fmt (fc.input lam v) = pad64 (fc.hinput lam v) := by
@@ -207,17 +206,14 @@ theorem fmt_input (fc : FCtx) (hfc : fc.ok) (hn : NodeH fc) (lam : Nat) (hlam : 
   have hj : fc.E / 2 ^ (lam + 1) < 2 ^ 32 := by
     have h3 : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
     have := Nat.div_le_self fc.E (2 ^ (lam + 1)); omega
-  have ht : fc.t = 3 ∨ fc.t = 10 := by rcases hn with h | h <;> simp [h.1]
-  have hH : (if fc.t = 3 then height (fc.f2 % 256) else ftsA) = fc.h := by
-    rcases hn with h | h
-    · rw [if_pos h.1, h.2]
-    · rw [if_neg (by rw [h.1]; decide), h.2]
+  obtain ⟨ht, hH⟩ := hn
   unfold FCtx.input FCtx.hinput FCtx.node nodeF
+  rw [ht]
   split
-  · rw [fmt_thInput_node _ _ _ _ _ _ ht (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, hH,
+  · rw [fmt_thInput_node _ _ _ _ _ (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, ← hH,
       blk_eq_pad64 _ (by simp [hs, hv])]
     rfl
-  · rw [fmt_thInput_node _ _ _ _ _ _ ht (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, hH,
+  · rw [fmt_thInput_node _ _ _ _ _ (by simp [hs, hv]) (by have := hfc.2.1; omega) hj, ← hH,
       blk_eq_pad64 _ (by simp [hs, hv])]
     rfl
 

@@ -13,7 +13,7 @@ theorem layerMessagePosition_public (words : OtsReferenceWords)
     (disclosed : Index → FtsTree → FtsLeaf → Prop) (index : Index) (lay : Layer) :
     ¬CanonicalCoordinate.Hidden words disclosed (.graph (layerMessagePosition index lay)) := by
   unfold layerMessagePosition
-  split_ifs <;> simp only [CanonicalCoordinate.Hidden, not_false_eq_true]
+  split_ifs <;> simp only [CanonicalCoordinate.Hidden, Position.ftsRoot, not_false_eq_true]
 
 noncomputable def knownEncodingMessage (known : Labels) (position : EncodingPosition) : Digest :=
   known (.graph (layerMessagePosition (referenceIndex position.lay position.tree position.leafIdx) position.lay))

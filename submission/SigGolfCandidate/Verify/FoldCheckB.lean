@@ -1,4 +1,4 @@
-import SigGolfCandidate.Verify.FoldCheckA2
+import SigGolfCandidate.Verify.FoldDefs
 
 /-! Kernel check of the hypertree fold levels (one declaration per layer). -/
 

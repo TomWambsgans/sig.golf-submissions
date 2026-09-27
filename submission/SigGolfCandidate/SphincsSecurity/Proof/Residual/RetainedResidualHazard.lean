@@ -34,6 +34,6 @@ theorem prob_checkedHashQuery_stop_le (routing : Routing) (input : inputs) (stat
 
 variable (key : SecretKey) (adversary : Adversary) (encoding : ReferenceEncodingAuxiliary) (dummy : OtsReferenceWords)
   (exposed : InitialPublicLabels (referenceFamilyWords encoding.selections dummy)) (high : CanonicalGraphHighHalves)
-  (q : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule) (stopped : Bool)
+  (q : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule) (stopped : Bool)
 
 end SphincsSecurity.Concrete.RetainedResidual

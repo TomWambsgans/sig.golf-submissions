@@ -1,16 +1,19 @@
 import SigGolfCandidate.Budget.Loops
+import SigGolfCandidate.Budget.Octopus.Prob
 
 /-!
 # Budget: the acceptance probabilities of one fresh answer
 
 For a uniform answer `u : BitVec 256`:
 
-* the digest is admissible with probability exactly `2^-10` (`probEvent_not_admissible`);
+* the digest is admissible with probability exactly `p = 15! * Nadm / 2^210 ≈ 1/869.22`
+  (`probEvent_not_admissible`, from the exact count of `Octopus/`; `Ref.admissible` is
+  `Octopus.admissible` by `rfl`, `admissible_eq_octopus`);
 * the randomizer lands in a set `R` of values with probability at most `|R| / 2^128`
   (`probEvent_answerBytes_mem_le`);
 * the encoding decodes with probability exactly `codeCount / 2^128`, where
-  `codeCount = 101963205812723399925627924643353984` is the number of pairs of 21-digit octal
-  words with digit sum `targetSum` (184) (`probEvent_decode_none`). The count is a generating-function identity
+  `codeCount = 142011337208683198491175192637617680` is the number of pairs of 21-digit octal
+  words with digit sum `targetSum` (182) (`probEvent_decode_none`). The count is a generating-function identity
   evaluated by the kernel (`codeCount_eq`), as in the leanVM completeness proof.
 -/
 
@@ -56,57 +59,16 @@ theorem card_filter_range (P : Nat → Prop) [DecidablePred P] (n : Nat) :
 
 /-! ## Admissibility -/
 
-theorem count_split (A B : Nat) (P Q : Nat → Prop) [DecidablePred P] [DecidablePred Q]
-    (hPQ : ∀ a, a < A → ∀ b, (P (a + A * b) ↔ Q b)) :
-    (∑ k ∈ range (A * B), if P k then 1 else 0) = A * ∑ b ∈ range B, if Q b then 1 else 0 := by
-  rw [sum_range_mul, Finset.mul_sum]
-  refine Finset.sum_congr rfl fun b _ => ?_
-  rw [Finset.sum_congr rfl fun a ha => by rw [if_congr (hPQ a (mem_range.mp ha) b) rfl rfl]]
-  by_cases hb : Q b <;> simp [hb]
+/-- The signer's admissibility test of the Ref layer is the one counted in `Octopus/`. -/
+theorem admissible_eq_octopus : Ref.admissible = Octopus.admissible := rfl
 
-theorem count_mod (m t : Nat) (hm : 0 < m) :
-    (∑ b ∈ range (m * t), if b % m = 0 then 1 else 0) = t := by
-  rw [sum_range_mul]
-  have : ∀ s ∈ range t, (∑ r ∈ range m, if (r + m * s) % m = 0 then 1 else 0) = 1 := by
-    intro s _
-    rw [Finset.sum_congr rfl fun r hr => by
-      rw [Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt (mem_range.mp hr)]]
-    rw [Finset.sum_ite_eq' (range m) 0 (fun _ => 1)]
-    simp [hm]
-  rw [Finset.sum_congr rfl this]
-  simp
-
-theorem admissible_split (a b : Nat) (ha : a < 2 ^ 174) :
-    admissible ((a + 2 ^ 174 * b) % 2 ^ 184) = true ↔ b % 2 ^ 10 = 0 := by
-  unfold admissible uOf
-  simp only [totalH, ftsA]
-  have h1 : (2 : Nat) ^ 184 = 2 ^ 174 * 2 ^ 10 := by rw [← pow_add]
-  rw [h1, Nat.mod_mul_right_div_self, Nat.add_mul_div_left _ _ (by positivity),
-    Nat.div_eq_of_lt ha, Nat.zero_add]
-  simp
-
-theorem count_admissible_gen (T : Nat) :
-    (∑ k ∈ range (2 ^ 174 * (2 ^ 10 * T)), if admissible (k % 2 ^ 184) = true then 1 else 0)
-      = 2 ^ 174 * T := by
-  rw [count_split _ _ _ (fun b => b % 2 ^ 10 = 0) (fun a ha b => admissible_split a b ha),
-    count_mod _ _ (by positivity)]
-
-theorem count_admissible :
-    ((range (2 ^ 256)).filter fun k => admissible (k % 2 ^ 184) = true).card = 2 ^ 246 := by
-  have e : (2 : Nat) ^ 256 = 2 ^ 174 * (2 ^ 10 * 2 ^ 72) := by rw [← pow_add, ← pow_add]
-  rw [card_filter_range, e, count_admissible_gen, ← pow_add]
-
-/-- A fresh digest is rejected with probability `1 - 2^-10`. -/
+/-- A fresh digest is rejected with probability exactly `1 - 15! * Nadm / 2^210`. -/
 theorem probEvent_not_admissible :
-    Pr[fun u : BitVec 256 => ¬ admissible (u.toNat % 2 ^ 184) = true |
-      ($ᵗ BitVec 256 : ProbComp (BitVec 256))] = 1 - (2 ^ 246 : ℝ≥0∞) / 2 ^ 256 := by
-  have hc := probEvent_compl ($ᵗ BitVec 256 : ProbComp (BitVec 256))
-    (fun u : BitVec 256 => admissible (u.toNat % 2 ^ 184) = true)
-  have hfail : Pr[⊥ | ($ᵗ BitVec 256 : ProbComp (BitVec 256))] = 0 := by simp
-  rw [hfail, tsub_zero] at hc
-  rw [ENNReal.eq_sub_of_add_eq probEvent_ne_top ((add_comm _ _).trans hc),
-    probEvent_uniform_toNat (fun k => admissible (k % 2 ^ 184) = true), count_admissible,
-    Nat.cast_pow, Nat.cast_ofNat]
+    Pr[fun u : BitVec 256 => ¬ admissible u.toNat = true |
+      ($ᵗ BitVec 256 : ProbComp (BitVec 256))] =
+      1 - ((Nat.factorial 15 * Octopus.Nadm : Nat) : ℝ≥0∞) / 2 ^ 210 := by
+  rw [admissible_eq_octopus]
+  exact Octopus.probEvent_not_admissibleDigest
 
 /-! ## Answer bytes -/
 
@@ -279,8 +241,8 @@ theorem npair_coeff (n s X : Nat) (hX : 8 ^ n * 8 ^ n < X) (hs : s < 14 * n + 1)
   rw [← gf_pairs]
   exact (digit_of_sum X (by omega) (npair n) (fun s => (npair_le n s).trans_lt hX) _ s hs).symm
 
-/-- The number of accepted encodings (pairs of 21-digit words with digit sum `targetSum = 184`). -/
-def codeCount : Nat := 101963205812723399925627924643353984
+/-- The number of accepted encodings (pairs of 21-digit words with digit sum `targetSum = 182`). -/
+def codeCount : Nat := 142011337208683198491175192637617680
 
 theorem gfDigit_eq (X : Nat) : gfDigit X = 1 + X + X ^ 2 + X ^ 3 + X ^ 4 + X ^ 5 + X ^ 6 + X ^ 7 := by
   simp [gfDigit, Finset.sum_range_succ]

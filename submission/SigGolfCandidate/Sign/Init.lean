@@ -7,7 +7,7 @@ import SigGolfCandidate.Expand.Mem
 
 `initialState submission .sign (sk, cache, m) = some (s0 sk cache m)`; its registers are `0`
 except `x2`, its memory holds the secret key at `0x80`, the message at `0x40`, the cache at
-`0x44A0`, and zeros elsewhere (`s0_readWords_sk`, `s0_readWords_msg`, `s0_zero`).
+`0x4B00`, and zeros elsewhere (`s0_readWords_sk`, `s0_readWords_msg`, `s0_zero`).
 -/
 
 namespace SigGolfCandidate.Sign
@@ -19,7 +19,7 @@ set_option maxRecDepth 100000
 def s0 (sk : SecretKey) (cache : Cache) (m : Message) : MachineState :=
   let blank : MachineState := { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
   ((((blank.writeBytesAsWords (BitVec.ofNat 64 (dataBase image)) image.data).writeBytesAsWords
-      (BitVec.ofNat 64 0x80) (SigGolf.bytes sk)).writeBytesAsWords (BitVec.ofNat 64 0x44A0)
+      (BitVec.ofNat 64 0x80) (SigGolf.bytes sk)).writeBytesAsWords (BitVec.ofNat 64 0x4B00)
       (SigGolf.bytes cache)).writeBytesAsWords
       (BitVec.ofNat 64 0x40) (SigGolf.bytes m)).setReg .x2 (BitVec.ofNat 64 (dataBase image))
 
@@ -33,7 +33,7 @@ theorem initialState_eq (sk : SecretKey) (cache : Cache) (m : Message) :
   rw [List.foldl_cons, List.foldl_cons, List.foldl_cons, List.foldl_nil,
     show submission.image .sign = image from rfl,
     show (submission.layout.secretKey, bytes sk).1 = 0x80 from rfl,
-    show (submission.layout.cache, bytes cache).1 = 0x44A0 from rfl,
+    show (submission.layout.cache, bytes cache).1 = 0x4B00 from rfl,
     show (submission.layout.message, bytes m).1 = 0x40 from rfl]
   dsimp only
   rfl
@@ -73,7 +73,7 @@ theorem length_bytes {n : Nat} (x : Bytes n) : (SigGolf.bytes x).length = n := b
 theorem s0_getByte (sk : SecretKey) (cache : Cache) (m : Message) (a : Nat) (ha : a < 2 ^ 64) :
     (s0 sk cache m).getByte (BitVec.ofNat 64 a) =
       if 0x40 ≤ a ∧ a < 0x60 then (SigGolf.bytes m).getD (a - 0x40) 0
-      else if 0x44A0 ≤ a ∧ a < 0x44A0 + 131072 then (SigGolf.bytes cache).getD (a - 0x44A0) 0
+      else if 0x4B00 ≤ a ∧ a < 0x4B00 + 131072 then (SigGolf.bytes cache).getD (a - 0x4B00) 0
       else if 0x80 ≤ a ∧ a < 0xA0 then (SigGolf.bytes sk).getD (a - 0x80) 0
       else 0 := by
   unfold s0
@@ -86,7 +86,7 @@ theorem s0_getByte (sk : SecretKey) (cache : Cache) (m : Message) (a : Nat) (ha 
   · rw [if_pos (by omega), if_pos h1]
   rw [if_neg (by omega), if_neg h1, getByte_writeBytesAsWords _ _ _ _ (by decide)
     (by rw [L2]; norm_num) ha, L2]
-  by_cases h2 : 0x44A0 ≤ a ∧ a < 0x44A0 + 131072
+  by_cases h2 : 0x4B00 ≤ a ∧ a < 0x4B00 + 131072
   · rw [if_pos (by omega), if_pos h2]
   rw [if_neg (by omega), if_neg h2, getByte_writeBytesAsWords _ _ _ _ (by decide)
     (by rw [L3]; norm_num) ha, L3]
@@ -159,7 +159,7 @@ theorem s0_readWords_msg (sk : SecretKey) (cache : Cache) (m : Message) :
 /-- The initial memory is zero outside the message, secret key and cache. -/
 theorem s0_zero (sk : SecretKey) (cache : Cache) (m : Message) (A : Nat) (hA : A % 8 = 0)
     (hA' : A + 8 < 2 ^ 64)
-    (hout : A + 8 ≤ 0x40 ∨ (0x60 ≤ A ∧ A + 8 ≤ 0x80) ∨ (0xA0 ≤ A ∧ A + 8 ≤ 0x44A0) ∨ 0x244A0 ≤ A) :
+    (hout : A + 8 ≤ 0x40 ∨ (0x60 ≤ A ∧ A + 8 ≤ 0x80) ∨ (0xA0 ≤ A ∧ A + 8 ≤ 0x4B00) ∨ 0x24B00 ≤ A) :
     (s0 sk cache m).getMem (BitVec.ofNat 64 A) = 0 := by
   rw [getMem_of_bytes _ A hA hA']
   have : (List.range 8).map (fun j => (s0 sk cache m).getByte (BitVec.ofNat 64 (A + j))) =
@@ -185,13 +185,13 @@ theorem getD_slice (l : List Byte) (off len j : Nat) (hj : j < len) (hl : off + 
 /-- The initial cache words: `8 n` bytes at cache offset `off` (8-aligned). -/
 theorem s0_readWords_cache (sk : SecretKey) (cache : Cache) (m : Message) (off n : Nat)
     (h8 : off % 8 = 0) (hn : off + 8 * n ≤ 131072) :
-    (s0 sk cache m).readWords (BitVec.ofNat 64 (0x44A0 + off)) n =
+    (s0 sk cache m).readWords (BitVec.ofNat 64 (0x4B00 + off)) n =
       wordsOf (slice (toList cache) off (8 * n)) := by
   have hlen : (toList cache).length = 131072 := by simp [toList, SigGolf.bytes]; rfl
   apply readWords_of_bytes _ _ _ _ (by simp [slice, hlen]; omega) (by omega) (by omega)
   intro j hj
   rw [s0_getByte _ _ _ _ (by omega), if_neg (by omega), if_pos (by omega),
-    getD_slice _ _ _ _ hj (by rw [hlen]; omega), show 0x44A0 + off + j - 0x44A0 = off + j by omega]
+    getD_slice _ _ _ _ hj (by rw [hlen]; omega), show 0x4B00 + off + j - 0x4B00 = off + j by omega]
   rfl
 
 end SigGolfCandidate.Sign

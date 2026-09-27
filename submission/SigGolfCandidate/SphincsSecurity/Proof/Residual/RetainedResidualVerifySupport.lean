@@ -112,7 +112,7 @@ theorem fixedSourceRun_verify_honest {inputs : Finset HashInput} (context : Cont
     ∃ digest, evalWithAnswerFn context.oracle (messageDigest context.key.parameter context.key.root message signature.randomness) = digest ∧
       CachedRun after.external.cache context.oracle (messageDigest context.key.parameter context.key.root message signature.randomness) ∧
       Admissible digest ∧ FullyHonestOpening context.oracle after.external.cache context.key (digestIndex digest) (digestLeaves digest) signature ∧
-      ∀ tree, after.routing.disclosed (digestIndex digest) tree (digestLeaves digest (ftsIndexOf tree)) := by
+      ∀ slot, after.routing.disclosed (digestIndex digest) porsTree (digestLeaves digest slot) := by
   have hcompatible' := fixedSourceRun_compatible context _ memory hcompatible true after hresult
   rw [FtsProbeSimulation.liftOracleWorldLeft_scheme_verify] at hresult
   obtain ⟨hvalue, hcached, _⟩ := fixedSourceRun_hash_success context _ memory true after hresult
@@ -129,7 +129,7 @@ theorem fixedSourceRun_rest_honest {inputs : Finset HashInput} (context : Contex
       CachedRun after.external.cache context.oracle
         (messageDigest context.key.parameter context.key.root forgery.message forgery.signature.randomness) ∧
       Admissible digest ∧ FullyHonestOpening context.oracle after.external.cache context.key (digestIndex digest) (digestLeaves digest) forgery.signature ∧
-      ∀ tree, after.routing.disclosed (digestIndex digest) tree (digestLeaves digest (ftsIndexOf tree)) := by
+      ∀ slot, after.routing.disclosed (digestIndex digest) porsTree (digestLeaves digest slot) := by
   rw [FtsProbeSimulation.unloggedRetainedRestComputation, fixedSourceRun_bind, RetainedObservation.bind_nonzero] at hresult
   obtain ⟨⟨candidate, middle⟩, hmiddle, hresult⟩ := hresult
   cases candidate with

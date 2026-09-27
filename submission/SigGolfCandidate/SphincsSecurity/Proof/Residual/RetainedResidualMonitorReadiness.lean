@@ -69,7 +69,7 @@ theorem lazySigning_digestsCached (message : Message) (state : State inputs)
       loop hloop (record.1, result.2.memory.external.cache) hcompletion signature hsignature
     exact Option.ne_none_iff_exists'.mpr ⟨output, houtput⟩
 
-variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
+variable (budget : Nat) (required : Finset IndexGroup) (stopAfter : CertificateStopRule)
 
 theorem monitoredStep_digestsCached (input : (OracleWorld + SigningSpec).Domain) (state : MonitoredState inputs)
     (hvalid : MonitoredValid inputs state) (hinputs : requestInputs key input ⊆ inputs)
