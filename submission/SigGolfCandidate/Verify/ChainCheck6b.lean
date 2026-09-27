@@ -1,4 +1,5 @@
 import SigGolfCandidate.Verify.ChainRuns
+import SigGolfCandidate.Verify.ChainCheck6a
 
 /-! Kernel check of the chain blocks 21..41 of layer 6 (one declaration per chain). -/
 

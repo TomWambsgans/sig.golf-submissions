@@ -27,7 +27,15 @@ theorem initialState_eq (sk : SecretKey) (cache : Cache) (m : Message) :
     initialState submission .sign (sk, cache, m) = some (s0 sk cache m) := by
   unfold initialState
   rw [if_pos (submission_admissible.2 .sign)]
-  simp only [inputBuffers, List.foldl, s0]
+  -- (`simp only [List.foldl]` or a direct `rfl` here make the elaborator unfold
+  -- `writeBytesAsWords` over the 128 KiB cache; rewrite structurally instead)
+  simp only [inputBuffers]
+  rw [List.foldl_cons, List.foldl_cons, List.foldl_cons, List.foldl_nil,
+    show submission.image .sign = image from rfl,
+    show (submission.layout.secretKey, bytes sk).1 = 0x80 from rfl,
+    show (submission.layout.cache, bytes cache).1 = 0x44A0 from rfl,
+    show (submission.layout.message, bytes m).1 = 0x40 from rfl]
+  dsimp only
   rfl
 
 theorem s0_pc (sk : SecretKey) (cache : Cache) (m : Message) : (s0 sk cache m).pc = pcOf 0 := by
@@ -50,11 +58,13 @@ theorem regs_writeBytesAsWords (l : List Byte) : ∀ (s : MachineState) (base : 
 theorem s0_getReg (sk : SecretKey) (cache : Cache) (m : Message) (r : Reg) (hr : r ≠ .x2) :
     (s0 sk cache m).getReg r = 0 := by
   unfold s0
-  cases r <;> first
-    | exact absurd rfl hr
-    | simp [MachineState.getReg, MachineState.setReg, regs_writeBytesAsWords]
+  dsimp only
+  rw [MachineState.getReg_setReg_ne _ _ _ _ (Ne.symm hr)]
+  unfold MachineState.getReg
+  rw [regs_writeBytesAsWords, regs_writeBytesAsWords, regs_writeBytesAsWords, regs_writeBytesAsWords]
+  cases r <;> rfl
 
-theorem image_data : image.data = [] := rfl
+theorem image_data : image.data = [] := by kernel_rfl
 
 theorem length_bytes {n : Nat} (x : Bytes n) : (SigGolf.bytes x).length = n := by
   simp [SigGolf.bytes]

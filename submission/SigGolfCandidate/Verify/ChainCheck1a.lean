@@ -1,4 +1,5 @@
 import SigGolfCandidate.Verify.ChainRuns
+import SigGolfCandidate.Verify.ChainCheck0b
 
 /-! Kernel check of the chain blocks 0..20 of layer 1 (one declaration per chain). -/
 
