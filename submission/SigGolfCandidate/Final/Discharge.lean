@@ -1,4 +1,5 @@
 import SigGolfCandidate.Final.Main
+import SigGolfCandidate.Keygen.Main
 import SigGolfCandidate.Sign.Main
 import SigGolfCandidate.Verify.Main
 import SigGolfCandidate.SphincsSecurity
@@ -11,6 +12,16 @@ Each pending statement of `Pending.lean` is one of the component theorems.
 
 namespace SigGolfCandidate.Final
 open SigGolf
+
+set_option allowUnsafeReducibility true in
+attribute [local reducible] SigGolfCandidate.submission SigGolf.Output SigGolf.Input
+
+theorem keygenRefinement : KeygenRefinementStatement := fun sk =>
+  Keygen.keygen_run_counts sk
+
+theorem keygenTermination : KeygenTerminationStatement := fun hash sk => by
+  rw [Keygen.keygen_runWith]
+  exact ⟨rfl, by show _ < 2 ^ 32; norm_num⟩
 
 theorem signRefinement : SignRefinementStatement := fun sk cache m =>
   Sign.sign_refines sk cache m
@@ -35,7 +46,7 @@ theorem eventSecurity : EventSecurityStatement := fun q hq adversary =>
 
 /-- The competition certificate for `SigGolfCandidate.submission` with `C = claimedC`. -/
 theorem certificate : SigGolf.Certificate submission claimedC :=
-  certificate_of ⟨signRefinement, signTermination, verifyRefinement, verifyTermination,
-    verifyCycles, eventSecurity⟩
+  certificate_of ⟨keygenRefinement, keygenTermination, signRefinement, signTermination,
+    verifyRefinement, verifyTermination, verifyCycles, eventSecurity⟩
 
 end SigGolfCandidate.Final

@@ -101,13 +101,13 @@ theorem Concrete.signAfterDigest_some_randomness (f : QueryImpl HashSpec Id)
     (heval : evalWithAnswerFn f
       (Concrete.signAfterDigest secretKey randomness index leaves) = some signature) :
     signature.randomness = randomness := by
-  rw [Concrete.eval_signAfterDigest, Concrete.signatureValue] at heval
-  cases hparts : sequenceFin (m := Option) (fun lay => evalWithAnswerFn f (Concrete.signLayer secretKey index lay)) with
-  | none => simp only [hparts, Option.map_none, reduceCtorEq] at heval
-  | some parts =>
-      simp only [hparts, Option.map_some, Option.some.injEq] at heval
-      subst signature
-      rfl
+  rw [Concrete.signAfterDigest_eq_signFrom, signFrom] at heval
+  simp only [evalWithAnswerFn_bind] at heval
+  split at heval
+  · simp only [evalWithAnswerFn_pure, Option.some.injEq] at heval
+    subst signature
+    rfl
+  · simp only [evalWithAnswerFn_pure, reduceCtorEq] at heval
 
 theorem Concrete.signAfterDigest_support_some_randomness
     (secretKey : SecretKey) (randomness : Randomness) (index : Index)

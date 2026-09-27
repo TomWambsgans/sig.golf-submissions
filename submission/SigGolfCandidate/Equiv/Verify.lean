@@ -86,7 +86,7 @@ end fold
 
 section wit
 
-variable (wl : List Byte) (hl : wl.length = 7756)
+variable (wl : List Byte) (hl : wl.length = 7080)
 
 include hl
 
@@ -110,7 +110,8 @@ theorem witFtsPath_eq (k : FtsTree) :
 theorem witChain_eq (lay : Layer) (i : ChainIndex) :
     Ref.witChain wl lay i = dv (((sigOfWit wl).layers lay).chainValues i) :=
   (dv_ofList_slice _ _ (by
-    have := lay_lt lay; have := chain_lt i; unfold Ref.witLayerOff; omega)).symm
+    have := wit_bound lay; have := chain_lt i; have := witCounters_eq; unfold Ref.witChain at *
+    omega)).symm
 
 theorem witPath_eq (lay : Layer) :
     Ref.witPath wl lay = (List.range (SphincsSecurity.layerHeight lay)).map fun l =>
@@ -122,16 +123,9 @@ theorem witPath_eq (lay : Layer) :
   have hl2 : l < SphincsSecurity.layerHeight lay := List.mem_range.mp hl'
   unfold SphincsSecurity.Concrete.signaturePath
   rw [dif_pos hl2]
-  have hlay := lay_lt lay
-  have hb : 752 * lay.val + 16 * l ≤ 4576 := by
-    by_cases h6 : lay.val = 6
-    · have h4 : SphincsSecurity.layerHeight lay = 4 := by
-        unfold SphincsSecurity.layerHeight
-        rw [if_neg (show ¬ (lay.val + 1 < SphincsSecurity.numLayers) from
-          show ¬ (lay.val + 1 < 7) by omega)]
-      omega
-    · have := layerHeight_le lay; omega
-  exact (dv_ofList_slice _ _ (by unfold Ref.witLayerOff; omega)).symm
+  have hb := wit_bound lay
+  have hc := witCounters_eq
+  exact (dv_ofList_slice _ _ (by omega)).symm
 
 omit hl in
 theorem witCounter_eq (lay : Layer) :
@@ -144,7 +138,7 @@ theorem witCounter_toNat (lay : Layer) :
   simp only [BitVec.toNat_ofNat, SphincsSecurity.counterBits]
   apply Nat.mod_eq_of_lt
   have := Ref.leNat_lt (Ref.slice wl (Ref.witCounters + 4 * lay.val) 4)
-  rw [length_slice _ _ _ (by have := lay_lt lay; unfold Ref.witCounters; omega)] at this
+  rw [length_slice _ _ _ (by have := lay_lt lay; have := witCounters_eq; omega)] at this
   unfold Ref.witCounter; omega
 
 theorem countersOk_eq :
@@ -183,7 +177,7 @@ theorem ftsRoot_eq (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (secret : D
     (fun n v => SphincsSecurity.Concrete.ftsFold (m := AComp) 0 index tree leaf path n v)
     (fun v => rfl) (fun l v => rfl) _ v
 
-theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7756) (d : SphincsSecurity.MessageDigest) :
+theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7080) (d : SphincsSecurity.MessageDigest) :
     Ref.verifyFors wl d.toNat =
       (fun roots : FtsTree → Digest => List.ofFn fun k => dv (roots k)) <$> relabel fmtQ
         (sequenceFin (m := AComp) fun tree => do
@@ -213,7 +207,7 @@ theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7756) (d : SphincsSecur
 
 /-! ## The layers -/
 
-theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 7756) (lay : Layer) (tree : TreeIndex)
+theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 7080) (lay : Layer) (tree : TreeIndex)
     (leaf : LeafIndex) (enc : Encoding) :
     Ref.verifyLeaf wl lay tree leaf (List.ofFn fun i => (enc i).val) =
       dv <$> relabel fmtQ (do
@@ -238,19 +232,19 @@ theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 7756) (lay : Layer) (tr
   refine bind_congr (m := OracleComp SigGolf.HashSpec) fun f => ?_
   rw [foldl_finRange_append, List.nil_append, hash16_leaf]
 
-theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 7756) (index : Index) (n : Nat)
-    (hn : n ≤ 7) (M : Digest) :
+theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 7080) (index : Index) (n : Nat)
+    (hn : n ≤ 6) (M : Digest) :
     Ref.verifyLayers wl index n (dv M) =
       Option.map dv <$> relabel fmtQ
         (SphincsSecurity.Concrete.verifyLayers (m := AComp) 0 index (sigOfWit wl) n M) := by
   induction n generalizing M with
   | zero => simp [Ref.verifyLayers, SphincsSecurity.Concrete.verifyLayers]
   | succ n ih =>
-    let lay : Layer := ⟨n, show n < 7 by omega⟩
+    let lay : Layer := ⟨n, show n < 6 by omega⟩
     have hr := route_eq index lay
     simp only [lay] at hr
     unfold Ref.verifyLayers SphincsSecurity.Concrete.verifyLayers
-    rw [dif_pos (show n < SphincsSecurity.numLayers by show n < 7; omega)]
+    rw [dif_pos (show n < SphincsSecurity.numLayers by show n < 6; omega)]
     simp only [hr]
     unfold SphincsSecurity.Concrete.otsLeaf SphincsSecurity.Concrete.encode
     rw [hash16_enc lay, witCounter_eq wl lay]
@@ -284,10 +278,10 @@ theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 7756) (index : Index)
 
 /-- **verify**: `verifyRef m pk w` is the relabelled abstract verifier on the public key
 `⟨pk, 0⟩` and the decoded witness. -/
-theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
+theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7080) :
     Ref.verifyRef m pk w =
       relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (witDec w)) := by
-  have hl : (Ref.toList w).length = 7756 := Ref.length_toList w
+  have hl : (Ref.toList w).length = 7080 := Ref.length_toList w
   unfold Ref.verifyRef Ref.verifyList SphincsSecurity.Concrete.verify SphincsSecurity.Concrete.verifyCore
   rw [countersOk_eq _ hl]
   unfold witDec
@@ -305,7 +299,7 @@ theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
       rw [hash16_roots, bind_map_left]
       refine bind_congr (m := OracleComp SigGolf.HashSpec) fun key => ?_
       rw [show Ref.nLayers = SphincsSecurity.numLayers from rfl,
-        verifyLayers_eq _ hl _ SphincsSecurity.numLayers (le_refl 7), bind_map_left]
+        verifyLayers_eq _ hl _ SphincsSecurity.numLayers (le_refl 6), bind_map_left]
       refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
       rcases r with _ | root
       · rfl
@@ -317,14 +311,14 @@ theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
   · simp only [hc, decide_false, Bool.not_false, if_true, if_false, relabel_pure]
 
 /-- **verify**, with the witness decoded through the signature codec. -/
-theorem verifyRef_eq' (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
+theorem verifyRef_eq' (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7080) :
     Ref.verifyRef m pk w =
       relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m
         (sigCodec (Ref.unexpandRef w))) := by
   rw [verifyRef_eq, witDec_eq]
 
 /-- **verify** on a signature (through `expandRef`). -/
-theorem verifySigRef_eq (m : Bytes 32) (pk : Bytes 16) (σ : Bytes 7756) :
+theorem verifySigRef_eq (m : Bytes 32) (pk : Bytes 16) (σ : Bytes 7080) :
     Ref.verifySigRef m pk σ =
       relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (sigCodec σ)) := by
   rw [Ref.verifySigRef, verifyRef_eq, witDec_expandRef]

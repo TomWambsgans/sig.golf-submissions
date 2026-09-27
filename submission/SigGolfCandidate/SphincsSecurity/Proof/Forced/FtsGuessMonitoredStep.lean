@@ -93,7 +93,7 @@ abbrev MonitoredState := CachedState × CertificateMonitor
 
 def monitorView (state : MonitoredState) : CertificateMonitorState := (state.1.1, state.2)
 
-def monitorKey : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0⟩
+def monitorKey : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0, fun _ _ => 0⟩
 
 variable (budget : Nat) (required : Finset FtsTree) (stopAfter : CertificateStopRule)
 

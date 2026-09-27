@@ -24,7 +24,7 @@ theorem vw1_slice (l : List Byte) (off : Nat) :
 
 
 theorem wit_word {wl : List Byte} {s : MachineState} (hW : WitOK wl s) (off : Nat)
-    (h8 : off % 8 = 0) (hoff : off < 7760) :
+    (h8 : off % 8 = 0) (hoff : off < 7080) :
     s.getMem (BitVec.ofNat 64 (0x800 + off)) = w64 (slice wl off 8) := by
   have := hW (off / 8) (by omega)
   rwa [show 8 * (off / 8) = off by omega] at this

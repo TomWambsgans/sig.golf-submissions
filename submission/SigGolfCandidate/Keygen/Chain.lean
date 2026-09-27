@@ -16,10 +16,11 @@ structure LCtx (W : List Word) (e : Nat) (leaves : List Val) (t : MachineState) 
   base : Base W t
   t1 : (t.getMem (BitVec.ofNat 64 1696)).toNat % 2 ^ 32 = 1
   t2 : (t.getMem (BitVec.ofNat 64 192)).toNat % 2 ^ 32 = 257
-  r17 : t.getReg .x17 = BitVec.ofNat 64 32
+  r17 : t.getReg .x17 = BitVec.ofNat 64 2048
+  r19 : t.getReg .x19 = BitVec.ofNat 64 REGION
   r20 : t.getReg .x20 = BitVec.ofNat 64 e
   len : leaves.length = e
-  lv : Vals t TA leaves
+  lv : Vals t REGION leaves
 
 /-- Chain-loop context of leaf `e`: chain ends `0 .. j-1` are in the leaf buffer. -/
 structure CCtx (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends : List Val)
@@ -33,10 +34,10 @@ structure CCtx (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends : L
 
 /-- A key that does not touch the chain-loop context (except possibly `1696`, `192`). -/
 def CSafe (e j k : Nat) : Prop :=
-  BaseSafe k ∧ k ∉ [1704, 200, 840] ∧ (k + 8 ≤ TA ∨ TA + 16 * e ≤ k) ∧ (k + 8 ≤ 864 ∨ 864 + 16 * j ≤ k)
+  BaseSafe k ∧ k ∉ [1704, 200, 840] ∧ (k + 8 ≤ REGION ∨ REGION + 16 * e ≤ k) ∧ (k + 8 ≤ 864 ∨ 864 + 16 * j ≤ k)
 
 theorem CCtx.frame {W : List Word} {e j : Nat} {leaves ends : List Val} {s t : MachineState}
-    {keys : List Nat} (h : CCtx W e leaves j ends s) (he : e ≤ 32) (hj : j ≤ 42)
+    {keys : List Nat} (h : CCtx W e leaves j ends s) (he : e ≤ 2048) (hj : j ≤ 42)
     (hr : ∀ r, r = .x5 ∨ r = .x8 ∨ r = .x30 ∨ r = .x9 ∨ r = .x19 ∨ r = .x17 ∨ r = .x20 ∨ r = .x21 →
       t.getReg r = s.getReg r)
     (hf : Frame s t keys) (hk : ∀ k ∈ keys, CSafe e j k)
@@ -45,12 +46,13 @@ theorem CCtx.frame {W : List Word} {e j : Nat} {leaves ends : List Val} {s t : M
     CCtx W e leaves j ends t := by
   have fr : ∀ A < 2 ^ 64, (∀ k ∈ keys, A ≠ k) → t.getMem (BitVec.ofNat 64 A) = s.getMem (BitVec.ofNat 64 A) :=
     fun A hA hne => hf A hA (fun hm => hne A hm rfl)
-  refine ⟨⟨h.base.frame (fun r hr' => hr r (by rcases hr' with h | h | h | h | h <;> simp [h]))
-      hf (fun k hk' => (hk k hk').1), ht1, ht2, ?_, ?_, h.len, ?_⟩, ?_, ?_, ?_, ?_, h.elen, ?_⟩
+  refine ⟨⟨h.base.frame (fun r hr' => hr r (by rcases hr' with h | h | h | h <;> simp [h]))
+      hf (fun k hk' => (hk k hk').1), ht1, ht2, ?_, ?_, ?_, h.len, ?_⟩, ?_, ?_, ?_, ?_, h.elen, ?_⟩
   · rw [hr _ (by simp)]; exact h.r17
+  · rw [hr _ (by simp)]; exact h.r19
   · rw [hr _ (by simp)]; exact h.r20
-  · exact h.lv.frame hf (by rw [h.len]; unfold TA; omega) (fun k hk' => by
-      have := (hk k hk').2.2.1; rw [h.len]; unfold TA at *; omega)
+  · exact h.lv.frame hf (by rw [h.len]; unfold REGION; omega) (fun k hk' => by
+      have := (hk k hk').2.2.1; rw [h.len]; unfold REGION at *; omega)
   · rw [fr _ (by omega) (fun k hk' heq => (hk k hk').2.1 (by simp [← heq]))]; exact h.w1704
   · rw [fr _ (by omega) (fun k hk' heq => (hk k hk').2.1 (by simp [← heq]))]; exact h.w200
   · rw [fr _ (by omega) (fun k hk' heq => (hk k hk').2.1 (by simp [← heq]))]; exact h.w840
@@ -86,7 +88,7 @@ theorem hashArgs_const (t : MachineState) (a b c : Nat) (h10 : t.getReg .x10 = B
 
 /-- One chain step (`mu = m + 1`): the block `tw || 0^32 || v` at `CB = 192`, answer at `CB+48`. -/
 theorem step_xsim (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends : List Val)
-    (m : Nat) (hm : m < 7) (he : e < 32) (hj : j < 42) (st : Val × Val) (t : MachineState)
+    (m : Nat) (hm : m < 7) (he : e < 2048) (hj : j < 42) (st : Val × Val) (t : MachineState)
     (h : SCtx W e leaves j ends m st.1 t) (hpc : t.pc = pcOf 38) :
     XSim image t 7 14 1 1
       (do let v ← Ref.hash16 (chainInput 0 0 e j (1 + m) st.1)
@@ -140,7 +142,7 @@ theorem step_xsim (W : List Word) (e : Nat) (leaves : List Val) (j : Nat) (ends 
         ux r (by rcases hr with h | h | h | h | h | h | h | h <;> simp [h])]
     · simp at hk
       rcases hk with rfl | rfl | rfl | rfl | rfl <;>
-        simp [CSafe, BaseSafe, zeroKeys, TA] <;> omega
+        simp [CSafe, BaseSafe, zeroKeys, REGION] <;> omega
     · rw [getMem_frame fr (by norm_num) (by simp)]; exact h.t1
     · rw [getMem_frame vfr (by norm_num) (by simp),
         getMem_frame (Frame.writeHash u a 240 u12 (by norm_num) (by norm_num)) (by norm_num) (by simp),
@@ -166,7 +168,7 @@ theorem sumTo_const' (c n : Nat) : sumTo (fun _ => c) n = n * c := sumTo_const c
 
 /-- A whole chain (`prf`, 7 steps) of leaf `e`, ending with the copy of its end. -/
 theorem chain_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (leaves : List Val)
-    (j : Nat) (he : e < 32) (hj : j < 42) (st : List Val × List Val) (t : MachineState)
+    (j : Nat) (he : e < 2048) (hj : j < 42) (st : List Val × List Val) (t : MachineState)
     (h : CCtx W e leaves j st.1 t) (h24 : t.getReg .x24 = BitVec.ofNat 64 (8 * j))
     (hpc : t.pc = pcOf 32) :
     XSim image t 64 120 8 8
@@ -221,7 +223,7 @@ theorem chain_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (le
             ux r (by rcases hr with h | h | h | h | h | h | h | h <;> simp [h])]
         · simp at hk
           rcases hk with rfl | rfl | rfl | rfl | rfl <;>
-            simp [CSafe, BaseSafe, zeroKeys, TA] <;> omega
+            simp [CSafe, BaseSafe, zeroKeys, REGION] <;> omega
         · rw [getMem_frame vfr (by norm_num) (by simp),
             getMem_frame (Frame.writeHash u a 240 u12 (by norm_num) (by norm_num)) (by norm_num) (by simp),
             u1696, BitVec.toNat_ofNat]
@@ -252,16 +254,17 @@ theorem chain_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (le
     spec_45 w hw.2 j (8 * j + 7) hj hw.1.r21 hw.1.r24
   refine XSim.pure_steps xst ⟨?_, by rw [x24]; congr 1 <;> omega, ?_⟩
   · have hs := hw.1
-    refine CCtx.mk (LCtx.mk ?_ ?_ ?_ ?_ ?_ hs.len ?_) ?_ ?_ ?_ x21 ?_ ?_
+    refine CCtx.mk (LCtx.mk ?_ ?_ ?_ ?_ ?_ ?_ hs.len ?_) ?_ ?_ ?_ x21 ?_ ?_
     · refine hs.base.frame (fun r hr => xun r ?_ ?_ ?_ ?_ ?_) xfr (fun k hk => ?_) <;>
-        try (rcases hr with h | h | h | h | h <;> simp [h])
+        try (rcases hr with h | h | h | h <;> simp [h])
       simp at hk; rcases hk with rfl | rfl <;> simp [BaseSafe, zeroKeys] <;> omega
     · rw [getMem_frame xfr (by norm_num) (by simp; omega)]; exact hs.t1
     · rw [getMem_frame xfr (by norm_num) (by simp; omega)]; exact hs.t2
     · rw [xun _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hs.r17
+    · rw [xun _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hs.r19
     · rw [xun _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hs.r20
-    · exact hs.lv.frame xfr (by rw [hs.len]; unfold TA; omega)
-        (fun k hk => by simp at hk; rw [hs.len]; unfold TA; omega)
+    · exact hs.lv.frame xfr (by rw [hs.len]; unfold REGION; omega)
+        (fun k hk => by simp at hk; rw [hs.len]; unfold REGION; omega)
     · rw [getMem_frame xfr (by norm_num) (by simp; omega)]; exact hs.w1704
     · rw [getMem_frame xfr (by norm_num) (by simp; omega)]; exact hs.w200
     · rw [getMem_frame xfr (by norm_num) (by simp; omega)]; exact hs.w840
@@ -279,25 +282,26 @@ theorem chain_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (le
 theorem Vals.nil (t : MachineState) (A : Nat) : Vals t A [] := ⟨by simp, by simp⟩
 
 /-- A whole leaf `e`: 42 chains, the leaf hash into the tree array. -/
-theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he : e < 32)
+theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he : e < 2048)
     (acc : List Val × List Val) (t : MachineState) (h : LCtx W e acc.1 t) (hpc : t.pc = pcOf 25) :
     XSim image t 2702 5141 337 347
       (do let (leaf, c) ← buildLeaf S 0 0 e []
           pure (acc.1 ++ [leaf], if e = 0 then c else acc.2))
-      (fun acc' u => LCtx W (e + 1) acc'.1 u ∧ u.pc = if e + 1 < 32 then pcOf 25 else pcOf 61) := by
+      (fun acc' u => LCtx W (e + 1) acc'.1 u ∧ u.pc = if e + 1 < 2048 then pcOf 25 else pcOf 61) := by
   obtain ⟨u, hst, upc, u21, u24, uun, u1704, u200, u840, ufr⟩ :=
     spec_25 t hpc e (by omega) h.r20 h.base.r30
   have h0 : CCtx W e acc.1 0 [] u := by
-    refine CCtx.mk (LCtx.mk ?_ ?_ ?_ ?_ ?_ h.len ?_) u1704 u200 u840 u21 rfl (Vals.nil u 864)
+    refine CCtx.mk (LCtx.mk ?_ ?_ ?_ ?_ ?_ ?_ h.len ?_) u1704 u200 u840 u21 rfl (Vals.nil u 864)
     · refine h.base.frame (fun r hr => uun r ?_ ?_ ?_) ufr (fun k hk => ?_) <;>
-        try (rcases hr with h | h | h | h | h <;> simp [h])
+        try (rcases hr with h | h | h | h <;> simp [h])
       simp at hk; rcases hk with rfl | rfl | rfl <;> simp [BaseSafe, zeroKeys]
     · rw [getMem_frame ufr (by norm_num) (by simp)]; exact h.t1
     · rw [getMem_frame ufr (by norm_num) (by simp)]; exact h.t2
     · rw [uun _ (by simp) (by simp) (by simp)]; exact h.r17
+    · rw [uun _ (by simp) (by simp) (by simp)]; exact h.r19
     · rw [uun _ (by simp) (by simp) (by simp)]; exact h.r20
-    · exact h.lv.frame ufr (by rw [h.len]; unfold TA; omega)
-        (fun k hk => by simp at hk; rw [h.len]; unfold TA; omega)
+    · exact h.lv.frame ufr (by rw [h.len]; unfold REGION; omega)
+        (fun k hk => by simp at hk; rw [h.len]; unfold REGION; omega)
   have hchains := XSim.foldlM_range (image := image) 42
     (fun (st : List Val × List Val) i => do
       let (v, c) ← buildChain S 0 0 e i (([] : List Nat).getD i 0)
@@ -316,7 +320,7 @@ theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he 
   obtain ⟨hc, _, hpc57⟩ := hw
   have hl42 : st.1.length = 42 := hc.elen
   obtain ⟨x, xst, xpc, x10, x11, x12, xun, xfr⟩ :=
-    spec_54 w (by rw [hpc57]; rfl) e he hc.r20 hc.base.r19
+    spec_54 w (by rw [hpc57]; rfl) e he hc.r20 hc.r19
   have xm : ∀ A < 2 ^ 64, x.getMem (BitVec.ofNat 64 A) = w.getMem (BitVec.ofNat 64 A) :=
     fun A hA => xfr A hA (by simp)
   have hx : (leafInput 0 0 e st.1).length = 704 := by
@@ -344,38 +348,39 @@ theorem leaf_xsim (W : List Word) (S : List Byte) (hS : SkOk W S) (e : Nat) (he 
   refine (XSim.steps xst (XSim.hash16_bind (x := leafInput 0 0 e st.1) (k := 2) (c := 2) (n := 0) (b := 0)
     ((codeAt_58.fetch x xpc).trans rfl)
     (by rw [xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.base.r5)
-    (hashArgs_const x 832 704 (TA + 16 * e) x10 x11 x12 (by norm_num) (by norm_num) (by norm_num)
-      (by unfold TA; omega) (by unfold TA; omega)) (hq.trans (fmt_thInput 2 0 0 0 e _ (by decide)).symm) (fun a => ?_))).of_eq rfl (by rfl) (by rw [hblk])
+    (hashArgs_const x 832 704 (REGION + 16 * e) x10 x11 x12 (by norm_num) (by norm_num) (by norm_num)
+      (by unfold REGION; omega) (by unfold REGION; omega)) (hq.trans (fmt_thInput 2 0 0 0 e _ (by decide)).symm) (fun a => ?_))).of_eq rfl (by rfl) (by rw [hblk])
       (by rfl) (by rw [hblk])
   have wpc : (writeHash x a).pc = pcOf 59 := by rw [pc_writeHash, xpc]; rfl
   obtain ⟨y, yst, ypc, y20, yun, yfr⟩ := spec_59 (writeHash x a) wpc e he
     (by rw [getReg_writeHash, xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.r20)
     (by rw [getReg_writeHash, xun _ (by simp) (by simp) (by simp) (by simp)]; exact hc.r17)
-  have hwf := Frame.writeHash x a (TA + 16 * e) x12 (by unfold TA; omega) (by unfold TA; omega)
+  have hwf := Frame.writeHash x a (REGION + 16 * e) x12 (by unfold REGION; omega) (by unfold REGION; omega)
   have ym : ∀ A < 2 ^ 64, y.getMem (BitVec.ofNat 64 A) = (writeHash x a).getMem (BitVec.ofNat 64 A) :=
     fun A hA => yfr A hA (by simp)
   have yr : ∀ r, r ≠ .x20 → r ≠ .x3 → r ≠ .x10 → r ≠ .x11 → r ≠ .x12 → y.getReg r = w.getReg r :=
     fun r h1 h2 h3 h4 h5 => by rw [yun r h1, getReg_writeHash, xun r h2 h3 h4 h5]
-  refine XSim.pure_steps yst ⟨LCtx.mk ?_ ?_ ?_ ?_ y20 (by simp [h.len]) ?_, ?_⟩
+  refine XSim.pure_steps yst ⟨LCtx.mk ?_ ?_ ?_ ?_ ?_ y20 (by simp [h.len]) ?_, ?_⟩
   · have fr := (xfr.trans hwf).trans yfr
     refine hc.base.frame (fun r hr => ?_) fr (fun k hk => ?_)
-    · rcases hr with rfl | rfl | rfl | rfl | rfl <;> exact yr _ (by simp) (by simp) (by simp) (by simp) (by simp)
+    · rcases hr with rfl | rfl | rfl | rfl <;> exact yr _ (by simp) (by simp) (by simp) (by simp) (by simp)
     · simp at hk
-      rcases hk with rfl | rfl | rfl | rfl <;> simp [BaseSafe, zeroKeys, TA] <;> omega
-  · rw [ym _ (by norm_num), getMem_frame hwf (by norm_num) (by simp; unfold TA; omega), xm _ (by norm_num)]
+      rcases hk with rfl | rfl | rfl | rfl <;> simp [BaseSafe, zeroKeys, REGION] <;> omega
+  · rw [ym _ (by norm_num), getMem_frame hwf (by norm_num) (by simp; unfold REGION; omega), xm _ (by norm_num)]
     exact hc.t1
-  · rw [ym _ (by norm_num), getMem_frame hwf (by norm_num) (by simp; unfold TA; omega), xm _ (by norm_num)]
+  · rw [ym _ (by norm_num), getMem_frame hwf (by norm_num) (by simp; unfold REGION; omega), xm _ (by norm_num)]
     exact hc.t2
   · rw [yr _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hc.r17
-  · have hlv' : Vals y TA acc.1 := (hc.lv.frame (xfr.trans hwf) (by rw [hc.len]; unfold TA; omega)
-      (fun k hk => by simp at hk; rw [hc.len]; unfold TA at *; omega)).frame yfr
-      (by rw [hc.len]; unfold TA; omega) (by simp)
+  · rw [yr _ (by simp) (by simp) (by simp) (by simp) (by simp)]; exact hc.r19
+  · have hlv' : Vals y REGION acc.1 := (hc.lv.frame (xfr.trans hwf) (by rw [hc.len]; unfold REGION; omega)
+      (fun k hk => by simp at hk; rw [hc.len]; unfold REGION at *; omega)).frame yfr
+      (by rw [hc.len]; unfold REGION; omega) (by simp)
     refine hlv'.snoc ?_ (length_answer16 a)
     rw [hc.len]
-    exact (valAt_writeHash x a (TA + 16 * e) x12 (by unfold TA; omega)).frame yfr
-      (by unfold TA; omega) (by simp)
+    exact (valAt_writeHash x a (REGION + 16 * e) x12 (by unfold REGION; omega)).frame yfr
+      (by unfold REGION; omega) (by simp)
   · rw [ypc]
-    by_cases he' : e + 1 = 32
+    by_cases he' : e + 1 = 2048
     · rw [if_pos he', if_neg (by omega)]
     · rw [if_neg he', if_pos (by omega)]
 

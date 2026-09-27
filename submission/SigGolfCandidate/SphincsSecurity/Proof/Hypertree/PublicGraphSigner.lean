@@ -12,10 +12,10 @@ def publicSignLayer (known : Labels) (words : OtsReferenceWords) (selections : R
   let search := referenceSelectionResult (selections ⟨lay, treeIndexAt index lay, leafIndexAt index lay⟩)
   match search.1 with
   | none => (none, search.2)
-  | some (counter, _) =>
+  | some (counter, word) =>
       (some (counter, knownFrontier known words lay (treeIndexAt index lay) (leafIndexAt index lay),
         knownTreePath known lay (treeIndexAt index lay) (leafIndexAt index lay)),
-        search.2 + treeNodeHashCost (layerHeight lay))
+        search.2 + if lay = topLayer then OtsCode.signingSteps word else treeNodeHashCost (layerHeight lay))
 
 structure PublicSigningPlan where
   randomness : Randomness
@@ -47,7 +47,7 @@ theorem frontierSignLayer_eq_public (index : Index) (lay : Layer) :
       publicSignLayer known words (referenceTableSelection key f) index lay := by
   have hfrontier : IsSigningFrontier key f words
       (canonicalGraphFrontier key.otsSecret (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) words) := by
-    rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root]
+    rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root key.top]
     exact isSigningFrontier_canonical key f words
   have hsearch : frontierLayerSearch key.parameter f key.ftsSecret words
       (canonicalGraphFrontier key.otsSecret (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f) words) index lay =
@@ -76,7 +76,7 @@ theorem frontierSignAfterDigest_eq_publicPlan (randomness : Randomness) (index :
     ← knownFtsPath_eq key.parameter key.otsSecret key.ftsSecret f words disclosed known hagrees,
     Option.map_map, Function.comp_def, PublicSigningPlan.finish]
 
-theorem boundaryEval_signAfterDigest_public (dummy : OtsReferenceWords)
+theorem boundaryEval_signAfterDigest_public (htop : KeyTopHonest f key) (dummy : OtsReferenceWords)
     (hagrees : PublicAgreement (canonicalReferenceWords key f dummy) disclosed known
       (CanonicalCoordinate.value key.otsSecret key.ftsSecret (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)))
     (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
@@ -86,7 +86,7 @@ theorem boundaryEval_signAfterDigest_public (dummy : OtsReferenceWords)
         (FreeMonoid.of none) ^
           (publicSignPlan known (canonicalReferenceWords key f dummy) (referenceTableSelection key f) randomness index leaves).2) := by
   have h := frontierSignAfterDigest_eq_publicPlan key f (canonicalReferenceWords key f dummy) disclosed known hagrees randomness index leaves
-  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ key.root] at h
-  rw [boundaryEval_signAfterDigest_canonical key f dummy, h]
+  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ key.root key.top] at h
+  rw [boundaryEval_signAfterDigest_canonical key f htop dummy, h]
 
 end SphincsSecurity.Concrete

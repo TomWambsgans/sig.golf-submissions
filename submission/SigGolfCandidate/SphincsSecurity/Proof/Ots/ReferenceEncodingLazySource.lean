@@ -35,7 +35,7 @@ noncomputable def referenceEncodingLazyGame {Result : Type} (observer : Frontier
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let selections ← 𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit]
   let outside ← 𝒮[PMF.uniformOfFintype (NonencodingRows parameter inputs (hencoding parameter))]
   let result ← Prod.fst <$> referenceEncodingLazyRest observer key inputs (hencoding parameter) outside selections dummy adversary
@@ -59,7 +59,7 @@ theorem referenceEncodingLazyGame_original {Result : Type} (observer : FrontierO
   funext selections
   apply congrArg (𝒮[PMF.uniformOfFintype (NonencodingRows parameter inputs (hencoding parameter))] >>= ·)
   funext outside
-  rw [← bind_assoc, referenceEncodingLazyRest_original observer ⟨parameter, 0, otsSecret, ftsSecret⟩
+  rw [← bind_assoc, referenceEncodingLazyRest_original observer ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
     inputs (hencoding parameter) outside selections dummy adversary]
 
 end SphincsSecurity.Concrete

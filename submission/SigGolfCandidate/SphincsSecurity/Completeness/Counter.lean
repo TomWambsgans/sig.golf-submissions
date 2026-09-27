@@ -5,7 +5,7 @@ import SigGolfCandidate.SphincsSecurity.Completeness.Search
 
 `encodingSearch` is the search of `Search.lean` run over the encoding inputs: the counter rides in
 the hashed bytes, so the inputs below the `2 ^ 32` wrap are distinct, and the trial budget
-`C_max = 2 ^ 20` stays below it.
+`C_max = 2 ^ 22` stays below it.
 What remains to bound its failure is the share of answers the target-sum code rejects.
 -/
 

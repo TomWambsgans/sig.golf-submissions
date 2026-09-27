@@ -45,7 +45,7 @@ def maskE (i : Nat) : E :=
 
 def rE (lay i : Nat) : E := mkBin .add (maskE i) (cw (bVal lay i))
 
-def chainAddr (lay i : Nat) : Nat := 0x800 + 2480 + 752 * lay + 16 * i
+def chainAddr (lay i : Nat) : Nat := 0x800 + layBody lay + 16 * i
 
 /-- Head of chain `i`: (lui) (prep) `ld; ld; addi a2, CB+48; jalr`, stopping at the symbolic target. -/
 def headExp (lay i : Nat) : PRes :=

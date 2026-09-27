@@ -110,7 +110,7 @@ theorem advStep_cost (sk : SecretKey) (parameter : PublicParameter) (f : QueryIm
     exact fixedBoundaryRun_atLeast parameter f (boundaryHashAtLeast_hash parameter input) source hsource
   · rw [advStep_sign, fixedBoundaryRun_map, support_map] at hresult
     obtain ⟨source, hsource, rfl⟩ := hresult
-    exact fixedBoundaryRun_atLeast parameter f (boundaryHashAtLeast_sign parameter sk message) source hsource
+    exact fixed_sign_charge parameter f sk message source hsource
 
 
 /-- Keep the value of a functional on the runs the cap did not stop. -/
@@ -264,10 +264,11 @@ theorem fixed_gameAfterSecrets (adversary : Adversary) (parameter : PublicParame
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (f : QueryImpl HashSpec Id) :
     fixedBoundaryRun parameter f (gameAfterSecrets adversary parameter otsSecret ftsSecret) =
-      let root := evalWithAnswerFn f (keygenRoot parameter (otsSecret topLayer rootTree))
+      let top := evalWithAnswerFn f (keygenTable parameter (otsSecret topLayer rootTree))
       (fun final => (final.1, (FreeMonoid.of none) ^ keygenHashCost * final.2)) <$>
-        fixedBoundaryRun parameter f (Seeded.gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩) := by
-  rw [gameAfterSecrets, fixedBoundaryRun_bind, fixedBoundaryRun_lift_hash, boundaryEval_keygenRoot, pure_bind]
+        fixedBoundaryRun parameter f (Seeded.gameRest scheme adversary ⟨top (layerHeight topLayer) 0, parameter⟩
+          ⟨parameter, top (layerHeight topLayer) 0, otsSecret, ftsSecret, top⟩) := by
+  rw [gameAfterSecrets, fixedBoundaryRun_bind, fixedBoundaryRun_lift_hash, boundaryEval_keygen, pure_bind]
   rfl
 
 theorem fixed_boundaryGameCore (adversary : Adversary) (f : QueryImpl HashSpec Id) :

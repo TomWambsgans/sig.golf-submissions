@@ -52,7 +52,8 @@ def completedTwoGuesses (key : SecretKey) (f : QueryImpl HashSpec Id) (result : 
 theorem lazy_reference_two_guesses (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
-    (dummy : OtsReferenceWords) (adversary : Adversary) (result : Completed × State Coordinate Digest PUnit)
+    (dummy : OtsReferenceWords) (htop : TopFromGraph key labels) (adversary : Adversary)
+    (result : Completed × State Coordinate Digest PUnit)
     (hr : lazyRun
       (SecretGuessObservation.environment (referenceAnswers key.parameter key.root key.otsSecret labels inputs hencoding auxiliary dummy))
       (completedRun key.parameter key.root labels adversary) (initialState PUnit.unit) result ≠ 0)
@@ -60,7 +61,7 @@ theorem lazy_reference_two_guesses (key : SecretKey) (inputs : Finset HashInput)
     (hevent : completedTwoGuesses key (programmedHash key.parameter key.otsSecret key.ftsSecret labels
       (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result.1) :
     2 ≤ result.2.guesses.card := by
-  have tracking := lazy_reference_completedRun_tracking key inputs hencoding labels auxiliary hauxiliary dummy adversary
+  have tracking := lazy_reference_completedRun_tracking key inputs hencoding labels auxiliary hauxiliary dummy htop adversary
     (initialState PUnit.unit) result hr hsecrets
   exact tracking.two_guesses rfl _ hevent
 
@@ -69,7 +70,7 @@ theorem initial_reference_two_witnesses (parameter : PublicParameter) (root : Di
     (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
     (dummy : OtsReferenceWords) (adversary : Adversary) :
-    Pr[fun result => completedTwoGuesses ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm result.1⟩
+    Pr[fun result => completedTwoGuesses ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm result.1, graphTop labels⟩
       (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm result.1) labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result.2 |
       complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
@@ -80,16 +81,16 @@ theorem initial_reference_two_witnesses (parameter : PublicParameter) (root : Di
         (SecretGuessObservation.environment (referenceAnswers parameter root otsSecret labels inputs hencoding auxiliary dummy))
         (completedRun parameter root labels adversary) (initialState PUnit.unit)] := by
   apply initialEvent_le _ _ (fun secrets result => completedTwoGuesses
-    ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+    ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩
     (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm secrets) labels
       (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result)
     (fun result => 2 ≤ result.2.guesses.card)
   intro result hr secrets hs hevent
-  refine lazy_reference_two_guesses ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
-    inputs hencoding labels auxiliary hauxiliary dummy adversary result ?_ ?_ ?_
+  refine lazy_reference_two_guesses ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩
+    inputs hencoding labels auxiliary hauxiliary dummy (fun _ _ _ _ => rfl) adversary result ?_ ?_ ?_
   · exact hr
   · have htable : FtsGuessSigning.secretTable
-        (⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ : SecretKey).ftsSecret = secrets :=
+        (⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ : SecretKey).ftsSecret = secrets :=
       Equiv.apply_symm_apply FtsGuessSigning.secretTable secrets
     exact (congrArg (fun table => complete result.2.allowed table ≠ 0) htable).mpr hs
   · exact hevent
@@ -103,7 +104,7 @@ theorem initial_original_two_witnesses (dummy : OtsReferenceWords) (adversary : 
     let hencoding := canonicalEncodingInputs_subset_gameInputs adversary parameter
     let residual := finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs hencoding labels auxiliary.rows auxiliary.seed)
     Pr[fun result => completedTwoGuesses
-      ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm result.1⟩
+      ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm result.1, graphTop labels⟩
       (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm result.1) labels residual) result.2 |
       complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
         (fun value => (secrets, value)) <$> 𝒮[simulateQ

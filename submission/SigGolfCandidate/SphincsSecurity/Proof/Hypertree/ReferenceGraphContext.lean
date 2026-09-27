@@ -103,7 +103,7 @@ noncomputable def referenceGraphContextGame {Result : Type} (observer : Frontier
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let result ← referenceGraphContextRest observer key inputs (hencoding parameter) dummy adversary
   pure (key, result)
 

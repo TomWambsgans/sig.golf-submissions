@@ -68,7 +68,7 @@ theorem referenceResidualGame_auxiliary_support (inputs : Finset HashInput)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (auxiliary : ReferenceAuxiliary inputs)
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support) (labels : CanonicalGraphLabels)
     (result : Bool × SigningBoundaryTrace)
-    (hr : 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+    (hr : 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       (programmedHash parameter otsSecret ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs (hencoding parameter) labels auxiliary.rows auxiliary.seed)))
       labels auxiliary.selections dummy adversary] result ≠ 0) :
@@ -102,13 +102,13 @@ theorem original_completedWork_le (dummy : OtsReferenceWords) (adversary : Adver
     (hr : 𝒮[simulateQ (fixedAnswers (originalAnswers dummy adversary parameter otsSecret labels auxiliary)
       (FtsGuessSigning.secretTable ftsSecret)) (completedRun parameter (canonicalGraphRoot labels) labels adversary)] result ≠ 0) :
     keygenHashCost + completedWork result ≤ q := by
-  have hv : 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+  have hv : 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       (programmedHash parameter otsSecret ftsSecret labels
         (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
           (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
             (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary.rows auxiliary.seed)))
       labels auxiliary.selections dummy adversary] (verdict result) ≠ 0 := by
-    rw [← reference_completed_verdict ⟨parameter, 0, otsSecret, ftsSecret⟩ (canonicalGraphGameInputs adversary)
+    rw [← reference_completed_verdict ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (canonicalGraphGameInputs adversary)
       (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary hauxiliary dummy adversary, evalSPMF_map]
     rw [map_eq_bind_pure_comp, RetainedObservation.bind_nonzero]
     exact ⟨result, hr, by simp only [Function.comp_def, ne_eq, SPMF.pure_apply_eq_zero_iff, not_not]⟩

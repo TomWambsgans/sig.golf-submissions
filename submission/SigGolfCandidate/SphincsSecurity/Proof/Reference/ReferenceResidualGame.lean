@@ -14,7 +14,7 @@ noncomputable def referenceResidualGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let sampled ← 𝒮[graphReferenceSample parameter inputs (hencoding parameter)]
   let f := programmedHash parameter otsSecret ftsSecret sampled.2.1 (finiteHashAnswer ∅ inputs sampled.2.2)
   let result ← 𝒮[referenceFamilyFrontierRest key f sampled.2.1 sampled.1 dummy adversary]
@@ -33,8 +33,8 @@ theorem referenceResidualGame_erased (inputs : Finset HashInput)
   funext otsSecret
   apply congrArg (𝒮[sampleFtsSecrets] >>= ·)
   funext ftsSecret
-  have h := graphReferenceSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter)
-    (fun selections labels residual => referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+  have h := graphReferenceSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter)
+    (fun selections labels residual => referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       (programmedHash parameter otsSecret ftsSecret labels (finiteHashAnswer ∅ inputs residual)) labels selections dummy adversary)
   simpa only [referenceFamilyFrontierRest_selected, evalSPMF_bind] using h
 

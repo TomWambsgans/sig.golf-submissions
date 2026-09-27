@@ -1,5 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.MemoGame
-import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.GameComparison
+import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.GameExpansion
 
 open OracleComp OracleSpec
 
@@ -35,22 +35,5 @@ theorem prob_tableGameAfterSecrets_le_memo (adversary : Adversary) (outputs : Se
   intro result _
   rw [← runSigning_sourceGame, ← runSigning_sourceGame]
   exact prob_sourceGame_le_memo _ _ _ _
-
-theorem tableBudget_memo (adversary : Adversary) (q : Nat) (hbound : HasTableBudget adversary q) :
-    HasTableBudget (memoAdversary adversary) q := by
-  intro outputs randomizers
-  have h := hbound outputs randomizers
-  unfold tableGameAfterSecrets at h ⊢
-  apply hashQueryBound_bind_replace _ _ _ ∅ q h
-  intro root cache q hrest
-  rw [← runSigning_sourceGame] at hrest ⊢
-  exact hashQueryBound_sourceGame_memo _ _ _ cache q hrest
-
-theorem prob_independentTableGame_le_memo (adversary : Adversary) :
-    Pr[= true | independentTableGame adversary] ≤ Pr[= true | independentTableGame (memoAdversary adversary)] := by
-  unfold independentTableGame
-  apply probOutput_bind_mono
-  intro material _
-  exact prob_tableGameAfterSecrets_le_memo _ _ _ ∅
 
 end SphincsSecurity.Seeded

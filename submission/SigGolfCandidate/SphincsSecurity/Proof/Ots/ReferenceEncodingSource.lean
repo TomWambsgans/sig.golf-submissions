@@ -13,7 +13,7 @@ noncomputable def referenceEncodingGame {Result : Type} (observer : FrontierObse
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let reference ← 𝒮[referenceFamilyOracleSample key inputs (hencoding parameter)]
   let result ← 𝒮[referenceEncodingRest observer key inputs (hencoding parameter)
     (fun cell => reference.2 cell.val) reference.1
@@ -35,11 +35,11 @@ theorem referenceEncodingGame_original {Result : Type} (observer : FrontierObser
   funext ftsSecret
   apply evalSPMF_bind_congr (m := SPMF)
   intro reference hreference
-  have hselected := referenceFamilyOracleSample_selections ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+  have hselected := referenceFamilyOracleSample_selections ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
     (hencoding parameter) (hgraph parameter) reference
     (by simpa only [PMF.evalSPMF_eq, SPMF.support_eq_support, SPMF.support_liftM] using hreference)
   dsimp only
-  rw [referenceEncodingRest_table observer ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+  rw [referenceEncodingRest_table observer ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
     (hencoding parameter) (hgraph parameter) reference.1 reference.2 hselected.symm dummy adversary]
 
 private theorem join_comp {Index Cell Answer : Type} (embed : Index → Cell) (hinj : Function.Injective embed)
@@ -79,7 +79,7 @@ theorem referenceEncodingGame_conditioned {Result : Type} (observer : FrontierOb
       let parameter ← 𝒮[sampleParameter]
       let otsSecret ← 𝒮[sampleOtsSecrets]
       let ftsSecret ← 𝒮[sampleFtsSecrets]
-      let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+      let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       let selections ← 𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit]
       let outside ← 𝒮[PMF.uniformOfFintype (NonencodingRows parameter inputs (hencoding parameter))]
       let rows ← 𝒮[FirstSuccessFamily.afterSelect decodeEncodingOutput encodingAttemptLimit selections]
@@ -107,10 +107,10 @@ theorem referenceEncodingGame_conditioned {Result : Type} (observer : FrontierOb
   apply congrArg (𝒮[FirstSuccessFamily.afterSelect decodeEncodingOutput encodingAttemptLimit selections] >>= ·)
   funext rows
   apply congrArg (𝒮[PMF.uniformOfFintype (UniformTableSplit.Outside
-    (referenceFamilyCell parameter (outsideGraphMessage ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+    (referenceFamilyCell parameter (outsideGraphMessage ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
       (hencoding parameter) outside)) → HashOutput)] >>= ·)
   funext remaining
-  rw [referenceEncodingRest_join observer ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+  rw [referenceEncodingRest_join observer ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
     (hencoding parameter) outside selections _ dummy adversary]
 
 end SphincsSecurity.Concrete

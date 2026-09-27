@@ -57,7 +57,7 @@ theorem referenceResidualGame_eq_auxiliary (inputs : Finset HashInput)
       let labels ← 𝒮[PMF.uniformOfFintype CanonicalGraphLabels]
       let f := programmedHash parameter otsSecret ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs (hencoding parameter) labels auxiliary.rows auxiliary.seed))
-      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩ f labels auxiliary.selections dummy adversary]
+      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f labels auxiliary.selections dummy adversary]
       pure (auxiliary.selections, result)) := by
   simp only [referenceResidualGame, graphReferenceSample_eq_auxiliary,
     ← PMF.monad_bind_eq_bind, ← PMF.monad_map_eq_map, evalSPMF_bind, evalSPMF_map, bind_assoc, bind_map_left]

@@ -74,7 +74,8 @@ noncomputable def initialExceptionHistoryPrior (parameter : PublicParameter) (ad
     (budget : Nat) : SPMF (Option (Forgery × Bool) × ExceptionHistoryState (gameInputs adversary)) := do
   let words := referenceFamilyWords encoding.selections dummy
   let labels ← UniformTableCompletion.complete (initialAllowed words exposed)
-  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), coordinateOtsSecrets labels, coordinateFtsSecrets labels,
+    graphTop (coordinateGraphLabels labels high)⟩
   initialExceptionHistorySource key adversary encoding dummy exposed high budget
 
 theorem initialExceptionHistoryPrior_erasure (parameter : PublicParameter) (adversary : Adversary)

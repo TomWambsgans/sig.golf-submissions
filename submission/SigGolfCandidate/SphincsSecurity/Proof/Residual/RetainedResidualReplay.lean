@@ -22,7 +22,7 @@ theorem Compatible.honest_public_plan {inputs : Finset HashInput} {context : Con
   have hfrontier := knownFrontier_eq context.key.otsSecret context.key.ftsSecret context.graph context.words
     memory.routing.disclosed memory.routing.known hcompatible.agrees
   rw [← context.graph_eq, canonicalGraphLabels_frontier context.key.parameter context.key.otsSecret context.key.ftsSecret
-    context.oracle context.words context.key.root] at hfrontier
+    context.oracle context.words context.key.root context.key.top] at hfrontier
   let parts : Layer → LayerPart := fun lay =>
     (signature.counter lay, signature.chainValue lay,
       knownTreePath memory.routing.known lay (treeIndexAt index lay) (leafIndexAt index lay))
@@ -81,7 +81,8 @@ theorem Compatible.honest_signAfterDigest {inputs : Finset HashInput} {context :
   have hselection : referenceTableSelection context.key context.oracle = context.auxiliary.selections :=
     referenceTableSelection_prefix context.key inputs context.encoding context.graph context.auxiliary context.auxiliary_valid
   rw [← boundaryEval_fst context.key.parameter context.oracle,
-    boundaryEval_signAfterDigest_public context.key context.oracle memory.routing.disclosed memory.routing.known context.dummy hagrees,
+    boundaryEval_signAfterDigest_public context.key context.oracle memory.routing.disclosed memory.routing.known
+      context.keyTopHonest context.dummy hagrees,
     ← hwords, hselection]
   exact hcompatible.honest_public_plan hdummy index leaves signature hfull
 

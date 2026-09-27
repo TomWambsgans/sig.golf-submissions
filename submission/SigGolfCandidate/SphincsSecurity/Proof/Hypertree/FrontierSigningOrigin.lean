@@ -41,12 +41,12 @@ theorem SignatureOrigin.mono {key : SecretKey} {f : QueryImpl HashSpec Id} {mess
   ⟨htrace h.1, h.2⟩
 
 theorem signing_origin (key : SecretKey) (f : QueryImpl HashSpec Id) (words : OtsReferenceWords) (frontier : OtsFrontierValues)
-    (hfrontier : IsSigningFrontier key f words frontier)
+    (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (message : Message) (signature : Signature) (trace : SigningBoundaryTrace)
     (hr : (some signature, trace) ∈ support (frontierSigningRun key.parameter key.root f key.ftsSecret words frontier message)) :
     SignatureOrigin key f message signature trace := by
-  rw [frontierSigningRun, ← fixedBoundaryRun_signWithView_frontier key f words frontier hfrontier hwords, support_map] at hr
+  rw [frontierSigningRun, ← fixedBoundaryRun_signWithView_frontier key f words frontier hfrontier htop hwords, support_map] at hr
   obtain ⟨⟨⟨response, view⟩, recorded⟩, hr, heq⟩ := hr
   have hresponse : response = some signature := congrArg (fun result => result.1) heq
   have htrace : recorded = trace := congrArg (fun result => result.2) heq
@@ -105,7 +105,7 @@ private theorem logged_run_origin {Result : Type} (key : SecretKey) (f : QueryIm
         exact Or.inr hmem
 
 theorem adversaryRun_origin {Result : Type} (key : SecretKey) (f : QueryImpl HashSpec Id)
-    (words : OtsReferenceWords) (frontier : OtsFrontierValues) (hfrontier : IsSigningFrontier key f words frontier)
+    (words : OtsReferenceWords) (frontier : OtsFrontierValues) (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (computation : OracleComp (OracleWorld + SigningSpec) Result) (result : (Result × QueryLog SigningSpec) × SigningBoundaryTrace)
     (hr : result ∈ support (frontierAdversaryRun key.parameter key.root f key.ftsSecret words frontier computation))
@@ -116,13 +116,13 @@ theorem adversaryRun_origin {Result : Type} (key : SecretKey) (f : QueryImpl Has
         ((frontierAdversaryImpl key.parameter key.root f key.ftsSecret words frontier (.inr request)).run)) :
       SignatureOrigin key f request signed trace := by
     rw [frontierAdversaryImpl, WriterT.run_mk] at hs
-    exact signing_origin key f words frontier hfrontier hwords request signed trace hs
+    exact signing_origin key f words frontier hfrontier htop hwords request signed trace hs
   rw [frontierAdversaryRun] at hr
   exact logged_run_origin key f (frontierAdversaryImpl key.parameter key.root f key.ftsSecret words frontier)
     horigin computation result hr message signature hentry
 
 theorem fixedTrace_origin {Result : Type} (key : SecretKey) (f : QueryImpl HashSpec Id)
-    (words : OtsReferenceWords) (frontier : OtsFrontierValues) (hfrontier : IsSigningFrontier key f words frontier)
+    (words : OtsReferenceWords) (frontier : OtsFrontierValues) (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (computation : OracleComp (OracleWorld + SigningSpec) Result)
     (result : ((Result × QueryLog SigningSpec) × SigningBoundaryTrace) × Trace)
@@ -135,6 +135,6 @@ theorem fixedTrace_origin {Result : Type} (key : SecretKey) (f : QueryImpl HashS
     rw [support_map]
     exact ⟨result, hr, rfl⟩
   rw [fixedTrace_forget, CausalFrontierProgram.fixed_adversaryRun] at hbase
-  exact adversaryRun_origin key f words frontier hfrontier hwords computation result.1 hbase message signature hentry
+  exact adversaryRun_origin key f words frontier hfrontier htop hwords computation result.1 hbase message signature hentry
 
 end SphincsSecurity.Concrete.ReferenceSigningWitness

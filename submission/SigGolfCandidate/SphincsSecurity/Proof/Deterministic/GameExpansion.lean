@@ -1,5 +1,17 @@
-import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.TableSigner
+import SigGolfCandidate.SphincsSecurity.Proof.Seeded.GameErasure
 import SigGolfCandidate.SphincsSecurity.Proof.Seeded.GameExpansion
+
+/-!
+# The experiment's games after the seed
+
+`cachedGameRest` is everything the experiment does after key generation, with the signer as a
+parameter: the adversary gets the public key and the cache, signing requests carry a cache, and the
+final forgery is checked against the request log. With the seeded key generation and signer it is the
+experiment after the seed (`deterministicGameAfterSeed`); with every derivation read from tables it is
+`cachedTableGameAfterSecrets`, which the seeded game erases to once the tables are in the cache.
+`tableGameAfterSecrets` is the proof's table game for message-only adversaries, whose signer reads the
+top layer's path from the key's node table.
+-/
 
 open OracleComp OracleSpec
 
@@ -8,36 +20,61 @@ namespace SphincsSecurity.Seeded
 set_option backward.isDefEq.respectTransparency false
 set_option maxRecDepth 4096
 
-/-- The deterministic seeded game once the seed is sampled: build the top tree from the seed, then play. -/
-noncomputable def deterministicGameAfterSeed (adversary : Adversary) (seed : MasterSeed) :
-    OracleComp OracleWorld Bool := do
-  let root ← liftM (keygenTree (otsSecret 0 seed topLayer Concrete.rootTree))
-  gameRest scheme adversary ⟨root, 0⟩ ⟨seed, 0, root⟩
+open Concrete
 
-/-- The game from secret and randomizer tables: build the top tree from the table, then play
-against the table signer. -/
+/-- Everything the experiment does after key generation, with the signer as a parameter. -/
+noncomputable def cachedGameRest (signer : TopCache → Message → OracleComp HashSpec (Option Signature))
+    (adversary : Security.Adversary) (pk : PublicKey) (cache : TopCache) : OracleComp OracleWorld Bool := do
+  let ((forgery, log) : Forgery × QueryLog RequestSpec) ←
+    (simulateQ (QueryImpl.ofLift OracleWorld (WriterT (QueryLog RequestSpec) (OracleComp OracleWorld)) +
+      QueryImpl.withLogging fun request : SigningRequest =>
+        (liftM (signer request.cache request.message) : OracleComp OracleWorld (Option Signature)))
+      (adversary.main pk cache)).run
+  let verified ← liftM (Concrete.verify pk forgery.message forgery.signature : OracleComp HashSpec Bool)
+  return decide (RequestTranscript.Valid log ∧ ¬RequestTranscript.Contains log forgery) && verified
+
+/-- The experiment once the seed is sampled: seeded key generation, then play against the seeded signer. -/
+noncomputable def deterministicGameAfterSeed (adversary : Security.Adversary) (seed : MasterSeed) :
+    OracleComp OracleWorld Bool :=
+  (liftM (keygenCachedWith (otsSecret 0 seed topLayer rootTree) (maskSecret 0 seed)
+      (fun region => oracleHash (macHashInput 0 seed region))) : OracleComp OracleWorld _) >>= fun result =>
+    cachedGameRest (fun cache message => sign ⟨seed, 0, result.1 (layerHeight topLayer) 0⟩ cache message)
+      adversary ⟨result.1 (layerHeight topLayer) 0, 0⟩ result.2
+
+/-- The experiment from derivation tables: key generation and the signer read every derivation (one-time
+and few-time secrets, masks, MAC answers, randomizers) from the tables. -/
+noncomputable def cachedTableGameAfterSecrets (adversary : Security.Adversary) (outputs : SecretOutputs)
+    (randomizers : RandomizerOutputs) (masks : MaskOutputs) (macs : MacOutputs) : OracleComp OracleWorld Bool :=
+  (liftM (keygenCachedWith (fun leaf chainIdx => pure (tableOts outputs topLayer rootTree leaf chainIdx))
+      (fun level nodeIdx => pure (maskValue masks level nodeIdx)) (fun region => pure (macs region))) :
+      OracleComp OracleWorld _) >>= fun result =>
+    cachedGameRest (cachedTableSign randomizers masks macs (tableKey 0 result.1 outputs))
+      adversary ⟨result.1 (layerHeight topLayer) 0, 0⟩ result.2
+
+/-- The proof's table game: build the top tree from the table, then play a message-only adversary against
+the table signer. -/
 noncomputable def tableGameAfterSecrets (adversary : Adversary) (outputs : SecretOutputs)
     (randomizers : RandomizerOutputs) : OracleComp OracleWorld Bool := do
-  let root ← liftM
-    (Concrete.keygenRoot 0 (tableOts outputs topLayer Concrete.rootTree) : OracleComp HashSpec Digest)
-  gameRest (tableScheme randomizers) adversary ⟨root, 0⟩ (tableKey 0 root outputs)
+  let top ← liftM
+    (Concrete.keygenTable 0 (tableOts outputs topLayer Concrete.rootTree) : OracleComp HashSpec (Nat → Nat → Digest))
+  gameRest (tableScheme randomizers) adversary ⟨top (layerHeight topLayer) 0, 0⟩ (tableKey 0 top outputs)
 
-theorem gameCore_deterministic_eq (adversary : Adversary) :
-    gameCore scheme adversary =
+theorem gameCore_deterministic_eq (adversary : Security.Adversary) :
+    Security.gameCore adversary =
       ((liftM sampleMasterSeed : OracleComp OracleWorld _) >>= deterministicGameAfterSeed adversary) := by
-  have hkeygen : scheme.keygen = keygen := rfl
-  unfold deterministicGameAfterSeed keygenTree
-  simp only [gameCore, hkeygen, keygen, keygenFromSeed, bind_assoc, liftM_bind, liftM_pure, pure_bind]
+  unfold Security.gameCore
+  refine bind_congr fun seed => ?_
+  unfold deterministicGameAfterSeed
+  rw [keygenFromSeed_eq, liftM_map, bind_map_left]
+  refine bind_congr fun result => ?_
+  rfl
 
-theorem erases_deterministicGameRest (known : QueryCache HashSpec) (parameter : PublicParameter)
-    (seed : MasterSeed) (root : Digest) (outputs : SecretOutputs) (randomizers : RandomizerOutputs)
-    (hsecrets : ∀ position, known (secretInputs parameter seed position) = some (outputs position))
-    (hrandomizers : ∀ position, known (randomizerInputs parameter seed position) = some (randomizers position))
-    (adversary : Adversary) :
-    Erases (worldKnown known)
-      (gameRest scheme adversary ⟨root, parameter⟩ ⟨seed, parameter, root⟩)
-      (gameRest (tableScheme randomizers) adversary ⟨root, parameter⟩ (tableKey parameter root outputs)) := by
-  unfold gameRest
+theorem erases_cachedGameRest (known : QueryCache HashSpec)
+    {left right : TopCache → Message → OracleComp HashSpec (Option Signature)}
+    (h : ∀ cache message, Erases known (left cache message) (right cache message))
+    (adversary : Security.Adversary) (pk : PublicKey) (cache : TopCache) :
+    Erases (worldKnown known) (cachedGameRest left adversary pk cache) (cachedGameRest right adversary pk cache) := by
+  unfold cachedGameRest
   apply Erases.bind _ _ _ (fun _ => Erases.refl (worldKnown known) _)
   apply Erases.simulateQ_writer
   intro input
@@ -46,66 +83,66 @@ theorem erases_deterministicGameRest (known : QueryCache HashSpec) (parameter : 
       simp only [QueryImpl.add_apply_inl]
       exact .refl _ _
   | inr request =>
-      simp only [QueryImpl.add_apply_inr, signingOracle, QueryImpl.run_withLogging_apply, bind_pure_comp]
-      exact (erases_deterministicSign known parameter seed root outputs randomizers
-        hsecrets hrandomizers request).lift_hash.map _
+      simp only [QueryImpl.add_apply_inr, QueryImpl.run_withLogging_apply, bind_pure_comp]
+      exact (h request.cache request.message).lift_hash.map _
 
-theorem erases_deterministicGameAfterSeed (known : QueryCache HashSpec)
-    (seed : MasterSeed) (outputs : SecretOutputs) (randomizers : RandomizerOutputs)
-    (hsecrets : ∀ position, known (secretInputs 0 seed position) = some (outputs position))
-    (hrandomizers : ∀ position, known (randomizerInputs 0 seed position) = some (randomizers position))
-    (adversary : Adversary) :
+section Erasure
+
+variable {known : QueryCache HashSpec} {seed : MasterSeed} {outputs : SecretOutputs}
+  {randomizers : RandomizerOutputs} {masks : MaskOutputs} {macs : MacOutputs}
+  (hsecrets : ∀ position, known (secretInputs 0 seed position) = some (outputs position))
+  (hrandomizers : ∀ position, known (randomizerInputs 0 seed position) = some (randomizers position))
+  (hmasks : ∀ position, known (maskInputs 0 seed position) = some (masks position))
+  (hmacs : ∀ region, known (macInputs 0 seed region) = some (macs region))
+
+include hsecrets hrandomizers hmasks hmacs
+
+theorem erases_deterministicGameRest (adversary : Security.Adversary) (top : Nat → Nat → Digest)
+    (cache : TopCache) :
+    Erases (worldKnown known)
+      (cachedGameRest (fun cache message => sign ⟨seed, 0, top (layerHeight topLayer) 0⟩ cache message)
+        adversary ⟨top (layerHeight topLayer) 0, 0⟩ cache)
+      (cachedGameRest (cachedTableSign randomizers masks macs (tableKey 0 top outputs))
+        adversary ⟨top (layerHeight topLayer) 0, 0⟩ cache) :=
+  erases_cachedGameRest known (fun cache message =>
+    erases_cachedSign known 0 seed top outputs randomizers masks macs hsecrets hrandomizers hmasks hmacs
+      cache message) adversary _ cache
+
+theorem erases_deterministicGameAfterSeed (adversary : Security.Adversary) :
     Erases (worldKnown known) (deterministicGameAfterSeed adversary seed)
-      (tableGameAfterSecrets adversary outputs randomizers) := by
-  unfold deterministicGameAfterSeed tableGameAfterSecrets
-  exact Erases.keygen_bind hsecrets fun root =>
-    erases_deterministicGameRest known 0 seed root outputs randomizers hsecrets hrandomizers adversary
+      (cachedTableGameAfterSecrets adversary outputs randomizers masks macs) := by
+  unfold deterministicGameAfterSeed cachedTableGameAfterSecrets
+  exact (erases_keygen hsecrets hmasks hmacs).lift_hash.bind _ _ fun result =>
+    erases_deterministicGameRest hsecrets hrandomizers hmasks hmacs adversary result.1 result.2
 
-attribute [local irreducible] deterministicGameAfterSeed tableGameAfterSecrets signingDerivationCache
+/-- The same, after key generation's first query (the derivation of the top tree's first secret) has
+been answered with the table's value. -/
+theorem erases_deterministicGameAfterSeed_first (adversary : Security.Adversary) :
+    Erases (worldKnown known)
+      ((liftM (keygenCachedWith (withFirst (otsSecret 0 seed topLayer rootTree)
+          (truncateHash (outputs firstSecretPosition))) (maskSecret 0 seed)
+          (fun region => oracleHash (macHashInput 0 seed region))) : OracleComp OracleWorld _) >>= fun result =>
+        cachedGameRest (fun cache message => sign ⟨seed, 0, result.1 (layerHeight topLayer) 0⟩ cache message)
+          adversary ⟨result.1 (layerHeight topLayer) 0, 0⟩ result.2)
+      (cachedTableGameAfterSecrets adversary outputs randomizers masks macs) := by
+  unfold cachedTableGameAfterSecrets
+  exact (erases_keygen_first hsecrets hmasks hmacs).lift_hash.bind _ _ fun result =>
+    erases_deterministicGameRest hsecrets hrandomizers hmasks hmacs adversary result.1 result.2
 
-theorem evalDist_deterministicGameAfterSeed_prepared (adversary : Adversary) (seed : MasterSeed) :
-    𝒮[(simulateQ romImpl (deterministicGameAfterSeed adversary seed)).run' ∅] =
-      𝒮[do
-        let outputs ← sampleSecretOutputs
-        let randomizers ← sampleRandomizerOutputs
-        (simulateQ romImpl (tableGameAfterSecrets adversary outputs randomizers)).run'
-          (signingDerivationCache seed outputs randomizers)] := by
-  rw [evalDist_presample_computation _
-    (liftM (prepareSecrets seed) : OracleComp OracleWorld SecretOutputs)]
-  rw [show simulateQ romImpl (liftM (prepareSecrets seed) : OracleComp OracleWorld SecretOutputs) =
-      simulateQ randomOracle (prepareSecrets seed)
-      from QueryImpl.simulateQ_add_liftM_right _ _ _,
-    evalSPMF_bind, evalDist_prepareSecrets, ← evalSPMF_bind, bind_map_left]
-  apply evalSPMF_bind_congr'
-  intro outputs
-  rw [evalDist_presample_computation _
-    (liftM (prepareRandomizers seed) : OracleComp OracleWorld RandomizerOutputs)]
-  rw [show simulateQ romImpl (liftM (prepareRandomizers seed) : OracleComp OracleWorld RandomizerOutputs) =
-      simulateQ randomOracle (prepareRandomizers seed)
-      from QueryImpl.simulateQ_add_liftM_right _ _ _,
-    evalSPMF_bind, evalDist_prepareRandomizers, ← evalSPMF_bind, bind_map_left]
-  apply evalSPMF_bind_congr'
-  intro randomizers
-  rw [StateT.run'_eq, StateT.run'_eq, evalSPMF_map, evalSPMF_map]
-  exact congrArg _ ((erases_deterministicGameAfterSeed _ seed outputs randomizers
-    (signingDerivationCache_secret seed outputs randomizers)
-    (signingDerivationCache_randomizer seed outputs randomizers) adversary).evalDist_run _ le_rfl)
+end Erasure
 
-/-- The deterministic game with every derivation presampled into the cache. -/
-noncomputable def programmedDeterministicGame (adversary : Adversary) : ProbComp Bool := do
-  let seed ← sampleMasterSeed
-  let outputs ← sampleSecretOutputs
-  let randomizers ← sampleRandomizerOutputs
-  (simulateQ romImpl (tableGameAfterSecrets adversary outputs randomizers)).run'
-    (signingDerivationCache seed outputs randomizers)
-
-theorem evalDist_gameCore_deterministic_programmed (adversary : Adversary) :
-    𝒮[(simulateQ romImpl (gameCore scheme adversary)).run' ∅] =
-      𝒮[programmedDeterministicGame adversary] := by
-  rw [gameCore_deterministic_eq, run'_lift_sample_bind]
-  unfold programmedDeterministicGame
-  apply evalSPMF_bind_congr'
-  intro seed
-  exact evalDist_deterministicGameAfterSeed_prepared adversary seed
+/-- The first hash query after the seed is the derivation of the top tree's first secret. -/
+theorem deterministicAfterSeed_first_query (adversary : Security.Adversary) (seed : MasterSeed) :
+    deterministicGameAfterSeed adversary seed = (do
+      let output ← liftM (OracleWorld.query (.inr (secretInputs 0 seed firstSecretPosition)))
+      (liftM (keygenCachedWith (withFirst (otsSecret 0 seed topLayer rootTree) (truncateHash output))
+          (maskSecret 0 seed) (fun region => oracleHash (macHashInput 0 seed region))) :
+          OracleComp OracleWorld _) >>= fun result =>
+        cachedGameRest (fun cache message => sign ⟨seed, 0, result.1 (layerHeight topLayer) 0⟩ cache message)
+          adversary ⟨result.1 (layerHeight topLayer) 0, 0⟩ result.2) := by
+  unfold deterministicGameAfterSeed
+  rw [keygenCachedWith_first, otsSecret_first]
+  simp only [map_eq_bind_pure_comp, liftM_bind, bind_assoc, liftM_pure, pure_bind, Function.comp_apply]
+  rfl
 
 end SphincsSecurity.Seeded

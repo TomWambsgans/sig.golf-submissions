@@ -58,10 +58,10 @@ theorem frontierFromEndpoint_replaceSecret (segment : OtsPrefix) (outside : Quer
     simp only [frontierFromEndpoint, replaceChain, h, ↓reduceIte]
 
 theorem canonicalFrontierValues_answer (segment : OtsPrefix) (tables : Fin segment.digit.val → Digest → Digest)
-    (high : segment.Query → High) (outside : QueryImpl HashSpec Id) (root : Digest)
+    (high : segment.Query → High) (outside : QueryImpl HashSpec Id) (root : Digest) (top : Nat → Nat → Digest)
     (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (words : OtsReferenceWords) (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit) :
-    canonicalFrontierValues ⟨segment.parameter, root, secrets, ftsSecret⟩ (segment.answer tables high outside) words =
+    canonicalFrontierValues ⟨segment.parameter, root, secrets, ftsSecret, top⟩ (segment.answer tables high outside) words =
       segment.frontierFromEndpoint outside secrets words
         (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx)) := by
   funext lay tree leaf chainIdx
@@ -79,7 +79,7 @@ theorem canonicalFrontierValues_answer (segment : OtsPrefix) (tables : Fin segme
       exact congrArg truncateHash (segment.answer_other_chain tables high outside lay tree leaf chainIdx h step value)
 
 theorem graphMessage_answer (segment : OtsPrefix) (tables : Fin segment.digit.val → Digest → Digest)
-    (high : segment.Query → High) (outside : QueryImpl HashSpec Id) (root : Digest)
+    (high : segment.Query → High) (outside : QueryImpl HashSpec Id) (root : Digest) (top : Nat → Nat → Digest)
     (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (words : OtsReferenceWords) (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (position : EncodingPosition) :
@@ -88,11 +88,11 @@ theorem graphMessage_answer (segment : OtsPrefix) (tables : Fin segment.digit.va
         (segment.frontierFromEndpoint outside secrets words
           (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx)))
         (referenceIndex position.lay position.tree position.leafIdx) position.lay) := by
-  let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret⟩
+  let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret, top⟩
   have hfrontier : IsSigningFrontier key (segment.answer tables high outside) words
       (segment.frontierFromEndpoint outside secrets words
         (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx))) := by
-    rw [← segment.canonicalFrontierValues_answer tables high outside root secrets ftsSecret words hword]
+    rw [← segment.canonicalFrontierValues_answer tables high outside root top secrets ftsSecret words hword]
     exact isSigningFrontier_canonical key _ words
   rw [canonicalGraphMessage_eq key, ← eval_frontierLayerMessage key _ words _ hfrontier]
   exact eval_frontierLayerMessage_eq_of_agree segment.parameter words _ outside

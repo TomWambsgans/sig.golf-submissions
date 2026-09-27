@@ -66,7 +66,7 @@ theorem referenceGraphContextGame_match_le (inputs : Finset HashInput)
   apply weighted_bound
   intro ftsSecret
   simpa only [probEvent_pure, mul_ite, mul_one, mul_zero, probEvent_eq_tsum_ite] using
-    referenceGraphContextRest_match_le ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) (hgraph parameter) dummy adversary
+    referenceGraphContextRest_match_le ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) (hgraph parameter) dummy adversary
 
 theorem contactObserver_otherCalls (parameter : PublicParameter) (words : OtsReferenceWords) (frontier : OtsFrontierValues)
     (computation : OracleComp OracleWorld (Bool × SigningBoundaryTrace)) :
@@ -107,7 +107,7 @@ theorem referenceContactGame_otherCalls (inputs : Finset HashInput)
   apply congrArg (𝒮[referenceFamilyOracleSample _ inputs (hencoding parameter)] >>= ·)
   funext reference
   have h := congrArg (fun law => (fun result => (parameter, reference.1, result.1, result.2)) <$> 𝒮[law])
-    (referenceContactRest_otherCalls ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs reference.2)
+    (referenceContactRest_otherCalls ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs reference.2)
       (canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs reference.2)) reference.1 dummy adversary)
   simpa only [← bind_pure_comp, evalSPMF_bind, evalSPMF_pure, bind_assoc, pure_bind] using h
 

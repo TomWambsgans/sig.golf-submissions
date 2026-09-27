@@ -75,7 +75,7 @@ theorem referenceContactGame_contactMarker_count_le (inputs : Finset HashInput)
   intro selections
   apply weighted_bound
   intro outside
-  exact referenceEncodingLazyRest_contactMarker_le ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter)
+  exact referenceEncodingLazyRest_contactMarker_le ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter)
     outside selections dummy adversary
 
 end SphincsSecurity.Concrete

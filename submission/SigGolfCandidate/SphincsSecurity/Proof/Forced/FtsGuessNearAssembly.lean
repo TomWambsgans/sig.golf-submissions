@@ -59,7 +59,7 @@ theorem nearStart_valid (spent : Nat) (stopped : Bool) : Valid (nearStart spent 
 include hauxiliary in
 theorem near_alive_le (budget massBudget : Nat) (adversary : Adversary) (omitted : FtsTree) (spent : Nat) (stopped : Bool) (total : Nat)
     (hbudget : budget ≤ 2 ^ 127) (hpool : stopped = false → fixedProposalLength ≤ total)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) (nearStart spent stopped))
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) (nearStart spent stopped))
     (hmassBound : ∀ result : Completed × MonitoredState,
       monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget (Finset.univ.erase omitted)
         (proposalStop (fun _ _ _ _ => false)) adversary (nearStart spent stopped) result ≠ 0 →
@@ -150,7 +150,7 @@ theorem near_alive_le (budget massBudget : Nat) (adversary : Adversary) (omitted
 
 include hauxiliary in
 theorem near_stopped_le (budget : Nat) (adversary : Adversary) (required : Finset FtsTree) (total : Nat) (hbudget : budget ≤ 2 ^ 127)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) (nearStart keygenHashCost (decide (total < fixedProposalLength))))
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) (nearStart keygenHashCost (decide (total < fixedProposalLength))))
     (hwork : ∀ result : Completed × CachedState,
       nearLaw parameter root otsSecret labels inputs hencoding selections rows dummy slot adversary result ≠ 0 →
         keygenHashCost + completedWork result.1 ≤ budget) :
@@ -248,7 +248,7 @@ theorem near_stopped_le (budget : Nat) (adversary : Adversary) (required : Finse
 
 include hauxiliary in
 theorem near_omitting_total_le (budget massBudget : Nat) (adversary : Adversary) (omitted : FtsTree) (total : Nat) (hbudget : budget ≤ 2 ^ 127)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) (nearStart keygenHashCost (decide (total < fixedProposalLength))))
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) (nearStart keygenHashCost (decide (total < fixedProposalLength))))
     (hmass : ∀ (required : Finset FtsTree) (spent : Nat) (stopped : Bool) (result : Completed × MonitoredState),
       monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         (proposalStop (fun _ _ _ _ => false)) adversary (nearStart spent stopped) result ≠ 0 →
@@ -284,7 +284,7 @@ theorem near_omitting_total_le (budget massBudget : Nat) (adversary : Adversary)
 
 include hauxiliary in
 theorem near_omitting_le (budget massBudget : Nat) (adversary : Adversary) (omitted : FtsTree) (hbudget : budget ≤ 2 ^ 127)
-    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, initialState PUnit.unit), monitor))
     (hmass : ∀ (required : Finset FtsTree) (spent : Nat) (stopped : Bool) (result : Completed × MonitoredState),
       monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
@@ -314,7 +314,7 @@ theorem nearMixedBound_self (budget : Nat) : nearMixedBound budget budget = near
 
 include hauxiliary in
 theorem nearLaw_certificate_mixed_le (budget massBudget : Nat) (adversary : Adversary) (hbudget : budget ≤ 2 ^ 127)
-    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, initialState PUnit.unit), monitor))
     (hmass : ∀ (required : Finset FtsTree) (spent : Nat) (stopped : Bool) (result : Completed × MonitoredState),
       monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
@@ -347,7 +347,7 @@ theorem nearLaw_certificate_mixed_le (budget massBudget : Nat) (adversary : Adve
 
 include hauxiliary in
 theorem nearLaw_certificate_le (budget : Nat) (adversary : Adversary) (hbudget : budget ≤ 2 ^ 127)
-    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : ∀ monitor, CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, initialState PUnit.unit), monitor))
     (hwork : ∀ result : Completed × CachedState,
       nearLaw parameter root otsSecret labels inputs hencoding selections rows dummy slot adversary result ≠ 0 →
@@ -394,10 +394,10 @@ theorem cachedNearGame_le (dummy : OtsReferenceWords) (adversary : Adversary) (q
       (⟨selections, Function.uncurry rows, seed⟩ : ReferenceAuxiliary (canonicalGraphGameInputs adversary)) ∈
         (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support :=
     fun seed => referenceAuxiliary_mem_support _ selections hsel rows hrow seed
-  have hcovered : ∀ monitor, CoveredRun parameter (canonicalGraphRoot labels) otsSecret (canonicalGraphGameInputs adversary)
+  have hcovered : ∀ monitor, CoveredRun parameter (canonicalGraphRoot labels) otsSecret labels (canonicalGraphGameInputs adversary)
       (adversary.main ⟨canonicalGraphRoot labels, parameter⟩) ((∅, initialState PUnit.unit), monitor) :=
     fun _ secrets _ =>
-      coveredInputs_main_subset adversary ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ hparameter
+      coveredInputs_main_subset adversary ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ hparameter
   have hwork : ∀ result : Completed × CachedState,
       nearLaw parameter (canonicalGraphRoot labels) otsSecret labels (canonicalGraphGameInputs adversary)
         (canonicalEncodingInputs_subset_gameInputs adversary parameter) selections (Function.uncurry rows) dummy slot adversary result ≠ 0 →

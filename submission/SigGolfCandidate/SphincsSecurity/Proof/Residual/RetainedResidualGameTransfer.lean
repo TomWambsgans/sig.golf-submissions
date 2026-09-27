@@ -26,13 +26,11 @@ theorem Context.frontierGame_original {inputs : Finset HashInput} (context : Con
         (gameAfterSecrets adversary context.key.parameter context.key.otsSecret context.key.ftsSecret) := by
     rw [← hselection, referenceFamilyFrontierRest_selected, ← hgraph, graphFrontierGameRest_canonical]
   rw [hfrontier, gameAfterSecrets, fixedBoundaryRun_bind, context.keygen_record hroot, pure_bind, Functor.map_map]
-  have hkey : (⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩ : SecretKey) = context.key := by
-    cases context.key
-    rfl
   change Prod.fst <$> fixedBoundaryRun context.key.parameter context.oracle
-    (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩
-      ⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩) = _
-  rw [hkey, fixedBoundaryRun_forget]
+    (gameRest scheme adversary ⟨context.keygenTop (layerHeight topLayer) 0, context.key.parameter⟩
+      ⟨context.key.parameter, context.keygenTop (layerHeight topLayer) 0, context.key.otsSecret, context.key.ftsSecret,
+        context.keygenTop⟩) = _
+  rw [context.gameRest_keygen hroot adversary, fixedBoundaryRun_forget]
 
 theorem forgeAdvantage_eq_retainedPrefixPrior (dummy : OtsReferenceWords) (adversary : Adversary) :
     forgeAdvantage scheme adversary =
@@ -64,7 +62,7 @@ theorem observedInitialSource_success (parameter : PublicParameter) (inputs : Fi
     (hinputs : ∀ key : SecretKey, sourceInputs key
       (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩) ⊆ inputs) :
     Pr[fun result => result.1 = true |
-      referenceFamilyFrontierRest ⟨parameter, 0, coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+      referenceFamilyFrontierRest ⟨parameter, 0, coordinateOtsSecrets labels, coordinateFtsSecrets labels, fun _ _ => 0⟩
         (programmedHash parameter (coordinateOtsSecrets labels) (coordinateFtsSecrets labels) (coordinateGraphLabels labels high)
           (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs hcanonical (coordinateGraphLabels labels high)
             encoding.selections encoding.rows seed)))

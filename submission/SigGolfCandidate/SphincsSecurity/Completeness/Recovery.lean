@@ -29,7 +29,7 @@ namespace SphincsSecurity.Completeness
 
 open Concrete
 
--- the attempt limits are `2 ^ 20`; unfolding them unfolds the loops that many times
+-- the attempt limits are `2 ^ 20` and `2 ^ 22`; unfolding them unfolds the loops that many times
 attribute [local irreducible] digestAttemptLimit encodingAttemptLimit
 
 variable (f : QueryImpl HashSpec Id)
@@ -336,7 +336,7 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
     have hbottom : enterMessage f key index numLayers
         = evalWithAnswerFn f (ftsKey key.parameter index (key.ftsSecret index)
           : OracleComp HashSpec Digest) := by
-      rw [show numLayers = 6 + 1 from rfl, enterMessage, dif_pos (by decide),
+      rw [show numLayers = 5 + 1 from rfl, enterMessage, dif_pos (by decide),
         ← layerMessage_bottomLayer_eq]
       rfl
     have htop : layerRoot f key index topLayer = key.root := by
@@ -353,9 +353,12 @@ theorem verify_of_signatureValue (key : SecretKey) (message : Message) (randomne
 /-! ## The seeded signer
 
 The seeded signer derives its secrets from the seed; read under `f`, they are a table of secrets,
-and the key they form is a key of the specification. -/
+and the key they form is a key of the specification. It reads the top layer's path from the cache,
+unmasking each node with a freshly derived mask; for the cache key generation wrote, that is the top
+tree's node. -/
 
-/-- The specification's key the seeded key stands for under `f`. -/
+/-- The specification's key the seeded key stands for under `f`. Its node table is the top tree the
+derived secrets span (the signer reads the top path through the cache instead). -/
 def tableKey (secretKey : Seeded.SecretKey) : SecretKey where
   parameter := secretKey.parameter
   root := secretKey.root
@@ -365,11 +368,39 @@ def tableKey (secretKey : Seeded.SecretKey) : SecretKey where
   ftsSecret index tree leaf := evalWithAnswerFn f
     (Seeded.ftsSecret secretKey.parameter secretKey.seed index tree leaf
       : OracleComp HashSpec Digest)
+  top level nodeIdx := honestNode f secretKey.parameter topLayer rootTree
+    (fun leaf chainIdx => evalWithAnswerFn f
+      (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf chainIdx
+        : OracleComp HashSpec Digest)) level nodeIdx
 
 @[simp] theorem eval_oracleHash (input : HashInput) :
     evalWithAnswerFn f (oracleHash input : OracleComp HashSpec HashOutput) = f input := by
   simp only [oracleHash, HasQuery.query]
   exact simulateQ_spec_query f input
+
+/-- The cache holds the top tree the seeded key's secrets span, each node masked with its derived mask. -/
+def CacheHonest (secretKey : Seeded.SecretKey) (cache : TopCache) : Prop :=
+  ∀ (level : Nat) (hlevel : level < maxLayerHeight) (nodeIdx : Nat)
+    (hnodeIdx : nodeIdx < 2 ^ (maxLayerHeight - level)),
+    cache.region ⟨level, hlevel⟩ ⟨nodeIdx, hnodeIdx⟩
+      = honestNode f secretKey.parameter topLayer rootTree
+          (fun leaf chainIdx => evalWithAnswerFn f
+            (Seeded.otsSecret secretKey.parameter secretKey.seed topLayer rootTree leaf chainIdx
+              : OracleComp HashSpec Digest)) level nodeIdx
+        ^^^ evalWithAnswerFn f (Seeded.maskSecret secretKey.parameter secretKey.seed level nodeIdx
+          : OracleComp HashSpec Digest)
+
+/-- Reading an honest cache unmasks to the top tree: the mask derivation returns the mask the node
+was stored under. -/
+theorem cachedTopNode_agrees (secretKey : Seeded.SecretKey) (cache : TopCache)
+    (hcache : CacheHonest f secretKey cache) :
+    TopAgrees f (tableKey f secretKey) (Seeded.cachedTopNode secretKey.parameter secretKey.seed cache) := by
+  intro level hlevel nodeIdx hnodeIdx
+  have hnode : cache.node level nodeIdx = cache.region ⟨level, hlevel⟩ ⟨nodeIdx, hnodeIdx⟩ := by
+    simp only [TopCache.node, dif_pos hlevel, dif_pos hnodeIdx]
+  simp only [Seeded.cachedTopNode, evalWithAnswerFn_bind, evalWithAnswerFn_pure]
+  rw [hnode, hcache level hlevel nodeIdx hnodeIdx, BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
+  rfl
 
 /-- The digest the signer accepted. -/
 def digestValue (secretKey : Seeded.SecretKey) (message : Message) (randomness : Randomness) :
@@ -410,16 +441,17 @@ theorem signDigestLoop_spec (secretKey : Seeded.SecretKey) (message : Message) :
 -- Below, only the shape of `sign` matters; sealing the loop keeps the unfolding shallow.
 attribute [local irreducible] Seeded.signDigestLoop Concrete.signFrom
 
-/-- What a successful signing produced: an admissible digest, and the specification's signature
-after it for the key the seed derives. -/
-theorem sign_spec (secretKey : Seeded.SecretKey) (message : Message) {signature : Signature}
-    (h : evalWithAnswerFn f (Seeded.sign secretKey message
+/-- What a successful signing after the MAC check produced: an admissible digest, and the
+specification's signature after it for the key the seed derives. -/
+theorem signChecked_spec (secretKey : Seeded.SecretKey) (cache : TopCache)
+    (hcache : CacheHonest f secretKey cache) (message : Message) {signature : Signature}
+    (h : evalWithAnswerFn f (Seeded.signChecked secretKey cache message
         : OracleComp HashSpec (Option Signature)) = some signature) :
     Admissible (digestValue f secretKey message signature.randomness)
       ∧ signatureValue f (tableKey f secretKey) signature.randomness
           (digestIndex (digestValue f secretKey message signature.randomness))
           (digestLeaves (digestValue f secretKey message signature.randomness)) = some signature := by
-  rw [Seeded.sign, evalWithAnswerFn_bind] at h
+  rw [Seeded.signChecked, evalWithAnswerFn_bind] at h
   cases hloop : evalWithAnswerFn f (Seeded.signDigestLoop secretKey message digestAttemptLimit 0
       : OracleComp HashSpec (Option (Randomness × Index × (IndexGroup → FtsLeaf)))) with
   | none => rw [hloop] at h; simp at h
@@ -430,12 +462,14 @@ theorem sign_spec (secretKey : Seeded.SecretKey) (message : Message) {signature 
         signDigestLoop_spec f secretKey message digestAttemptLimit 0 hloop
       change evalWithAnswerFn f (signFrom secretKey.parameter index
         (Seeded.ftsSecret secretKey.parameter secretKey.seed index)
-        (Seeded.otsSecret secretKey.parameter secretKey.seed) randomness leaves
+        (Seeded.otsSecret secretKey.parameter secretKey.seed)
+        (Seeded.cachedTopNode secretKey.parameter secretKey.seed cache) randomness leaves
           : OracleComp HashSpec (Option Signature)) = some signature at h
       have hsf := eval_signFrom f (tableKey f secretKey) index
         (Seeded.ftsSecret secretKey.parameter secretKey.seed index)
         (Seeded.otsSecret secretKey.parameter secretKey.seed) (fun _ _ => rfl) (fun _ _ _ _ => rfl)
-        randomness leaves
+        (Seeded.cachedTopNode secretKey.parameter secretKey.seed cache)
+        (cachedTopNode_agrees f secretKey cache hcache) randomness leaves
       rw [show (tableKey f secretKey).parameter = secretKey.parameter from rfl] at hsf
       rw [hsf] at h
       have hrand : signature.randomness = randomness := by
@@ -451,50 +485,162 @@ theorem sign_spec (secretKey : Seeded.SecretKey) (message : Message) {signature 
       subst hindex hleaves
       exact ⟨hadmissible, h⟩
 
-/-- **Recovery.** A signature the signer produced is one the verifier accepts: `doc/sphincs` §sec:ver. -/
-theorem verify_of_sign (secretKey : Seeded.SecretKey) (message : Message) {signature : Signature}
+/-- A successful signing passed the MAC check and then signed. -/
+theorem signChecked_of_sign (secretKey : Seeded.SecretKey) (cache : TopCache) (message : Message)
+    {signature : Signature}
+    (h : evalWithAnswerFn f (Seeded.sign secretKey cache message
+        : OracleComp HashSpec (Option Signature)) = some signature) :
+    evalWithAnswerFn f (Seeded.signChecked secretKey cache message
+        : OracleComp HashSpec (Option Signature)) = some signature := by
+  rw [Seeded.sign, evalWithAnswerFn_bind, eval_oracleHash] at h
+  split_ifs at h with htag
+  · exact h
+  · simp at h
+
+/-- **Recovery.** A signature the signer produced with an honest cache is one the verifier accepts:
+`doc/sphincs` §sec:ver. -/
+theorem verify_of_sign (secretKey : Seeded.SecretKey) (cache : TopCache) (message : Message)
+    {signature : Signature}
     (hroot : secretKey.root = honestNode f secretKey.parameter topLayer rootTree
       (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret secretKey.parameter secretKey.seed
         topLayer rootTree leaf chainIdx : OracleComp HashSpec Digest)) (layerHeight topLayer) 0)
-    (h : evalWithAnswerFn f (Seeded.sign secretKey message
+    (hcache : CacheHonest f secretKey cache)
+    (h : evalWithAnswerFn f (Seeded.sign secretKey cache message
         : OracleComp HashSpec (Option Signature)) = some signature) :
     evalWithAnswerFn f (Concrete.verify ⟨secretKey.root, secretKey.parameter⟩ message signature
       : OracleComp HashSpec Bool) = true := by
-  obtain ⟨hadmissible, hsig⟩ := sign_spec f secretKey message h
+  obtain ⟨hadmissible, hsig⟩ :=
+    signChecked_spec f secretKey cache hcache message (signChecked_of_sign f secretKey cache message h)
   exact verify_of_signatureValue f (tableKey f secretKey) message signature.randomness hroot
     hadmissible hsig
 
 /-! ## Key generation -/
 
-/-- The root key generation builds from the seed under `f`. -/
-def keygenRootValue (seed : MasterSeed) : Digest :=
-  (evalWithAnswerFn f (buildLayerTree 0 topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree)
-    ⟨0, Nat.two_pow_pos _⟩ zeroEncoding : OracleComp HashSpec _)).2.2
+/-- The node table key generation builds from the seed under `f`. -/
+def keygenTableValue (seed : MasterSeed) : Nat → Nat → Digest :=
+  (evalWithAnswerFn f (buildLayerTable 0 topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree)
+    ⟨0, Nat.two_pow_pos _⟩ zeroEncoding : OracleComp HashSpec _)).2
 
-/-- `keygenRootValue`'s definition, proved at the level of the function: the generated equation
+/-- `keygenTableValue`'s definition, proved at the level of the function: the generated equation
 lemma would make the kernel unfold `Prod.snd` first and so run the whole tree build. -/
-theorem keygenRootValue_def (seed : MasterSeed) :
-    keygenRootValue f seed = (evalWithAnswerFn f (buildLayerTree 0 topLayer rootTree
+theorem keygenTableValue_def (seed : MasterSeed) :
+    keygenTableValue f seed = (evalWithAnswerFn f (buildLayerTable 0 topLayer rootTree
       (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
-        : OracleComp HashSpec _)).2.2 :=
-  congrFun (congrFun (show keygenRootValue = fun f seed => (evalWithAnswerFn f (buildLayerTree 0
+        : OracleComp HashSpec _)).2 :=
+  congrFun (congrFun (show keygenTableValue = fun f seed => (evalWithAnswerFn f (buildLayerTable 0
     topLayer rootTree (Seeded.otsSecret 0 seed topLayer rootTree) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
-      : OracleComp HashSpec _)).2.2 from rfl) f) seed
+      : OracleComp HashSpec _)).2 from rfl) f) seed
+
+/-- The masked region key generation writes under `f`. -/
+def keygenRegionValue (seed : MasterSeed) : TopRegion :=
+  evalWithAnswerFn f (Seeded.maskRegion 0 seed (keygenTableValue f seed) : OracleComp HashSpec TopRegion)
+
+theorem keygenRegionValue_def (seed : MasterSeed) :
+    keygenRegionValue f seed = evalWithAnswerFn f
+      (Seeded.maskRegion 0 seed (keygenTableValue f seed) : OracleComp HashSpec TopRegion) := rfl
+
+-- Both values stand for a whole tree build under `f`; unfolding them runs it.
+attribute [local irreducible] keygenTableValue keygenRegionValue
 
 theorem eval_keygenFromSeed (seed : MasterSeed) :
     evalWithAnswerFn f (Seeded.keygenFromSeed seed)
-      = (⟨keygenRootValue f seed, 0⟩, ⟨seed, 0, keygenRootValue f seed⟩) := by
-  rw [Seeded.keygenFromSeed, evalWithAnswerFn_bind, keygenRootValue_def]
+      = (⟨keygenTableValue f seed (layerHeight topLayer) 0, 0⟩,
+          ⟨f (macHashInput 0 seed (keygenRegionValue f seed)), keygenRegionValue f seed⟩,
+          ⟨seed, 0, keygenTableValue f seed (layerHeight topLayer) 0⟩) := by
+  rw [Seeded.keygenFromSeed, evalWithAnswerFn_bind, keygenRegionValue_def, keygenTableValue_def]
   split
-  next values path root h => rw [h]; rfl
+  next leaves table h =>
+    rw [h]
+    simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure, eval_oracleHash]
+
+/-- A built table carries the specification's nodes, for every tree and every secret derivation. -/
+theorem eval_buildLayerTable_node (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest) (leaf : LeafIndex) (digits : Encoding)
+    (level : Nat) (hlevel : level ≤ layerHeight lay) (nodeIdx : Nat)
+    (hnodeIdx : nodeIdx < 2 ^ (layerHeight lay - level)) :
+    (evalWithAnswerFn f (buildLayerTable parameter lay tree secret leaf digits)).2 level nodeIdx
+      = honestNode f parameter lay tree
+          (fun leaf chainIdx => evalWithAnswerFn f (secret leaf chainIdx)) level nodeIdx := by
+  have htable := eval_buildLayerTree_table f parameter lay tree secret leaf digits
+    level hlevel nodeIdx hnodeIdx
+  unfold buildLayerTable
+  simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
+  exact htable
+
+/-- Key generation's table is the specification's top tree for the derived secrets. -/
+theorem keygenTableValue_eq (seed : MasterSeed) (level : Nat) (hlevel : level ≤ layerHeight topLayer)
+    (nodeIdx : Nat) (hnodeIdx : nodeIdx < 2 ^ (layerHeight topLayer - level)) :
+    keygenTableValue f seed level nodeIdx = honestNode f 0 topLayer rootTree
+      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
+        : OracleComp HashSpec Digest)) level nodeIdx := by
+  rw [keygenTableValue_def]
+  exact eval_buildLayerTable_node f 0 topLayer rootTree _ _ _ level hlevel nodeIdx hnodeIdx
+
+theorem eval_maskRegion (parameter : PublicParameter) (seed : MasterSeed) (table : Nat → Nat → Digest)
+    (level : Fin maxLayerHeight) (nodeIdx : Fin (2 ^ (maxLayerHeight - level.val))) :
+    evalWithAnswerFn f (Seeded.maskRegion parameter seed table : OracleComp HashSpec TopRegion) level nodeIdx
+      = table level.val nodeIdx.val ^^^ evalWithAnswerFn f
+          (Seeded.maskSecret parameter seed level.val nodeIdx.val : OracleComp HashSpec Digest) := by
+  simp only [Seeded.maskRegion, evalWithAnswerFn_bind, evalWithAnswerFn_sequenceFin,
+    evalWithAnswerFn_pure, dif_pos nodeIdx.isLt]
+
+/-- Masking a table of the top tree gives an honest cache. -/
+theorem cacheHonest_of_table (seed : MasterSeed) (root : Digest) (tag : HashOutput)
+    (table : Nat → Nat → Digest)
+    (htable : ∀ level, level ≤ layerHeight topLayer → ∀ nodeIdx, nodeIdx < 2 ^ (layerHeight topLayer - level) →
+      table level nodeIdx = honestNode f 0 topLayer rootTree
+        (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
+          : OracleComp HashSpec Digest)) level nodeIdx) :
+    CacheHonest f ⟨seed, 0, root⟩
+      ⟨tag, evalWithAnswerFn f (Seeded.maskRegion 0 seed table : OracleComp HashSpec TopRegion)⟩ := by
+  intro level hlevel nodeIdx hnodeIdx
+  have hheight : layerHeight topLayer = maxLayerHeight := rfl
+  have hmask := eval_maskRegion f 0 seed table ⟨level, hlevel⟩ ⟨nodeIdx, hnodeIdx⟩
+  dsimp only at hmask
+  rw [htable level (by rw [hheight]; omega) nodeIdx (by rw [hheight]; exact hnodeIdx)] at hmask
+  -- reduce the key's projections first: comparing them unreduced unfolds the evaluations
+  dsimp only
+  exact hmask
+
+/-- The cache key generation writes is honest for the key it returns. -/
+theorem keygen_cacheHonest (seed : MasterSeed) (tag : HashOutput) :
+    CacheHonest f ⟨seed, 0, keygenTableValue f seed (layerHeight topLayer) 0⟩
+      ⟨tag, keygenRegionValue f seed⟩ := by
+  rw [keygenRegionValue_def]
+  exact cacheHonest_of_table f seed _ tag _ (keygenTableValue_eq f seed)
 
 /-- The root is the specification's root of the top tree for the derived secrets. -/
 theorem keygenRootValue_eq (seed : MasterSeed) :
-    keygenRootValue f seed = honestNode f 0 topLayer rootTree
+    keygenTableValue f seed (layerHeight topLayer) 0 = honestNode f 0 topLayer rootTree
       (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
         : OracleComp HashSpec Digest)) (layerHeight topLayer) 0 :=
-  (keygenRootValue_def f seed).trans
-    (eval_buildLayerTree f 0 topLayer rootTree _ ⟨0, Nat.two_pow_pos _⟩ (Nat.two_pow_pos _)
-      zeroEncoding).2.2
+  keygenTableValue_eq f seed _ le_rfl 0 (by simp)
+
+/-- Recovery for a key of key generation's shape, stated with its fields as variables. -/
+theorem verify_of_sign_seeded (seed : MasterSeed) (root : Digest) (cache : TopCache) (message : Message)
+    {signature : Signature}
+    (hroot : root = honestNode f 0 topLayer rootTree
+      (fun leaf chainIdx => evalWithAnswerFn f (Seeded.otsSecret 0 seed topLayer rootTree leaf chainIdx
+        : OracleComp HashSpec Digest)) (layerHeight topLayer) 0)
+    (hcache : CacheHonest f ⟨seed, 0, root⟩ cache)
+    (h : evalWithAnswerFn f (Seeded.sign ⟨seed, 0, root⟩ cache message
+        : OracleComp HashSpec (Option Signature)) = some signature) :
+    evalWithAnswerFn f (Concrete.verify ⟨root, 0⟩ message signature : OracleComp HashSpec Bool) = true :=
+  verify_of_sign f ⟨seed, 0, root⟩ cache message hroot hcache h
+
+/-- **Correctness for key generation.** What the signer produces with the key and cache key
+generation returned, the verifier accepts. -/
+theorem verify_of_keygen_sign (seed : MasterSeed) (message : Message) {publicKey : PublicKey}
+    {cache : TopCache} {secretKey : Seeded.SecretKey} {signature : Signature}
+    (hkeys : evalWithAnswerFn f (Seeded.keygenFromSeed seed) = (publicKey, cache, secretKey))
+    (hsign : evalWithAnswerFn f (Seeded.sign secretKey cache message
+      : OracleComp HashSpec (Option Signature)) = some signature) :
+    evalWithAnswerFn f (Concrete.verify publicKey message signature : OracleComp HashSpec Bool)
+      = true := by
+  rw [eval_keygenFromSeed] at hkeys
+  simp only [Prod.mk.injEq] at hkeys
+  obtain ⟨rfl, rfl, rfl⟩ := hkeys
+  exact verify_of_sign_seeded f seed _ _ message (keygenRootValue_eq f seed)
+    (keygen_cacheHonest f seed _) hsign
 
 end SphincsSecurity.Completeness

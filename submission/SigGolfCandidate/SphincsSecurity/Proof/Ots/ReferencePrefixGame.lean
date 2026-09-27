@@ -41,7 +41,7 @@ theorem referenceResidualGame_eq_prefixAuxiliary (inputs : Finset HashInput)
       let f := programmedHash parameter otsSecret ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs (hencoding parameter) labels
           auxiliary.selections auxiliary.rows auxiliary.seed))
-      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩ f labels auxiliary.selections dummy adversary]
+      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f labels auxiliary.selections dummy adversary]
       pure (auxiliary.selections, result)) := by
   simp only [referenceResidualGame, graphReferenceSample_eq_prefixAuxiliary,
     ← PMF.monad_bind_eq_bind, ← PMF.monad_map_eq_map, evalSPMF_bind, evalSPMF_map, bind_assoc, bind_map_left]
@@ -61,7 +61,7 @@ noncomputable def referencePrefixCoordinateGame (inputs : Finset HashInput)
   let f := programmedHash parameter ots fts graph
     (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs (hencoding parameter) graph
       auxiliary.selections auxiliary.rows auxiliary.seed))
-  let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts⟩ f graph auxiliary.selections dummy adversary]
+  let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts, fun _ _ => 0⟩ f graph auxiliary.selections dummy adversary]
   pure (auxiliary.selections, result)
 
 theorem referenceResidualGame_eq_prefixCoordinates (inputs : Finset HashInput)
@@ -82,7 +82,7 @@ theorem referenceResidualGame_eq_prefixCoordinates (inputs : Finset HashInput)
       let f := programmedHash parameter ots fts graph
         (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs (hencoding parameter) graph
           auxiliary.selections auxiliary.rows auxiliary.seed))
-      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts⟩ f graph auxiliary.selections dummy adversary]
+      let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts, fun _ _ => 0⟩ f graph auxiliary.selections dummy adversary]
       pure (auxiliary.selections, result))
 
 noncomputable def referencePrefixJointPriorGame (inputs : Finset HashInput)
@@ -101,7 +101,7 @@ noncomputable def referencePrefixJointPriorGame (inputs : Finset HashInput)
   let f := programmedHash parameter ots fts graph
     (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs (hencoding parameter) graph
       encoding.selections encoding.rows seed))
-  let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts⟩ f graph encoding.selections dummy adversary]
+  let result ← 𝒮[referenceFamilyFrontierRest ⟨parameter, 0, ots, fts, fun _ _ => 0⟩ f graph encoding.selections dummy adversary]
   pure (encoding.selections, result)
 
 theorem referencePrefixCoordinateGame_eq_jointPrior (inputs : Finset HashInput)

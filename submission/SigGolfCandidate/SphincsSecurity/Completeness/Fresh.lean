@@ -241,7 +241,48 @@ theorem Avoids.buildForest (parameter : PublicParameter) (index : Index)
     (Avoids.bind f target (Avoids.tweakableHash f target parameter _ _ (hroots _))
       (Avoids.pure' f target _))
 
-/-- Key generation builds the top tree from its derived secrets, and nothing else. -/
+/-- Building a layer's table avoids what building its tree avoids: the same queries. -/
+theorem Avoids.buildLayerTable (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainIndex → OracleComp HashSpec Digest) (leaf : LeafIndex)
+    (digits : Encoding)
+    (hsecret : ∀ leaf chainIdx, Avoids f target (secret leaf chainIdx))
+    (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
+      tweakableHashInput parameter (.chain lay tree leaf chainIdx step) payload ≠ target)
+    (hleaf : ∀ (leaf : LeafIndex) (payload : HashInput),
+      tweakableHashInput parameter (.leaf lay tree leaf) payload ≠ target)
+    (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
+      tweakableHashInput parameter (.node lay tree level nodeIdx) payload ≠ target) :
+    Avoids f target (Concrete.buildLayerTable parameter lay tree secret leaf digits) := by
+  rw [Concrete.buildLayerTable]
+  refine Avoids.bind f target (Avoids.sequenceFin f target _ fun _ =>
+    Avoids.buildLeaf f target parameter lay tree _ _ _ (hsecret _) (hchain _) (hleaf _)) ?_
+  exact Avoids.bind f target
+    (Avoids.buildLevels f target _ _ _
+      (fun _ _ _ _ => Avoids.tweakableHash f target parameter _ _ (hnode _ _ _)) _)
+    (Avoids.pure' f target _)
+
+theorem queriedInputs_oracleHash (input : HashInput) :
+    queriedInputs f (oracleHash input : OracleComp HashSpec HashOutput) = [input] := rfl
+
+theorem Avoids.oracleHash (input : HashInput) (hne : input ≠ target) :
+    Avoids f target (oracleHash input : OracleComp HashSpec HashOutput) := by
+  intro hmem
+  rw [queriedInputs_oracleHash, List.mem_singleton] at hmem
+  exact hne hmem.symm
+
+/-- Masking the top tree derives the masks and nothing else. -/
+theorem Avoids.maskRegion (parameter : PublicParameter) (seed : MasterSeed)
+    (table : Nat → Nat → Digest)
+    (hmask : ∀ level nodeIdx : Nat, keygenHashInput parameter (Seeded.maskDomain level nodeIdx) seed ≠ target) :
+    Avoids f target (Seeded.maskRegion parameter seed table : OracleComp HashSpec TopRegion) := by
+  rw [Seeded.maskRegion]
+  refine Avoids.bind f target (Avoids.sequenceFin f target _ fun level => ?_) (Avoids.pure' f target _)
+  refine Avoids.bind f target (Avoids.sequenceFin f target _ fun nodeIdx => ?_) (Avoids.pure' f target _)
+  exact Avoids.bind f target (Avoids.deriveKey f target parameter _ seed (hmask _ _))
+    (Avoids.pure' f target _)
+
+/-- Key generation builds the top tree from its derived secrets, masks it with derived masks, and
+authenticates the masked region with one MAC query, and nothing else. -/
 theorem Avoids.keygenFromSeed (seed : MasterSeed)
     (hchain : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex) (step : ChainStep) (payload : HashInput),
       tweakableHashInput 0 (.chain topLayer rootTree leaf chainIdx step) payload ≠ target)
@@ -249,18 +290,19 @@ theorem Avoids.keygenFromSeed (seed : MasterSeed)
       tweakableHashInput 0 (.leaf topLayer rootTree leaf) payload ≠ target)
     (hnode : ∀ (level nodeIdx : Nat) (payload : HashInput),
       tweakableHashInput 0 (.node topLayer rootTree level nodeIdx) payload ≠ target)
-    (hderive : ∀ (leaf : LeafIndex) (chainIdx : ChainIndex),
-      keygenHashInput 0 (.ots topLayer rootTree leaf chainIdx) seed ≠ target) :
+    (hderive : ∀ domain : KeygenDomain, keygenHashInput 0 domain seed ≠ target)
+    (hmac : ∀ region : TopRegion, macHashInput 0 seed region ≠ target) :
     Avoids f target (Seeded.keygenFromSeed seed) := by
   rw [Seeded.keygenFromSeed]
   refine Avoids.bind f target
-    (Avoids.buildLayerTree f target 0 topLayer rootTree _ _ _
-      (fun leaf chainIdx => Avoids.deriveKey f target 0 _ seed (hderive leaf chainIdx))
+    (Avoids.buildLayerTable f target 0 topLayer rootTree _ _ _
+      (fun leaf chainIdx => Avoids.deriveKey f target 0 _ seed (hderive _))
       hchain hleaf hnode) ?_
-  -- `split` keeps the tree build opaque; unifying `pure _` with the `match` on it makes the kernel
-  -- run the whole build
+  -- `split` keeps the tree build opaque; unifying with the `match` on it makes the kernel run the
+  -- whole build
   split
-  exact Avoids.pure' f target _
+  exact Avoids.bind f target (Avoids.maskRegion f target 0 seed _ fun _ _ => hderive _)
+    (Avoids.bind f target (Avoids.oracleHash f target _ (hmac _)) (Avoids.pure' f target _))
 
 /-! ## The signing side
 
@@ -456,7 +498,7 @@ theorem Avoids.buildLayerTree_of_structural (parameter : PublicParameter) (seed 
 
 /-! ## The invariant a signature keeps
 
-Signing runs its seven counter searches one after another. Before each, no encoding input of a
+Signing runs its six counter searches one after another. Before each, no encoding input of a
 layer still to come is cached: key generation and every earlier step avoid them. -/
 
 /-- A computation that avoids an input, run from a cache missing it, leaves it missing. -/

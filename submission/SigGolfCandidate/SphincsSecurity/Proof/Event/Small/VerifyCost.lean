@@ -164,8 +164,7 @@ theorem evenBound_verifyLayers (parameter : PublicParameter) (index : Index) (si
           | none => exact evenBound_pure _ _
           | some value =>
               refine evenBound_bind ((evenBound_treeFold _ _ _ _ _ _ _).mono ?_) fun root => ih root
-              simp only [layerHeight]
-              split <;> decide
+              exact layerHeight_le _
         · rw [Nat.succ_mul, layerVerifyBound]
           omega
       · exact evenBound_pure _ _
@@ -225,7 +224,7 @@ theorem evenBound_verify (publicKey : PublicKey) (message : Message) (signature 
     exact evenBound_bind hdigest hrest
   · exact evenBound_pure _ _
 
-theorem verifyHashBound_eq : verifyHashBound = 2263 := by
+theorem verifyHashBound_eq : verifyHashBound = 1998 := by
   simp only [verifyHashBound, layerVerifyBound, Fintype.card_fin]
   decide
 

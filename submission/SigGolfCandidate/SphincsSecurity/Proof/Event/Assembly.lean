@@ -24,6 +24,8 @@ theorem independentEventStatement : IndependentEventStatement := by
 theorem security127_event : ∀ q : Nat, 1 ≤ q → ∀ adversary : Security.Adversary,
     Pr[fun result => result.1 = true ∧ result.2 ≤ q | Security.experiment adversary] ≤
       (q : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) :=
-  fun q hq adversary => security127_event_of_independent independentEventStatement q hq adversary
+  fun q hq adversary => security127_event_of_independent independentEventStatement
+    (fun adversary => Concrete.EventSmall.forgeEventAdvantage_eq_zero adversary 0
+      (by rw [Concrete.EventSmall.keygenHashCost_eq]; norm_num)) q hq adversary
 
 end SphincsSecurity.Security

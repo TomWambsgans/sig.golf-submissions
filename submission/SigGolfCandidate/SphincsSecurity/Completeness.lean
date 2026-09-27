@@ -16,21 +16,21 @@ namespace SphincsSecurity
 signature for a generated key, the verifier accepts it. `evalWithAnswerFn hash` runs a computation with
 every hash query answered by `hash`. -/
 abbrev SphincsCorrectnessStatement : Prop :=
-  ∀ (hash : QueryImpl HashSpec Id) (seed : MasterSeed) (publicKey : PublicKey)
+  ∀ (hash : QueryImpl HashSpec Id) (seed : MasterSeed) (publicKey : PublicKey) (cache : TopCache)
     (secretKey : Seeded.SecretKey) (message : Message) (signature : Signature),
-    evalWithAnswerFn hash (Seeded.keygenFromSeed seed) = (publicKey, secretKey) →
-    evalWithAnswerFn hash (Seeded.sign secretKey message : OracleComp HashSpec (Option Signature))
+    evalWithAnswerFn hash (Seeded.keygenFromSeed seed) = (publicKey, cache, secretKey) →
+    evalWithAnswerFn hash (Seeded.sign secretKey cache message : OracleComp HashSpec (Option Signature))
       = some signature →
     evalWithAnswerFn hash (Concrete.verify publicKey message signature : OracleComp HashSpec Bool)
       = true
 
 namespace Completeness
 
-/-- The honest run: sample the master seed, generate a key, sign, and verify. -/
+/-- The honest run: sample the master seed, generate a key and its cache, sign with that cache, and verify. -/
 noncomputable def gameCore (message : Message) : OracleComp OracleWorld Bool := do
   let seed ← liftM sampleMasterSeed
-  let (pk, sk) ← liftM (Seeded.keygenFromSeed seed)
-  let some signature ← liftM (Seeded.sign sk message : OracleComp HashSpec (Option Signature))
+  let (pk, cache, sk) ← liftM (Seeded.keygenFromSeed seed)
+  let some signature ← liftM (Seeded.sign sk cache message : OracleComp HashSpec (Option Signature))
     | return false
   liftM (Concrete.verify pk message signature : OracleComp HashSpec Bool)
 
@@ -44,8 +44,8 @@ noncomputable def experiment (message : Message) : ProbComp Bool :=
 /-- The honest run from a fixed master seed: generate the key, sign, and verify. -/
 noncomputable def seededGameCore (seed : MasterSeed) (message : Message) :
     OracleComp OracleWorld Bool := do
-  let (pk, sk) ← liftM (Seeded.keygenFromSeed seed)
-  let some signature ← liftM (Seeded.sign sk message : OracleComp HashSpec (Option Signature))
+  let (pk, cache, sk) ← liftM (Seeded.keygenFromSeed seed)
+  let some signature ← liftM (Seeded.sign sk cache message : OracleComp HashSpec (Option Signature))
     | return false
   liftM (Concrete.verify pk message signature : OracleComp HashSpec Bool)
 

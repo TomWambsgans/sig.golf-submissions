@@ -17,7 +17,7 @@ theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (
     (publicSignPlan known words selections signature.randomness index leaves).1.map
       (fun plan => plan.finish (fun tree => key.ftsSecret index tree (leaves (ftsIndexOf tree)))) = some signature := by
   have hfrontier := knownFrontier_eq key.otsSecret key.ftsSecret _ words disclosed known hagrees
-  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root] at hfrontier
+  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root key.top] at hfrontier
   let parts : Layer → LayerPart := fun lay => (signature.counter lay, signature.chainValue lay,
     knownTreePath known lay (treeIndexAt index lay) (leafIndexAt index lay))
   have hlayers : ∀ lay, (publicSignLayer known words selections index lay).1 = some (parts lay) := by
@@ -54,7 +54,8 @@ theorem known_honest_public_plan (key : SecretKey) (f : QueryImpl HashSpec Id) (
     funext fun tree => ((hfull.2.1 tree).1).symm
   rw [hsecrets, hparts]
 
-theorem honest_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id) (dummy : OtsReferenceWords)
+theorem honest_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id) (htop : KeyTopHonest f key)
+    (dummy : OtsReferenceWords)
     (cache : QueryCache HashSpec) (index : Index) (leaves : IndexGroup → FtsLeaf) (signature : Signature)
     (hfull : FullyHonestOpening f cache key index leaves signature)
     (hreference : ∀ lay, ReferenceLayerOpening f key (canonicalReferenceWords key f dummy) (referenceTableSelection key f) index signature lay) :
@@ -63,20 +64,22 @@ theorem honest_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id) (du
   have hagrees : PublicAgreement (canonicalReferenceWords key f dummy) (fun _ _ _ => False) known known := fun _ _ => rfl
   have hp := known_honest_public_plan key f (canonicalReferenceWords key f dummy) (referenceTableSelection key f)
     (fun _ _ _ => False) known hagrees cache index leaves signature hfull hreference
-  have he := congrArg Prod.fst (boundaryEval_signAfterDigest_public key f (fun _ _ _ => False) known dummy hagrees signature.randomness index leaves)
+  have he := congrArg Prod.fst (boundaryEval_signAfterDigest_public key f (fun _ _ _ => False) known htop dummy hagrees signature.randomness index leaves)
   rw [boundaryEval_fst] at he
   exact he.trans hp
 
-theorem honest_signature_eq (key : SecretKey) (f : QueryImpl HashSpec Id) (dummy : OtsReferenceWords)
+theorem honest_signature_eq (key : SecretKey) (f : QueryImpl HashSpec Id) (htop : KeyTopHonest f key)
+    (dummy : OtsReferenceWords)
     (cache : QueryCache HashSpec) (index : Index) (leaves : IndexGroup → FtsLeaf) (signature signed : Signature)
     (hfull : FullyHonestOpening f cache key index leaves signature)
     (hreference : ∀ lay, ReferenceLayerOpening f key (canonicalReferenceWords key f dummy) (referenceTableSelection key f) index signature lay)
     (hsigned : evalWithAnswerFn f (signAfterDigest key signed.randomness index leaves) = some signed)
     (hrandomness : signed.randomness = signature.randomness) : signed = signature := by
-  rw [hrandomness, honest_signAfterDigest key f dummy cache index leaves signature hfull hreference] at hsigned
+  rw [hrandomness, honest_signAfterDigest key f htop dummy cache index leaves signature hfull hreference] at hsigned
   exact (Option.some.inj hsigned).symm
 
-theorem strong_signing_payload_ne (key : SecretKey) (f : QueryImpl HashSpec Id) (dummy : OtsReferenceWords)
+theorem strong_signing_payload_ne (key : SecretKey) (f : QueryImpl HashSpec Id) (htop : KeyTopHonest f key)
+    (dummy : OtsReferenceWords)
     (cache : QueryCache HashSpec) (log : QueryLog SigningSpec) (forgery : Forgery)
     (hnew : ¬ SigningTranscript.Contains log forgery)
     (hfull : let digest := truncateMessageDigest (f (tweakableHashInput key.parameter .message
@@ -96,7 +99,7 @@ theorem strong_signing_payload_ne (key : SecretKey) (f : QueryImpl HashSpec Id) 
   obtain ⟨hmessage, hrandomness⟩ := messageDigestPayload_injective key.root heq
   dsimp only at hsigned
   rw [heq] at hsigned
-  have hsignature := honest_signature_eq key f dummy cache _ _ forgery.signature signature hfull hreference hsigned hrandomness
+  have hsignature := honest_signature_eq key f htop dummy cache _ _ forgery.signature signature hfull hreference hsigned hrandomness
   exact hnew ⟨⟨message, some signature⟩, hentry, hmessage, congrArg some hsignature⟩
 
 end SphincsSecurity.Concrete.OtsVerifierWitness

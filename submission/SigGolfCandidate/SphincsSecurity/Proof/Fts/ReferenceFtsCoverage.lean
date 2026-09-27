@@ -109,4 +109,16 @@ theorem classification (key : SecretKey) (f : QueryImpl HashSpec Id) (log : Quer
       obtain ⟨second, hne, hsecond⟩ := hrest
       exact Or.inr (Or.inr ⟨first, second, hne.symm, hfirst, hqueries first, hsecond, hqueries second⟩)
 
+/-! The few-time events do not read the key's top-tree table. -/
+
+theorem nearGuess_top (key : SecretKey) (top top' : Nat → Nat → Digest) (f : QueryImpl HashSpec Id)
+    (log : QueryLog SigningSpec) (boundary : SigningBoundaryTrace) (trace : Trace) (forgery : Forgery) :
+    NearGuess { key with top := top } f log boundary trace forgery ↔
+      NearGuess { key with top := top' } f log boundary trace forgery := Iff.rfl
+
+theorem twoGuesses_top (key : SecretKey) (top top' : Nat → Nat → Digest) (f : QueryImpl HashSpec Id)
+    (log : QueryLog SigningSpec) (trace : Trace) (forgery : Forgery) :
+    TwoGuesses { key with top := top } f log trace forgery ↔ TwoGuesses { key with top := top' } f log trace forgery :=
+  Iff.rfl
+
 end SphincsSecurity.Concrete.ReferenceFtsCoverage

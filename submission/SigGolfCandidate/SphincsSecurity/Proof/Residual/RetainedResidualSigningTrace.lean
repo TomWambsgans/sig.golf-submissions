@@ -89,7 +89,7 @@ theorem observedRun_jointSigningProgram_original_memory (key : SecretKey) (input
     (dummy : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (routing : Routing) (message : Message)
     (hinputs : hashInputs (signWithView key message) ⊆ inputs) (state : State inputs)
     (hagrees : PublicAgreement (referenceFamilyWords auxiliary.selections dummy) routing.disclosed routing.known
-      (CanonicalCoordinate.value key.otsSecret key.ftsSecret graph))
+      (CanonicalCoordinate.value key.otsSecret key.ftsSecret graph)) (htop : TopFromGraph key graph)
     (hreplies : ∀ position, ¬CanonicalCoordinate.Hidden (referenceFamilyWords auxiliary.selections dummy) routing.disclosed (.graph position) →
       publicReplies position = graph position)
     (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
@@ -117,7 +117,7 @@ theorem observedRun_jointSigningProgram_original_memory (key : SecretKey) (input
     key.otsSecret key.ftsSecret graph hagrees auxiliary.selections auxiliary.rows auxiliary.seed _
     (decodePosition_message key.parameter (messageDigestPayload key.root message randomness))
   have hpublic := fixedBoundaryRun_publicDigestLoop_eq_of_message key.parameter key.root message _ _ hmessage digestAttemptLimit
-  have hrecord := fixedBoundaryRun_signWithView_prefix_public key inputs hencoding graph auxiliary hauxiliary dummy routing.disclosed routing.known hagrees message
+  have hrecord := fixedBoundaryRun_signWithView_prefix_public key inputs hencoding graph auxiliary hauxiliary dummy routing.disclosed routing.known hagrees htop message
   have h := congrArg (fun computation => (fun record => (some record, state.memory.applyBoundary record.2)) <$> 𝒮[computation]) hrecord
   simp only [evalSPMF_map, Functor.map_map, completePublicSigningRecord_trace] at h
   rw [publicSigningRecord, hpublic]
@@ -148,7 +148,7 @@ theorem observedRun_signingProgram_original_memory (key : SecretKey) (inputs : F
     (dummy : OtsReferenceWords) (publicReplies : CanonicalGraphLabels) (message : Message)
     (hinputs : hashInputs (signWithView key message) ⊆ inputs) (state : State inputs)
     (hagrees : PublicAgreement (referenceFamilyWords auxiliary.selections dummy) state.memory.routing.disclosed state.memory.routing.known
-      (CanonicalCoordinate.value key.otsSecret key.ftsSecret graph))
+      (CanonicalCoordinate.value key.otsSecret key.ftsSecret graph)) (htop : TopFromGraph key graph)
     (hreplies : ∀ position, ¬CanonicalCoordinate.Hidden (referenceFamilyWords auxiliary.selections dummy) state.memory.routing.disclosed (.graph position) →
       publicReplies position = graph position)
     (hcovered : ResidualByteFrontend.RowsCovered inputs (project state))
@@ -168,7 +168,7 @@ theorem observedRun_signingProgram_original_memory (key : SecretKey) (inputs : F
   dsimp only
   rw [observedRun_signingProgram_full_project,
     observedRun_jointSigningProgram_original_memory key inputs hencoding graph auxiliary hauxiliary dummy publicReplies
-      state.memory.routing message hinputs state hagrees hreplies hcovered hmatches hclean]
+      state.memory.routing message hinputs state hagrees htop hreplies hcovered hmatches hclean]
   simp only [Functor.map_map, finishSigning, Option.elim_some]
 
 end SphincsSecurity.Concrete.RetainedResidual

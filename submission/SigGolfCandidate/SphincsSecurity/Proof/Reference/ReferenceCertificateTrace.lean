@@ -15,7 +15,7 @@ noncomputable def completeCertificateRest (key : SecretKey) (f : QueryImpl HashS
 
 theorem fixedBoundaryRun_retained_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
-    (hfrontier : IsSigningFrontier key f words frontier)
+    (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (adversary : Adversary) :
     fixedBoundaryRun key.parameter f (simulateQ (expandedAdversaryImpl key)
@@ -25,7 +25,7 @@ theorem fixedBoundaryRun_retained_frontier (key : SecretKey) (f : QueryImpl Hash
   rw [retainedGameRestComputation, simulateQ_bind,
     ← FtsProbeSimulation.simulateQ_withTraceAppend_run_eq_signingTraceComputation,
     ← forwardOracles_add_signingOracle_eq_withTraceAppend, fixedBoundaryRun_bind,
-    fixedBoundaryRun_adversary_frontier key f words frontier hfrontier hwords, map_eq_bind_pure_comp]
+    fixedBoundaryRun_adversary_frontier key f words frontier hfrontier htop hwords, map_eq_bind_pure_comp]
   apply bind_congr
   rintro ⟨⟨forgery, log⟩, trace⟩
   rw [simulateQ_bind, FtsProbeSimulation.simulateQ_expanded_liftOracleWorldLeft]
@@ -47,29 +47,29 @@ theorem referenceForgeryRest_certificateRecord_atRoot (key : SecretKey) (f : Que
     (hroot : root = (ReferenceVerifierWitness.rootedKey key f).root)
     (dummy : OtsReferenceWords) (adversary : Adversary) :
     (fun before : AdversaryTrace =>
-      let result := completeCertificateRest ({ key with root := root } : SecretKey) f before.1
-      (({ key with root := root } : SecretKey), result.1, result.2)) <$>
+      let result := completeCertificateRest ((keyAtRoot f key root) : SecretKey) f before.1
+      (((keyAtRoot f key root) : SecretKey), result.1, result.2)) <$>
       referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
         (referenceTableSelection key f) dummy adversary =
     (fun result : RetainedRestResult × SigningBoundaryTrace =>
-      (({ key with root := root } : SecretKey), result.1, result.2)) <$>
-      fixedBoundaryRun key.parameter f (simulateQ (expandedAdversaryImpl ({ key with root := root } : SecretKey))
+      (((keyAtRoot f key root) : SecretKey), result.1, result.2)) <$>
+      fixedBoundaryRun key.parameter f (simulateQ (expandedAdversaryImpl ((keyAtRoot f key root) : SecretKey))
         (retainedGameRestComputation adversary ⟨root, key.parameter⟩)) := by
   rw [referenceForgeryRest, ReferenceVerifierWitness.source_root, ← hroot]
   have hw : referenceFamilyWords (referenceTableSelection key f) dummy =
-      canonicalReferenceWords ({ key with root := root } : SecretKey) f dummy := by
+      canonicalReferenceWords ((keyAtRoot f key root) : SecretKey) f dummy := by
     rw [referenceFamilyWords_selected]
     exact (ReferenceVerifierWitness.canonicalReferenceWords_root key f root dummy).symm
-  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ root, hw]
-  rw [fixedBoundaryRun_retained_frontier ({ key with root := root } : SecretKey) f _ _
-    (isSigningFrontier_canonical ({ key with root := root } : SecretKey) f _)
-    (frontierReferenceWord_canonical ({ key with root := root } : SecretKey) f dummy), Functor.map_map]
+  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ root (honestTop f key.parameter (key.otsSecret topLayer rootTree)), hw]
+  rw [fixedBoundaryRun_retained_frontier ((keyAtRoot f key root) : SecretKey) f _ _
+    (isSigningFrontier_canonical ((keyAtRoot f key root) : SecretKey) f _) (keyTopHonest_keyAtRoot f key root)
+    (frontierReferenceWord_canonical ((keyAtRoot f key root) : SecretKey) f dummy), Functor.map_map]
   have h := congrArg (Functor.map (fun before =>
-    let result := completeCertificateRest ({ key with root := root } : SecretKey) f before
-    (({ key with root := root } : SecretKey), result.1, result.2)))
+    let result := completeCertificateRest ((keyAtRoot f key root) : SecretKey) f before
+    (((keyAtRoot f key root) : SecretKey), result.1, result.2)))
     (fixedTrace_forget f (CausalFrontierProgram.adversaryRun key.parameter root f key.ftsSecret
-      (canonicalReferenceWords ({ key with root := root } : SecretKey) f dummy)
-      (canonicalFrontierValues ({ key with root := root } : SecretKey) f (canonicalReferenceWords ({ key with root := root } : SecretKey) f dummy))
+      (canonicalReferenceWords ((keyAtRoot f key root) : SecretKey) f dummy)
+      (canonicalFrontierValues ((keyAtRoot f key root) : SecretKey) f (canonicalReferenceWords ((keyAtRoot f key root) : SecretKey) f dummy))
       (adversary.main ⟨root, key.parameter⟩)))
   rw [Functor.map_map, CausalFrontierProgram.fixed_adversaryRun] at h
   exact h
@@ -81,17 +81,21 @@ private theorem fixedHashWorld_lift_hash {Result : Type} (f : QueryImpl HashSpec
   rw [fixedBoundaryRun_lift_hash, map_pure, boundaryEval_fst] at h
   exact h.symm
 
-private theorem rootedKey_root_eq_treeRoot (key : SecretKey) (f : QueryImpl HashSpec Id) :
-    (ReferenceVerifierWitness.rootedKey key f).root =
-      evalWithAnswerFn f (keygenRoot key.parameter (key.otsSecret topLayer rootTree)) := by
-  rw [eval_keygenRoot]
-  simp only [honestNode, treeRoot]
+private theorem rootedKey_eq_table (key : SecretKey) (f : QueryImpl HashSpec Id) :
+    ReferenceVerifierWitness.rootedKey key f =
+      ⟨key.parameter,
+        evalWithAnswerFn f (keygenTable key.parameter (key.otsSecret topLayer rootTree)) (layerHeight topLayer) 0,
+        key.otsSecret, key.ftsSecret, evalWithAnswerFn f (keygenTable key.parameter (key.otsSecret topLayer rootTree))⟩ := by
+  show (⟨key.parameter, honestNode f key.parameter topLayer rootTree (key.otsSecret topLayer rootTree) (layerHeight topLayer) 0,
+    key.otsSecret, key.ftsSecret, honestTop f key.parameter (key.otsSecret topLayer rootTree)⟩ : SecretKey) = _
+  rw [← honestTop_root]
+  rfl
 
 noncomputable def fixedCertificateTraceGame (f : QueryImpl HashSpec Id) (adversary : Adversary) : ProbComp CertificateTraceRecord := do
   let parameter ← sampleParameter
   let otsSecret ← sampleOtsSecrets
   let ftsSecret ← sampleFtsSecrets
-  let key := ReferenceVerifierWitness.rootedKey ⟨parameter, 0, otsSecret, ftsSecret⟩ f
+  let key := ReferenceVerifierWitness.rootedKey ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f
   let result ← fixedBoundaryRun parameter f (simulateQ (expandedAdversaryImpl key)
     (retainedGameRestComputation adversary ⟨key.root, parameter⟩))
   pure (key, result.1, result.2)
@@ -107,7 +111,9 @@ theorem simulateQ_certificateTraceProgram (f : QueryImpl HashSpec Id) (adversary
   intro otsSecret
   apply bind_congr
   intro ftsSecret
-  rw [← fixedBoundaryRun_eq_boundaryComputation, ← rootedKey_root_eq_treeRoot ⟨parameter, 0, otsSecret, ftsSecret⟩ f]
+  rw [← fixedBoundaryRun_eq_boundaryComputation, rootedKey_eq_table ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f,
+    ← honestTop_root]
+  rfl
 
 noncomputable def referenceCertificateRest (key : SecretKey) (f : QueryImpl HashSpec Id)
     (selections : ReferenceFamily) (dummy : OtsReferenceWords) (adversary : Adversary) : ProbComp CertificateTraceRecord :=
@@ -146,10 +152,10 @@ theorem referenceForgeryGame_certificateRecord (inputs : Finset HashInput)
   apply congrArg (𝒮[sampleFtsSecrets] >>= ·)
   funext ftsSecret
   simp only [ReferenceForgerySample.certificateRecord, bind_pure_comp, ← evalSPMF_map]
-  change (𝒮[referenceFamilyOracleSample ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter)] >>= fun reference =>
-    𝒮[referenceCertificateRest ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs reference.2) reference.1 dummy adversary]) = _
-  rw [referenceFamilyOracleSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) (hgraph parameter)
-    (fun selections table => referenceCertificateRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+  change (𝒮[referenceFamilyOracleSample ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter)] >>= fun reference =>
+    𝒮[referenceCertificateRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs reference.2) reference.1 dummy adversary]) = _
+  rw [referenceFamilyOracleSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) (hgraph parameter)
+    (fun selections table => referenceCertificateRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       (finiteHashAnswer ∅ inputs table) selections dummy adversary)]
   apply evalSPMF_bind_congr_left
   intro table

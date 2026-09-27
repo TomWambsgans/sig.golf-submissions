@@ -19,8 +19,19 @@ structure Forgery where
   signature : Signature
 deriving DecidableEq
 
-/-- A signing request is a message alone, the scheme being stateless, and the answer is a signature or `none` if the signer fails. -/
+/-- A signing request of the proof's ideal games is a message alone, and the answer is a signature or `none` if the signer fails. -/
 abbrev SigningSpec := Message →ₒ Option Signature
+
+/-- A signing request of the experiment: a message and a cache, both chosen by the adversary. The signer
+checks the cache's MAC and reads the top layer's path from it. -/
+structure SigningRequest where
+  message : Message
+  cache : TopCache
+deriving DecidableEq
+
+/-- The experiment's signing oracle: a request is answered by a signature or `none` if the signer fails
+(including a cache that fails its MAC check). -/
+abbrev RequestSpec := SigningRequest →ₒ Option Signature
 
 namespace SigningTranscript
 
@@ -40,25 +51,47 @@ instance (log : QueryLog SigningSpec) (forgery : Forgery) : Decidable (Contains 
 
 end SigningTranscript
 
+namespace RequestTranscript
+
+/-- A transcript is valid exactly when the key answered at most `q_s` requests, failed ones included. -/
+def Valid (log : QueryLog RequestSpec) : Prop := log.length ≤ signatureLimit
+
+instance (log : QueryLog RequestSpec) : Decidable (Valid log) :=
+  inferInstanceAs (Decidable (log.length ≤ signatureLimit))
+
+/-- The signer returned the claimed forgery exactly when some request for the same message, with any
+cache, was answered by the same signature. A different signature for a signed message is a valid strong
+forgery. -/
+def Contains (log : QueryLog RequestSpec) (forgery : Forgery) : Prop :=
+  ∃ entry ∈ log, entry.1.message = forgery.message ∧ entry.2 = some forgery.signature
+
+instance (log : QueryLog RequestSpec) (forgery : Forgery) : Decidable (Contains log forgery) :=
+  inferInstanceAs
+    (Decidable (∃ entry ∈ log, entry.1.message = forgery.message ∧ entry.2 = some forgery.signature))
+
+end RequestTranscript
+
 namespace Security
 
-/-- A probabilistic adaptive adversary with private randomness and access to hashing and signing. -/
+/-- A probabilistic adaptive adversary with private randomness and access to hashing and signing. It
+receives the public key and the published cache, and chooses the cache of every signing request. -/
 structure Adversary where
-  main : PublicKey → OracleComp (OracleWorld + SigningSpec) Forgery
+  main : PublicKey → TopCache → OracleComp (OracleWorld + RequestSpec) Forgery
 
 /-- Record each signing request and its answer. -/
 def signingOracle (sk : Seeded.SecretKey) :
-    QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
-  QueryImpl.withLogging fun request => liftM (Seeded.sign sk request : OracleComp HashSpec _)
+    QueryImpl RequestSpec (WriterT (QueryLog RequestSpec) (OracleComp OracleWorld)) :=
+  QueryImpl.withLogging fun request =>
+    liftM (Seeded.sign sk request.cache request.message : OracleComp HashSpec _)
 
 /-- Sample the master seed, then run all parties with one shared hash oracle. -/
 noncomputable def gameCore (adversary : Adversary) : OracleComp OracleWorld Bool := do
   let seed ← liftM sampleMasterSeed
-  let (pk, sk) ← liftM (Seeded.keygenFromSeed seed)
-  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + signingOracle sk) (adversary.main pk)).run
+  let (pk, cache, sk) ← liftM (Seeded.keygenFromSeed seed)
+  let ((forgery, log) : Forgery × QueryLog RequestSpec) ←
+    (simulateQ (QueryImpl.ofLift OracleWorld (WriterT (QueryLog RequestSpec) (OracleComp OracleWorld)) + signingOracle sk) (adversary.main pk cache)).run
   let verified ← liftM (Concrete.verify pk forgery.message forgery.signature : OracleComp HashSpec Bool)
-  return decide (SigningTranscript.Valid log ∧ ¬SigningTranscript.Contains log forgery) && verified
+  return decide (RequestTranscript.Valid log ∧ ¬RequestTranscript.Contains log forgery) && verified
 
 /-- Forward private sampling for free; answer hash queries consistently and count every call, including cache hits. -/
 noncomputable def countedOracle :=

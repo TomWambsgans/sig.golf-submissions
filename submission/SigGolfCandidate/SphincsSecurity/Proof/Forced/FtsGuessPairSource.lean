@@ -30,12 +30,13 @@ noncomputable def referenceTwoWitnessRest (key : SecretKey) (f : QueryImpl HashS
 theorem rootedKey_programmedHash (key : SecretKey) (labels : CanonicalGraphLabels) (residual : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) :
     ReferenceVerifierWitness.rootedKey key (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) =
-      { key with root := canonicalGraphRoot labels } := by
+      keyAtRoot (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) key (canonicalGraphRoot labels) := by
   have hroot := ReferenceVerifierWitness.source_root key
     (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) words
   rw [canonicalGraphLabels_programmedHash, reference_root] at hroot
-  change { key with root := (ReferenceVerifierWitness.rootedKey key
-    (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual)).root } = _
+  change keyAtRoot (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) key
+    ((ReferenceVerifierWitness.rootedKey key
+      (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual)).root) = _
   rw [← hroot]
 
 theorem referenceTwoWitnessRest_program (key : SecretKey) (inputs : Finset HashInput)
@@ -45,7 +46,7 @@ theorem referenceTwoWitnessRest_program (key : SecretKey) (inputs : Finset HashI
     let f := programmedHash key.parameter key.otsSecret key.ftsSecret labels
       (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))
     referenceTwoWitnessRest key f labels auxiliary.selections dummy adversary =
-      (fun result => decide (completedTwoGuesses { key with root := canonicalGraphRoot labels } f result)) <$>
+      (fun result => decide (completedTwoGuesses (keyAtLabels key labels) f result)) <$>
         simulateQ (fixedAnswers (referenceAnswers key.parameter (canonicalGraphRoot labels) key.otsSecret labels inputs hencoding auxiliary dummy)
           (FtsGuessSigning.secretTable key.ftsSecret)) (completedRun key.parameter (canonicalGraphRoot labels) labels adversary) := by
   dsimp only
@@ -55,6 +56,7 @@ theorem referenceTwoWitnessRest_program (key : SecretKey) (inputs : Finset HashI
   funext before
   rw [sourceTwoWitnesses, rootedKey_programmedHash key labels _ dummy]
   simp only [completedReferenceContact, reference_root, completedTwoGuesses, completedAtRoot]
+  exact decide_eq_decide.mpr (ReferenceFtsCoverage.twoGuesses_top { key with root := canonicalGraphRoot labels } _ _ _ _ _ _)
 
 theorem referenceTwoWitnessRest_initial_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
     (hprobe : ProbeBudget dummy adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
@@ -62,7 +64,7 @@ theorem referenceTwoWitnessRest_initial_bound (dummy : OtsReferenceWords) (adver
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
     Pr[fun hit => hit = true | 𝒮[sampleFtsSecrets] >>= fun ftsSecret =>
-      𝒮[referenceTwoWitnessRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+      𝒮[referenceTwoWitnessRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
         (programmedHash parameter otsSecret ftsSecret labels
           (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
             (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
@@ -77,7 +79,7 @@ theorem referenceTwoWitnessRest_initial_bound (dummy : OtsReferenceWords) (adver
   rw [bind_map_left] at hprior
   rw [← hprior] at h
   have hprogram (ftsSecret : Index → FtsTree → FtsLeaf → Digest) := referenceTwoWitnessRest_program
-    ⟨parameter, 0, otsSecret, ftsSecret⟩ (canonicalGraphGameInputs adversary)
+    ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (canonicalGraphGameInputs adversary)
     (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary hauxiliary dummy adversary
   simp only [hprogram, evalSPMF_map, probEvent_bind_eq_tsum, probEvent_map, Function.comp_def,
     Equiv.symm_apply_apply, decide_eq_true_eq] at h ⊢

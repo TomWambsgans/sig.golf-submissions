@@ -146,7 +146,7 @@ theorem advStep_expected_le (sk : SecretKey) (input : (OracleWorld + SigningSpec
     simp only [NonmessageQuery, Nat.cast_zero, zero_add, if_false]
     refine (expectedBoundaryMessageCalls_sign_le sk message cache hcache).trans ?_
     simp only [visWeight]
-    rw [ftsOpenHashCost_eq]
+    rw [signCharge_eq]
     norm_num
 
 
@@ -338,10 +338,11 @@ theorem markerValue_mul_of_nil (first second : SigningBoundaryTrace) (hfirst : f
 
 theorem boundaryRun_keygen (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (result : _)
     (hresult : result ∈ support (boundaryRun parameter
-      (liftM (keygenRoot parameter secret : OracleComp HashSpec Digest) : OracleComp OracleWorld Digest) ∅)) :
+      (liftM (keygenTable parameter secret : OracleComp HashSpec (Nat → Nat → Digest)) :
+        OracleComp OracleWorld (Nat → Nat → Digest)) ∅)) :
     result.1.2.messageCalls = [] ∧ QueryCache.enncard result.2 ≤ keygenHashCost := by
   obtain ⟨f, hf⟩ := boundaryRun_mem_fixed _ _ ∅ result hresult
-  rw [fixedBoundaryRun_lift_hash, boundaryEval_keygenRoot, support_pure, Set.mem_singleton_iff] at hf
+  rw [fixedBoundaryRun_lift_hash, boundaryEval_keygen, support_pure, Set.mem_singleton_iff] at hf
   have hgrow := boundaryRun_enncard_le _ _ ∅ result hresult
   rw [hf] at hgrow ⊢
   simp only [SigningBoundaryTrace.messageCalls_pow_none, SigningBoundaryTrace.hashCalls_pow_none,
@@ -383,18 +384,21 @@ theorem lazy_visAdversary_expected (adversary : Adversary) (budget : Nat) (hbudg
     refine (add_le_add hkcache le_rfl).trans ?_
     have : signRatio * (budget - keygenHashCost - 1) ≤ signRatio * budget := Nat.mul_le_mul_left _ (by omega)
     exact_mod_cast (show keygenHashCost + signRatio * (budget - keygenHashCost - 1) ≤ 2 ^ 126 by omega)
-  have hadv := visAdversary_advPhase_expected adversary budget hbudget ⟨parameter, keygen.1.1, otsSecret, ftsSecret⟩
-    keygen.1.1 keygen.2 hcache
+  have hadv := visAdversary_advPhase_expected adversary budget hbudget
+    ⟨parameter, keygen.1.1 (layerHeight topLayer) 0, otsSecret, ftsSecret, keygen.1.1⟩
+    (keygen.1.1 (layerHeight topLayer) 0) keygen.2 hcache
   calc
-    _ ≤ ∑' first, Pr[= first | boundaryRun parameter (advPhase ⟨parameter, keygen.1.1, otsSecret, ftsSecret⟩
-          ((visAdversary adversary budget).main ⟨keygen.1.1, parameter⟩)) keygen.2] *
+    _ ≤ ∑' first, Pr[= first | boundaryRun parameter
+          (advPhase ⟨parameter, keygen.1.1 (layerHeight topLayer) 0, otsSecret, ftsSecret, keygen.1.1⟩
+          ((visAdversary adversary budget).main ⟨keygen.1.1 (layerHeight topLayer) 0, parameter⟩)) keygen.2] *
         (((markerValue first.1.2 : ENNReal) + first.1.2.messageCalls.length) + verifyHashBound) := by
       apply ENNReal.tsum_le_tsum
       intro first
       apply mul_le_mul' le_rfl
       rw [tsum_probOutput_map_mul]
       refine expectation_le_of_forall _ _ _ fun last hlast => ?_
-      obtain ⟨heven, hcalls⟩ := boundaryRun_finishGame ⟨keygen.1.1, parameter⟩ first.1.1 first.2 last hlast
+      obtain ⟨heven, hcalls⟩ := boundaryRun_finishGame ⟨keygen.1.1 (layerHeight topLayer) 0, parameter⟩
+        first.1.1 first.2 last hlast
       simp only [SigningBoundaryTrace.messageCalls_mul, List.length_append, hkmsg, List.length_nil, zero_add,
         markerValue_mul_of_nil _ _ hkmsg, markerValue_mul_even _ _ heven, Nat.cast_add]
       rw [add_assoc]

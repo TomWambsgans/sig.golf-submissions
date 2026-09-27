@@ -1,6 +1,5 @@
 import SigGolfCandidate.Budget.Main
 import SigGolfCandidate.Sign.Sim
-import SigGolfCandidate.Keygen.Main
 
 /-!
 # Budget: bridge to the bytecode refinement theorems
@@ -40,7 +39,7 @@ theorem keygenRefines_of_counts (h : ∀ sk, RefinesCounts sub .keygen sk (keyge
     KeygenRefines sub := fun sk => compressions_of_refinesCounts sub (h sk)
 
 theorem signRefines_of_counts
-    (h : ∀ sk cache m, RefinesCounts sub .sign (sk, cache, m) (signRef sk m)) :
+    (h : ∀ sk cache m, RefinesCounts sub .sign (sk, cache, m) (signRef sk cache m)) :
     SignRefines sub := by
   intro sk cache m
   obtain ⟨F, hF⟩ := compressions_of_refinesCounts sub (h sk cache m)
@@ -60,17 +59,18 @@ theorem expandNoHash_of_counts
 
 end
 
-theorem submission_keygenRefines : KeygenRefines submission :=
-  keygenRefines_of_counts submission fun sk =>
-    ⟨fun pk => some (pk, 0), Keygen.keygen_run_counts sk⟩
+/-- **Compression bounds** for `SigGolfCandidate.submission`, given the keygen, sign and expand
+refinements in the form of `Sign.Sim.run_eq`.
 
-/-- **Compression bounds** for `SigGolfCandidate.submission`, given the sign and expand
-refinements in the form of `Sign.Sim.run_eq` (keygen's is proven). -/
-theorem submission_compressionBounds_of_counts
-    (hS : ∀ sk cache m, RefinesCounts submission .sign (sk, cache, m) (signRef sk m))
+(v4: the keygen refinement `Keygen.keygen_run_counts` is being redone for the cached top tree;
+once it states `RefinesCounts submission .keygen sk (keygenRef sk)`, `hK` is discharged by it and
+`submission_compressionBounds_of_counts` below takes only `hS` and `hE` again.) -/
+theorem submission_compressionBounds_of_counts'
+    (hK : ∀ sk, RefinesCounts submission .keygen sk (keygenRef sk))
+    (hS : ∀ sk cache m, RefinesCounts submission .sign (sk, cache, m) (signRef sk cache m))
     (hE : ∀ input, ∃ (α : Type) (a : α), RefinesCounts submission .expand input (pure a)) :
     submission.CompressionBounds :=
-  submission_compressionBounds submission_keygenRefines
+  submission_compressionBounds (keygenRefines_of_counts submission hK)
     (signRefines_of_counts submission hS) (expandNoHash_of_counts submission hE)
 
 end SigGolfCandidate.Budget

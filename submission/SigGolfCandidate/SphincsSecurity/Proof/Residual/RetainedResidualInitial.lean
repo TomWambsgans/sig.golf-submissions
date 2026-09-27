@@ -21,36 +21,62 @@ noncomputable def initialContext (parameter : PublicParameter) (inputs : Finset 
     (exposedValues : InitialPublicLabels (referenceFamilyWords auxiliary.selections dummy))
     (high : CanonicalGraphHighHalves) (labels : Labels) : Context inputs where
   key := ⟨parameter, knownRoot (initialKnown (referenceFamilyWords auxiliary.selections dummy) exposedValues),
-    coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+    coordinateOtsSecrets labels, coordinateFtsSecrets labels, graphTop (coordinateGraphLabels labels high)⟩
   graph := coordinateGraphLabels labels high
   auxiliary := auxiliary
   encoding := hencoding
   auxiliary_valid := hauxiliary
   dummy := dummy
   publicReplies := coordinateGraphLabels (initialKnown (referenceFamilyWords auxiliary.selections dummy) exposedValues) high
+  top_graph := fun _ _ _ _ => rfl
 
 theorem initialState_rowsCovered (inputs : Finset HashInput) (words : OtsReferenceWords)
     (exposedValues : InitialPublicLabels words) : ResidualByteFrontend.RowsCovered inputs (project (initialState inputs words exposedValues)) := by
   intro input answer hanswer
   cases hanswer
 
+/-- The table key generation builds under the context's oracle. -/
+noncomputable abbrev Context.keygenTop {inputs : Finset HashInput} (context : Context inputs) : Nat → Nat → Digest :=
+  honestTop context.oracle context.key.parameter (context.key.otsSecret topLayer rootTree)
+
 theorem Context.keygen_record {inputs : Finset HashInput} (context : Context inputs)
-    (hroot : context.key.root = canonicalGraphRoot context.graph) :
+    (_hroot : context.key.root = canonicalGraphRoot context.graph) :
     fixedBoundaryRun context.key.parameter context.oracle
-      (liftM (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest)) =
-        pure (context.key.root, (FreeMonoid.of none) ^ keygenHashCost) := by
-  have hcomputed : context.key.root = evalWithAnswerFn context.oracle
-      (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree)) := by
-    rw [hroot, ← canonicalGraphLabels_root context.key.parameter context.key.otsSecret context.key.ftsSecret context.oracle]
-    congr 1
-    exact (canonicalGraphLabels_programmedHash context.key.parameter context.key.otsSecret context.key.ftsSecret context.graph _).symm
-  rw [fixedBoundaryRun_lift_hash]
-  have htree : boundaryEval context.key.parameter context.oracle
-      (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree)) =
-      (evalWithAnswerFn context.oracle (treeRoot context.key.parameter topLayer rootTree (context.key.otsSecret topLayer rootTree)),
-        (FreeMonoid.of none) ^ keygenHashCost) :=
-    boundaryEval_keygen context.key.parameter context.oracle (context.key.otsSecret topLayer rootTree)
-  rw [htree, ← hcomputed]
+      (liftM (keygenTable context.key.parameter (context.key.otsSecret topLayer rootTree) :
+        OracleComp HashSpec (Nat → Nat → Digest))) =
+        pure (context.keygenTop, (FreeMonoid.of none) ^ keygenHashCost) := by
+  rw [fixedBoundaryRun_lift_hash, boundaryEval_keygen]
+  rfl
+
+theorem Context.keygenTop_root {inputs : Finset HashInput} (context : Context inputs)
+    (hroot : context.key.root = canonicalGraphRoot context.graph) :
+    context.keygenTop (layerHeight topLayer) 0 = context.key.root := by
+  rw [Context.keygenTop, honestTop_root, hroot]
+  have h := canonicalGraphLabels_root context.key.parameter context.key.otsSecret context.key.ftsSecret context.oracle
+  unfold Context.oracle at h ⊢
+  rw [canonicalGraphLabels_programmedHash] at h
+  rw [h]
+  rfl
+
+theorem Context.keygenTop_region {inputs : Finset HashInput} (context : Context inputs) :
+    TopRegionEq (m := OracleComp HashSpec) (fun level nodeIdx => pure (context.keygenTop level nodeIdx))
+      (fun level nodeIdx => pure (context.key.top level nodeIdx)) := by
+  intro level hlevel nodeIdx hnodeIdx
+  have h := context.keyTopHonest level hlevel nodeIdx hnodeIdx
+  rw [evalWithAnswerFn_pure] at h
+  show pure _ = pure _
+  rw [h, Context.keygenTop, honestTop, eval_keygenTable context.oracle _ _ level (by
+    change level ≤ maxLayerHeight; omega) nodeIdx hnodeIdx]
+
+/-- The game after key generation under the context's oracle is the game with the context's key. -/
+theorem Context.gameRest_keygen {inputs : Finset HashInput} (context : Context inputs)
+    (hroot : context.key.root = canonicalGraphRoot context.graph) (adversary : Adversary) :
+    gameRest scheme adversary ⟨context.keygenTop (layerHeight topLayer) 0, context.key.parameter⟩
+      ⟨context.key.parameter, context.keygenTop (layerHeight topLayer) 0, context.key.otsSecret,
+        context.key.ftsSecret, context.keygenTop⟩ =
+      gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩ context.key := by
+  rw [context.keygenTop_root hroot]
+  exact gameRest_congr_top adversary _ _ _ rfl rfl rfl rfl context.keygenTop_region
 
 theorem Context.rest_queryBound {inputs : Finset HashInput} (context : Context inputs)
     (hroot : context.key.root = canonicalGraphRoot context.graph)
@@ -68,15 +94,14 @@ theorem Context.rest_queryBound {inputs : Finset HashInput} (context : Context i
     (hashQueryBound_gameAfterSecrets adversary q hq hparameter hots hfts)
   rw [gameAfterSecrets] at hbound
   have hresult : 𝒮[fixedBoundaryRun context.key.parameter context.oracle
-      (liftM (keygenRoot context.key.parameter (context.key.otsSecret topLayer rootTree) : OracleComp HashSpec Digest))]
-        (context.key.root, (FreeMonoid.of none) ^ keygenHashCost) ≠ 0 := by
+      (liftM (keygenTable context.key.parameter (context.key.otsSecret topLayer rootTree) :
+        OracleComp HashSpec (Nat → Nat → Digest)))]
+        (context.keygenTop, (FreeMonoid.of none) ^ keygenHashCost) ≠ 0 := by
     rw [context.keygen_record hroot, evalSPMF_pure, SPMF.pure_apply_self]
     exact one_ne_zero
   have h := fixedBoundaryRun_bind_query_bound context.key.parameter context.oracle _ _ q hbound _ hresult
-  have hkey : (⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩ : SecretKey) = context.key := by
-    cases context.key
-    rfl
-  simp only [SigningBoundaryTrace.hashCalls_pow_none, hkey] at h
+  simp only [SigningBoundaryTrace.hashCalls_pow_none] at h
+  rw [context.gameRest_keygen hroot adversary] at h
   exact h
 
 end SphincsSecurity.Concrete.RetainedResidual

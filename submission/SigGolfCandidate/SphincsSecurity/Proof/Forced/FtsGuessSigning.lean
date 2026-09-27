@@ -91,7 +91,7 @@ theorem nativeRun_original (environment : Environment auxSpec Coordinate Digest 
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
     (dummy : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)
     (hagrees : PublicAgreement (referenceFamilyWords auxiliary.selections dummy) disclosed known
-      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (message : Message) :
+      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (htop : TopFromGraph key labels) (message : Message) :
     Prod.fst <$> nativeRun environment (fun coordinate => key.ftsSecret coordinate.1 coordinate.2.1 coordinate.2.2) state
         key.parameter key.root
         (finiteHashAnswer ∅ inputs (knownReferenceResidual key.parameter inputs hencoding known auxiliary.rows auxiliary.seed))
@@ -101,7 +101,8 @@ theorem nativeRun_original (environment : Environment auxSpec Coordinate Digest 
           (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed)))
         (signWithView key message)] := by
   rw [nativeRun_erasure,
-    fixedBoundaryRun_signWithView_auxiliary_public key inputs hencoding labels auxiliary hauxiliary dummy disclosed known hagrees message]
+    fixedBoundaryRun_signWithView_auxiliary_public key inputs hencoding labels auxiliary hauxiliary dummy disclosed known hagrees htop
+      message]
 
 theorem signingRun_erasure (environment : Environment auxSpec Coordinate Digest Memory)
     (state : State Coordinate Digest Memory) (ha : ∀ coordinate, (state.allowed coordinate).Nonempty)

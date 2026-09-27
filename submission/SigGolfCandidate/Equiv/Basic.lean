@@ -197,6 +197,29 @@ theorem foldlM_range_seq {α β σ : Type} {n : Nat} (c : Fin n → m α) (b : N
     congr 1; funext t
     simp [List.finRange_succ, List.foldl_map]
 
+/-- `foldlM_range_seq` with a conversion that depends on the index. -/
+theorem foldlM_range_seq_dep {α β σ : Type} {n : Nat} (c : Fin n → m α) (b : Nat → m β)
+    (g : Fin n → α → β) (hb : ∀ j (h : j < n), b j = g ⟨j, h⟩ <$> c ⟨j, h⟩)
+    (upd : σ → Nat → β → σ) (s : σ) :
+    (List.range n).foldlM (fun st j => do let v ← b j; pure (upd st j v)) s =
+      (fun f => (List.finRange n).foldl (fun st j => upd st j.val (g j (f j))) s) <$>
+        SphincsSecurity.Concrete.sequenceFin c := by
+  induction n generalizing s b upd with
+  | zero => simp [SphincsSecurity.Concrete.sequenceFin]
+  | succ n ih =>
+    rw [List.range_succ_eq_map, List.foldlM_cons]
+    simp only [List.foldlM_map]
+    rw [hb 0 (by omega)]
+    simp only [SphincsSecurity.Concrete.sequenceFin, map_bind, bind_map_left, map_pure, bind_assoc,
+      pure_bind]
+    congr 1; funext h
+    have := ih (fun j => c j.succ) (fun j => b (j + 1)) (fun j => g j.succ)
+      (fun j hj => hb (j + 1) (by omega)) (fun st j v => upd st (j + 1) v) (upd s 0 (g ⟨0, by omega⟩ h))
+    simp only [Nat.succ_eq_add_one] at this ⊢
+    rw [this, map_eq_bind_pure_comp]
+    congr 1; funext t
+    simp [List.finRange_succ, List.foldl_map]
+
 theorem map_fst_foldlM {α β γ δ : Type} (l : List γ) (body : α → γ → m δ) (g : α → γ → δ → α)
     (k : α × β → γ → δ → β) (s : α × β) :
     Prod.fst <$> l.foldlM (fun st x => do let r ← body st.1 x; pure (g st.1 x r, k st x r)) s =
@@ -243,10 +266,25 @@ theorem foldl_finRange_capture {β : Type} {n : Nat} (F : Fin n → β) (cap : N
       · rw [dif_pos hl, dif_pos (by omega)]; rfl
       · rw [dif_neg hl, dif_neg (by omega)]
 
+theorem foldl_finRange_appendList {β : Type} {n : Nat} (F : Fin n → List β) (init : List β) :
+    (List.finRange n).foldl (fun acc j => acc ++ F j) init = init ++ (List.ofFn F).flatten := by
+  induction n generalizing init with
+  | zero => simp
+  | succ n ih =>
+    rw [List.finRange_succ, List.foldl_cons, List.foldl_map]
+    have := ih (fun j => F j.succ) (init ++ F 0)
+    rw [this, List.ofFn_succ]; simp
+
 theorem foldl_prod {α β γ : Type} (l : List γ) (u1 : α → γ → α) (u2 : β → γ → β) (a : α) (b : β) :
     l.foldl (fun st j => (u1 st.1 j, u2 st.2 j)) (a, b) = (l.foldl u1 a, l.foldl u2 b) := by
   induction l generalizing a b with
   | nil => rfl
   | cons x l ih => simp [ih]
+
+theorem getD_ofFn {β : Type} {n : Nat} (f : Fin n → β) (i : Nat) (d : β) :
+    (List.ofFn f).getD i d = if h : i < n then f ⟨i, h⟩ else d := by
+  split_ifs with h
+  · simp [List.getD_eq_getElem?_getD, h]
+  · simp [List.getD_eq_getElem?_getD, h]
 
 end SigGolfCandidate.Equiv

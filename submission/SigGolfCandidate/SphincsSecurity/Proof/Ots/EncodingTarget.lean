@@ -14,8 +14,8 @@ namespace SphincsSecurity.Concrete
 open OracleComp OracleSpec
 
 theorem layerHeight_pos (lay : Layer) : 0 < layerHeight lay := by
-  unfold layerHeight
-  split <;> decide
+  unfold layerHeight maxLayerHeight
+  split <;> (try split) <;> omega
 
 theorem layerHeight_sub_one_lt (lay : Layer) : layerHeight lay - 1 < maxLayerHeight := by
   have h1 := layerHeight_le lay

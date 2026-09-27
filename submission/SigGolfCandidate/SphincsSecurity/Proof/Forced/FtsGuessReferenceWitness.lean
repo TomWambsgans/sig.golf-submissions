@@ -41,7 +41,7 @@ theorem fixed_signingProgram_view (auxiliary : QueryImpl Auxiliary ProbComp) (ke
 theorem fixed_reference_signingProgram_view (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
-    (dummy : OtsReferenceWords) (message : Message) (state : State Coordinate Digest PUnit)
+    (dummy : OtsReferenceWords) (htop : TopFromGraph key labels) (message : Message) (state : State Coordinate Digest PUnit)
     (result : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) × State Coordinate Digest PUnit)
     (hr : fixedRun
       (SecretGuessObservation.environment (referenceAnswers key.parameter key.root key.otsSecret labels inputs hencoding auxiliary dummy))
@@ -58,12 +58,12 @@ theorem fixed_reference_signingProgram_view (key : SecretKey) (inputs : Finset H
       (finiteHashAnswer ∅ inputs (knownReferenceResidual key.parameter inputs hencoding (known key.otsSecret labels) auxiliary.rows auxiliary.seed))
       (known key.otsSecret labels) (referenceFamilyWords auxiliary.selections dummy) auxiliary.selections message) = _
   exact (fixedBoundaryRun_signWithView_auxiliary_public key inputs hencoding labels auxiliary hauxiliary dummy
-    (fun _ _ _ => False) (known key.otsSecret labels) (known_agrees key.otsSecret key.ftsSecret labels _) message).symm
+    (fun _ _ _ => False) (known key.otsSecret labels) (known_agrees key.otsSecret key.ftsSecret labels _) htop message).symm
 
 theorem fixed_reference_completedRun_tracking (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
-    (dummy : OtsReferenceWords) (adversary : Adversary) (state : State Coordinate Digest PUnit)
+    (dummy : OtsReferenceWords) (htop : TopFromGraph key labels) (adversary : Adversary) (state : State Coordinate Digest PUnit)
     (result : Completed × State Coordinate Digest PUnit)
     (hr : fixedRun
       (SecretGuessObservation.environment (referenceAnswers key.parameter key.root key.otsSecret labels inputs hencoding auxiliary dummy))
@@ -73,7 +73,7 @@ theorem fixed_reference_completedRun_tracking (key : SecretKey) (inputs : Finset
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed)))
       state result.2 result.1.1.1.1.2 (result.1.1.2 * result.1.2.2) := by
   apply fixed_completedRun_tracking _ key _ labels _ adversary state result hr
-  exact fixed_reference_signingProgram_view key inputs hencoding labels auxiliary hauxiliary dummy
+  exact fixed_reference_signingProgram_view key inputs hencoding labels auxiliary hauxiliary dummy htop
 
 theorem fixedRun_nonzero_of_lazy_posterior {Memory Result : Type}
     (environment : SecretGuessObservation.Environment Auxiliary Coordinate Digest Memory)
@@ -94,7 +94,7 @@ theorem fixedRun_nonzero_of_lazy_posterior {Memory Result : Type}
 theorem lazy_reference_completedRun_tracking (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
-    (dummy : OtsReferenceWords) (adversary : Adversary) (state : State Coordinate Digest PUnit)
+    (dummy : OtsReferenceWords) (htop : TopFromGraph key labels) (adversary : Adversary) (state : State Coordinate Digest PUnit)
     (result : Completed × State Coordinate Digest PUnit)
     (hr : lazyRun
       (SecretGuessObservation.environment (referenceAnswers key.parameter key.root key.otsSecret labels inputs hencoding auxiliary dummy))
@@ -104,7 +104,7 @@ theorem lazy_reference_completedRun_tracking (key : SecretKey) (inputs : Finset 
       (programmedHash key.parameter key.otsSecret key.ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed)))
       state result.2 result.1.1.1.1.2 (result.1.1.2 * result.1.2.2) :=
-  fixed_reference_completedRun_tracking key inputs hencoding labels auxiliary hauxiliary dummy adversary state result
+  fixed_reference_completedRun_tracking key inputs hencoding labels auxiliary hauxiliary dummy htop adversary state result
     (fixedRun_nonzero_of_lazy_posterior _ _ state result _ hr hsecrets)
 
 end SphincsSecurity.Concrete.FtsGuessHash

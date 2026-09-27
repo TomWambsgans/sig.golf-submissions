@@ -37,7 +37,7 @@ theorem referenceForgeryGame_bind_auxiliary {Result : Type} (inputs : Finset Has
         let parameter ← 𝒮[sampleParameter]
         let otsSecret ← 𝒮[sampleOtsSecrets]
         let ftsSecret ← 𝒮[sampleFtsSecrets]
-        let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+        let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
         let auxiliary ← 𝒮[referenceAuxiliarySample inputs]
         let labels ← 𝒮[PMF.uniformOfFintype CanonicalGraphLabels]
         let f := programmedHash parameter otsSecret ftsSecret labels
@@ -51,10 +51,10 @@ theorem referenceForgeryGame_bind_auxiliary {Result : Type} (inputs : Finset Has
   funext otsSecret
   apply congrArg (𝒮[sampleFtsSecrets] >>= ·)
   funext ftsSecret
-  have h := referenceFamilyOracleSample_auxiliary_bind ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+  have h := referenceFamilyOracleSample_auxiliary_bind ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
     (hencoding parameter) (hgraph parameter) (fun f labels selections => do
-      let before ← referenceForgeryRest ⟨parameter, 0, otsSecret, ftsSecret⟩ f labels selections dummy adversary
-      next ⟨parameter, 0, otsSecret, ftsSecret⟩ f labels selections before)
+      let before ← referenceForgeryRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f labels selections dummy adversary
+      next ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ f labels selections before)
   simpa only [evalSPMF_bind] using h
 
 end SphincsSecurity.Concrete

@@ -66,10 +66,10 @@ theorem seedOracle_replaceSecret (auxiliary : segment.ReferenceAuxSeed inputs he
   simp only [seedOracle, seedEncoding, seedMessages_replaceSecret]
 
 theorem outsideGraphMessage_eq_seedMessages (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (words : OtsReferenceWords) (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) :
-    outsideGraphMessage ⟨segment.parameter, root, secrets, ftsSecret⟩ inputs hencoding
+    outsideGraphMessage ⟨segment.parameter, root, secrets, ftsSecret, top⟩ inputs hencoding
         (segment.joinNonencoding inputs hencoding hgraph tables auxiliary.high auxiliary.remaining) =
       segment.seedMessages inputs hencoding hgraph auxiliary secrets ftsSecret words
         (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx)) := by
@@ -77,14 +77,14 @@ theorem outsideGraphMessage_eq_seedMessages (auxiliary : segment.ReferenceAuxSee
   change canonicalGraphMessage (canonicalGraphLabels segment.parameter secrets ftsSecret
     (segment.rawAnswer inputs hencoding hgraph (fun _ => 0) tables auxiliary.high auxiliary.remaining)) position = _
   rw [rawAnswer_eq]
-  exact segment.graphMessage_answer tables auxiliary.high _ root secrets ftsSecret words hword position
+  exact segment.graphMessage_answer tables auxiliary.high _ root top secrets ftsSecret words hword position
 
 theorem referenceSeedTable_eq_raw (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (selections : ReferenceFamily) (words : OtsReferenceWords)
     (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) :
-    referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret⟩ inputs hencoding
+    referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret, top⟩ inputs hencoding
         (segment.referenceSeed inputs hencoding hgraph selections tables auxiliary) =
       joinEncodingTable segment.parameter inputs hencoding
         (segment.seedEncoding inputs hencoding hgraph auxiliary secrets ftsSecret words
@@ -92,43 +92,43 @@ theorem referenceSeedTable_eq_raw (auxiliary : segment.ReferenceAuxSeed inputs h
         (segment.joinNonencoding inputs hencoding hgraph tables auxiliary.high auxiliary.remaining) := by
   change joinEncodingTable segment.parameter inputs hencoding
     (encodingFromMessages segment.parameter
-      (outsideGraphMessage ⟨segment.parameter, root, secrets, ftsSecret⟩ inputs hencoding
+      (outsideGraphMessage ⟨segment.parameter, root, secrets, ftsSecret, top⟩ inputs hencoding
         (segment.joinNonencoding inputs hencoding hgraph tables auxiliary.high auxiliary.remaining))
       auxiliary.selectedRows auxiliary.encoding)
     (segment.joinNonencoding inputs hencoding hgraph tables auxiliary.high auxiliary.remaining) = _
-  rw [segment.outsideGraphMessage_eq_seedMessages inputs hencoding hgraph auxiliary root secrets ftsSecret words hword tables]
+  rw [segment.outsideGraphMessage_eq_seedMessages inputs hencoding hgraph auxiliary root top secrets ftsSecret words hword tables]
   rfl
 
 theorem referenceSeedOracle_eq (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (selections : ReferenceFamily) (words : OtsReferenceWords)
     (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) :
     finiteHashAnswer ∅ inputs
-        (referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret⟩ inputs hencoding
+        (referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret, top⟩ inputs hencoding
           (segment.referenceSeed inputs hencoding hgraph selections tables auxiliary)) =
       segment.answer tables auxiliary.high (segment.seedOracle inputs hencoding hgraph auxiliary secrets ftsSecret words
         (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx))) := by
-  rw [segment.referenceSeedTable_eq_raw inputs hencoding hgraph auxiliary root secrets ftsSecret selections words hword tables]
+  rw [segment.referenceSeedTable_eq_raw inputs hencoding hgraph auxiliary root top secrets ftsSecret selections words hword tables]
   exact segment.rawAnswer_eq inputs hencoding hgraph _ tables auxiliary.high auxiliary.remaining
 
 theorem referenceSeedFrontier_eq (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (selections : ReferenceFamily) (words : OtsReferenceWords)
     (hword : words segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) :
     canonicalGraphFrontier secrets (canonicalGraphLabels segment.parameter secrets ftsSecret
       (finiteHashAnswer ∅ inputs
-        (referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret⟩ inputs hencoding
+        (referenceFamilySeedTable ⟨segment.parameter, root, secrets, ftsSecret, top⟩ inputs hencoding
           (segment.referenceSeed inputs hencoding hgraph selections tables auxiliary)))) words =
       segment.seedFrontier inputs hencoding hgraph auxiliary secrets words
         (PartialChainEndpoint.evaluate tables (secrets segment.lay segment.tree segment.leaf segment.chainIdx)) := by
-  rw [segment.referenceSeedTable_eq_raw inputs hencoding hgraph auxiliary root secrets ftsSecret selections words hword tables,
+  rw [segment.referenceSeedTable_eq_raw inputs hencoding hgraph auxiliary root top secrets ftsSecret selections words hword tables,
     canonicalGraphLabels_joinEncodingTable segment.parameter secrets ftsSecret inputs hencoding hgraph,
-    canonicalGraphLabels_frontier segment.parameter secrets ftsSecret _ words root]
-  change canonicalFrontierValues ⟨segment.parameter, root, secrets, ftsSecret⟩
+    canonicalGraphLabels_frontier segment.parameter secrets ftsSecret _ words root top]
+  change canonicalFrontierValues ⟨segment.parameter, root, secrets, ftsSecret, top⟩
     (segment.rawAnswer inputs hencoding hgraph (fun _ => 0) tables auxiliary.high auxiliary.remaining) words = _
-  rw [rawAnswer_eq, segment.canonicalFrontierValues_answer tables auxiliary.high _ root secrets ftsSecret words hword]
+  rw [rawAnswer_eq, segment.canonicalFrontierValues_answer tables auxiliary.high _ root top secrets ftsSecret words hword]
   rfl
 
 end SphincsSecurity.Concrete.OtsPrefix

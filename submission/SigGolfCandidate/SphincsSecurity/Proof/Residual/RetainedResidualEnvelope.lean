@@ -8,30 +8,47 @@ attribute [local instance] Classical.propDecidable
 attribute [local irreducible] hashInputs sourceInputs canonicalEncodingInputs canonicalGraphInputs instFintypePosition canonicalGraphGameInputs
 set_option backward.isDefEq.respectTransparency false
 
-noncomputable local instance keyFintype : Fintype SecretKey := by
-  classical
-  exact Fintype.ofEquiv
-    (PublicParameter × Digest × (Layer → TreeIndex → LeafIndex → ChainIndex → Digest) × (Index → FtsTree → FtsLeaf → Digest))
-    { toFun := fun key => ⟨key.1, key.2.1, key.2.2.1, key.2.2.2⟩
-      invFun := fun key => (key.parameter, key.root, key.otsSecret, key.ftsSecret)
-      left_inv := fun _ => rfl
-      right_inv := fun _ => rfl }
+theorem signWithView_congr_top (key key' : SecretKey) (hparameter : key.parameter = key'.parameter)
+    (hroot : key.root = key'.root) (hots : key.otsSecret = key'.otsSecret) (hfts : key.ftsSecret = key'.ftsSecret)
+    (htop : TopRegionEq (m := OracleComp HashSpec) (fun level nodeIdx => pure (key.top level nodeIdx))
+      (fun level nodeIdx => pure (key'.top level nodeIdx))) (message : Message) :
+    signWithView key message = signWithView key' message := by
+  unfold signWithView
+  rw [signDigestLoop_congr_key digestAttemptLimit key key' hparameter hroot message]
+  congr 1
+  funext selected
+  rcases selected with _ | ⟨randomness, index, leaves⟩
+  · rfl
+  · simp only [signAfterDigest_congr_top key key' hparameter hots hfts htop]
 
-attribute [local irreducible] keyFintype signatureFintype
+theorem sourceInputs_keyCode {Result : Type} (key : SecretKey) (computation : OracleComp (OracleWorld + SigningSpec) Result) :
+    sourceInputs (keyCode key).key computation = sourceInputs key computation := by
+  have hrequest : requestInputs (keyCode key).key = requestInputs key := by
+    funext input
+    cases input with
+    | inl input => rfl
+    | inr message =>
+        simp only [requestInputs]
+        rw [signWithView_congr_top (keyCode key).key key rfl rfl rfl rfl (keyCode_top key) message]
+  unfold sourceInputs
+  rw [hrequest]
+
+attribute [local irreducible] signatureFintype
 
 noncomputable def verificationInputs (key : SecretKey) : Finset HashInput :=
   Finset.univ.biUnion fun message : Message => Finset.univ.biUnion fun signature : Signature =>
     hashInputs (scheme.verify ⟨key.root, key.parameter⟩ message signature)
 
 noncomputable def gameInputs (adversary : Adversary) : Finset HashInput :=
-  canonicalGraphGameInputs adversary ∪ Finset.univ.biUnion fun key : SecretKey =>
-    sourceInputs key (adversary.main ⟨key.root, key.parameter⟩) ∪ verificationInputs key
+  canonicalGraphGameInputs adversary ∪ Finset.univ.biUnion fun code : KeyCode =>
+    sourceInputs code.key (adversary.main ⟨code.key.root, code.key.parameter⟩) ∪ verificationInputs code.key
 
 theorem sourceInputs_subset_gameInputs (adversary : Adversary) (key : SecretKey) :
     sourceInputs key (adversary.main ⟨key.root, key.parameter⟩) ⊆ gameInputs adversary := by
   intro input hinput
   rw [gameInputs, Finset.mem_union]
-  exact Or.inr (Finset.mem_biUnion.mpr ⟨key, Finset.mem_univ _, Finset.mem_union_left _ hinput⟩)
+  rw [← sourceInputs_keyCode] at hinput
+  exact Or.inr (Finset.mem_biUnion.mpr ⟨keyCode key, Finset.mem_univ _, Finset.mem_union_left _ hinput⟩)
 
 theorem verifyInputs_subset_gameInputs (adversary : Adversary) (key : SecretKey) (forgery : Forgery) :
     hashInputs (scheme.verify ⟨key.root, key.parameter⟩ forgery.message forgery.signature) ⊆ gameInputs adversary := by
@@ -39,7 +56,7 @@ theorem verifyInputs_subset_gameInputs (adversary : Adversary) (key : SecretKey)
   rw [gameInputs, Finset.mem_union]
   apply Or.inr
   apply Finset.mem_biUnion.mpr
-  refine ⟨key, Finset.mem_univ _, Finset.mem_union_right _ ?_⟩
+  refine ⟨keyCode key, Finset.mem_univ _, Finset.mem_union_right _ ?_⟩
   rw [verificationInputs, Finset.mem_biUnion]
   exact ⟨forgery.message, Finset.mem_univ _, Finset.mem_biUnion.mpr ⟨forgery.signature, Finset.mem_univ _, hinput⟩⟩
 

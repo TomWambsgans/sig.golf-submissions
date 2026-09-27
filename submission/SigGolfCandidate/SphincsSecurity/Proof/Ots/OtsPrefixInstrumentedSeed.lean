@@ -35,11 +35,11 @@ theorem fixedImpl_world_program (tables : Fin segment.digit.val → Digest → D
   exact segment.fixedImpl_worldImpl tables high outside input
 
 theorem referenceSeedGame_instrumented (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (selections : ReferenceFamily) (dummy : OtsReferenceWords)
     (hword : referenceFamilyWords selections dummy segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) (adversary : Adversary) :
-    let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret⟩
+    let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret, top⟩
     let oracle := finiteHashAnswer ∅ inputs (referenceFamilySeedTable key inputs hencoding
       (segment.referenceSeed inputs hencoding hgraph selections tables auxiliary))
     referenceInstrumentedRest observer key oracle (canonicalGraphLabels segment.parameter secrets ftsSecret oracle) selections dummy adversary =
@@ -49,8 +49,8 @@ theorem referenceSeedGame_instrumented (auxiliary : segment.ReferenceAuxSeed inp
   dsimp only
   rw [instrumentedSeedGame_replaceSecret, instrumentedSeedGame, segment.fixedImpl_world_program]
   rw [referenceInstrumentedRest,
-    segment.referenceSeedFrontier_eq inputs hencoding hgraph auxiliary root secrets ftsSecret selections _ hword tables,
-    segment.referenceSeedOracle_eq inputs hencoding hgraph auxiliary root secrets ftsSecret selections _ hword tables]
+    segment.referenceSeedFrontier_eq inputs hencoding hgraph auxiliary root top secrets ftsSecret selections _ hword tables,
+    segment.referenceSeedOracle_eq inputs hencoding hgraph auxiliary root top secrets ftsSecret selections _ hword tables]
   rw [segment.program_mask_answer tables auxiliary.high _ ftsSecret (referenceFamilyWords selections dummy) (by rw [hword])]
 
 end SphincsSecurity.Concrete.OtsPrefix

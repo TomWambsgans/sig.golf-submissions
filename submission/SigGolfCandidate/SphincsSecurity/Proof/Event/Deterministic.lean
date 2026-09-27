@@ -1,4 +1,4 @@
-import SigGolfCandidate.SphincsSecurity.Proof.Event.Erasure
+import SigGolfCandidate.SphincsSecurity.Proof.Event.CachedErasure
 import SigGolfCandidate.SphincsSecurity.Proof.Event.Boundary
 import SigGolfCandidate.SphincsSecurity.Proof.Deterministic.ReferenceDistribution
 /-!
@@ -162,99 +162,5 @@ theorem evalDist_independentTable_memo_counted (adversary : Adversary) :
   simp only [← evalSPMF_map, romRun_count_of_costWorld] at h
   rw [evalSPMF_bind]
   exact h
-
-attribute [local irreducible] deterministicGameAfterSeed tableGameAfterSecrets signingDerivationCache in
-/-- Presampling the derivations and erasing them: the deterministic game after the seed, counted. -/
-theorem probEvent_deterministicAfterSeed_le_table (adversary : Adversary) (seed : MasterSeed) (event : Bool → Prop) (q : Nat) :
-    Pr[fun result => event result.1 ∧ result.2 ≤ q |
-      (simulateQ romImpl (countHashQueries (deterministicGameAfterSeed adversary seed))).run' ∅] ≤
-    Pr[fun result => event result.1 ∧ result.2 ≤ q - 1 | do
-      let outputs ← sampleSecretOutputs
-      let randomizers ← sampleRandomizerOutputs
-      (simulateQ romImpl (countHashQueries (tableGameAfterSecrets adversary outputs randomizers))).run'
-        (signingDerivationCache seed outputs randomizers)] := by
-  rw [probEvent_of_evalSPMF_eq (evalDist_presample_computation _
-    (liftM (prepareSecrets seed) : OracleComp OracleWorld SecretOutputs) ∅)]
-  rw [show simulateQ romImpl (liftM (prepareSecrets seed) : OracleComp OracleWorld SecretOutputs) =
-      simulateQ randomOracle (prepareSecrets seed)
-      from QueryImpl.simulateQ_add_liftM_right _ _ _]
-  have hsecrets := evalDist_prepareSecrets seed
-  rw [probEvent_of_evalSPMF_eq (show 𝒮[(simulateQ randomOracle (prepareSecrets seed)).run ∅ >>= fun result =>
-      (simulateQ romImpl (countHashQueries (deterministicGameAfterSeed adversary seed))).run' result.2] =
-      𝒮[((fun outputs => (outputs, derivationCache seed outputs)) <$> sampleSecretOutputs) >>= fun result =>
-      (simulateQ romImpl (countHashQueries (deterministicGameAfterSeed adversary seed))).run' result.2] by
-    rw [evalSPMF_bind, hsecrets, ← evalSPMF_bind])]
-  rw [bind_map_left, probEvent_bind_eq_tsum, probEvent_bind_eq_tsum]
-  apply ENNReal.tsum_le_tsum
-  intro outputs
-  apply mul_le_mul' le_rfl
-  rw [probEvent_of_evalSPMF_eq (evalDist_presample_computation _
-    (liftM (prepareRandomizers seed) : OracleComp OracleWorld RandomizerOutputs) (derivationCache seed outputs))]
-  rw [show simulateQ romImpl (liftM (prepareRandomizers seed) : OracleComp OracleWorld RandomizerOutputs) =
-      simulateQ randomOracle (prepareRandomizers seed)
-      from QueryImpl.simulateQ_add_liftM_right _ _ _]
-  have hrandomizers := evalDist_prepareRandomizers seed outputs
-  rw [probEvent_of_evalSPMF_eq (show 𝒮[(simulateQ randomOracle (prepareRandomizers seed)).run (derivationCache seed outputs) >>= fun result =>
-      (simulateQ romImpl (countHashQueries (deterministicGameAfterSeed adversary seed))).run' result.2] =
-      𝒮[((fun randomizers => (randomizers, signingDerivationCache seed outputs randomizers)) <$> sampleRandomizerOutputs) >>= fun result =>
-      (simulateQ romImpl (countHashQueries (deterministicGameAfterSeed adversary seed))).run' result.2] by
-    rw [evalSPMF_bind, hrandomizers, ← evalSPMF_bind])]
-  rw [bind_map_left, probEvent_bind_eq_tsum, probEvent_bind_eq_tsum]
-  apply ENNReal.tsum_le_tsum
-  intro randomizers
-  apply mul_le_mul' le_rfl
-  unfold deterministicGameAfterSeed tableGameAfterSecrets
-  exact probEvent_keygen_erased (signingDerivationCache_secret seed outputs randomizers) _ le_rfl
-    (fun root => erases_deterministicGameRest _ 0 seed root outputs randomizers
-      (signingDerivationCache_secret seed outputs randomizers)
-      (signingDerivationCache_randomizer seed outputs randomizers) adversary) event q
-
-attribute [local irreducible] deterministicGameAfterSeed tableGameAfterSecrets signingDerivationCache sampleMasterSeed
-  sampleSecretOutputs sampleRandomizerOutputs in
-/-- The deterministic seeded scheme against the independent scheme, in event form. -/
-theorem forgeEventAdvantage_scheme_le_independent (adversary : Adversary) (q : Nat) :
-    Concrete.forgeEventAdvantage scheme adversary q ≤
-      Concrete.forgeEventAdvantage Concrete.scheme (memoAdversary adversary) (q - 1) +
-        ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by
-  unfold Concrete.forgeEventAdvantage
-  rw [← simulateQ_countHashQueries, ← simulateQ_countHashQueries, gameCore_deterministic_split,
-    Concrete.romRun_countHashQueries_lift_bind]
-  calc
-    _ ≤ Pr[fun result => result.1 = true ∧ result.2 ≤ q - 1 | do
-          let seed ← sampleMasterSeed
-          let outputs ← sampleSecretOutputs
-          let randomizers ← sampleRandomizerOutputs
-          (simulateQ romImpl (countHashQueries (tableGameAfterSecrets adversary outputs randomizers))).run'
-            (signingDerivationCache seed outputs randomizers)] := by
-      apply probEvent_bind_le_of
-      intro seed
-      exact probEvent_deterministicAfterSeed_le_table adversary seed (fun b => b = true) q
-    _ = Pr[fun result => result.1 = true ∧ result.2 ≤ q - 1 | do
-          let outputs ← sampleSecretOutputs
-          let randomizers ← sampleRandomizerOutputs
-          let seed ← sampleMasterSeed
-          (simulateQ romImpl (countHashQueries (tableGameAfterSecrets adversary outputs randomizers))).run'
-            (signingDerivationCache seed outputs randomizers)] := by
-      apply probEvent_of_evalSPMF_eq
-      rw [evalSPMF_bind_bind_swap]
-      apply evalSPMF_bind_congr'
-      intro outputs
-      rw [evalSPMF_bind_bind_swap]
-    _ ≤ Pr[fun result => result.1 = true ∧ result.2 ≤ q - 1 | do
-          let outputs ← sampleSecretOutputs
-          let randomizers ← sampleRandomizerOutputs
-          (simulateQ romImpl (countHashQueries (tableGameAfterSecrets adversary outputs randomizers))).run' ∅] + ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by
-      apply probEvent_bind_congr_le_add
-      intro outputs _
-      apply probEvent_bind_congr_le_add
-      intro randomizers _
-      exact probEvent_random_cache_change_event _ (fun seed => signingDerivationCache seed outputs randomizers) ∅
-        (fun seed => signingDerivationCache_agreeOutside seed _ _) (q - 1) (· = true)
-    _ ≤ _ := by
-      apply add_le_add _ le_rfl
-      refine le_trans (probEvent_bind_mono fun outputs _ => probEvent_bind_mono fun randomizers _ =>
-        probEvent_tableGameAfterSecrets_memo_counted adversary outputs randomizers ∅ (q - 1)) (le_of_eq ?_)
-      exact probEvent_of_evalSPMF_eq (evalDist_independentTable_memo_counted adversary) _
-
 
 end SphincsSecurity.Seeded

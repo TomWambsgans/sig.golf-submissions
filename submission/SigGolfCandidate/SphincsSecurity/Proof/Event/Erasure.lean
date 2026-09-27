@@ -69,36 +69,6 @@ theorem Erases.probEvent_counted_le {α : Type} {known : QueryCache HashSpec}
           exact ih cache hcache _ (fun value count count' hle h => hmono value _ _ (Nat.add_le_add_left hle _) h)
   | trans _ _ first second => exact (first cache hcache event hmono).trans (second cache hcache event hmono)
 
-section Keygen
-
-variable {known : QueryCache HashSpec} {seed : MasterSeed} {outputs : SecretOutputs}
-  (hknown : ∀ position, known (secretInputs 0 seed position) = some (outputs position))
-
-include hknown
-
-/-- The erased game saves at least the first query of key generation. -/
-theorem probEvent_keygen_erased (cache : QueryCache HashSpec) (hcache : known ≤ cache) {β : Type}
-    {nextLeft nextRight : Digest → OracleComp OracleWorld β}
-    (hnext : ∀ root, Erases (worldKnown known) (nextLeft root) (nextRight root)) (event : β → Prop) (q : Nat) :
-    Pr[fun result => event result.1 ∧ result.2 ≤ q | (simulateQ romImpl (countHashQueries
-      ((liftM (keygenTree (otsSecret 0 seed topLayer Concrete.rootTree)) : OracleComp OracleWorld Digest) >>= nextLeft))).run' cache] ≤
-    Pr[fun result => event result.1 ∧ result.2 ≤ q - 1 | (simulateQ romImpl (countHashQueries
-      ((liftM (Concrete.keygenRoot 0 (tableOts outputs topLayer Concrete.rootTree) : OracleComp HashSpec Digest) :
-        OracleComp OracleWorld Digest) >>= nextRight))).run' cache] := by
-  rw [keygenTree_first_query, countHashQueries_run'_query_bind]
-  have hc : cache (secretInputs 0 seed firstSecretPosition) = some (outputs firstSecretPosition) := hcache (hknown _)
-  change Pr[_ | (randomOracle (spec := HashSpec) _).run cache >>= _] ≤ _
-  rw [QueryImpl.withCaching_run_some _ hc, pure_bind, probEvent_map]
-  have h := ((erases_keygenTree_first hknown).lift_hash.bind _ _ hnext).probEvent_counted_le cache hcache
-    (fun value count => event value ∧ 1 + count ≤ q)
-    (fun value count count' hle h => ⟨h.1, by have := h.2; omega⟩)
-  refine le_trans (le_of_eq ?_) (h.trans ?_)
-  · rfl
-  · apply probEvent_mono
-    intro result _ hresult
-    exact ⟨hresult.1, by have := hresult.2; omega⟩
-
-end Keygen
 
 open scoped Classical in
 theorem romRun_cap_event {α : Type} (computation : OracleComp OracleWorld α) (cache : QueryCache HashSpec)

@@ -98,7 +98,7 @@ noncomputable def frontierSigningRecord (parameter : PublicParameter) (root : Di
 
 theorem fixedBoundaryRun_signWithView_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
-    (hfrontier : IsSigningFrontier key f words frontier)
+    (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (message : Message) :
     fixedBoundaryRun key.parameter f (signWithView key message) =
@@ -111,15 +111,15 @@ theorem fixedBoundaryRun_signWithView_frontier (key : SecretKey) (f : QueryImpl 
   | some selected =>
       obtain ⟨randomness, index, leaves⟩ := selected
       rw [fixedBoundaryRun_bind, fixedBoundaryRun_lift_hash,
-        boundaryEval_signAfterDigest_frontier key f words frontier hfrontier randomness index leaves (hwords index)]
+        boundaryEval_signAfterDigest_frontier key f words frontier hfrontier htop randomness index leaves (hwords index)]
       simp only [pure_bind, fixedBoundaryRun_pure, map_pure, mul_one]
 
 theorem fixedBoundaryRun_signWithView_canonical (key : SecretKey) (f : QueryImpl HashSpec Id)
-    (dummy : OtsReferenceWords) (message : Message) :
+    (htop : KeyTopHonest f key) (dummy : OtsReferenceWords) (message : Message) :
     fixedBoundaryRun key.parameter f (signWithView key message) =
       frontierSigningRecord key.parameter key.root f key.ftsSecret (canonicalReferenceWords key f dummy)
         (canonicalFrontierValues key f (canonicalReferenceWords key f dummy)) message :=
-  fixedBoundaryRun_signWithView_frontier key f _ _ (isSigningFrontier_canonical key f _)
+  fixedBoundaryRun_signWithView_frontier key f _ _ (isSigningFrontier_canonical key f _) htop
     (frontierReferenceWord_canonical key f dummy) message
 
 noncomputable def frontierSigningRun (parameter : PublicParameter) (root : Digest) (f : QueryImpl HashSpec Id)
@@ -129,12 +129,12 @@ noncomputable def frontierSigningRun (parameter : PublicParameter) (root : Diges
 
 theorem fixedBoundaryRun_sign_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
-    (hfrontier : IsSigningFrontier key f words frontier)
+    (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
     (hwords : ∀ index lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay)
     (message : Message) :
     fixedBoundaryRun key.parameter f (sign key message) =
       frontierSigningRun key.parameter key.root f key.ftsSecret words frontier message := by
-  rw [← signWithView_fst, fixedBoundaryRun_map, fixedBoundaryRun_signWithView_frontier key f words frontier hfrontier hwords]
+  rw [← signWithView_fst, fixedBoundaryRun_map, fixedBoundaryRun_signWithView_frontier key f words frontier hfrontier htop hwords]
   rfl
 
 end SphincsSecurity.Concrete

@@ -25,14 +25,15 @@ theorem gameCore_eq (scheme : Scheme SecretKey) (adversary : Adversary) :
 
 namespace Concrete
 
-/-- The game from the sampled secrets on: build the root, then run the adversary against the signer
-and verify what it returns. -/
+/-- The game from the sampled secrets on: build the top tree (keeping its node table), then run the
+adversary against the signer and verify what it returns. -/
 noncomputable def gameAfterSecrets (adversary : Adversary) (parameter : PublicParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) : OracleComp OracleWorld Bool := do
-  let root ← liftM
-    (keygenRoot parameter (otsSecret topLayer rootTree) : OracleComp HashSpec Digest)
-  gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩
+  let top ← liftM
+    (keygenTable parameter (otsSecret topLayer rootTree) : OracleComp HashSpec (Nat → Nat → Digest))
+  gameRest scheme adversary ⟨top (layerHeight topLayer) 0, parameter⟩
+    ⟨parameter, top (layerHeight topLayer) 0, otsSecret, ftsSecret, top⟩
 
 attribute [local semireducible] keygen
 

@@ -339,6 +339,38 @@ theorem boundaryEval_buildLayerTree_pure (parameter : PublicParameter) (f : Quer
       2 ^ layerHeight lay * (oneTimeKeyHashCost + 1) + 2 ^ layerHeight lay := by ring
   omega
 
+/-- **A layer's tree table built once from table secrets costs exactly a tree node at its height.** -/
+theorem boundaryEval_buildLayerTable_pure (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (lay : Layer) (tree : TreeIndex) (secret : LeafIndex → ChainIndex → Digest) (leaf : LeafIndex)
+    (digits : Encoding) :
+    (boundaryEval parameter f (buildLayerTable parameter lay tree
+      (fun leaf chainIdx => pure (secret leaf chainIdx)) leaf digits)).2 =
+      (FreeMonoid.of none) ^ treeNodeHashCost (layerHeight lay) := by
+  unfold buildLayerTable
+  rw [boundaryEval_bind, boundaryEval_sequenceFin parameter f _ (fun _ => oneTimeKeyHashCost + 1)
+    (fun leafNat => boundaryEval_buildLeaf_pure _ _ _ _ _ _ _)]
+  rw [boundaryEval_bind, boundaryEval_buildLevels _ _ _ (fun _ _ _ _ => boundaryEval_node_hash _ _ _ _ _ _ _ _),
+    levelsHashCost_self]
+  simp only [boundaryEval_pure, mul_one, Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+    smul_eq_mul, ← pow_add]
+  congr 1
+  rw [treeNodeHashCost_def]
+  have hpos : 0 < 2 ^ layerHeight lay := Nat.two_pow_pos _
+  have : (oneTimeKeyHashCost + 2) * 2 ^ layerHeight lay =
+      2 ^ layerHeight lay * (oneTimeKeyHashCost + 1) + 2 ^ layerHeight lay := by ring
+  omega
+
+/-- Key generation's table costs exactly one top tree. -/
+theorem boundaryEval_keygenTable (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (secret : LeafIndex → ChainIndex → Digest) :
+    boundaryEval parameter f (keygenTable parameter secret) =
+      (evalWithAnswerFn f (keygenTable parameter secret), (FreeMonoid.of none) ^ keygenHashCost) := by
+  apply boundaryEval_eq_of_snd
+  unfold keygenTable
+  rw [boundaryEval_bind, boundaryEval_buildLayerTable_pure, keygenHashCost_def]
+  split
+  simp only [boundaryEval_pure, mul_one]
+
 theorem boundaryEval_keygenRoot (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
     (secret : LeafIndex → ChainIndex → Digest) :
     boundaryEval parameter f (keygenRoot parameter secret) =

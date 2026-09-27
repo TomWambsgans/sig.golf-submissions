@@ -3,8 +3,8 @@ import SigGolfCandidate.SphincsSecurity.Scheme
 /-!
 # A search that beats its own odds
 
-The signer's searches are long: `2 ^ 20` trials each, a randomizer trial accepted with probability
-about `2 ^ -10` and a counter trial with probability at least `1/1536`.
+The signer's searches are long: `2 ^ 20` randomizer trials accepted with probability about `2 ^ -10`
+each, and `2 ^ 22` counter trials accepted with probability at least `1/4741` each.
 What that buys is stated here, in the elementary form the bound needs. A trial rejected with
 probability at most `1 - 1/m` leaves at most `1/2` after `m` trials, because `(1-a)(1+a) ≤ 1` caps
 the product while Bernoulli's inequality puts `(1+a)^m` above `1 + m a = 2`.
@@ -110,32 +110,32 @@ theorem digest_room (x : ENNReal) (hx : x + (1024 : ENNReal)⁻¹ = 1) :
   rw [add_comm]
   exact add_le_add le_rfl hsmall
 
-/-- After a union bound over all `2²⁵⁶` messages, the digest search (`2⁻¹⁰²³`) and the seven counter
-searches (`2⁻⁶⁸²` each) stay below `2⁻²⁵⁶`. -/
+/-- After a union bound over all `2²⁵⁶` messages, the digest search (`2⁻¹⁰²³`) and the six counter
+searches (`2⁻⁸⁸⁴` each) stay below `2⁻²⁵⁶`. -/
 theorem closing_sum :
     (2 : ENNReal) ^ 256 *
-      ((2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ 682)
+      ((2⁻¹ : ENNReal) ^ 1023 + 6 * (2⁻¹ : ENNReal) ^ 884)
       ≤ ((2 ^ 256 : Nat) : ENNReal)⁻¹ := by
   have hcast : ((2 ^ 256 : Nat) : ENNReal)⁻¹ = (2⁻¹ : ENNReal) ^ 256 := by
     rw [Nat.cast_pow, Nat.cast_ofNat, ENNReal.inv_pow]
   have ha : (2⁻¹ : ENNReal) ^ 1023 ≤ (2⁻¹ : ENNReal) ^ 513 := inv_two_pow_anti (by norm_num)
-  have hb : 7 * (2⁻¹ : ENNReal) ^ 682 ≤ (2⁻¹ : ENNReal) ^ 513 := by
-    have hy : (2⁻¹ : ENNReal) ^ 682 ≤ (2⁻¹ : ENNReal) ^ 516 := inv_two_pow_anti (by norm_num)
+  have hb : 6 * (2⁻¹ : ENNReal) ^ 884 ≤ (2⁻¹ : ENNReal) ^ 513 := by
+    have hy : (2⁻¹ : ENNReal) ^ 884 ≤ (2⁻¹ : ENNReal) ^ 516 := inv_two_pow_anti (by norm_num)
     have h1 := inv_two_pow_succ_add 515
     have h2 := inv_two_pow_succ_add 514
     have h3 := inv_two_pow_succ_add 513
-    calc 7 * (2⁻¹ : ENNReal) ^ 682 ≤ 8 * (2⁻¹ : ENNReal) ^ 516 :=
+    calc 6 * (2⁻¹ : ENNReal) ^ 884 ≤ 8 * (2⁻¹ : ENNReal) ^ 516 :=
           mul_le_mul' (by norm_num) hy
       _ = (((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)
             + ((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516))
           + (((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)
             + ((2⁻¹ : ENNReal) ^ 516 + (2⁻¹ : ENNReal) ^ 516)) := by ring
       _ = (2⁻¹ : ENNReal) ^ 513 := by rw [h1, h2, h3]
-  have hsum : (2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ 682 ≤ (2⁻¹ : ENNReal) ^ 512 :=
+  have hsum : (2⁻¹ : ENNReal) ^ 1023 + 6 * (2⁻¹ : ENNReal) ^ 884 ≤ (2⁻¹ : ENNReal) ^ 512 :=
     (add_le_add ha hb).trans_eq (inv_two_pow_succ_add 512)
   rw [hcast]
   calc
-    (2 : ENNReal) ^ 256 * ((2⁻¹ : ENNReal) ^ 1023 + 7 * (2⁻¹ : ENNReal) ^ 682)
+    (2 : ENNReal) ^ 256 * ((2⁻¹ : ENNReal) ^ 1023 + 6 * (2⁻¹ : ENNReal) ^ 884)
         ≤ (2 : ENNReal) ^ 256 * (2⁻¹ : ENNReal) ^ 512 := mul_le_mul_right hsum _
     _ = (2⁻¹ : ENNReal) ^ 256 := by
       rw [← ENNReal.inv_pow, mul_comm, ← ENNReal.div_eq_inv_mul,

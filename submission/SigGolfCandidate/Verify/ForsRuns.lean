@@ -75,14 +75,13 @@ def k0 : List (Reg × Word) :=
 def gkD : List (Reg × Word) := baseK ++ [(.x14, 6), (.x15, 7), (.x20, 8), (.x21, 9), (.x26, 10)]
 def dgK : List (Reg × Word) := gkD ++ [(.x10, 0), (.x11, 128), (.x12, 0x160)]
 
-def ctrX : E :=
-  .bin .or (.bin .or (.bin .or (ldE 9776) (ldE 9784)) (ldE 9792)) (.un (.ld .wu 0) (ldE 9800))
-def ctrE' : E := .bin .srl (.bin .or ctrX (.bin .sll ctrX (cw 32))) (cw 52)
+def ctrX : E := .bin .or (.bin .or (ldE 9104) (ldE 9112)) (ldE 9120)
+def ctrE' : E := .bin .srl (.bin .or ctrX (.bin .sll ctrX (cw 32))) (cw 54)
 
 def specStartOk : Spec :=
   ⟨[], [(⟨none, BitVec.ofNat 64 40⟩, ldE 2056), (⟨none, BitVec.ofNat 64 32⟩, ldE 2048),
-    (⟨none, BitVec.ofNat 64 0⟩, cw 3073)], 32, true, 32, [⟨.ne, ctrE', .c 0, false⟩], none⟩
-def specStartRej : Spec := ⟨rejK, [], 39, true, 25, [⟨.ne, ctrE', .c 0, true⟩], none⟩
+    (⟨none, BitVec.ofNat 64 0⟩, cw 3073)], 30, true, 30, [⟨.ne, ctrE', .c 0, false⟩], none⟩
+def specStartRej : Spec := ⟨rejK, [], 37, true, 23, [⟨.ne, ctrE', .c 0, true⟩], none⟩
 
 def idxE : E := .bin .srl (.bin .sll (wLdE 0) (cw 30)) (cw 30)
 def hiE : E := .bin .sll (.bin .srl idxE (cw 32)) (cw 24)
@@ -101,13 +100,13 @@ def specDgOk (b : Nat) : Spec :=
    xPc 0 b 0 + 1, true, 34,
    [⟨.lt, .bin .sll u0E (cw 63), .c 0, b == 1⟩, ⟨.eq, admE, .c 0, true⟩], none⟩
 
-def specDgRej : Spec := ⟨rejK, [], 39, true, 6, [⟨.eq, admE, .c 0, false⟩], none⟩
+def specDgRej : Spec := ⟨rejK, [], 37, true, 6, [⟨.eq, admE, .c 0, false⟩], none⟩
 
 def topCheck : Bool :=
   specB gkD (runAt k0 [] 0 [.br false]) specStartOk dgK [] &&
   specB [] (runAt k0 [] 0 [.br true]) specStartRej [] [] &&
-  specB gkF (runAt dgK [] 33 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] &&
-  specB gkF (runAt dgK [] 33 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] &&
-  specB [] (runAt dgK [] 33 [.br false]) specDgRej [] []
+  specB gkF (runAt dgK [] 31 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] &&
+  specB gkF (runAt dgK [] 31 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] &&
+  specB [] (runAt dgK [] 31 [.br false]) specDgRej [] []
 
 end SigGolfCandidate.Verify

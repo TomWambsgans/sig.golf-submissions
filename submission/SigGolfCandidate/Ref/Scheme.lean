@@ -78,14 +78,37 @@ def buildTree (S : List Byte) (lay tau h cap : Nat) (x : List Nat) :
 
 /-! ## keygen -/
 
-/-- Public key = root of tree `(0, 0)` (height 5). (The capture arguments are irrelevant.) -/
-def keygenList (S : List Byte) : OracleComp HashSpec Val := do
-  let (root, _, _) ← buildTree S 0 0 (height 0) 0 []
-  pure root
+/-- All levels `0 .. h` of a tree over `leaves` (level 0 = the leaves), built bottom-up, each level
+left to right: the queries of `buildLevels`, keeping every level. -/
+def buildAllLevels (node : NodeFmt) (h : Nat) (leaves : List Val) :
+    OracleComp HashSpec (List (List Val)) :=
+  (List.range' 1 h).foldlM (fun (levels : List (List Val)) lam => do
+    let level ← buildLevel node lam (levels.getD (lam - 1) [])
+    pure (levels ++ [level])) [leaves]
 
-def keygenRef (sk : Bytes 32) : OracleComp HashSpec (Bytes 16) := do
-  let root ← keygenList (toList sk)
-  pure (ofList 16 root)
+/-- Level `l` of the top tree masked node by node: `mask(l, j)` for `j` in order, then
+`X_{l,j} xor mask(l, j)`. -/
+def maskLevel (S : List Byte) (l : Nat) (level : List Val) : OracleComp HashSpec (List Val) :=
+  (List.range level.length).foldlM (fun acc j => do
+    let mk ← hash16 (maskInput S l j)
+    pure (acc ++ [xorBytes (level.getD j []) mk])) []
+
+/-- `ref.keygen`: build the top tree (layer 0, tau 0, height `topH`, as `buildTree`), mask its
+levels `0 .. topH - 1` into the region, MAC the region. Returns `(pk = root, cache bytes)`. -/
+def keygenList (S : List Byte) : OracleComp HashSpec (Val × List Byte) := do
+  let (leaves, _) ← buildLeaves S 0 0 topH 0 []
+  let levels ← buildAllLevels (nodeInput 0 0) topH leaves
+  let masked ← (List.range topH).foldlM (fun (acc : List Val) l => do
+    let ml ← maskLevel S l (levels.getD l [])
+    pure (acc ++ ml)) []
+  let region := masked.flatten
+  let tag ← H (macInput S region)
+  pure ((levels.getD topH []).getD 0 [],
+    toList (n := 32) tag ++ region ++ zeros (cacheBytes - 32 - regionBytes))
+
+def keygenRef (sk : Bytes 32) : OracleComp HashSpec (Bytes 16 × Cache) := do
+  let (root, cache) ← keygenList (toList sk)
+  pure (ofList 16 root, ofList CACHE_BYTES cache)
 
 /-! ## sign -/
 
@@ -136,18 +159,46 @@ def searchCounter (lay tau e : Nat) (M : Val) (c : Nat) :
 /-- A signed layer: counter, 42 chain values, authentication path. -/
 abbrev LayerSig := Nat × List Val × List Val
 
-/-- Layers `n-1, n-2, .., 0` (`M` = the message of layer `n-1`): counter search, then the tree
-with capture; its root is the message of the layer below. Returns the layers in order
-`0 .. n-1`. -/
-def signLayers (S : List Byte) (idx : Nat) : Nat → Val → OracleComp HashSpec (Option (List LayerSig))
-  | 0, _ => pure (some [])
+/-- Chain `i` of leaf `e` up to position `x` only: the secret, then steps `1 .. x`. -/
+def chainTo (S : List Byte) (lay tau e i x : Nat) : OracleComp HashSpec Val := do
+  let v ← hash16 (prfInput S lay tau e i)
+  (List.range' 1 x).foldlM (fun v mu => hash16 (chainInput lay tau e i mu v)) v
+
+/-- The top-tree path of leaf `e` from the cache: for `l = 0 .. topH - 1`, sibling
+`s = (e >> l) xor 1`, query `mask(l, s)`, path node = cache node `(l, s)` xor mask. -/
+def topPath (S cache : List Byte) (e : Nat) : OracleComp HashSpec (List Val) :=
+  (List.range topH).foldlM (fun acc l => do
+    let s := (e / 2 ^ l) ^^^ 1
+    let mk ← hash16 (maskInput S l s)
+    pure (acc ++ [xorBytes (cacheNode cache l s) mk])) []
+
+/-- Layer 0 (the cached top tree): counter search on `M`, the WOTS signature of leaf `e_0`
+(chains up to `x_i` only), the path from the cache. The top tree is not built. -/
+def signTop (S cache : List Byte) (idx : Nat) (M : Val) :
+    OracleComp HashSpec (Option (List LayerSig)) := do
+  let (e, tau) := route idx 0
+  match ← searchCounter 0 tau e M 0 cMax with
+  | none => pure none
+  | some (c, x) =>
+    let vals ← (List.range nChains).foldlM (fun acc i => do
+      let v ← chainTo S 0 tau e i (x.getD i 0)
+      pure (acc ++ [v])) []
+    let path ← topPath S cache e
+    pure (some [(c, vals, path)])
+
+/-- Layers `lay, lay-1, .., 1` (`M` = the message of layer `lay`): counter search, then the tree
+with capture; its root is the message of the layer below; then the top layer (`signTop`).
+Called with `lay = nLayers - 1`. Returns the layers in order `0 .. lay`. -/
+def signLayers (S cache : List Byte) (idx : Nat) :
+    Nat → Val → OracleComp HashSpec (Option (List LayerSig))
+  | 0, M => signTop S cache idx M
   | lay + 1, M => do
-    let (e, tau) := route idx lay
-    match ← searchCounter lay tau e M 0 cMax with
+    let (e, tau) := route idx (lay + 1)
+    match ← searchCounter (lay + 1) tau e M 0 cMax with
     | none => pure none
     | some (c, x) =>
-      let (root, vals, path) ← buildTree S lay tau (height lay) e x
-      match ← signLayers S idx lay root with
+      let (root, vals, path) ← buildTree S (lay + 1) tau (height (lay + 1)) e x
+      match ← signLayers S cache idx lay root with
       | none => pure none
       | some rest => pure (some (rest ++ [(c, vals, path)]))
 
@@ -156,45 +207,61 @@ def serialize (rho : Val) (fors : List (Val × List Val)) (lays : List LayerSig)
   rho ++ (fors.map fun o => o.1 ++ o.2.flatten).flatten ++
     (lays.map fun l => le32 l.1 ++ l.2.1.flatten ++ l.2.2.flatten).flatten
 
-def signList (S m : List Byte) : OracleComp HashSpec (Option (List Byte)) := do
-  match ← searchDigest S m 0 aMax with
-  | none => pure none
-  | some (rho, N) =>
-    let (fors, roots) ← signFors S N
-    let M ← hash16 (rootsInput (idxOf N) roots)
-    match ← signLayers S (idxOf N) nLayers M with
+/-- `ref.sign`: the MAC check of the cache (one query; `none` on a mismatch), the digest search,
+FORS, the layers. -/
+def signList (S cache m : List Byte) : OracleComp HashSpec (Option (List Byte)) := do
+  let tag ← H (macInput S (cacheRegion cache))
+  if toList (n := 32) tag = cacheTag cache then
+    match ← searchDigest S m 0 aMax with
     | none => pure none
-    | some lays => pure (some (serialize rho fors lays))
+    | some (rho, N) =>
+      let (fors, roots) ← signFors S N
+      let M ← hash16 (rootsInput (idxOf N) roots)
+      match ← signLayers S cache (idxOf N) (nLayers - 1) M with
+      | none => pure none
+      | some lays => pure (some (serialize rho fors lays))
+  else pure none
 
-def signRef (sk : Bytes 32) (m : Bytes 32) : OracleComp HashSpec (Option (Bytes 7756)) := do
-  let r ← signList (toList sk) (toList m)
-  pure (r.map (ofList 7756))
+def signRef (sk : Bytes 32) (cache : Cache) (m : Bytes 32) :
+    OracleComp HashSpec (Option (Bytes 7080)) := do
+  let r ← signList (toList sk) (toList cache) (toList m)
+  pure (r.map (ofList 7080))
 
 /-! ## expand (the byte permutation `ref.to_witness`) -/
 
-/-- Offset of layer `lay` in the signature: `2480 + 756 lay`. -/
-def sigLayerOff (lay : Nat) : Nat := 2480 + 756 * lay
-/-- Offset of layer `lay`'s body (chain values, path) in the witness: `2480 + 752 lay`. -/
-def witLayerOff (lay : Nat) : Nat := 2480 + 752 * lay
-/-- Offset of the counters in the witness. -/
-def witCounters : Nat := 7728
+/-- Bytes of layer `lay` in the signature: `LE32 c`, 42 chain values, `h_lay` siblings. -/
+def sigLayerBytes (lay : Nat) : Nat := 4 + 16 * nChains + 16 * height lay
+/-- Bytes before the layers: `rho` and the FORS openings (2480). -/
+def headBytes : Nat := 16 + 16 * (1 + ftsA) * ftsTrees
+/-- Offset of layer `lay` in the signature. -/
+def sigLayerOff (lay : Nat) : Nat := headBytes + ((List.range lay).map sigLayerBytes).sum
+/-- Offset of layer `lay`'s body (chain values, path) in the witness. -/
+def witLayerOff (lay : Nat) : Nat := headBytes + ((List.range lay).map fun l => sigLayerBytes l - 4).sum
+/-- Offset of the counters in the witness (7056). -/
+def witCounters : Nat := witLayerOff nLayers
+
+/-- The layer of signature byte `i ≥ headBytes`. -/
+def sigLayerOf (i : Nat) : Nat := ((List.range' 1 (nLayers - 1)).filter fun l => sigLayerOff l ≤ i).length
+/-- The layer of witness body byte `headBytes ≤ i < witCounters`. -/
+def witLayerOf (i : Nat) : Nat := ((List.range' 1 (nLayers - 1)).filter fun l => witLayerOff l ≤ i).length
 
 /-- Signature position of witness byte `i`: head (rho, FORS) in place; layer bodies without
-their counters; the seven counters at the end. -/
+their counters; the six counters at the end. -/
 def witnessSrc (i : Nat) : Nat :=
-  if i < 2480 then i
+  if i < headBytes then i
   else if i < witCounters then
-    sigLayerOff ((i - 2480) / 752) + 4 + (i - witLayerOff ((i - 2480) / 752))
+    sigLayerOff (witLayerOf i) + 4 + (i - witLayerOff (witLayerOf i))
   else
     sigLayerOff ((i - witCounters) / 4) + (i - witCounters) % 4
 
-/-- Witness position of signature byte `i` (inverse of `witnessSrc`): with
-`lay = (i - 2480) / 756`, `r = (i - 2480) % 756`, the counter byte `r < 4` goes to
-`7728 + 4 lay + r`, the body byte to `witLayerOff lay + r - 4`. -/
+/-- Witness position of signature byte `i` (inverse of `witnessSrc`): with `lay = sigLayerOf i`
+and `r = i - sigLayerOff lay`, the counter byte `r < 4` goes to `witCounters + 4 lay + r`, the
+body byte to `witLayerOff lay + r - 4`. -/
 def signatureSrc (i : Nat) : Nat :=
-  if i < 2480 then i
-  else if (i - 2480) % 756 < 4 then witCounters + 4 * ((i - 2480) / 756) + (i - 2480) % 756
-  else witLayerOff ((i - 2480) / 756) + ((i - 2480) % 756 - 4)
+  if i < headBytes then i
+  else if i - sigLayerOff (sigLayerOf i) < 4 then
+    witCounters + 4 * sigLayerOf i + (i - sigLayerOff (sigLayerOf i))
+  else witLayerOff (sigLayerOf i) + (i - sigLayerOff (sigLayerOf i) - 4)
 
 /-- `ref.to_witness` on byte lists. -/
 def toWitness (sig : List Byte) : List Byte :=
@@ -204,9 +271,9 @@ def toWitness (sig : List Byte) : List Byte :=
 def fromWitness (w : List Byte) : List Byte :=
   (List.range sigBytes).map fun i => w.getD (signatureSrc i) 0
 
-def expandRef (sig : Bytes 7756) : Bytes 7756 := ofList 7756 (toWitness (toList sig))
+def expandRef (sig : Bytes 7080) : Bytes 7080 := ofList 7080 (toWitness (toList sig))
 
-def unexpandRef (w : Bytes 7756) : Bytes 7756 := ofList 7756 (fromWitness (toList w))
+def unexpandRef (w : Bytes 7080) : Bytes 7080 := ofList 7080 (fromWitness (toList w))
 
 /-! ## verify (on the witness, in the bytecode's order) -/
 
@@ -280,11 +347,11 @@ def verifyList (m pk w : List Byte) : OracleComp HashSpec Bool := do
   | none => pure false
   | some root => pure (root == pk)
 
-def verifyRef (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) : OracleComp HashSpec Bool :=
+def verifyRef (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7080) : OracleComp HashSpec Bool :=
   verifyList (toList m) (toList pk) (toList w)
 
 /-- Verification of a signature: verify its witness. -/
-def verifySigRef (m : Bytes 32) (pk : Bytes 16) (sig : Bytes 7756) : OracleComp HashSpec Bool :=
+def verifySigRef (m : Bytes 32) (pk : Bytes 16) (sig : Bytes 7080) : OracleComp HashSpec Bool :=
   verifyRef m pk (expandRef sig)
 
 end SigGolfCandidate.Ref

@@ -45,7 +45,7 @@ def ForsIn (d : DCtx) (k : Nat) (roots : List Val) (s : MachineState) : Prop :=
 def forsFC (d : DCtx) (k : Nat) : FCtx :=
   ⟨d.wl, d.pk, d.u k, 10, true, k / 7, 10 * (k % 7), 64, 10, k, d.idx, 32 + 176 * k, 0x240 + 16 * k⟩
 
-theorem forsFC_ok (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk : k < 14) : (forsFC d k).ok := by
+theorem forsFC_ok (d : DCtx) (hwl : d.wl.length = 7080) (k : Nat) (hk : k < 14) : (forsFC d k).ok := by
   refine ⟨by simp [forsFC], by simp [forsFC], ?_, by simp [forsFC], ?_, hwl, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [forsFC]
   · exact d_u_lt d k
@@ -126,7 +126,7 @@ theorem tree_branch (d : DCtx) (k t : Nat) (hk : k < 14) (s : MachineState)
   · rw [if_neg h0, hge, dirOf, if_neg h0]
     rcases Nat.mod_two_eq_zero_or_one (d.u k) with h | h <;> simp [h]
 
-theorem tree_leaf (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk1 : 1 ≤ k) (hk : k < 14)
+theorem tree_leaf (d : DCtx) (hwl : d.wl.length = 7080) (k : Nat) (hk1 : 1 ≤ k) (hk : k < 14)
     (roots : List Val) (s : MachineState) (hs : ForsIn d k roots s) :
     ∃ u, Steps image s (treeSteps k) (treeSteps k) u ∧ fetch image u = some (.base .ECALL) ∧
       u.getReg .x5 = 0 ∧ hashArgumentsValid u = true ∧
@@ -260,14 +260,14 @@ theorem stW0_mod (s : MachineState) (a : Nat) (v : E) (V : Nat) (hv : v.eval s =
   omega
 
 theorem topCheck_parts :
-    specB gkF (runAt dgK [] 33 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] = true ∧
-    specB gkF (runAt dgK [] 33 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] = true ∧
-    specB [] (runAt dgK [] 33 [.br false]) specDgRej [] [] = true := by
+    specB gkF (runAt dgK [] 31 [.br true, .br false]) (specDgOk 0) (fk true 0xC0 64) [] = true ∧
+    specB gkF (runAt dgK [] 31 [.br true, .br true]) (specDgOk 1) (fk true 0xC0 64) [] = true ∧
+    specB [] (runAt dgK [] 31 [.br false]) specDgRej [] [] = true := by
   have := topCheck_ok
   simp only [topCheck, Bool.and_eq_true] at this
   exact ⟨this.1.1.2, this.1.2, this.2⟩
 
-theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 7756) (s : MachineState) (hs : DigestOut d s) :
+theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 7080) (s : MachineState) (hs : DigestOut d s) :
     (admissible (d.A % 2 ^ 184) = false → ∃ t, Steps image s 6 6 t ∧ fetch image t = some (.base .ECALL) ∧
         t.getReg .x5 = 1 ∧ t.getReg .x10 = 1) ∧
     (admissible (d.A % 2 ^ 184) = true → ∃ u, Steps image s 34 34 u ∧ fetch image u = some (.base .ECALL) ∧
@@ -318,7 +318,7 @@ theorem dg_leaf (d : DCtx) (hwl : d.wl.length = 7756) (s : MachineState) (hs : D
       rw [hhi, BitVec.ofNat_add_ofNat]
     have hq : d.idx / 2 ^ 32 < 4 := by omega
     set b := d.u 0 % 2 with hb
-    have hsp : specB gkF (runAt dgK [] 33 [.br true, .br (b == 1)]) (specDgOk b) (fk true 0xC0 64) [] = true := by
+    have hsp : specB gkF (runAt dgK [] 31 [.br true, .br (b == 1)]) (specDgOk b) (fk true 0xC0 64) [] = true := by
       rcases Nat.mod_two_eq_zero_or_one (d.u 0) with h | h
       · rw [hb, h]; exact cOk0
       · rw [hb, h]; exact cOk1
@@ -504,6 +504,6 @@ theorem tree_end (d : DCtx) (k : Nat) (hk : k < 14) (roots : List Val) (t u : Ma
   · rw [wf 0x1C8 (by omega) (by omega)]; exact hN8
   · refine ⟨bitOf (forsFC d k).E ((forsFC d k).h - 1), by simp [bitOf]; omega, ?_⟩
     rw [writeHash_pc, hpc, pcOf_add4]
-    simp only [forsFC, tEnd, Nat.add_sub_cancel]
+    simp only [forsFC, tEnd, Nat.add_sub_cancel, show xp true (10 - 1) = 0 from rfl, Nat.add_zero]
 
 end SigGolfCandidate.Verify

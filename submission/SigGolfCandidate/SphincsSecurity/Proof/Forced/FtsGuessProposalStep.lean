@@ -304,18 +304,18 @@ theorem proposalRun_forced {Result : Type} (computation : OracleComp (OracleWorl
 theorem covered_step_digest (input : (OracleWorld + SigningSpec).Domain)
     (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state) :
     ∀ message, input = .inr message → hashInputs (publicDigestLoop parameter root message digestAttemptLimit) ⊆ inputs := by
   intro message heq
   subst heq
-  exact covered_sign_digest parameter root otsSecret inputs message next state hvalid hcovered
+  exact covered_sign_digest parameter root otsSecret labels inputs message next state hvalid hcovered
 
 variable (hauxiliary : ∀ seed : inputs → HashOutput,
   (⟨selections, rows, seed⟩ : ReferenceAuxiliary inputs) ∈ (referenceAuxiliarySample inputs).support)
 
 include hauxiliary in
 theorem proposalRun_complete (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state.2) (total : Nat) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2) (total : Nat) :
     (proposalRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter computation state >>=
       fun result => (liftM (completeProposalWord (PMF.uniformOfFintype Index) total result.2.1) : SPMF (List Index))) =
       (liftM (completeProposalWord (PMF.uniformOfFintype Index) total state.1) : SPMF (List Index)) := by
@@ -337,7 +337,7 @@ theorem proposalRun_complete (computation : OracleComp (OracleWorld + SigningSpe
             (covered_step_next parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter hauxiliary
               input next state.2 hvalid hcovered (result.1, result.2.2) hforced)
         _ = _ := proposalStep_complete parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
-          input state hvalid (covered_step_digest parameter root otsSecret inputs input next state.2 hvalid hcovered) total
+          input state hvalid (covered_step_digest parameter root otsSecret labels inputs input next state.2 hvalid hcovered) total
 
 /-! ### The completed proposal run -/
 
@@ -376,7 +376,7 @@ theorem proposalCompletedRun_erasure (adversary : Adversary) (state : ProposalSt
 
 include hauxiliary in
 theorem proposalCompletedRun_complete (adversary : Adversary) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.2) (total : Nat) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.2) (total : Nat) :
     (proposalCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter adversary state >>=
       fun result => (liftM (completeProposalWord (PMF.uniformOfFintype Index) total result.2.1) : SPMF (List Index))) =
       (liftM (completeProposalWord (PMF.uniformOfFintype Index) total state.1) : SPMF (List Index)) := by
@@ -399,7 +399,7 @@ theorem proposalCompletedRun_complete (adversary : Adversary) (state : ProposalS
 
 include hauxiliary in
 theorem expected_proposalCompletedRun_terminalPotential (adversary : Adversary) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.2) (total : Nat)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.2) (total : Nat)
     (payoff : List Index → ENNReal) :
     (∑' result, Pr[= result | proposalCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter adversary state] * terminalProposalPotential (PMF.uniformOfFintype Index) total payoff result.2.1) =

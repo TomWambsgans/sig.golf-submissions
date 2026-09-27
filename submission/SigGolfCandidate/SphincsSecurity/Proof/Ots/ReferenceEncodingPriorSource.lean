@@ -12,7 +12,7 @@ noncomputable def referenceEncodingTableGame {Result : Type} (observer : Frontie
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let selections ← 𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit]
   let outside ← 𝒮[PMF.uniformOfFintype (NonencodingRows parameter inputs (hencoding parameter))]
   let encoding ← complete (referenceEncodingAllowed parameter (outsideGraphMessage key inputs (hencoding parameter) outside) selections)

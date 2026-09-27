@@ -16,9 +16,9 @@ theorem uSteps_le (k : Nat) : uSteps k ≤ 4 := by
   · split <;> omega
   · omega
 
-theorem foldCost_fors : foldCost 10 0 10 = 178 := by decide
+theorem foldCost_fors : foldCost true 10 0 10 = 178 := by decide
 
-theorem treeRest_good (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk : k < 14)
+theorem treeRest_good (d : DCtx) (hwl : d.wl.length = 7080) (k : Nat) (hk : k < 14)
     (roots : List Val) (Kr : Val → OracleComp HashSpec Obs) (N C : Nat)
     (hK : ∀ ans t, ForsIn d (k + 1) (roots ++ [answerBytes 16 ans]) t →
       Good t N C (Kr (answerBytes 16 ans)))
@@ -34,7 +34,7 @@ theorem treeRest_good (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk : k < 
 
 def treeCost (k : Nat) : Nat := treeSteps k + 8 + 178
 
-theorem tree_good (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk1 : 1 ≤ k) (hk : k < 14)
+theorem tree_good (d : DCtx) (hwl : d.wl.length = 7080) (k : Nat) (hk1 : 1 ≤ k) (hk : k < 14)
     (roots : List Val) (K : List Val → OracleComp HashSpec Obs) (N C : Nat)
     (hK : ∀ ans t, ForsIn d (k + 1) (roots ++ [answerBytes 16 ans]) t →
       Good t N C (K (roots ++ [answerBytes 16 ans])))
@@ -61,7 +61,7 @@ def forsF (d : DCtx) (roots : List Val) (k : Nat) : OracleComp HashSpec (List Va
 
 def treesCost (i k : Nat) : Nat := ((List.range' i k).map treeCost).sum
 
-theorem trees_good (d : DCtx) (hwl : d.wl.length = 7756) (K : List Val → OracleComp HashSpec Obs)
+theorem trees_good (d : DCtx) (hwl : d.wl.length = 7080) (K : List Val → OracleComp HashSpec Obs)
     (N C : Nat) (hK : ∀ roots t, ForsIn d 14 roots t → Good t N C (K roots)) :
     ∀ m k, k + m = 14 → 1 ≤ k → ∀ roots s, ForsIn d k roots s →
       Good s (N + 200 * m) (C + treesCost k m) (cc ((List.range' k m).foldlM (forsF d) roots) K) := by
@@ -86,7 +86,7 @@ theorem trees_good (d : DCtx) (hwl : d.wl.length = 7756) (K : List Val → Oracl
 /-! ## The roots hash -/
 
 theorem roots_good (d : DCtx) (roots : List Val) (KM : Val → OracleComp HashSpec Obs) (N C : Nat)
-    (hK : ∀ ans t, LayerIn ⟨d.wl, d.pk, 6, d.idx⟩ (answerBytes 16 ans) t → Good t N C (KM (answerBytes 16 ans)))
+    (hK : ∀ ans t, LayerIn ⟨d.wl, d.pk, 5, d.idx⟩ (answerBytes 16 ans) t → Good t N C (KM (answerBytes 16 ans)))
     (s : MachineState) (hs : ForsIn d 14 roots s) :
     Good s (N + 6) (C + 5 + 32) (cc (hash16 (rootsInput d.idx roots)) KM) := by
   obtain ⟨hG, hK0, ⟨h16, h17, h25, h22, h29, h27, hC0, hC8, hF0, hF8, hRB, hrv, hR0, hR8⟩,

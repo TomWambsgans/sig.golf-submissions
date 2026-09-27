@@ -7,31 +7,31 @@ import SigGolfCandidate.Keygen.Spec
 namespace SigGolfCandidate.Keygen
 open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
 
-/-- Tree array base (`addrTA`). -/
-abbrev TA : Nat := 0x34100
+/-- The masked-node region of the cache (`CACHE + 32`): the top tree is built here. -/
+abbrev REGION : Nat := 0x44C0
 
 /-- Doublewords kept at zero: the `P` parts of the PRF, chain, leaf and node buffers, and the
 zero half `CB+32 .. CB+48` of the value-last chain block (cleared once by the first block). -/
-def zeroKeys : List Nat := [1712, 1720, 208, 216, 224, 232, 848, 856, 464, 472]
+def zeroKeys : List Nat := [1712, 1720, 208, 216, 224, 232, 848, 856, 464, 472, 0x4488, 0x4490, 0x4498]
 
 /-- Facts that hold from the end of the first block until the final block. -/
 structure Base (W : List Word) (t : MachineState) : Prop where
   r5 : t.getReg .x5 = 0
   r8 : t.getReg .x8 = BitVec.ofNat 64 0
   r30 : t.getReg .x30 = BitVec.ofNat 64 0
-  r9 : t.getReg .x9 = BitVec.ofNat 64 5
-  r19 : t.getReg .x19 = BitVec.ofNat 64 TA
+  r9 : t.getReg .x9 = BitVec.ofNat 64 11
   sk : ∀ k < 4, t.getMem (BitVec.ofNat 64 (1728 + 8 * k)) = W.getD k 0
+  skIn : ∀ k < 4, t.getMem (BitVec.ofNat 64 (128 + 8 * k)) = W.getD k 0
   zero : ∀ A ∈ zeroKeys, t.getMem (BitVec.ofNat 64 A) = 0
   w832 : t.getMem (BitVec.ofNat 64 832) = BitVec.ofNat 64 513
-  cache : ∀ A, 0x44A0 ≤ A → A < 0x244A0 → t.getMem (BitVec.ofNat 64 A) = 0
+  tail : ∀ A, 0x144C0 ≤ A → A < 0x244A0 → t.getMem (BitVec.ofNat 64 A) = 0
 
 /-- A doubleword key that does not touch `Base`. -/
 def BaseSafe (k : Nat) : Prop :=
-  k < 2 ^ 64 ∧ k ∉ [1728, 1736, 1744, 1752, 832] ∧ k ∉ zeroKeys ∧ (k < 0x44A0 ∨ 0x244A0 ≤ k)
+  k < 2 ^ 64 ∧ k ∉ [1728, 1736, 1744, 1752, 832, 128, 136, 144, 152] ∧ k ∉ zeroKeys ∧ (k < 0x144C0 ∨ 0x244A0 ≤ k)
 
 theorem Base.frame {W : List Word} {s t : MachineState} {keys : List Nat} (h : Base W s)
-    (hr : ∀ r, r = .x5 ∨ r = .x8 ∨ r = .x30 ∨ r = .x9 ∨ r = .x19 → t.getReg r = s.getReg r)
+    (hr : ∀ r, r = .x5 ∨ r = .x8 ∨ r = .x30 ∨ r = .x9 → t.getReg r = s.getReg r)
     (hf : Frame s t keys) (hk : ∀ k ∈ keys, BaseSafe k) : Base W t := by
   have fr : ∀ A < 2 ^ 64, (∀ k ∈ keys, A ≠ k) → t.getMem (BitVec.ofNat 64 A) = s.getMem (BitVec.ofNat 64 A) :=
     fun A hA hne => hf A hA (fun hm => hne A hm rfl)
@@ -40,11 +40,14 @@ theorem Base.frame {W : List Word} {s t : MachineState} {keys : List Nat} (h : B
   · rw [hr _ (by simp)]; exact h.r8
   · rw [hr _ (by simp)]; exact h.r30
   · rw [hr _ (by simp)]; exact h.r9
-  · rw [hr _ (by simp)]; exact h.r19
   · intro k hk4
     rw [fr _ (by omega) (fun k' hk' heq => by
       have := (hk k' hk').2.1; subst heq; interval_cases k <;> simp at this)]
     exact h.sk k hk4
+  · intro k hk4
+    rw [fr _ (by omega) (fun k' hk' heq => by
+      have := (hk k' hk').2.1; subst heq; interval_cases k <;> simp at this)]
+    exact h.skIn k hk4
   · intro A hA
     rw [fr _ (by simp [zeroKeys] at hA; omega) (fun k' hk' heq => (hk k' hk').2.2.1 (heq ▸ hA))]
     exact h.zero A hA
@@ -52,7 +55,7 @@ theorem Base.frame {W : List Word} {s t : MachineState} {keys : List Nat} (h : B
     exact h.w832
   · intro A h1 h2
     rw [fr _ (by omega) (fun k' hk' heq => by have := (hk k' hk').2.2.2; omega)]
-    exact h.cache A h1 h2
+    exact h.tail A h1 h2
 
 theorem Frame.trans {s t u : MachineState} {k₁ k₂ : List Nat} (h₁ : Frame s t k₁)
     (h₂ : Frame t u k₂) : Frame s u (k₁ ++ k₂) := by

@@ -42,7 +42,7 @@ noncomputable def fixedFrontierGame (f : QueryImpl HashSpec Id) (dummy : OtsRefe
   let otsSecret ← sampleOtsSecrets
   let ftsSecret ← sampleFtsSecrets
   let root := evalWithAnswerFn f (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree))
-  let key : SecretKey := ⟨parameter, root, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, root, otsSecret, ftsSecret, honestTop f parameter (otsSecret topLayer rootTree)⟩
   let words := canonicalReferenceWords key f dummy
   frontierGame parameter f ftsSecret words (canonicalFrontierValues key f words) adversary
 

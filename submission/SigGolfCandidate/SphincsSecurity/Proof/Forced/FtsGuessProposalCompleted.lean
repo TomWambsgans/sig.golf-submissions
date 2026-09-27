@@ -151,7 +151,7 @@ theorem expected_proposalCompletedRun_mass_terminalPotential (total : Nat) (adve
 
 include hauxiliary in
 theorem expected_proposalCompletedRun_creationCost (adversary : Adversary) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.2) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.2) :
     (∑' result, Pr[= result | proposalCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter adversary state] * result.2.2.2.creationCost) =
       state.2.2.creationCost +
@@ -190,7 +190,7 @@ theorem expected_proposalCompletedRun_creationCost (adversary : Adversary) (stat
 
 include hauxiliary in
 theorem expected_proposalCompletedRun_creationCost_le_mass_terminalPotential (total : Nat) (adversary : Adversary) (state : ProposalState)
-    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.2)
+    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.2)
     (hbudget : budget ≤ 2 ^ 127) (hinv : ProposalInvariant parameter root total state) :
     (∑' result, Pr[= result | proposalCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         (proposalStop stopAfter) adversary state] * result.2.2.2.creationCost) ≤
@@ -234,7 +234,7 @@ theorem expected_proposalCompletedRun_creationCost_le_mass_terminalPotential (to
       rw [← expectedWorldPayment_mul]
       exact expectedWorldPayment_charge_le_mass_terminalPotential parameter root otsSecret labels inputs hencoding selections rows dummy slot
         budget required stopAfter total before.2.1 (verifyComputation parameter root before.1.1.1.1) before.2.2 hvalid'
-        (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2.2 hvalid' hfinal) hbudget hinv'
+        (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2.2 hvalid' hfinal) hbudget hinv'
   calc
     _ ≤ expectedProposalPayment parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
           (proposalStop stopAfter)

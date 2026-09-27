@@ -105,7 +105,7 @@ theorem or_disj (lo hi : Nat) (hlo : lo < 2 ^ 32) :
   split <;> simp [Nat.testBit_or]
 
 theorem ctr_shift_iff (x : Nat) (hx : x < 2 ^ 64) :
-    (x ||| (x * 2 ^ 32 % 2 ^ 64)) / 2 ^ 52 = 0 ↔ x % 2 ^ 32 < 2 ^ 20 ∧ x / 2 ^ 32 < 2 ^ 20 := by
+    (x ||| (x * 2 ^ 32 % 2 ^ 64)) / 2 ^ 54 = 0 ↔ x % 2 ^ 32 < 2 ^ 22 ∧ x / 2 ^ 32 < 2 ^ 22 := by
   have hd := Nat.div_add_mod x (2 ^ 32)
   have hlo : x % 2 ^ 32 < 2 ^ 32 := Nat.mod_lt _ (by decide)
   have hhi : x / 2 ^ 32 < 2 ^ 32 := by omega
@@ -118,7 +118,7 @@ theorem ctr_shift_iff (x : Nat) (hx : x < 2 ^ 64) :
   have hor : hi ||| lo < 2 ^ 32 := Nat.or_lt_two_pow hhi hlo
   constructor
   · intro h
-    have : hi ||| lo < 2 ^ 20 := by omega
+    have : hi ||| lo < 2 ^ 22 := by omega
     exact ⟨lt_of_le_of_lt Nat.right_le_or this, lt_of_le_of_lt Nat.left_le_or this⟩
   · rintro ⟨h1, h2⟩
     have := Nat.or_lt_two_pow h2 h1

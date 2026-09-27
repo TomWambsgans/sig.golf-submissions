@@ -15,7 +15,8 @@ noncomputable def initialMonitoredPrior (parameter : PublicParameter) (adversary
     (budget : Nat) (stopAfter : CertificateStopRule) : SPMF (Option (Forgery × Bool) × MonitoredState (gameInputs adversary)) := do
   let words := referenceFamilyWords encoding.selections dummy
   let labels ← UniformTableCompletion.complete (initialAllowed words exposed)
-  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+  let key : SecretKey := ⟨parameter, knownRoot (initialKnown words exposed), coordinateOtsSecrets labels, coordinateFtsSecrets labels,
+    graphTop (coordinateGraphLabels labels high)⟩
   initialMonitoredSource key adversary encoding dummy exposed high budget Finset.univ (proposalStop stopAfter) false
 
 theorem initialMonitoredPrior_erasure (parameter : PublicParameter) (adversary : Adversary)

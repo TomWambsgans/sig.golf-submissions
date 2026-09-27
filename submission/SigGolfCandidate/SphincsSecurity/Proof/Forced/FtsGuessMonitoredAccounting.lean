@@ -312,7 +312,7 @@ variable (hauxiliary : ∀ seed : inputs → HashOutput,
 
 include hauxiliary in
 theorem monitoredRun_account (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state) (result : AdversaryTrace × MonitoredState)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state) (result : AdversaryTrace × MonitoredState)
     (hresult : monitoredRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       computation state result ≠ 0) :
     RunAccount parameter root required state result.1.1.2 result.1.1.1.2 result.2 := by
@@ -328,8 +328,8 @@ theorem monitoredRun_account (computation : OracleComp (OracleWorld + SigningSpe
       obtain ⟨tail, htail, rfl⟩ := map_nonzero_source' _ _ _ hresult
       have hfirst := monitoredStep_account parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         input state hvalid
-        (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state hvalid hcovered)
-        (covered_step_digest parameter root otsSecret inputs input next state hvalid hcovered) step hstep
+        (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state hvalid hcovered)
+        (covered_step_digest parameter root otsSecret labels inputs input next state hvalid hcovered) step hstep
       have hlast := ih step.1.1.1 step.2
         (monitoredStep_valid parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter input state
           hvalid step hstep)
@@ -362,7 +362,7 @@ theorem monitoredWorldRun_account {Result : Type} (computation : OracleComp Orac
 
 include hauxiliary in
 theorem monitoredCompletedRun_account (adversary : Adversary) (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state) (result : Completed × MonitoredState)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state) (result : Completed × MonitoredState)
     (hresult : monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       adversary state result ≠ 0) :
     RunAccount parameter root required state (result.1.1.1.2 * result.1.2.1.2) result.1.1.1.1.2 result.2 := by
@@ -377,14 +377,14 @@ theorem monitoredCompletedRun_account (adversary : Adversary) (state : Monitored
     hauxiliary (adversary.main ⟨root, parameter⟩) state hvalid hcovered before hbefore
   have hlast := monitoredWorldRun_account parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
     (verifyComputation parameter root before.1.1.1.1) before.2 hvalid'
-    (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2 hvalid' hfinal) checked hchecked
+    (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2 hvalid' hfinal) checked hchecked
   simpa only [List.append_nil] using RunAccount.trans parameter root required hfirst hlast
 
 /-! ### Consequences for the completed run -/
 
 include hauxiliary in
 theorem monitoredCompletedRun_creationMass_le (adversary : Adversary) (spent : Nat) (stopped : Bool)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, SecretGuessObservation.initialState PUnit.unit), initialCertificateMonitor spent stopped))
     (result : Completed × MonitoredState)
     (hresult : monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
@@ -396,7 +396,7 @@ theorem monitoredCompletedRun_creationMass_le (adversary : Adversary) (spent : N
 
 include hauxiliary in
 theorem monitoredCompletedRun_certificate_count (adversary : Adversary) (spent : Nat) (stopped : Bool)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, SecretGuessObservation.initialState PUnit.unit), initialCertificateMonitor spent stopped))
     (result : Completed × MonitoredState)
     (hresult : monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter

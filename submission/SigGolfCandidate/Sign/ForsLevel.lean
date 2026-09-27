@@ -16,11 +16,11 @@ set_option linter.unnecessarySeqFocus false
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
-theorem seg161_eq : seg161 = nodeSegA := rfl
-theorem seg177_eq : seg177 = nodeSegB := rfl
+theorem seg202_eq : seg202 = nodeSegA := rfl
+theorem seg218_eq : seg218 = nodeSegB := rfl
 
-theorem codeAt_node161 : CodeAt image (pcOf 161) nodeSegA := seg161_eq ▸ codeAt_161
-theorem codeAt_node177 : CodeAt image (pcOf (161 + 16)) nodeSegB := seg177_eq ▸ codeAt_177
+theorem codeAt_node202 : CodeAt image (pcOf 202) nodeSegA := seg202_eq ▸ codeAt_202
+theorem codeAt_node218 : CodeAt image (pcOf (202 + 16)) nodeSegB := seg218_eq ▸ codeAt_218
 
 /-- Facts at the start of the level loop of tree `k`. -/
 structure LevCtx (k idx u : Nat) (t0 : MachineState) : Prop where
@@ -43,7 +43,7 @@ def levRegs : List Reg := [.x1, .x2, .x3, .x10, .x11, .x12, .x15, .x16, .x17, .x
 def LevInv (k : Nat) (t0 : MachineState) (j : Nat) (st : List Val × List Val) (t : MachineState) : Prop :=
   j ≤ 10 ∧ st.1.length = 2 ^ (10 - j) ∧ (∀ v ∈ st.1, v.length = 16) ∧ Slots t 0x30000 st.1 ∧
   st.2.length = j ∧ (∀ v ∈ st.2, v.length = 16) ∧ Slots t (0x2650 + 176 * k + 32) st.2 ∧
-  t.pc = (if j < 10 then pcOf 142 else pcOf 182) ∧ t.getReg .x15 = BitVec.ofNat 64 (j + 1) ∧
+  t.pc = (if j < 10 then pcOf 183 else pcOf 223) ∧ t.getReg .x15 = BitVec.ofNat 64 (j + 1) ∧
   t.getReg .x17 = BitVec.ofNat 64 (2 ^ (10 - j)) ∧
   RegsEq t0 t levRegs ∧ Frame t0 t (levW k) ∧
   lo32 (t.getMem (BitVec.ofNat 64 0x1C8)) = lo32 (t0.getMem (BitVec.ofNat 64 0x1C8))
@@ -57,7 +57,7 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
     Sim image t (19 + (2 ^ (9 - j) * 25 + 3))
       (levelStep (ftsNodeInput k idx) u st (1 + j)) (LevInv k t0 (j + 1)) := by
   obtain ⟨-, hlen, hvals, hslots, hplen, hpvals, hpath, tpc, t15, t17, tregs, tframe, tlo⟩ := hinv
-  have tpc' : t.pc = pcOf 142 := by rw [tpc, if_pos hj]
+  have tpc' : t.pc = pcOf 183 := by rw [tpc, if_pos hj]
   have tx5 : t.getReg .x5 = 0 := by rw [tregs.get .x5 (by decide), ctx.x5]
   have tx8 : t.getReg .x8 = BitVec.ofNat 64 k := by rw [tregs.get .x8 (by decide), ctx.x8]
   have tx13 : t.getReg .x13 = BitVec.ofNat 64 u := by rw [tregs.get .x13 (by decide), ctx.x13]
@@ -81,34 +81,34 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
       _ = 1024 := by norm_num)
   -- block 142: capture sibling, node tweak
   have hudiv : u / 2 ^ j ≤ u := Nat.div_le_self _ _
-  have hs1 := symRun_sound blk142 codeAt_142 t tpc' (by
-    simp only [blk142.res, rv_simp]
+  have hs1 := symRun_sound blk183 codeAt_183 t tpc' (by
+    simp only [blk183.res, rv_simp]
     bvsimp [t15, tx13, tx18, tx19, accessValid_ofNat]
     rw [← hsib]; omega)
-  have hc1 : blk142.res.cycles = 19 := rfl
+  have hc1 : blk183.res.cycles = 19 := rfl
   rw [hc1] at hs1
-  set t1 := blk142.res.toState t with ht1
+  set t1 := blk183.res.toState t with ht1
   have hP : 0x2650 + 176 * k + 32 + 16 * j + 8 < 2 ^ 64 := by omega
   have f1 : Frame t t1 (fun x => x = 0x1C0 ∨ x = 0x2650 + 176 * k + 32 + 16 * j ∨
       x = 0x2650 + 176 * k + 32 + 16 * j + 8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk142.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk183.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq]
     bvsimp [t15, tx18, ofNat_eq_iff]
     omega
   have r1 : RegsEq t t1 [.x1, .x2, .x3, .x16, .x17, .x29] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
-  have pc1 : t1.pc = pcOf 161 := by simp only [ht1, blk142.res, rv_simp]
-  have y16 : t1.getReg .x16 = 0 := by simp only [ht1, blk142.res, rv_simp]
+  have pc1 : t1.pc = pcOf 202 := by simp only [ht1, blk183.res, rv_simp]
+  have y16 : t1.getReg .x16 = 0 := by simp only [ht1, blk183.res, rv_simp]
   have y17 : t1.getReg .x17 = BitVec.ofNat 64 (2 ^ (9 - j)) := by
-    simp only [ht1, blk142.res, rv_simp]
+    simp only [ht1, blk183.res, rv_simp]
     bvsimp [t17]
     congr 1; rw [hpow]; omega
   have y19 : t1.getReg .x19 = BitVec.ofNat 64 0x30000 := by rw [r1.get .x19, tx19]
   have y5 : t1.getReg .x5 = 0 := by rw [r1.get .x5, tx5]
   have w448 : t1.getMem (BitVec.ofNat 64 448) = twWord0 10 k idx (1 + j) := by
-    simp only [ht1, blk142.res, rv_simp]
+    simp only [ht1, blk183.res, rv_simp]
     bvsimp [t15, tx8, tx14, tx18, ofNat_eq_iff]
     unfold twWord0; congr 1
     have : idx / 2 ^ 32 < 4 := by omega
@@ -118,7 +118,7 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
   have hcap1 : t1.readWords (BitVec.ofNat 64 (0x2650 + 176 * k + 32 + 16 * j)) 2 =
       wordsOf (st.1.getD sib []) := by
     rw [← hslots.getD sib (by omega), readWords_ofNat_two, readWords_ofNat_two]
-    simp only [ht1, blk142.res, rv_simp]
+    simp only [ht1, blk183.res, rv_simp]
     bvsimp [t15, tx13, tx18, tx19, ofNat_eq_iff]
     simp (disch := bvomega) only [if_pos, if_neg]
     have e : (u / 2 ^ j ^^^ 1) * 16 = 16 * sib := by rw [hsib, Nat.mul_comm]
@@ -128,7 +128,7 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
   have hB : ∀ a, 0x2650 + 176 * k + 32 ≤ a → a < 0x2650 + 176 * k + 192 →
       ¬ ((c.B ≤ a ∧ a < c.B + 32 * c.m) ∨ a = 456 ∨ a = 480 ∨ a = 488 ∨ a = 496 ∨ a = 504) := by
     intro a h1 h2; simp only [c]; omega
-  have hnode := nodeLoop_sim codeAt_node161 codeAt_node177 c st.1 (by simp only [c]; rw [hlen, hpow])
+  have hnode := nodeLoop_sim codeAt_node202 codeAt_node218 c st.1 (by simp only [c]; rw [hlen, hpow])
     hvals (by simp only [c]; positivity) (by simp only [c]; norm_num) (by simp only [c])
     (by simp only [c]; omega) t1 pc1 y16 y17 y19 y5 (by simp only [c]; decide) w448
     (by rw [f1.getMem (by norm_num) (by omega), tlo, ctx.nb8])
@@ -146,16 +146,16 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
   rw [hstep]
   refine Sim.steps hs1 (Sim.bind hnode (fun acc t2 hn => ?_))
   obtain ⟨-, hacc, haccv, haccs, -, pc2, x216, nregs, nframe⟩ := hn
-  have pc2' : t2.pc = pcOf 179 := by rw [pc2, if_neg (lt_irrefl _)]
-  have hs3 := symRun_sound blk179 codeAt_179 t2 pc2' (by simp only [blk179.res, rv_simp])
-  have hc3 : blk179.res.cycles = 3 := rfl
+  have pc2' : t2.pc = pcOf 220 := by rw [pc2, if_neg (lt_irrefl _)]
+  have hs3 := symRun_sound blk220 codeAt_220 t2 pc2' (by simp only [blk220.res, rv_simp])
+  have hc3 : blk220.res.cycles = 3 := rfl
   rw [hc3] at hs3
-  set t3 := blk179.res.toState t2 with ht3
+  set t3 := blk220.res.toState t2 with ht3
   have r3 : RegsEq t2 t3 [.x3, .x15] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk179.res]
+    apply frame_toState; intro x hx hW; simp [blk220.res]
   have x215 : t2.getReg .x15 = BitVec.ofNat 64 (j + 1) := by
     rw [nregs.toRegsEq.get .x15, r1.get .x15, t15]
   have ft13 : Frame t t3 (fun x => (x = 0x1C0 ∨ x = 0x2650 + 176 * k + 32 + 16 * j ∨
@@ -178,12 +178,12 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
         intro i hi; constructor <;> (simp only [c, or_false, not_or]; omega))
     · rw [hplen, f3.readWords _ _ (by omega) (by simp),
         nframe.toFrame.readWords _ _ (by omega) (by intro i hi; simp only [c]; omega), hcap1]
-  · simp only [ht3, blk179.res, rv_simp, x215, ofNat_add_ofNat]
+  · simp only [ht3, blk220.res, rv_simp, x215, ofNat_add_ofNat]
     rw [ofNat_slt_ofNat _ _ (by norm_num) (by omega)]
     by_cases h : j + 1 < 10
     · rw [if_pos h]; simp; omega
     · rw [if_neg h]; simp; omega
-  · simp only [ht3, blk179.res, rv_simp, x215, ofNat_add_ofNat]
+  · simp only [ht3, blk220.res, rv_simp, x215, ofNat_add_ofNat]
   · rw [r3.get .x17, nregs.toRegsEq.get .x17, y17, show 10 - (j + 1) = 9 - j by omega]
   · exact (((tregs.trans r1).trans nregs.toRegsEq).trans r3).mono (by decide)
   · exact (tframe.trans ft13).mono (by
@@ -199,7 +199,7 @@ open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.R
 theorem forsLevels_sim (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu : u < 1024)
     (t0 : MachineState) (ctx : LevCtx k idx u t0) (leaves : List Val) (hlen : leaves.length = 1024)
     (hvals : ∀ v ∈ leaves, v.length = 16) (hslots : Slots t0 0x30000 leaves)
-    (hpc : t0.pc = pcOf 142) (h15 : t0.getReg .x15 = BitVec.ofNat 64 1)
+    (hpc : t0.pc = pcOf 183) (h15 : t0.getReg .x15 = BitVec.ofNat 64 1)
     (h17 : t0.getReg .x17 = BitVec.ofNat 64 1024) :
     Sim image t0 (10 * 12822) ((List.range' 1 10).foldlM (levelStep (ftsNodeInput k idx) u)
       (leaves, [])) (LevInv k t0 10) := by

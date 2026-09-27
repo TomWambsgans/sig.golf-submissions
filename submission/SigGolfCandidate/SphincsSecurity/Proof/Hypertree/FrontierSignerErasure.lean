@@ -41,11 +41,11 @@ def frontierSignLayer (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
   let search := frontierLayerSearch parameter f ftsSecret words frontier index lay
   match search.1 with
   | none => (none, search.2)
-  | some (counter, _) =>
+  | some (counter, word) =>
       (some (counter, frontier lay (treeIndexAt index lay) (leafIndexAt index lay),
         evalWithAnswerFn f (frontierTreePath parameter lay (treeIndexAt index lay)
           (words lay (treeIndexAt index lay)) (frontier lay (treeIndexAt index lay)) (leafIndexAt index lay))),
-        search.2 + treeNodeHashCost (layerHeight lay))
+        search.2 + if lay = topLayer then OtsCode.signingSteps word else treeNodeHashCost (layerHeight lay))
 
 theorem eval_frontierLayerMessage (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
@@ -131,8 +131,8 @@ def frontierSignAfterDigest (parameter : PublicParameter) (f : QueryImpl HashSpe
 
 theorem boundaryEval_signAfterDigest_frontier (key : SecretKey) (f : QueryImpl HashSpec Id)
     (words : OtsReferenceWords) (frontier : OtsFrontierValues)
-    (hfrontier : IsSigningFrontier key f words frontier) (randomness : Randomness) (index : Index)
-    (leaves : IndexGroup → FtsLeaf)
+    (hfrontier : IsSigningFrontier key f words frontier) (htop : KeyTopHonest f key)
+    (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf)
     (hwords : ∀ lay, FrontierReferenceWord key.parameter f key.ftsSecret words frontier index lay) :
     boundaryEval key.parameter f (signAfterDigest key randomness index leaves) =
       ((frontierSignAfterDigest key.parameter f key.ftsSecret words frontier randomness index leaves).1,
@@ -147,7 +147,7 @@ theorem boundaryEval_signAfterDigest_frontier (key : SecretKey) (f : QueryImpl H
     exact layersHashCostFrom_congr
       (fun lay => (evalWithAnswerFn f (signLayer key index lay), (specLayerCost key f index lay).2))
       (specLayerCost key f index) (fun _ => rfl) (fun lay => (specLayerCost_isSome key f index lay).symm) _
-  rw [boundaryEval_signAfterDigest]
+  rw [boundaryEval_signAfterDigest_eq key f htop]
   simp only [frontierSignAfterDigest, hcost, signatureValue]
   congr 2
   simp only [hlayers]

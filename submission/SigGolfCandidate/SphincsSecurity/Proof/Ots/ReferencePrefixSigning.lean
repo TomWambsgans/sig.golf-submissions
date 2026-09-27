@@ -84,7 +84,8 @@ theorem fixedBoundaryRun_signWithView_prefix_public (key : SecretKey) (inputs : 
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
     (dummy : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)
     (hagrees : PublicAgreement (referenceFamilyWords auxiliary.selections dummy) disclosed known
-      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (message : Message) :
+      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (htop : TopFromGraph key labels)
+    (message : Message) :
     fixedBoundaryRun key.parameter
         (programmedHash key.parameter key.otsSecret key.ftsSecret labels
           (finiteHashAnswer ∅ inputs (canonicalPrefixResidual key.parameter inputs hencoding labels
@@ -94,8 +95,12 @@ theorem fixedBoundaryRun_signWithView_prefix_public (key : SecretKey) (inputs : 
           (finiteHashAnswer ∅ inputs (knownPrefixResidual key.parameter inputs hencoding known
             auxiliary.selections auxiliary.rows auxiliary.seed))
           known (referenceFamilyWords auxiliary.selections dummy) auxiliary.selections message := by
-  rw [fixedBoundaryRun_signWithView_canonical _ _ dummy,
-    ← canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret _ _ key.root,
+  have hhonest : KeyTopHonest (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs (canonicalPrefixResidual key.parameter inputs hencoding labels
+            auxiliary.selections auxiliary.rows auxiliary.seed))) key :=
+    keyTopHonest_of_graphTop key _ (by rw [canonicalGraphLabels_programmedHash]; exact htop)
+  rw [fixedBoundaryRun_signWithView_canonical _ _ hhonest dummy,
+    ← canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret _ _ key.root key.top,
     canonicalGraphLabels_programmedHash, ← referencePrefix_words key inputs hencoding labels auxiliary hauxiliary dummy]
   exact frontierSigningRecord_prefix_public key key.root inputs hencoding labels auxiliary hauxiliary dummy disclosed known hagrees message
 

@@ -8,7 +8,7 @@ namespace SigGolfCandidate.Verify
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- The cycle bound of the verify program (every run, honest or not). -/
-def cycleBound : Nat := 15494
+def cycleBound : Nat := 13371
 
 /-- A step bound (fuel) sufficient for every run. -/
 def fuelBound : Nat := 40100
@@ -49,24 +49,24 @@ theorem tail_eq (pk : List Byte) (w : List Byte) (idx : Nat) (M : Val) :
       let o ← verifyLayers w idx nLayers M
       match o with
       | none => pure false
-      | some root => pure (root == pk)) Kb = cc (verifyLayers w idx 7 M) (Kfin pk) := by
+      | some root => pure (root == pk)) Kb = cc (verifyLayers w idx 6 M) (Kfin pk) := by
   rw [cc_bind]
   congr 1; funext o
   cases o <;> simp [Kfin, Kb]
 
-theorem after_roots (wl pk : List Byte) (hpk : pk.length = 16) (hwl : wl.length = 7756) (idx : Nat)
-    (hidx : idx < 2 ^ 34) (M : Val) (t : MachineState) (ht : LayerIn ⟨wl, pk, 6, idx⟩ M t) :
-    Good t (5000 * 7 + 9) (layersCost 7) (cc (do
+theorem after_roots (wl pk : List Byte) (hpk : pk.length = 16) (hwl : wl.length = 7080) (idx : Nat)
+    (hidx : idx < 2 ^ 34) (M : Val) (t : MachineState) (ht : LayerIn ⟨wl, pk, 5, idx⟩ M t) :
+    Good t (5000 * 6 + 9) (layersCost 6) (cc (do
       let o ← verifyLayers wl idx nLayers M
       match o with
       | none => pure false
       | some root => pure (root == pk)) Kb) := by
   rw [tail_eq]
-  exact layers_good wl pk hpk idx hidx hwl 7 (le_refl _) M t ht
+  exact layers_good wl pk hpk idx hidx hwl 6 (le_refl _) M t ht
 
-theorem after_fors (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7756) (roots : List Val)
+theorem after_fors (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7080) (roots : List Val)
     (t : MachineState) (ht : ForsIn d 14 roots t) :
-    Good t (5000 * 7 + 9 + 6) (layersCost 7 + 5 + 32) (cc (do
+    Good t (5000 * 6 + 9 + 6) (layersCost 6 + 5 + 32) (cc (do
       let M ← hash16 (rootsInput d.idx roots)
       let o ← verifyLayers d.wl d.idx nLayers M
       match o with
@@ -76,11 +76,11 @@ theorem after_fors (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7756
   exact roots_good d roots _ _ _ (fun ans t ht => after_roots d.wl d.pk hpk hwl d.idx (d_idx_lt d) _ t ht) t ht
 
 theorem treesCost_val : treesCost 1 13 = 2601 := by decide
-theorem layersCost_val : layersCost 7 = 12588 := by decide
+theorem layersCost_val : layersCost 6 = 10467 := by decide
 
-theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7756)
+theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7080)
     (s : MachineState) (hs : DigestOut d s) :
-    Good s 40000 (12588 + 37 + 2601 + 178 + 8 + 34)
+    Good s 40000 (10467 + 37 + 2601 + 178 + 8 + 34)
       (cc (if (!admissible (d.A % 2 ^ 184)) = true then pure false else do
         let roots ← verifyFors d.wl (d.A % 2 ^ 184)
         let M ← hash16 (rootsInput (idxOf (d.A % 2 ^ 184)) roots)
@@ -106,8 +106,8 @@ theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 77
                 | none => pure false
                 | some root => pure (root == d.pk))
                 Kb
-    have H := fun ans => treeRest_good d hwl 0 (by decide) [] Kr (5000 * 7 + 9 + 6 + 200 * 13)
-      (layersCost 7 + 5 + 32 + treesCost 1 13)
+    have H := fun ans => treeRest_good d hwl 0 (by decide) [] Kr (5000 * 6 + 9 + 6 + 200 * 13)
+      (layersCost 6 + 5 + 32 + treesCost 1 13)
       (fun ans t ht => (trees_good d hwl _ _ _ (fun roots t ht => (after_fors d hpk hwl roots t ht).congr
           (by simp only [cc_bind]))
         13 1 rfl (le_refl _) _ t ht)) _ _ (hpost ans)
@@ -116,11 +116,11 @@ theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 77
       (K := fun v => cc (foldPath (ftsNodeInput 0 d.idx) (d.u 0) v
       (witFtsPath d.wl 0)) Kr) (fmt_th _ _ _ _ _ _ (by decide) (by decide)) hf h5 hv hin H
     rw [pad64_ftsLeafInput _ _ _ _ hsl, blocks_q] at h3
-    exact Good.steps' (N' := 40000) (C' := 12588 + 37 + 2601 + 178 + 8 + 34) hst h3 (by omega)
+    exact Good.steps' (N' := 40000) (C' := 10467 + 37 + 2601 + 178 + 8 + 34) hst h3 (by omega)
       (by rw [treesCost_val, layersCost_val])
 
 theorem main_good (ml pkl wl : List Byte) (hml : ml.length = 32) (hpk : pkl.length = 16)
-    (hwl : wl.length = 7756) (s : MachineState) (hs : InitOK ml pkl wl s) :
+    (hwl : wl.length = 7080) (s : MachineState) (hs : InitOK ml pkl wl s) :
     Good s fuelBound cycleBound (cc (verifyList ml pkl wl) Kb) := by
   unfold verifyList
   obtain ⟨hrej, hacc⟩ := start_step ml pkl wl hml hwl s hs

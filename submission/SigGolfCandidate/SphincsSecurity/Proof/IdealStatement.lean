@@ -10,6 +10,9 @@ structure SecretKey where
   root : Digest
   otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest
   ftsSecret : Index → FtsTree → FtsLeaf → Digest
+  /-- The top tree's node table `(level, nodeIdx) ↦ X_{level, nodeIdx}`, built by key generation. The
+  signer reads the top layer's authentication path from it instead of rebuilding the top tree. -/
+  top : Nat → Nat → Digest
 
 namespace Concrete
 
@@ -137,14 +140,25 @@ def keygenRoot (parameter : PublicParameter) (secret : LeafIndex → ChainIndex 
     (fun leaf chainIdx => pure (secret leaf chainIdx)) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
   return root
 
-/-- `Gen`: take the parameter `P = 0`, sample every secret, and build layer `0`'s tree for the root. The trees below it are built when a signature needs them, so nothing else is computed here. -/
+/-- Key generation's tree kept whole: layer `0`'s node table, built once from table secrets with exactly
+the queries of `keygenRoot`. -/
+def keygenTable (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) :
+    m (Nat → Nat → Digest) := do
+  let (_, table) ← buildLayerTable parameter topLayer rootTree
+    (fun leaf chainIdx => pure (secret leaf chainIdx)) ⟨0, Nat.two_pow_pos _⟩ zeroEncoding
+  return table
+
+/-- `Gen`: take the parameter `P = 0`, sample every secret, and build layer `0`'s tree, keeping its node
+table for the signer and its root for the public key. The trees below it are built when a signature needs
+them, so nothing else is computed here. -/
 noncomputable def keygen : OracleComp OracleWorld (PublicKey × SecretKey) := do
   let parameter ← liftM sampleParameter
   let otsSecret ← liftM sampleOtsSecrets
   let ftsSecret ← liftM sampleFtsSecrets
-  let root ← liftM
-    (keygenRoot parameter (otsSecret topLayer rootTree) : OracleComp HashSpec Digest)
-  return (⟨root, parameter⟩, ⟨parameter, root, otsSecret, ftsSecret⟩)
+  let top ← liftM
+    (keygenTable parameter (otsSecret topLayer rootTree) : OracleComp HashSpec (Nat → Nat → Digest))
+  let root := top (layerHeight topLayer) 0
+  return (⟨root, parameter⟩, ⟨parameter, root, otsSecret, ftsSecret, top⟩)
 
 /-- One digest attempt: one hash, keeping the index and the leaf indices if the digest is admissible. -/
 def signAttempt (secretKey : SecretKey) (message : Message) (randomness : Randomness) :
@@ -189,11 +203,12 @@ def signLayer (secretKey : SecretKey) (index : Index) (lay : Layer) :
       let path ← treePath secretKey.parameter lay tree (secretKey.otsSecret lay tree) leaf
       return some (counter, values, path)
 
-/-- `Sig` after the digest loop, from table secrets: the forest built once, then the layers from the bottom up, each a counter search and its tree built once. This mirrors `Seeded.sign` query for query, except for the secret derivations. -/
+/-- `Sig` after the digest loop, from table secrets: the forest built once, then the layers from the bottom up, each a counter search and its tree built once, and the top layer's path read from the key's node table. This mirrors `Seeded.signChecked` query for query, except for the secret and mask derivations. -/
 def signAfterDigest (secretKey : SecretKey) (randomness : Randomness) (index : Index)
     (leaves : IndexGroup → FtsLeaf) : OracleComp HashSpec (Option Signature) :=
   signFrom secretKey.parameter index (fun tree leaf => pure (secretKey.ftsSecret index tree leaf))
-    (fun lay tree leaf chainIdx => pure (secretKey.otsSecret lay tree leaf chainIdx)) randomness leaves
+    (fun lay tree leaf chainIdx => pure (secretKey.otsSecret lay tree leaf chainIdx))
+    (fun level nodeIdx => pure (secretKey.top level nodeIdx)) randomness leaves
 
 /-- `Sig(sk, m)`: the digest loop, then the forest and the layers, or nothing as soon as one search fails. -/
 noncomputable def sign (secretKey : SecretKey) (message : Message) :
@@ -204,7 +219,7 @@ noncomputable def sign (secretKey : SecretKey) (message : Message) :
       liftM (signAfterDigest secretKey randomness index leaves : OracleComp HashSpec (Option Signature))
 
 attribute [irreducible] treeNode ftsNode sampleParameter sampleOtsSecrets sampleFtsSecrets keygen sign
-  keygenRoot signAfterDigest
+  keygenRoot keygenTable signAfterDigest
 
 end Concrete
 
@@ -218,38 +233,5 @@ noncomputable def Concrete.scheme : Scheme SecretKey where
 /-- The security claim: `127` bits of classical strong unforgeability in the random-oracle model, at `2^32` signing requests per key pair. -/
 abbrev IndependentSecurityStatement : Prop :=
   HasClassicalSecurityBits Concrete.scheme 127
-
-namespace Seeded
-
-open Concrete
-
-noncomputable def randomizedDigestLoop : Nat → SecretKey → Message →
-    OracleComp OracleWorld (Option (Randomness × Index × (IndexGroup → FtsLeaf)))
-  | 0, _secretKey, _message => pure none
-  | attempts + 1, secretKey, message => do
-      let randomness ← liftM sampleRandomness
-      let attempt ← liftM
-        (signAttempt secretKey message randomness :
-          OracleComp HashSpec (Option (Index × (IndexGroup → FtsLeaf))))
-      match attempt with
-      | some (index, leaves) => pure (some (randomness, index, leaves))
-      | none => randomizedDigestLoop attempts secretKey message
-
-noncomputable def randomizedSign (secretKey : SecretKey) (message : Message) :
-    OracleComp OracleWorld (Option Signature) := do
-  match ← randomizedDigestLoop digestAttemptLimit secretKey message with
-  | none => return none
-  | some (randomness, index, leaves) =>
-      liftM (signFrom secretKey.parameter index (ftsSecret secretKey.parameter secretKey.seed index)
-        (otsSecret secretKey.parameter secretKey.seed) randomness leaves :
-          OracleComp HashSpec (Option Signature))
-
-end Seeded
-
-noncomputable def Seeded.randomizedScheme : Scheme Seeded.SecretKey where
-  keygen := Seeded.keygen
-  sign := Seeded.randomizedSign
-  verify := fun publicKey message signature =>
-    liftM (Concrete.verify publicKey message signature : OracleComp HashSpec Bool)
 
 end SphincsSecurity

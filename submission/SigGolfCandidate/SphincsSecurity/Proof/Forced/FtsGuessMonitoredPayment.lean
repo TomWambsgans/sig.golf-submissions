@@ -40,10 +40,10 @@ theorem monitoredRun_valid {Result : Type} (computation : OracleComp (OracleWorl
 
 include hauxiliary in
 theorem monitoredRun_covered (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : MonitoredState)
-    (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret inputs computation state)
+    (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state)
     (result : AdversaryTrace × MonitoredState)
     (hresult : monitoredRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
-      computation state result ≠ 0) : CoveredRun parameter root otsSecret inputs (pure result.1.1.1.1) result.2 := by
+      computation state result ≠ 0) : CoveredRun parameter root otsSecret labels inputs (pure result.1.1.1.1) result.2 := by
   induction computation using OracleComp.inductionOn generalizing state result with
   | pure value =>
       rw [monitoredRun_pure] at hresult
@@ -264,7 +264,7 @@ theorem monitoredCompletedRun_eq (adversary : Adversary) (state : MonitoredState
 
 include hauxiliary in
 theorem expected_monitoredCompletedRun_potential_le (adversary : Adversary) (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state) :
     (∑' result, Pr[= result | monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter adversary state] *
       certificateMonitorPotential (monitorKey parameter root) budget required (monitorView result.2)) ≤
@@ -292,7 +292,7 @@ theorem expected_monitoredCompletedRun_potential_le (adversary : Adversary) (sta
           (adversary.main ⟨root, parameter⟩) state hvalid before hb
         exact expected_monitoredWorldRun_potential_le parameter root otsSecret labels inputs hencoding selections rows dummy slot budget
           required stopAfter (verifyComputation parameter root before.1.1.1.1) before.2
-          (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2 hvalid' hfinal)
+          (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2 hvalid' hfinal)
     _ = _ := by
       simp only [mul_add, ENNReal.tsum_add]
     _ ≤ _ :=
@@ -331,7 +331,7 @@ theorem expected_monitoredCompletedRun_creationCost (adversary : Adversary) (sta
 
 include hauxiliary in
 theorem expected_monitoredCompletedRun_count_le_creationCost (adversary : Adversary) (spent : Nat) (stopped : Bool)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩)
       ((∅, SecretGuessObservation.initialState PUnit.unit), initialCertificateMonitor spent stopped)) :
     (∑' result, Pr[= result | monitoredCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter adversary ((∅, SecretGuessObservation.initialState PUnit.unit), initialCertificateMonitor spent stopped)] *

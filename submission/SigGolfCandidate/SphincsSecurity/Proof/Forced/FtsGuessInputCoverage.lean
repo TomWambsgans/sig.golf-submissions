@@ -172,15 +172,6 @@ theorem coveredInputs_main_eq_gameRest (adversary : Adversary) (key : SecretKey)
   rw [OtsProbeSimulation.gameRest_eq_map_retained, ResidualByteFrontend.hashInputs_map, hretained, htail, simulateQ_bind, hdrop,
     ← simulateQ_bind, hfst, coveredInputs]
 
-theorem hashInputs_gameRest_subset_gameAfterSecrets (adversary : Adversary) (parameter : PublicParameter) (root : Digest)
-    (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (ftsSecret : Index → FtsTree → FtsLeaf → Digest) :
-    hashInputs (gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩) ⊆
-      hashInputs (gameAfterSecrets adversary parameter otsSecret ftsSecret) := by
-  rw [gameAfterSecrets]
-  exact hashInputs_liftHash_bind_subset (keygenRoot parameter (otsSecret topLayer rootTree))
-    (fun root => gameRest scheme adversary ⟨root, parameter⟩ ⟨parameter, root, otsSecret, ftsSecret⟩) root
-    (mem_support_keygenRoot parameter _ root)
-
 theorem hashInputs_gameAfterSecrets_subset_boundaryGameCore (adversary : Adversary) (parameter : PublicParameter)
     (hparameter : parameter ∈ support sampleParameter)
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → Digest) (ftsSecret : Index → FtsTree → FtsLeaf → Digest) :
@@ -199,17 +190,11 @@ theorem hashInputs_gameAfterSecrets_subset_boundaryGameCore (adversary : Adversa
         boundaryComputation parameter (gameAfterSecrets adversary parameter otsSecret ftsSecret)) parameter
     hparameter
 
-theorem hashInputs_gameRest_subset_boundaryGameCore (adversary : Adversary) (key : SecretKey)
-    (hparameter : key.parameter ∈ support sampleParameter) :
-    hashInputs (gameRest scheme adversary ⟨key.root, key.parameter⟩ key) ⊆ hashInputs (boundaryGameCore adversary) :=
-  (hashInputs_gameRest_subset_gameAfterSecrets adversary key.parameter key.root key.otsSecret key.ftsSecret).trans
-    (hashInputs_gameAfterSecrets_subset_boundaryGameCore adversary key.parameter hparameter key.otsSecret key.ftsSecret)
-
 theorem coveredInputs_main_subset (adversary : Adversary) (key : SecretKey)
-    (hparameter : key.parameter ∈ support sampleParameter) :
+    (_hparameter : key.parameter ∈ support sampleParameter) :
     coveredInputs key (adversary.main ⟨key.root, key.parameter⟩) ⊆ canonicalGraphGameInputs adversary := by
   rw [coveredInputs_main_eq_gameRest]
-  exact (hashInputs_gameRest_subset_boundaryGameCore adversary key hparameter).trans (hashInputs_subset_canonicalGraphGameInputs adversary)
+  exact hashInputs_gameRest_subset_canonicalGraphGameInputs adversary key
 
 theorem expandedAdversaryImpl_inl (key : SecretKey) (input : OracleWorld.Domain) :
     expandedAdversaryImpl key (.inl input) = liftM (OracleWorld.query input) := rfl
@@ -424,7 +409,7 @@ theorem cachedSigning_mem_support_sign (message : Message) (cache : QueryCache H
     (result : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) × CachedState)
     (hr : cachedForcedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot (signingProgram message) (cache, state) result ≠ 0)
     (secrets : Coordinate → Digest) (hsecrets : complete result.2.2.allowed secrets ≠ 0) :
-    result.1.1.1 ∈ support (sign ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ message) := by
+    result.1.1.1 ∈ support (sign ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ message) := by
   obtain ⟨seed, _, hforced⟩ := cachedForcedRun_fixed_seed parameter root otsSecret labels inputs hencoding selections rows dummy slot
     (signingProgram message) cache state result hr
   have hlazy := SecretGuessObservation.forcedRun_nonzero _ slot _ _ _ hforced
@@ -454,8 +439,8 @@ theorem cachedSigning_mem_support_sign (message : Message) (cache : QueryCache H
     exact hmem
   have hfixed := FtsGuessSigning.nativeRun_original
     (environment (referenceAnswers parameter root otsSecret labels inputs hencoding ⟨selections, rows, seed⟩ dummy)) state
-    ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ inputs hencoding labels ⟨selections, rows, seed⟩ (hauxiliary seed)
-    dummy (fun _ _ _ => False) (known otsSecret labels) (known_agrees otsSecret _ labels _) message
+    ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ inputs hencoding labels ⟨selections, rows, seed⟩ (hauxiliary seed)
+    dummy (fun _ _ _ => False) (known otsSecret labels) (known_agrees otsSecret _ labels _) (fun _ _ _ _ => rfl) message
   dsimp only at hfixed
   have hnonzero : (Prod.fst <$> FtsGuessSigning.nativeRun
       (environment (referenceAnswers parameter root otsSecret labels inputs hencoding ⟨selections, rows, seed⟩ dummy))
@@ -467,7 +452,7 @@ theorem cachedSigning_mem_support_sign (message : Message) (cache : QueryCache H
   rw [hfixed] at hnonzero
   have hmem := (mem_support_iff_evalSPMF_apply_ne_zero _ _).mpr hnonzero
   have hview := mem_support_of_fixedBoundaryRun _ _ _ _ hmem
-  have hsign : result.1.1.1 ∈ support (Prod.fst <$> signWithView ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ message) := by
+  have hsign : result.1.1.1 ∈ support (Prod.fst <$> signWithView ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ message) := by
     rw [support_map]
     exact ⟨_, hview, rfl⟩
   rwa [signWithView_fst] at hsign

@@ -62,7 +62,7 @@ theorem frontierRoot_of_graph (key : SecretKey) (f : QueryImpl HashSpec Id) (lab
     (words : OtsReferenceWords) (hlabels : canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f = labels) :
     frontierRoot key.parameter f words (canonicalGraphFrontier key.otsSecret labels words) = canonicalGraphRoot labels := by
   have hfrontier : IsSigningFrontier key f words (canonicalGraphFrontier key.otsSecret labels words) := by
-    rw [← hlabels, canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root]
+    rw [← hlabels, canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f words key.root key.top]
     exact isSigningFrontier_canonical key f words
   rw [frontierRoot_eq key f words _ hfrontier, ← canonicalGraphLabels_root key.parameter key.otsSecret key.ftsSecret f, hlabels]
 

@@ -63,7 +63,7 @@ variable (hauxiliary : ∀ seed : inputs → HashOutput,
 
 include hauxiliary in
 theorem expected_exceptionRun_cacheWeight_le (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ExceptionState)
-    (hvalid : Valid state.1) (hcovered : CoveredRun parameter root otsSecret inputs computation state.1) (hsized : Sized state.1) :
+    (hvalid : Valid state.1) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.1) (hsized : Sized state.1) :
     (∑' result, Pr[= result | exceptionRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         computation state] * cacheHistoryWeight parameter root result.2) ≤
       cacheHistoryWeight parameter root state +
@@ -75,8 +75,8 @@ theorem expected_exceptionRun_cacheWeight_le (computation : OracleComp (OracleWo
   | query_bind input next ih =>
       rw [exceptionRun_query_bind, tsum_probOutput_bind_mul, expectedMonitoredPayment_query_bind]
       have hworld : ∀ world, input = .inl world → hashInputs (liftM (OracleWorld.query world)) ⊆ inputs :=
-        fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state.1 hvalid hcovered
-      have hsign := covered_step_digest parameter root otsSecret inputs input next state.1 hvalid hcovered
+        fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state.1 hvalid hcovered
+      have hsign := covered_step_digest parameter root otsSecret labels inputs input next state.1 hvalid hcovered
       let payment (result : AdversaryStep input × MonitoredState) : ENNReal :=
         expectedMonitoredPayment parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
           (fun input current => nativeMessageCharge (monitorKey parameter root) input current * certificateCacheExceptionRate)
@@ -180,7 +180,7 @@ theorem expected_exceptionWorldRun_cacheWeight_le {Result : Type} (computation :
 
 include hauxiliary in
 theorem exceptionRun_sized (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ExceptionState) (hvalid : Valid state.1)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state.1) (hsized : Sized state.1)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.1) (hsized : Sized state.1)
     (result : AdversaryTrace × ExceptionState)
     (hresult : exceptionRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       computation state result ≠ 0) : Sized result.2.1 := by
@@ -195,7 +195,7 @@ theorem exceptionRun_sized (computation : OracleComp (OracleWorld + SigningSpec)
 
 include hauxiliary in
 theorem expected_exceptionCompletedRun_cacheWeight_le (adversary : Adversary) (state : ExceptionState) (hvalid : Valid state.1)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.1) (hsized : Sized state.1) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.1) (hsized : Sized state.1) :
     (∑' result, Pr[= result | exceptionCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter adversary state] * cacheHistoryWeight parameter root result.2) ≤
       cacheHistoryWeight parameter root state +
@@ -239,7 +239,7 @@ theorem expected_exceptionCompletedRun_cacheWeight_le (adversary : Adversary) (s
         rw [tsum_probOutput_map_mul]
         exact expected_exceptionWorldRun_cacheWeight_le parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
           stopAfter (verifyComputation parameter root before.1.1.1.1) before.2 hvalid'
-          (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2.1 hvalid' hfinal)
+          (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2.1 hvalid' hfinal)
           (exceptionRun_sized parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter hauxiliary
             (adversary.main ⟨root, parameter⟩) state hvalid hcovered hsized before hb)
     _ ≤ (cacheHistoryWeight parameter root state +
@@ -263,7 +263,7 @@ theorem expected_exceptionCompletedRun_cacheWeight_le (adversary : Adversary) (s
 
 include hauxiliary in
 theorem exceptionCompletedRun_cache_le (adversary : Adversary) (state : ExceptionState) (hvalid : Valid state.1)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.1) (hsized : Sized state.1) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.1) (hsized : Sized state.1) :
     Pr[fun result => result.2.2.1 = true | exceptionCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot
         budget required stopAfter adversary state] ≤
       cacheHistoryWeight parameter root state +

@@ -31,7 +31,7 @@ noncomputable def referenceRecordedGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let reference ← 𝒮[referenceFamilyOracleSample key inputs (hencoding parameter)]
   let f := finiteHashAnswer ∅ inputs reference.2
   let result ← 𝒮[referenceRecordedRest key f

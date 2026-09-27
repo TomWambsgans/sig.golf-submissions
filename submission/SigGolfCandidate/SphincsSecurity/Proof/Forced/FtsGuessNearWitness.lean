@@ -42,7 +42,7 @@ def completedNearGuess (key : SecretKey) (f : QueryImpl HashSpec Id) (result : C
     (result.1.2 * result.2.2) result.1.1.1.1
 
 noncomputable def completedNearCertificate (parameter : PublicParameter) (root : Digest) (result : Completed) : Prop :=
-  let key : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0⟩
+  let key : SecretKey := ⟨parameter, root, fun _ _ _ _ => 0, fun _ _ _ => 0, fun _ _ => 0⟩
   SigningTranscript.Valid result.1.1.1.2 ∧ ∃ omitted : FtsTree,
     TargetCertificateAt key (Finset.univ.erase omitted)
       (hashRowsCache (result.1.1.2 * result.2.1.2).messageCalls, result.1.1.1.2)
@@ -60,9 +60,9 @@ theorem reference_completed_nearCertificate (key : SecretKey) (f : QueryImpl Has
     (dummy : OtsReferenceWords) (adversary : Adversary) (before : AdversaryTrace)
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary))
-    (hevent : completedNearGuess { key with root := root } f (completedAtRoot key.parameter root f before)) :
+    (hevent : completedNearGuess (keyAtRoot f key root) f (completedAtRoot key.parameter root f before)) :
     completedNearCertificate key.parameter root (completedAtRoot key.parameter root f before) := by
-  rw [completedNearCertificate_iff { key with root := root }]
+  rw [completedNearCertificate_iff (keyAtRoot f key root)]
   obtain ⟨hvalid, hcounters, omitted, hcertificate, _⟩ := hevent
   refine ⟨hvalid, omitted, ?_⟩
   have h := referenceForgeryRest_certificate_atRoot key f root hroot dummy adversary before hb _ _ hcounters hcertificate
@@ -84,14 +84,19 @@ theorem fixed_reference_completed_nearCertificate (key : SecretKey) (inputs : Fi
     (hr : 𝒮[simulateQ
       (fixedAnswers (referenceAnswers key.parameter (canonicalGraphRoot labels) key.otsSecret labels inputs hencoding auxiliary dummy)
         (FtsGuessSigning.secretTable key.ftsSecret)) (completedRun key.parameter (canonicalGraphRoot labels) labels adversary)] result ≠ 0)
-    (hevent : completedNearGuess { key with root := canonicalGraphRoot labels }
+    (hevent : completedNearGuess (keyAtLabels key labels)
       (programmedHash key.parameter key.otsSecret key.ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result) :
     completedNearCertificate key.parameter (canonicalGraphRoot labels) result := by
   rw [fixed_reference_completedForgeryRest key inputs hencoding labels auxiliary hauxiliary dummy adversary, evalSPMF_map,
     map_nonzero] at hr
   obtain ⟨before, hb, rfl⟩ := hr
-  apply reference_completed_nearCertificate key _ (canonicalGraphRoot labels) _ dummy adversary before _ hevent
+  have hevent' := And.intro hevent.1 ((ReferenceFtsCoverage.nearGuess_top { key with root := canonicalGraphRoot labels } _
+    (honestTop (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed)))
+      key.parameter (key.otsSecret topLayer rootTree)) _ _ _ _ _).mp hevent.2)
+  apply reference_completed_nearCertificate key _ (canonicalGraphRoot labels) _ dummy adversary before _ hevent'
+
   · exact (congrArg SecretKey.root (rootedKey_programmedHash key labels _ dummy)).symm
   · rw [canonicalGraphLabels_programmedHash, referenceTableSelection_auxiliary key inputs hencoding labels auxiliary hauxiliary]
     exact supported_probComp _ before hb
@@ -105,17 +110,18 @@ theorem lazy_reference_near_witnesses (key : SecretKey) (inputs : Finset HashInp
         (referenceAnswers key.parameter (canonicalGraphRoot labels) key.otsSecret labels inputs hencoding auxiliary dummy))
       (completedRun key.parameter (canonicalGraphRoot labels) labels adversary) (initialState PUnit.unit) result ≠ 0)
     (hsecrets : complete result.2.allowed (FtsGuessSigning.secretTable key.ftsSecret) ≠ 0)
-    (hevent : completedNearGuess { key with root := canonicalGraphRoot labels }
+    (hevent : completedNearGuess (keyAtLabels key labels)
       (programmedHash key.parameter key.otsSecret key.ftsSecret labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result.1) :
     result.2.guesses.Nonempty ∧ completedNearCertificate key.parameter (canonicalGraphRoot labels) result.1 := by
   have hfixed := fixedRun_nonzero_of_lazy_posterior _ _ (initialState PUnit.unit) result _ hr hsecrets
   have hprojected := (map_nonzero Prod.fst _ result.1).mpr ⟨result, hfixed, rfl⟩
   rw [SecretGuessObservation.fixedRun_projection] at hprojected
-  have htable : FtsGuessSigning.secretTable ({ key with root := canonicalGraphRoot labels } : SecretKey).ftsSecret =
+  have htable : FtsGuessSigning.secretTable ((keyAtLabels key labels) : SecretKey).ftsSecret =
       FtsGuessSigning.secretTable key.ftsSecret := rfl
-  have tracking := lazy_reference_completedRun_tracking { key with root := canonicalGraphRoot labels }
-    inputs hencoding labels auxiliary hauxiliary dummy adversary (initialState PUnit.unit) result hr
+  have tracking := lazy_reference_completedRun_tracking (keyAtLabels key labels)
+    inputs hencoding labels auxiliary hauxiliary dummy (topFromGraph_keyAtLabels key labels) adversary
+    (initialState PUnit.unit) result hr
     ((congrArg (fun table => complete result.2.allowed table ≠ 0) htable).mpr hsecrets)
   have hnear := tracking.near_guess rfl _ _ hevent.2
   obtain ⟨omitted, _, hguess⟩ := hnear

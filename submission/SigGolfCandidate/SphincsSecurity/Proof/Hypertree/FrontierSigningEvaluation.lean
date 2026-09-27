@@ -106,19 +106,49 @@ theorem eval_encodingSearch (parameter : PublicParameter) (f : QueryImpl HashSpe
   rw [← boundaryEval_fst parameter f, boundaryEval_encodingSearch]
 
 /-- One layer of the signer, from the specification's message: the counter search and, when it
-succeeds, the tree built once. -/
+succeeds, the tree built once, or for the top layer (whose tree key generation built) the chain steps
+walked to the found word. -/
 noncomputable def specLayerCost (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index)
     (lay : Layer) : Option (Counter × Encoding) × Nat :=
   let search := referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
     (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0
-  (search.1, search.2 + search.1.elim 0 (fun _ => treeNodeHashCost (layerHeight lay)))
+  (search.1, search.2 + search.1.elim 0 (fun result =>
+    if lay = topLayer then OtsCode.signingSteps result.2 else treeNodeHashCost (layerHeight lay)))
+
+/-- The top layer read from the key's table: the counter search, then the chain steps to the word; the
+secrets and the path are table reads. -/
+theorem boundaryEval_signTopLayer (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index)
+    (message : Digest) :
+    (boundaryEval key.parameter f (signTopLayer key.parameter index
+      (fun leaf chainIdx => pure (key.otsSecret topLayer (treeIndexAt index topLayer) leaf chainIdx))
+      (fun level nodeIdx => pure (key.top level nodeIdx)) message)).2 =
+      (FreeMonoid.of none) ^
+        ((referenceEncodingSearch key.parameter f topLayer (treeIndexAt index topLayer)
+          (leafIndexAt index topLayer) message encodingAttemptLimit 0).2 +
+        (referenceEncodingSearch key.parameter f topLayer (treeIndexAt index topLayer)
+          (leafIndexAt index topLayer) message encodingAttemptLimit 0).1.elim 0
+            (fun result => OtsCode.signingSteps result.2)) := by
+  unfold signTopLayer
+  rw [boundaryEval_bind, boundaryEval_encodingSearch, eval_encodingSearch]
+  cases (referenceEncodingSearch key.parameter f topLayer (treeIndexAt index topLayer)
+      (leafIndexAt index topLayer) message encodingAttemptLimit 0).1 with
+  | none => simp only [boundaryEval_pure, mul_one, Option.elim_none, Nat.add_zero]
+  | some result =>
+      obtain ⟨counter, word⟩ := result
+      simp only [pure_bind, Option.elim_some]
+      rw [boundaryEval_bind, boundaryEval_otsValues key.parameter f topLayer (treeIndexAt index topLayer)
+        (leafIndexAt index topLayer) (key.otsSecret topLayer (treeIndexAt index topLayer) (leafIndexAt index topLayer)) word,
+        boundaryEval_bind, boundaryEval_sequenceFin key.parameter f _ (fun _ => 0) (fun _ => by
+          rw [boundaryEval_pure, pow_zero])]
+      simp only [boundaryEval_pure, mul_one, Finset.sum_const_zero, pow_zero, pow_add]
 
 theorem boundaryEval_signLayers (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index)
     (remaining : Nat) (hremaining : remaining ≤ numLayers) (message : Digest)
     (hmessage : ∀ h : 0 < remaining,
       message = evalWithAnswerFn f (layerMessage key index ⟨remaining - 1, by omega⟩)) :
     (boundaryEval key.parameter f (signLayers key.parameter index
-      (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx)) remaining message)).2 =
+      (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx))
+      (fun level nodeIdx => pure (key.top level nodeIdx)) remaining message)).2 =
       (FreeMonoid.of none) ^ layersHashCostFrom (specLayerCost key f index) remaining := by
   induction remaining generalizing message with
   | zero => simp only [signLayers, boundaryEval_pure, layersHashCostFrom, pow_zero]
@@ -126,12 +156,30 @@ theorem boundaryEval_signLayers (key : SecretKey) (f : QueryImpl HashSpec Id) (i
       have hlayer : remaining < numLayers := by omega
       let lay : Layer := ⟨remaining, hlayer⟩
       have hmsg : message = evalWithAnswerFn f (layerMessage key index lay) := hmessage (by omega)
-      rw [signLayers, dif_pos hlayer, layersHashCostFrom, dif_pos hlayer, boundaryEval_bind,
+      by_cases hzero : remaining = 0
+      · subst hzero
+        have hlay : lay = topLayer := rfl
+        rw [signLayers, dif_pos hlayer, if_pos rfl, layersHashCostFrom, dif_pos hlayer, boundaryEval_bind,
+          boundaryEval_signTopLayer]
+        change _ = (FreeMonoid.of none) ^ ((specLayerCost key f index topLayer).2 +
+          if (specLayerCost key f index topLayer).1.isSome then layersHashCostFrom (specLayerCost key f index) 0
+            else 0)
+        have hcost : (specLayerCost key f index topLayer).2 =
+            (referenceEncodingSearch key.parameter f topLayer (treeIndexAt index topLayer)
+              (leafIndexAt index topLayer) message encodingAttemptLimit 0).2 +
+            (referenceEncodingSearch key.parameter f topLayer (treeIndexAt index topLayer)
+              (leafIndexAt index topLayer) message encodingAttemptLimit 0).1.elim 0
+                (fun result => OtsCode.signingSteps result.2) := by
+          simp only [specLayerCost, ← hlay, ← hmsg, if_pos hlay, if_true]
+        rw [hcost, layersHashCostFrom, ite_self, Nat.add_zero]
+        split <;> simp only [boundaryEval_pure, mul_one]
+      rw [signLayers, dif_pos hlayer, if_neg hzero, layersHashCostFrom, dif_pos hlayer, boundaryEval_bind,
         boundaryEval_encodingSearch, eval_encodingSearch]
       simp only [show (⟨remaining, hlayer⟩ : Layer) = lay from rfl]
       change _ = (FreeMonoid.of none) ^ ((specLayerCost key f index lay).2 +
         if (specLayerCost key f index lay).1.isSome then layersHashCostFrom (specLayerCost key f index) remaining else 0)
-      simp only [specLayerCost, ← hmsg]
+      have hnottop : lay ≠ topLayer := fun h => hzero (congrArg Fin.val h)
+      simp only [specLayerCost, ← hmsg, if_neg hnottop]
       cases hsearch : (referenceEncodingSearch key.parameter f lay (treeIndexAt index lay)
           (leafIndexAt index lay) message encodingAttemptLimit 0).1 with
       | none =>
@@ -160,18 +208,15 @@ theorem boundaryEval_signLayers (key : SecretKey) (f : QueryImpl HashSpec Id) (i
             simp only [hl, hroot]
           rw [boundaryEval_bind, ih (by omega) root hnext]
           cases evalWithAnswerFn f (signLayers key.parameter index
-              (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx)) remaining root) <;>
+              (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx))
+              (fun level nodeIdx => pure (key.top level nodeIdx)) remaining root) <;>
             simp only [boundaryEval_pure, mul_one, pow_add, mul_assoc]
 
-/-- **The table signer after the digest loop**: the specification's signature, at the cost of the
-forest and of the layers it walks. -/
+/-- **The table signer's cost after the digest loop**: the forest and the layers it walks. -/
 theorem boundaryEval_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec Id)
     (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
-    boundaryEval key.parameter f (signAfterDigest key randomness index leaves) =
-      (signatureValue f key randomness index leaves,
-        (FreeMonoid.of none) ^ (ftsOpenHashCost + sequenceLayersHashCost (specLayerCost key f index))) := by
-  rw [← eval_signAfterDigest f key randomness index leaves]
-  apply boundaryEval_eq_of_snd
+    (boundaryEval key.parameter f (signAfterDigest key randomness index leaves)).2 =
+      (FreeMonoid.of none) ^ (ftsOpenHashCost + sequenceLayersHashCost (specLayerCost key f index)) := by
   have hforest := eval_buildForest f key.parameter index
     (fun tree leaf => pure (key.ftsSecret index tree leaf)) leaves
   rw [signAfterDigest_eq_signFrom, signFrom, boundaryEval_bind, boundaryEval_buildForest_pure]
@@ -187,11 +232,30 @@ theorem boundaryEval_signAfterDigest (key : SecretKey) (f : QueryImpl HashSpec I
     change _ = evalWithAnswerFn f (layerMessage key index bottomLayer)
     rw [layerMessage_bottomLayer_eq])]
   cases evalWithAnswerFn f (signLayers key.parameter index
-      (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx)) numLayers ftsPublicKey) <;>
+      (fun lay tree leaf chainIdx => pure (key.otsSecret lay tree leaf chainIdx))
+      (fun level nodeIdx => pure (key.top level nodeIdx)) numLayers ftsPublicKey) <;>
     simp only [boundaryEval_pure, mul_one, pow_add, sequenceLayersHashCost]
 
-/-- Key generation: the specification's root, at the cost of one top tree. -/
+/-- **The table signer after the digest loop**, for a key whose table is the specification's top tree:
+the specification's signature, at the cost of the forest and of the layers it walks. -/
+theorem boundaryEval_signAfterDigest_eq (key : SecretKey) (f : QueryImpl HashSpec Id)
+    (htop : KeyTopHonest f key)
+    (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
+    boundaryEval key.parameter f (signAfterDigest key randomness index leaves) =
+      (signatureValue f key randomness index leaves,
+        (FreeMonoid.of none) ^ (ftsOpenHashCost + sequenceLayersHashCost (specLayerCost key f index))) := by
+  rw [← eval_signAfterDigest f key htop randomness index leaves]
+  exact boundaryEval_eq_of_snd _ _ _ _ (boundaryEval_signAfterDigest key f randomness index leaves)
+
+/-- Key generation: the specification's top tree, at the cost of one top tree. -/
 theorem boundaryEval_keygen (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
+    (secret : LeafIndex → ChainIndex → Digest) :
+    boundaryEval parameter f (keygenTable parameter secret) =
+      (evalWithAnswerFn f (keygenTable parameter secret), (FreeMonoid.of none) ^ keygenHashCost) :=
+  boundaryEval_keygenTable parameter f secret
+
+/-- The old key generation (the root alone): the specification's root, at the cost of one top tree. -/
+theorem boundaryEval_keygenRoot_eq (parameter : PublicParameter) (f : QueryImpl HashSpec Id)
     (secret : LeafIndex → ChainIndex → Digest) :
     boundaryEval parameter f (keygenRoot parameter secret) =
       (evalWithAnswerFn f (treeRoot parameter topLayer rootTree secret), (FreeMonoid.of none) ^ keygenHashCost) := by

@@ -1,20 +1,20 @@
 import SigGolfCandidate.Verify.ChainRuns
 import SigGolfCandidate.Verify.ChainCheckB08
 
-/-! Kernel check of chain blocks (layer, chain) (5, 30) .. (5, 39) (one declaration per chain;
+/-! Kernel check of chain blocks (layer, chain) (5, 10) .. (5, 19) (one declaration per chain;
 the import chain serializes this family to bound parallel build memory). -/
 
 namespace SigGolfCandidate.Verify
 
-theorem chainCheck_5_30 : chainCheck 5 30 = true := by decide +kernel
-theorem chainCheck_5_31 : chainCheck 5 31 = true := by decide +kernel
-theorem chainCheck_5_32 : chainCheck 5 32 = true := by decide +kernel
-theorem chainCheck_5_33 : chainCheck 5 33 = true := by decide +kernel
-theorem chainCheck_5_34 : chainCheck 5 34 = true := by decide +kernel
-theorem chainCheck_5_35 : chainCheck 5 35 = true := by decide +kernel
-theorem chainCheck_5_36 : chainCheck 5 36 = true := by decide +kernel
-theorem chainCheck_5_37 : chainCheck 5 37 = true := by decide +kernel
-theorem chainCheck_5_38 : chainCheck 5 38 = true := by decide +kernel
-theorem chainCheck_5_39 : chainCheck 5 39 = true := by decide +kernel
+theorem chainCheck_5_10 : chainCheck 5 10 = true := by decide +kernel
+theorem chainCheck_5_11 : chainCheck 5 11 = true := by decide +kernel
+theorem chainCheck_5_12 : chainCheck 5 12 = true := by decide +kernel
+theorem chainCheck_5_13 : chainCheck 5 13 = true := by decide +kernel
+theorem chainCheck_5_14 : chainCheck 5 14 = true := by decide +kernel
+theorem chainCheck_5_15 : chainCheck 5 15 = true := by decide +kernel
+theorem chainCheck_5_16 : chainCheck 5 16 = true := by decide +kernel
+theorem chainCheck_5_17 : chainCheck 5 17 = true := by decide +kernel
+theorem chainCheck_5_18 : chainCheck 5 18 = true := by decide +kernel
+theorem chainCheck_5_19 : chainCheck 5 19 = true := by decide +kernel
 
 end SigGolfCandidate.Verify

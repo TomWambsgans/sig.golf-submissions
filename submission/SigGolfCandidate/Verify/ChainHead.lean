@@ -118,20 +118,20 @@ theorem entIdx_spec (c : CCtx) (i : Nat) (hi : i < 42) :
 
 def tabOk (lay i : Nat) : Bool :=
   decide (tabAddr lay i % 4 = 0) && decide (0x1000 ≤ tabAddr lay i) &&
-    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 387)) && decide (bVal lay i < 2 ^ 32) &&
+    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 335)) && decide (bVal lay i < 2 ^ 32) &&
     decide (nextPc' lay i = s1Pc lay i + 22) &&
     (!(decide (i + 1 < 42) && !hasPrep (i + 1)) || bVal lay (i + 1) == bVal lay i)
 
-def tabOkAll : Bool := (List.range 7).all fun lay => (List.range 42).all fun i => tabOk lay i
+def tabOkAll : Bool := (List.range 6).all fun lay => (List.range 42).all fun i => tabOk lay i
 
 theorem tabOkAll_eq : tabOkAll = true := by decide +kernel
 
-theorem tabOk_at (lay i : Nat) (hl : lay < 7) (hi : i < 42) : tabOk lay i = true :=
+theorem tabOk_at (lay i : Nat) (hl : lay < 6) (hi : i < 42) : tabOk lay i = true :=
   List.all_eq_true.mp (List.all_eq_true.mp tabOkAll_eq lay (List.mem_range.mpr hl)) i
     (List.mem_range.mpr hi)
 
 theorem tabOk_spec {lay i : Nat} (h : tabOk lay i = true) :
-    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 387) ∧
+    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 335) ∧
       bVal lay i < 2 ^ 32 ∧ (i + 1 < 42 → hasPrep (i + 1) = false → bVal lay (i + 1) = bVal lay i) ∧
       nextPc' lay i = s1Pc lay i + 22 := by
   simp only [tabOk, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true',
@@ -147,7 +147,7 @@ def pairOk : Bool := (List.range 41).all fun i => hasPrep (i + 1) || (isFirst i 
 theorem pairOk_eq : pairOk = true := by decide
 
 /-- A chain without dispatch prep reuses the dispatch register of its predecessor. -/
-theorem rOf_next (c : CCtx) (i : Nat) (hl : c.lay < 7) (hi : i + 1 < 42)
+theorem rOf_next (c : CCtx) (i : Nat) (hl : c.lay < 6) (hi : i + 1 < 42)
     (hp : hasPrep (i + 1) = false) : rOf c (i + 1) = rOf c i := by
   have := List.all_eq_true.mp pairOk_eq i (List.mem_range.mpr (by omega))
   simp only [hp, Bool.false_or, Bool.and_eq_true, Bool.not_eq_true'] at this
@@ -255,7 +255,8 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
       rw [h14]
       exact ⟨hx14 hi hp', hx14 hi hp'⟩
   have hoff : chainAddr c.lay i = 0x800 + (witLayerOff c.lay + 16 * i) := by
-    unfold chainAddr witLayerOff; omega
+    unfold chainAddr; rw [witLayerOff_eq _ hc.1]; omega
+  have hlb := layBody_le _ hc.1
   have hwl := hc.2.2.2.1
   refine ⟨r.toState s, by simpa [hr, headExp, headCost] using hst, hglob _ _ hG, hK'.1, ?_, ⟨?_, ?_⟩,
     ⟨hx15, hR14.1⟩, ⟨by rw [fr]; exact hZ.1, by rw [fr]; exact hZ.2⟩,
@@ -266,12 +267,12 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
   · rw [fr]; exact hCB.2
   · rw [PRes.toState_getReg, hr, headExp_x1]
     simp only [ldE, cw, E.eval]
-    rw [hoff, wit_word hG.2.1 _ (by unfold witLayerOff; omega) (by unfold witLayerOff; omega),
+    rw [hoff, wit_word hG.2.1 _ (by have := witLayerOff_eq _ hc.1; omega) (by have := witLayerOff_eq _ hc.1; omega),
       witChain, vw0_slice]
   · rw [PRes.toState_getReg, hr, headExp_x2]
     simp only [ldE, cw, E.eval]
     rw [hoff, show 0x800 + (witLayerOff c.lay + 16 * i) + 8 = 0x800 + (witLayerOff c.lay + 16 * i + 8)
-      by omega, wit_word hG.2.1 _ (by unfold witLayerOff; omega) (by unfold witLayerOff; omega),
+      by omega, wit_word hG.2.1 _ (by have := witLayerOff_eq _ hc.1; omega) (by have := witLayerOff_eq _ hc.1; omega),
       witChain, vw1_slice]
   · rw [PRes.toState_pc_some _ _ _ (by simp only [hr, headExp]; rfl)]
     simp only [mkBin_eval, mkAdd_eval, BinOp.eval, E.eval]
@@ -281,7 +282,7 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
 
 /-! ## The checkpoint of the next chain -/
 
-theorem headInv_next (c : CCtx) (i : Nat) (hl : c.lay < 7) (hi : i < 42) (acc : List Val)
+theorem headInv_next (c : CCtx) (i : Nat) (hl : c.lay < 6) (hi : i < 42) (acc : List Val)
     (t : MachineState) (hG : Glob gkL c.wl c.pk t) (hK : KnownOK (chK c.lay) t) (hR : c.Regs t)
     (hCB : CBOk c t) (hZ : CBZ t) (hLB : LBOk acc t) (hlen : acc.length = i + 1)
     (hvs : ∀ v ∈ acc, v.length = 16) (hB : RB c i t) (hpc : t.pc = pcOf (nextPc' c.lay i)) :

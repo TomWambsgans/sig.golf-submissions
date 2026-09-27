@@ -96,20 +96,20 @@ theorem referenceForgeryRest_traceValid_atRoot (key : SecretKey) (f : QueryImpl 
     (dummy : OtsReferenceWords) (adversary : Adversary) (before : AdversaryTrace)
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary)) :
-    RetainedResidual.TraceValid key.parameter f (completeCertificateRest { key with root := root } f before.1).2 := by
-  have hrecord : ({ key with root := root },
-      (completeCertificateRest { key with root := root } f before.1).1,
-      (completeCertificateRest { key with root := root } f before.1).2) ∈ support
+    RetainedResidual.TraceValid key.parameter f (completeCertificateRest (keyAtRoot f key root) f before.1).2 := by
+  have hrecord : ((keyAtRoot f key root),
+      (completeCertificateRest (keyAtRoot f key root) f before.1).1,
+      (completeCertificateRest (keyAtRoot f key root) f before.1).2) ∈ support
       ((fun before : AdversaryTrace =>
-        let result := completeCertificateRest ({ key with root := root } : SecretKey) f before.1
-        (({ key with root := root } : SecretKey), result.1, result.2)) <$>
+        let result := completeCertificateRest ((keyAtRoot f key root) : SecretKey) f before.1
+        (((keyAtRoot f key root) : SecretKey), result.1, result.2)) <$>
         referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
           (referenceTableSelection key f) dummy adversary) := by
     rw [support_map]
     exact ⟨before, hb, rfl⟩
   rw [referenceForgeryRest_certificateRecord_atRoot key f root hroot dummy adversary, support_map] at hrecord
   obtain ⟨result, hr, heq⟩ := hrecord
-  have heq' : result = completeCertificateRest { key with root := root } f before.1 := congrArg Prod.snd heq
+  have heq' : result = completeCertificateRest (keyAtRoot f key root) f before.1 := congrArg Prod.snd heq
   rw [heq'] at hr
   apply RetainedResidual.fixedBoundaryRun_traceValid key.parameter f _ _
   simpa only [mem_support_iff, probOutput_def] using hr
@@ -120,16 +120,16 @@ theorem referenceForgeryRest_origin_atRoot (key : SecretKey) (f : QueryImpl Hash
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary))
     (message : Message) (signature : Signature) (hentry : (⟨message, some signature⟩ : SigningEntry) ∈ before.1.1.2) :
-    ReferenceSigningWitness.SignatureOrigin { key with root := root } f message signature before.1.2 := by
+    ReferenceSigningWitness.SignatureOrigin (keyAtRoot f key root) f message signature before.1.2 := by
   rw [referenceForgeryRest, ReferenceVerifierWitness.source_root, ← hroot] at hb
   have hw : referenceFamilyWords (referenceTableSelection key f) dummy =
-      canonicalReferenceWords ({ key with root := root } : SecretKey) f dummy := by
+      canonicalReferenceWords ((keyAtRoot f key root) : SecretKey) f dummy := by
     rw [referenceFamilyWords_selected]
     exact (ReferenceVerifierWitness.canonicalReferenceWords_root key f root dummy).symm
-  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ root, hw] at hb
-  exact ReferenceSigningWitness.fixedTrace_origin { key with root := root } f _ _
-    (isSigningFrontier_canonical { key with root := root } f _)
-    (frontierReferenceWord_canonical { key with root := root } f dummy) _ before hb message signature hentry
+  rw [canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret f _ root (honestTop f key.parameter (key.otsSecret topLayer rootTree)), hw] at hb
+  exact ReferenceSigningWitness.fixedTrace_origin (keyAtRoot f key root) f _ _
+    (isSigningFrontier_canonical (keyAtRoot f key root) f _) (keyTopHonest_keyAtRoot f key root)
+    (frontierReferenceWord_canonical (keyAtRoot f key root) f dummy) _ before hb message signature hentry
 
 theorem referenceForgeryRest_certificate_atRoot (key : SecretKey) (f : QueryImpl HashSpec Id) (root : Digest)
     (hroot : root = (ReferenceVerifierWitness.rootedKey key f).root)
@@ -137,13 +137,13 @@ theorem referenceForgeryRest_certificate_atRoot (key : SecretKey) (f : QueryImpl
     (hb : before ∈ support (referenceForgeryRest key f (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)
       (referenceTableSelection key f) dummy adversary))
     (trace : Trace) (required : Finset FtsTree) (hcounters : CountersInRange before.1.1.1.signature)
-    (hcertificate : TargetCertificateAt { key with root := root } required
+    (hcertificate : TargetCertificateAt (keyAtRoot f key root) required
       (ReferenceFtsCoverage.transcriptCache f before.1.2 trace, before.1.1.2)
-      (signingInput { key with root := root } before.1.1.1.message before.1.1.1.signature)) :
-    TargetCertificateAt { key with root := root } required
-      (hashRowsCache (completeCertificateRest { key with root := root } f before.1).2.messageCalls, before.1.1.2)
-      (signingInput { key with root := root } before.1.1.1.message before.1.1.1.signature) :=
-  certificate_to_message_record { key with root := root } f before.1 trace required hcounters
+      (signingInput (keyAtRoot f key root) before.1.1.1.message before.1.1.1.signature)) :
+    TargetCertificateAt (keyAtRoot f key root) required
+      (hashRowsCache (completeCertificateRest (keyAtRoot f key root) f before.1).2.messageCalls, before.1.1.2)
+      (signingInput (keyAtRoot f key root) before.1.1.1.message before.1.1.1.signature) :=
+  certificate_to_message_record (keyAtRoot f key root) f before.1 trace required hcounters
     (referenceForgeryRest_origin_atRoot key f root hroot dummy adversary before hb)
     (referenceForgeryRest_traceValid_atRoot key f root hroot dummy adversary before hb) hcertificate
 

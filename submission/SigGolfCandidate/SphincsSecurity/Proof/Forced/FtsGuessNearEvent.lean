@@ -41,7 +41,7 @@ theorem initial_reference_near_witnesses (parameter : PublicParameter)
     (hencoding : canonicalEncodingInputs parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
     (dummy : OtsReferenceWords) (adversary : Adversary) :
-    Pr[fun result => completedNearGuess ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm result.1⟩
+    Pr[fun result => completedNearGuess ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm result.1, graphTop labels⟩
       (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm result.1) labels
         (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result.2 |
       complete (fun _ : Coordinate => (Finset.univ : Finset Digest)) >>= fun secrets =>
@@ -53,15 +53,15 @@ theorem initial_reference_near_witnesses (parameter : PublicParameter)
           (referenceAnswers parameter (canonicalGraphRoot labels) otsSecret labels inputs hencoding auxiliary dummy))
           (completedRun parameter (canonicalGraphRoot labels) labels adversary) (initialState PUnit.unit)] := by
   apply initialEvent_le _ _ (fun secrets result => completedNearGuess
-    ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+    ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩
     (programmedHash parameter otsSecret (FtsGuessSigning.secretTable.symm secrets) labels
       (finiteHashAnswer ∅ inputs (canonicalReferenceResidual parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) result)
     (fun result => result.2.guesses.Nonempty ∧ completedNearCertificate parameter (canonicalGraphRoot labels) result.1)
   intro result hr secrets hs hevent
-  refine lazy_reference_near_witnesses ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+  refine lazy_reference_near_witnesses ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩
     inputs hencoding labels auxiliary hauxiliary dummy adversary result hr ?_ hevent
   have htable : FtsGuessSigning.secretTable
-      (⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ : SecretKey).ftsSecret = secrets :=
+      (⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ : SecretKey).ftsSecret = secrets :=
     Equiv.apply_symm_apply FtsGuessSigning.secretTable secrets
   exact (congrArg (fun table => complete result.2.allowed table ≠ 0) htable).mpr hs
 

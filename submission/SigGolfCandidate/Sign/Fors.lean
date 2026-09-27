@@ -51,7 +51,7 @@ def ForsInv (tF : MachineState) (k : Nat) (st : List (Val × List Val) × List V
   k ≤ 14 ∧ st.1.length = k ∧ st.2.length = k ∧
   (∀ i (hi : i < st.1.length), OpenAt t (0x2650 + 16 + 176 * i) st.1[i]) ∧
   (∀ v ∈ st.2, v.length = 16) ∧ Slots t 0x240 st.2 ∧
-  t.pc = (if k < 14 then pcOf 112 else pcOf 191) ∧ t.getReg .x8 = BitVec.ofNat 64 k ∧
+  t.pc = (if k < 14 then pcOf 153 else pcOf 232) ∧ t.getReg .x8 = BitVec.ofNat 64 k ∧
   t.getReg .x18 = BitVec.ofNat 64 (0x2650 + 176 * k) ∧
   RegsEq tF t forsRegs ∧ Frame tF t forsW ∧
   lo32 (t.getMem (BitVec.ofNat 64 0x6A8)) = lo32 (tF.getMem (BitVec.ofNat 64 0x6A8)) ∧
@@ -77,40 +77,40 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
         pure (st.1 ++ [(s, path)], st.2 ++ [root]))
       (ForsInv tF (k + 1)) := by
   obtain ⟨-, hl1, hl2, hopen, hrv, hroots, tpc, t8, t18, tregs, tframe, lo1, lo2, lo3, hi1, hi2⟩ := hinv
-  have tpc' : t.pc = pcOf 112 := by rw [tpc, if_pos hk]
+  have tpc' : t.pc = pcOf 153 := by rw [tpc, if_pos hk]
   have tx5 : t.getReg .x5 = 0 := by rw [tregs.get .x5 (by decide), ctx.x5]
   have tx14 : t.getReg .x14 = BitVec.ofNat 64 (fwVal idx) := by rw [tregs.get .x14 (by decide), ctx.x14]
   have tx19 : t.getReg .x19 = BitVec.ofNat 64 0x30000 := by rw [tregs.get .x19 (by decide), ctx.x19]
   have hu' := hu k
   have hi4 : idx / 2 ^ 32 < 4 := by omega
   -- block 112: tree setup
-  have hs1 := symRun_sound blk112 codeAt_112 t tpc' (by
-    simp only [blk112.res, rv_simp]; bvsimp [t8, accessValid_ofNat]; omega)
-  have hc1 : blk112.res.cycles = 8 := rfl
+  have hs1 := symRun_sound blk153 codeAt_153 t tpc' (by
+    simp only [blk153.res, rv_simp]; bvsimp [t8, accessValid_ofNat]; omega)
+  have hc1 : blk153.res.cycles = 8 := rfl
   rw [hc1] at hs1
-  set t1 := blk112.res.toState t with ht1
+  set t1 := blk153.res.toState t with ht1
   have f1 : Frame t t1 (fun x => x = 0x6A0 ∨ x = 0xC0) := by
     apply frame_toState; intro x hx hW
-    simp only [blk112.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk153.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq, ofNat_eq_iff]
     omega
   have r1 : RegsEq t t1 [.x3, .x9, .x13, .x29] := by
     intro r hr; rw [ht1, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
   have y13 : t1.getReg .x13 = BitVec.ofNat 64 (uOf N k) := by
-    simp only [ht1, blk112.res, rv_simp]; bvsimp [t8]
+    simp only [ht1, blk153.res, rv_simp]; bvsimp [t8]
     rw [show k * 8 + 1808 = 0x710 + 8 * k by ring, tframe.getMem (by omega) (by simp only [forsW]; omega),
       ctx.us k hk]
-  have y9 : t1.getReg .x9 = BitVec.ofNat 64 0 := by simp only [ht1, blk112.res, rv_simp]
-  have pc1 : t1.pc = pcOf 120 := by simp only [ht1, blk112.res, rv_simp]
+  have y9 : t1.getReg .x9 = BitVec.ofNat 64 0 := by simp only [ht1, blk153.res, rv_simp]
+  have pc1 : t1.pc = pcOf 161 := by simp only [ht1, blk153.res, rv_simp]
   have hfw : fwVal idx + k * 65536 < 2 ^ 32 := by unfold fwVal; omega
   have pb0 : t1.getMem (BitVec.ofNat 64 0x6A0) = twWord0 8 k idx 0 := by
-    simp only [ht1, blk112.res, rv_simp]; bvsimp [t8, tx14, ofNat_eq_iff]
+    simp only [ht1, blk153.res, rv_simp]; bvsimp [t8, tx14, ofNat_eq_iff]
     refine (word_of_halves _ (fwVal idx + k * 65536) 0 (by rw [lo32_replace0]) (by
       rw [hi32_replace0, hi1, ctx.pb0]; rfl)).trans ?_
     unfold twWord0 fwVal; congr 1; omega
   have cb0 : t1.getMem (BitVec.ofNat 64 0xC0) = twWord0 9 k idx 0 := by
-    simp only [ht1, blk112.res, rv_simp]; bvsimp [t8, tx14, ofNat_eq_iff]
+    simp only [ht1, blk153.res, rv_simp]; bvsimp [t8, tx14, ofNat_eq_iff]
     refine (word_of_halves _ (fwVal idx + k * 65536 + 256) 0 (by rw [lo32_replace0]) (by
       rw [hi32_replace0, hi2, ctx.cb0]; rfl)).trans ?_
     unfold twWord0 fwVal; congr 1; omega
@@ -133,15 +133,15 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
   refine Sim.steps hs1 (Sim.bind (forsLeaves_sim S hS k idx (uOf N k) hk hidx hu' t1 lctx pc1 y9)
     (fun p t2 h2 => ?_))
   obtain ⟨-, hlv, hlvv, hlvs, hsec, pc2, -, lregs, lframe, llo1, llo2⟩ := h2
-  have pc2' : t2.pc = pcOf 140 := by rw [pc2]; rfl
+  have pc2' : t2.pc = pcOf 181 := by rw [pc2]; rfl
   obtain ⟨hsl, hsw⟩ := hsec hu'
   -- block 140
-  have hs3 := symRun_sound blk140 codeAt_140 t2 pc2' (by simp only [blk140.res, rv_simp])
-  have hc3 : blk140.res.cycles = 2 := rfl
+  have hs3 := symRun_sound blk181 codeAt_181 t2 pc2' (by simp only [blk181.res, rv_simp])
+  have hc3 : blk181.res.cycles = 2 := rfl
   rw [hc3] at hs3
-  set t3 := blk140.res.toState t2 with ht3
+  set t3 := blk181.res.toState t2 with ht3
   have f3 : Frame t2 t3 (fun _ => False) := by
-    apply frame_toState; intro x hx hW; simp [blk140.res]
+    apply frame_toState; intro x hx hW; simp [blk181.res]
   have r3 : RegsEq t2 t3 [.x15, .x17] := by
     intro r hr; rw [ht3, Result.toState_getReg]
     cases r <;> first | exact absurd (by decide) hr | rfl
@@ -165,25 +165,25 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
     · rw [ft13.readWords _ _ (by norm_num) (by intro i hi; simp only [leafW]; omega),
         tframe.readWords _ _ (by norm_num) (by intro i hi; simp only [forsW]; omega), ctx.nbP]
   refine Sim.steps hs3 (Sim.bind (forsLevels_sim k idx (uOf N k) hk hidx hu' t3 vctx p.1 hlv hlvv
-    (hlvs.frame f3 (by omega) (by simp)) (by simp only [ht3, blk140.res, rv_simp])
-    (by simp only [ht3, blk140.res, rv_simp]) (by simp only [ht3, blk140.res, rv_simp]))
+    (hlvs.frame f3 (by omega) (by simp)) (by simp only [ht3, blk181.res, rv_simp])
+    (by simp only [ht3, blk181.res, rv_simp]) (by simp only [ht3, blk181.res, rv_simp]))
     (fun st' t4 h4 => ?_))
   obtain ⟨-, hl4, hv4, hs4, hp4, hpv4, hps4, pc4, -, -, vregs, vframe, vlo⟩ := h4
-  have pc4' : t4.pc = pcOf 182 := by rw [pc4]; rfl
+  have pc4' : t4.pc = pcOf 223 := by rw [pc4]; rfl
   have rt4 : RegsEq t t4 ([.x3, .x9, .x13, .x29] ++ leafRegs ++ [.x15, .x17] ++ levRegs) :=
     rt13.trans vregs
   have x48 : t4.getReg .x8 = BitVec.ofNat 64 k := by rw [rt4.get .x8, t8]
   have x418 : t4.getReg .x18 = BitVec.ofNat 64 (0x2650 + 176 * k) := by rw [rt4.get .x18, t18]
   have x419 : t4.getReg .x19 = BitVec.ofNat 64 0x30000 := by rw [rt4.get .x19, tx19]
   -- block 182: root, next tree
-  have hs5 := symRun_sound blk182 codeAt_182 t4 pc4' (by
-    simp only [blk182.res, rv_simp]; bvsimp [x48, x419, accessValid_ofNat]; omega)
-  have hc5 : blk182.res.cycles = 9 := rfl
+  have hs5 := symRun_sound blk223 codeAt_223 t4 pc4' (by
+    simp only [blk223.res, rv_simp]; bvsimp [x48, x419, accessValid_ofNat]; omega)
+  have hc5 : blk223.res.cycles = 9 := rfl
   rw [hc5] at hs5
-  set t5 := blk182.res.toState t4 with ht5
+  set t5 := blk223.res.toState t4 with ht5
   have f5 : Frame t4 t5 (fun x => x = 0x240 + 16 * k ∨ x = 0x240 + 16 * k + 8) := by
     apply frame_toState; intro x hx hW
-    simp only [blk182.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
+    simp only [blk223.res, rv_simp, List.forall_mem_cons, List.not_mem_nil, IsEmpty.forall_iff,
       implies_true, and_true, ne_eq]
     bvsimp [x48, ofNat_eq_iff]
     omega
@@ -192,7 +192,7 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
     cases r <;> first | exact absurd (by decide) hr | rfl
   have root5 : t5.readWords (BitVec.ofNat 64 (0x240 + 16 * k)) 2 = wordsOf (st'.1.getD 0 []) := by
     rw [← hs4.getD 0 (by rw [hl4]; norm_num), readWords_ofNat_two, readWords_ofNat_two]
-    simp only [ht5, blk182.res, rv_simp]
+    simp only [ht5, blk223.res, rv_simp]
     bvsimp [x48, x419, ofNat_eq_iff]
     simp (disch := bvomega) only [if_pos, if_neg]
   -- the frame from `t` to `t5`
@@ -233,13 +233,13 @@ theorem fors_body (S : List Byte) (hS : S.length = 32) (idx N : Nat) (hidx : idx
     · exact hroots.frame ft5 (by omega) (by
         intro i hi; simp only [leafW, levW]; constructor <;> omega)
     · rw [hl2]; exact root5
-  · simp only [ht5, blk182.res, rv_simp]
+  · simp only [ht5, blk223.res, rv_simp]
     bvsimp [x48, ofNat_bne_ofNat]
     by_cases h : k + 1 < 14
     · rw [if_pos h, if_pos (by simp; omega)]
     · rw [if_neg h, if_neg (by simp; omega)]
-  · simp only [ht5, blk182.res, rv_simp]; bvsimp [x48]
-  · simp only [ht5, blk182.res, rv_simp]; bvsimp [x418]
+  · simp only [ht5, blk223.res, rv_simp]; bvsimp [x48]
+  · simp only [ht5, blk223.res, rv_simp]; bvsimp [x418]
     apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat]; omega
   · exact ((tregs.trans rt4).trans r5).mono (by decide)
   · exact (tframe.trans ft5).mono (by intro x hx; simp only [forsW, leafW, levW] at hx ⊢; omega)
@@ -268,7 +268,7 @@ abbrev forsTreeW : Nat := 8 + (1024 * 34 + (2 + (10 * 12822 + 9)))
 
 /-- **FORS**: the 14 trees. -/
 theorem fors_sim (S : List Byte) (hS : S.length = 32) (N : Nat) (tF : MachineState)
-    (ctx : ForsCtx S (idxOf N) N tF) (hpc : tF.pc = pcOf 112)
+    (ctx : ForsCtx S (idxOf N) N tF) (hpc : tF.pc = pcOf 153)
     (h8 : tF.getReg .x8 = BitVec.ofNat 64 0) (h18 : tF.getReg .x18 = BitVec.ofNat 64 0x2650) :
     Sim image tF (14 * forsTreeW) (signFors S N) (ForsInv tF 14) := by
   have hidx : idxOf N < 2 ^ 34 := Nat.mod_lt _ (by norm_num)

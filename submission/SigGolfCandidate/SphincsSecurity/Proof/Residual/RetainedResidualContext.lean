@@ -17,6 +17,8 @@ structure Context (inputs : Finset HashInput) where
   auxiliary_valid : auxiliary ∈ (referenceAuxiliarySample inputs).support
   dummy : OtsReferenceWords
   publicReplies : CanonicalGraphLabels
+  /-- The key's top-tree table is the graph's, on the cached region. -/
+  top_graph : TopFromGraph key graph
 
 def Context.words {inputs : Finset HashInput} (context : Context inputs) : OtsReferenceWords :=
   referenceFamilyWords context.auxiliary.selections context.dummy
@@ -28,6 +30,13 @@ noncomputable def Context.oracle {inputs : Finset HashInput} (context : Context 
   programmedHash context.key.parameter context.key.otsSecret context.key.ftsSecret context.graph
     (finiteHashAnswer ∅ inputs (canonicalPrefixResidual context.key.parameter inputs context.encoding context.graph
       context.auxiliary.selections context.auxiliary.rows context.auxiliary.seed))
+
+theorem Context.keyTopHonest {inputs : Finset HashInput} (context : Context inputs) :
+    KeyTopHonest context.oracle context.key :=
+  keyTopHonest_of_graphTop context.key context.oracle (by
+    unfold Context.oracle
+    rw [canonicalGraphLabels_programmedHash]
+    exact context.top_graph)
 
 noncomputable def Context.environment {inputs : Finset HashInput} (context : Context inputs) :=
   RetainedResidual.environment context.key.parameter inputs context.encoding context.words context.publicReplies context.auxiliary.selections context.auxiliary.rows
@@ -105,7 +114,7 @@ theorem originalSigning_compatible {inputs : Finset HashInput} (context : Contex
   apply Compatible.afterSigning context memory hcompatible message record
     (fixedBoundaryRun_traceValid context.key.parameter context.oracle _ record hrecord)
   have h := fixedBoundaryRun_signWithView_prefix_public context.key inputs context.encoding context.graph context.auxiliary context.auxiliary_valid
-    context.dummy memory.routing.disclosed memory.routing.known hcompatible.agrees message
+    context.dummy memory.routing.disclosed memory.routing.known hcompatible.agrees context.top_graph message
   have h := congrArg evalSPMF h
   change 𝒮[fixedBoundaryRun context.key.parameter context.oracle (signWithView context.key message)] = _ at h
   rw [h, evalSPMF_map, map_eq_bind_pure_comp, RetainedObservation.bind_nonzero] at hrecord

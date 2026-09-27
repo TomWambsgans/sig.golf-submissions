@@ -1,6 +1,5 @@
 import SigGolfCandidate.SphincsSecurity.Statement
 import SigGolfCandidate.SphincsSecurity.Completeness
-import SigGolfCandidate.SphincsSecurity.Proof.Adversary.Security
 import SigGolfCandidate.SphincsSecurity.Completeness.Assembly
 import SigGolfCandidate.SphincsSecurity.Proof.Event.Assembly
 

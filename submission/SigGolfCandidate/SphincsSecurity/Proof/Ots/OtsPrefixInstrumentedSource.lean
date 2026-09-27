@@ -42,7 +42,7 @@ theorem prefixInstrumentedSeedRest_eq (key : SecretKey) (inputs : Finset HashInp
   funext tables
   apply congrArg (𝒮[segment.referenceAuxSeedLaw inputs hencoding hgraph selections] >>= ·)
   funext auxiliary
-  rw [segment.referenceSeedGame_instrumented observer inputs hencoding hgraph auxiliary key.root key.otsSecret key.ftsSecret
+  rw [segment.referenceSeedGame_instrumented observer inputs hencoding hgraph auxiliary key.root key.top key.otsSecret key.ftsSecret
     selections dummy rfl tables adversary]
 
 noncomputable def prefixInstrumentedSourceGame (inputs : Finset HashInput)
@@ -51,7 +51,7 @@ noncomputable def prefixInstrumentedSourceGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  prefixInstrumentedSeedRest observer ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) (hgraph parameter) address dummy adversary
+  prefixInstrumentedSeedRest observer ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) (hgraph parameter) address dummy adversary
 
 theorem prefixInstrumentedSourceGame_eq (inputs : Finset HashInput)
     (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs) (hgraph : ∀ parameter, canonicalGraphInputs parameter ⊆ inputs)

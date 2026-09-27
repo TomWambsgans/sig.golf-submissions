@@ -28,7 +28,7 @@ theorem referenceNearWitnessRest_program (key : SecretKey) (inputs : Finset Hash
     let f := programmedHash key.parameter key.otsSecret key.ftsSecret labels
       (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))
     referenceNearWitnessRest key f labels auxiliary.selections dummy adversary =
-      (fun result => decide (completedNearGuess { key with root := canonicalGraphRoot labels } f result)) <$>
+      (fun result => decide (completedNearGuess (keyAtLabels key labels) f result)) <$>
         simulateQ (fixedAnswers (referenceAnswers key.parameter (canonicalGraphRoot labels) key.otsSecret labels inputs hencoding auxiliary dummy)
           (FtsGuessSigning.secretTable key.ftsSecret)) (completedRun key.parameter (canonicalGraphRoot labels) labels adversary) := by
   dsimp only
@@ -38,7 +38,8 @@ theorem referenceNearWitnessRest_program (key : SecretKey) (inputs : Finset Hash
   funext before
   rw [sourceNearWitness, rootedKey_programmedHash key labels _ dummy]
   simp only [completedReferenceContact, reference_root, completedNearGuess, completedAtRoot]
-  exact decide_eq_decide.mpr Iff.rfl
+  exact decide_eq_decide.mpr (and_congr_right fun _ =>
+    ReferenceFtsCoverage.nearGuess_top { key with root := canonicalGraphRoot labels } _ _ _ _ _ _ _)
 
 theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adversary : Adversary) (budget : Nat)
     (hprobe : ProbeBudget dummy adversary budget) (parameter : PublicParameter) (hparameter : parameter ∈ support sampleParameter)
@@ -46,7 +47,7 @@ theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adve
     (auxiliary : ReferenceAuxiliary (canonicalGraphGameInputs adversary))
     (hauxiliary : auxiliary ∈ (referenceAuxiliarySample (canonicalGraphGameInputs adversary)).support) :
     Pr[fun hit => hit = true | 𝒮[sampleFtsSecrets] >>= fun ftsSecret =>
-      𝒮[referenceNearWitnessRest ⟨parameter, 0, otsSecret, ftsSecret⟩
+      𝒮[referenceNearWitnessRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
         (programmedHash parameter otsSecret ftsSecret labels
           (finiteHashAnswer ∅ (canonicalGraphGameInputs adversary)
             (canonicalReferenceResidual parameter (canonicalGraphGameInputs adversary)
@@ -65,7 +66,7 @@ theorem referenceNearWitnessRest_initial_bound (dummy : OtsReferenceWords) (adve
   simp only [originalAnswers] at hprior
   rw [← hprior] at h
   have hprogram (ftsSecret : Index → FtsTree → FtsLeaf → Digest) := referenceNearWitnessRest_program
-    ⟨parameter, 0, otsSecret, ftsSecret⟩ (canonicalGraphGameInputs adversary)
+    ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (canonicalGraphGameInputs adversary)
     (canonicalEncodingInputs_subset_gameInputs adversary parameter) labels auxiliary hauxiliary dummy adversary
   simp only [hprogram, evalSPMF_map, probEvent_bind_eq_tsum, probEvent_map, Function.comp_def,
     Equiv.symm_apply_apply, decide_eq_true_eq] at h ⊢

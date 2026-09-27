@@ -90,13 +90,14 @@ lemma orgK_sign_ge {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : Sig
   simp only [orgK, Submission.interact, h, hk, if_false]
   rfl
 
-lemma orgK_sign_lt {sk' : SphincsSecurity.Seeded.SecretKey}
-    (hkey : (pk, sk') ∈ support (aKeygen (B.seedOf sk)))
+lemma orgK_sign_lt {cache' : SphincsSecurity.TopCache} {sk' : SphincsSecurity.Seeded.SecretKey}
+    (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
     {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : SigningRequest}
     {resume : Option (Bytes sub.sizes.signature) → A.State} (h : A.step s = .sign req resume)
     (hk : T.signingRequests < LIFETIME) :
     orgK B A sk pk (n + 1) s T =
-      (liftM (countCalls (aSign sk' (B.msgOf req.message))) : OracleComp AW _) >>= fun p =>
+      (liftM (countCalls (aSign sk' (B.cacheDec req.cache) (B.msgOf req.message))) :
+          OracleComp AW _) >>= fun p =>
         orgK B A sk pk n (resume (p.1.map B.sigCodec.symm))
           (recordVC T req.message (p.1.map B.sigCodec.symm) p.2) := by
   simp only [orgK, Submission.interact, h, hk, if_true, Submission.signingOracle,
@@ -105,14 +106,15 @@ lemma orgK_sign_lt {sk' : SphincsSecurity.Seeded.SecretKey}
     (fun r => (r.value, r.hashCalls))
     (fun p => sub.interact A sk (B.pkEnc pk) n (resume p.1) (recordVC T req.message p.1 p.2))
     _ (fun _ => rfl)).trans ?_
-  rw [B.sign_eq sk pk sk' hkey]
+  rw [B.sign_eq sk pk cache' sk' hkey]
   erw [relabel_map]
-  rw [relabel_unpad_countCalls B _ (B.sign_honest _ pk sk' hkey _)]
+  rw [relabel_unpad_countCalls B _ (B.sign_honest _ pk cache' sk' hkey _ _)]
   erw [liftM_map, bind_map_left]
 
 /-- The witness-form checker, relabelled. -/
-lemma relabel_verify {sk' : SphincsSecurity.Seeded.SecretKey}
-    (hkey : (pk, sk') ∈ support (aKeygen (B.seedOf sk)))
+lemma relabel_verify {cache' : SphincsSecurity.TopCache}
+    {sk' : SphincsSecurity.Seeded.SecretKey}
+    (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
     (m : Message) (w : Bytes sub.sizes.witness) (fresh : Bool) (calls : ℕ) :
     relabel B.unpad ((sub.run .verify (m, B.pkEnc pk, w)) >>= fun verify =>
         (pure (⟨verify.value.isSome && fresh, calls + verify.hashCalls⟩ : AttackResult) :
@@ -126,16 +128,17 @@ lemma relabel_verify {sk' : SphincsSecurity.Seeded.SecretKey}
         ((fun r => (r.value, r.hashCalls)) <$> sub.run .verify (m, B.pkEnc pk, w)) := by
     rw [Functor.map_map, map_eq_bind_pure_comp]
     rfl
-  rw [e, B.verify_eq _ pk sk' hkey]
+  rw [e, B.verify_eq _ pk cache' sk' hkey]
   erw [Functor.map_map, relabel_map]
-  rw [relabel_unpad_countCalls B _ (B.verify_honest _ pk sk' hkey _ _)]
+  rw [relabel_unpad_countCalls B _ (B.verify_honest _ pk cache' sk' hkey _ _)]
   refine congrArg (· <$> _) ?_
   funext a
   rcases a with ⟨b, c⟩
   cases b <;> rfl
 
-lemma orgK_submit_witness {sk' : SphincsSecurity.Seeded.SecretKey}
-    (hkey : (pk, sk') ∈ support (aKeygen (B.seedOf sk)))
+lemma orgK_submit_witness {cache' : SphincsSecurity.TopCache}
+    {sk' : SphincsSecurity.Seeded.SecretKey}
+    (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
     {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {m : Message} {w : Bytes sub.sizes.witness}
     (h : A.step s = .submit (.witness m w)) :
     orgK B A sk pk (n + 1) s T =
@@ -145,8 +148,9 @@ lemma orgK_submit_witness {sk' : SphincsSecurity.Seeded.SecretKey}
   rw [← relabel_verify B hkey m w]
   rfl
 
-lemma orgK_submit_signature {sk' : SphincsSecurity.Seeded.SecretKey}
-    (hkey : (pk, sk') ∈ support (aKeygen (B.seedOf sk)))
+lemma orgK_submit_signature {cache' : SphincsSecurity.TopCache}
+    {sk' : SphincsSecurity.Seeded.SecretKey}
+    (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
     {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {m : Message}
     {σ : Bytes sub.sizes.signature}
     (h : A.step s = .submit (.signature m σ)) :
@@ -181,7 +185,7 @@ implementation of key generation substituted. -/
 noncomputable def orgGame (rounds : ℕ) : OracleComp AW AttackResult := do
   let sk ← (liftM sampleSecretKey : OracleComp AW _)
   let p ← (liftM (countCalls (aKeygen (B.seedOf sk))) : OracleComp AW _)
-  orgK B A sk p.1.1 rounds (A.initial (B.pkEnc p.1.1) (B.cacheOf p.1.1)) { hashCalls := p.2 }
+  orgK B A sk p.1.1 rounds (A.initial (B.pkEnc p.1.1) (B.cacheEnc p.1.2.1)) { hashCalls := p.2 }
 
 lemma unpad_injective : Function.Injective B.unpad := fun x y h => by
   rw [← B.pad_unpad x, ← B.pad_unpad y, h]

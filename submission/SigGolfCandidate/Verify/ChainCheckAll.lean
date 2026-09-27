@@ -1,5 +1,5 @@
-import SigGolfCandidate.Verify.ChainCheckA14
-import SigGolfCandidate.Verify.ChainCheckB14
+import SigGolfCandidate.Verify.ChainCheckA12
+import SigGolfCandidate.Verify.ChainCheckB12
 
 /-! All chain blocks. -/
 
@@ -275,52 +275,7 @@ theorem chainCheck_5 (i : Nat) (hi : i < 42) : chainCheck 5 i = true := by
   · exact chainCheck_5_40
   · exact chainCheck_5_41
 
-theorem chainCheck_6 (i : Nat) (hi : i < 42) : chainCheck 6 i = true := by
-  interval_cases i
-  · exact chainCheck_6_0
-  · exact chainCheck_6_1
-  · exact chainCheck_6_2
-  · exact chainCheck_6_3
-  · exact chainCheck_6_4
-  · exact chainCheck_6_5
-  · exact chainCheck_6_6
-  · exact chainCheck_6_7
-  · exact chainCheck_6_8
-  · exact chainCheck_6_9
-  · exact chainCheck_6_10
-  · exact chainCheck_6_11
-  · exact chainCheck_6_12
-  · exact chainCheck_6_13
-  · exact chainCheck_6_14
-  · exact chainCheck_6_15
-  · exact chainCheck_6_16
-  · exact chainCheck_6_17
-  · exact chainCheck_6_18
-  · exact chainCheck_6_19
-  · exact chainCheck_6_20
-  · exact chainCheck_6_21
-  · exact chainCheck_6_22
-  · exact chainCheck_6_23
-  · exact chainCheck_6_24
-  · exact chainCheck_6_25
-  · exact chainCheck_6_26
-  · exact chainCheck_6_27
-  · exact chainCheck_6_28
-  · exact chainCheck_6_29
-  · exact chainCheck_6_30
-  · exact chainCheck_6_31
-  · exact chainCheck_6_32
-  · exact chainCheck_6_33
-  · exact chainCheck_6_34
-  · exact chainCheck_6_35
-  · exact chainCheck_6_36
-  · exact chainCheck_6_37
-  · exact chainCheck_6_38
-  · exact chainCheck_6_39
-  · exact chainCheck_6_40
-  · exact chainCheck_6_41
-
-theorem chainCheck_at (lay i : Nat) (hl : lay < 7) (hi : i < 42) : chainCheck lay i = true := by
+theorem chainCheck_at (lay i : Nat) (hl : lay < 6) (hi : i < 42) : chainCheck lay i = true := by
   interval_cases lay
   · exact chainCheck_0 i hi
   · exact chainCheck_1 i hi
@@ -328,6 +283,5 @@ theorem chainCheck_at (lay i : Nat) (hl : lay < 7) (hi : i < 42) : chainCheck la
   · exact chainCheck_3 i hi
   · exact chainCheck_4 i hi
   · exact chainCheck_5 i hi
-  · exact chainCheck_6 i hi
 
 end SigGolfCandidate.Verify

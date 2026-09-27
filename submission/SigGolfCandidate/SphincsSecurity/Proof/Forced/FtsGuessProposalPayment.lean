@@ -130,7 +130,7 @@ theorem expected_proposalRun_accumulator (counter : ProposalState → ENNReal)
       (∑' result, Pr[= result | proposalStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter input state] * counter result.2) = counter state + charge input state)
     (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state.2) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2) :
     (∑' result, Pr[= result | proposalRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         computation state] * counter result.2) =
       counter state +
@@ -163,13 +163,13 @@ theorem expected_proposalRun_accumulator (counter : ProposalState → ENNReal)
                   state result hr))
         _ = _ := by
           simp only [mul_add, ENNReal.tsum_add]
-          rw [hstep input state hvalid (covered_step_digest parameter root otsSecret inputs input next state.2 hvalid hcovered), add_assoc]
+          rw [hstep input state hvalid (covered_step_digest parameter root otsSecret labels inputs input next state.2 hvalid hcovered), add_assoc]
 
 /-! ### Invariants along proposal runs -/
 
 include hauxiliary in
 theorem proposalRun_invariant (total : Nat) (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ProposalState)
-    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret inputs computation state.2)
+    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2)
     (hinv : ProposalInvariant parameter root total state) (result : AdversaryTrace × ProposalState)
     (hresult : proposalRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required (proposalStop stopAfter)
       computation state result ≠ 0) :
@@ -193,13 +193,13 @@ theorem proposalRun_invariant (total : Nat) (computation : OracleComp (OracleWor
           hauxiliary input next state.2 hvalid hcovered (step.1, step.2.2) hforced)
         (proposalStep_invariant parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter total input
           state hvalid
-          (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state.2 hvalid hcovered)
-          (covered_step_digest parameter root otsSecret inputs input next state.2 hvalid hcovered) hinv step hstep) tail htail
+          (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state.2 hvalid hcovered)
+          (covered_step_digest parameter root otsSecret labels inputs input next state.2 hvalid hcovered) hinv step hstep) tail htail
 
 include hauxiliary in
 theorem expectedProposalPayment_charge_le_mass_terminalPotential (total : Nat)
     (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ProposalState) (hvalid : Valid state.2)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state.2) (hbudget : budget ≤ 2 ^ 127)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2) (hbudget : budget ≤ 2 ^ 127)
     (hinv : ProposalInvariant parameter root total state) :
     expectedProposalPayment parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required (proposalStop stopAfter)
       (fun input current => certificateMonitorCharge (monitorKey parameter root) budget required input (monitorView current.2)) computation state ≤
@@ -228,12 +228,12 @@ theorem expectedProposalPayment_charge_le_mass_terminalPotential (total : Nat)
             hauxiliary input next state.2 hvalid hcovered (result.1, result.2.2) hforced)
           (proposalStep_invariant parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter total
             input state hvalid
-            (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state.2 hvalid hcovered)
-            (covered_step_digest parameter root otsSecret inputs input next state.2 hvalid hcovered) hinv result hr)
+            (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state.2 hvalid hcovered)
+            (covered_step_digest parameter root otsSecret labels inputs input next state.2 hvalid hcovered) hinv result hr)
 
 include hauxiliary in
 theorem expected_proposalRun_mass_terminalPotential (total : Nat) (computation : OracleComp (OracleWorld + SigningSpec) Forgery)
-    (state : ProposalState) (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret inputs computation state.2) :
+    (state : ProposalState) (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2) :
     (∑' result, Pr[= result | proposalRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         computation state] *
       (result.2.2.2.creationMass * terminalProposalPotential (PMF.uniformOfFintype Index) total (terminalCertificatePrice required) result.2.1)) =
@@ -248,7 +248,7 @@ theorem expected_proposalRun_mass_terminalPotential (total : Nat) (computation :
 
 include hauxiliary in
 theorem expected_proposalRun_creationCost (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ProposalState)
-    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret inputs computation state.2) :
+    (hvalid : Valid state.2) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.2) :
     (∑' result, Pr[= result | proposalRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         computation state] * result.2.2.2.creationCost) =
       state.2.2.creationCost +

@@ -178,14 +178,12 @@ theorem Context.frontierGame_original_counted {inputs : Finset HashInput} (conte
         (gameAfterSecrets adversary context.key.parameter context.key.otsSecret context.key.ftsSecret) := by
     rw [← hselection, referenceFamilyFrontierRest_selected, ← hgraph, graphFrontierGameRest_canonical]
   rw [hfrontier, gameAfterSecrets, fixedBoundaryRun_bind, context.keygen_record hroot, pure_bind, Functor.map_map]
-  have hkey : (⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩ : SecretKey) = context.key := by
-    cases context.key
-    rfl
   change (fun result => (result.1, SigningBoundaryTrace.hashCalls ((FreeMonoid.of none) ^ keygenHashCost * result.2))) <$>
     fixedBoundaryRun context.key.parameter context.oracle
-      (gameRest scheme adversary ⟨context.key.root, context.key.parameter⟩
-        ⟨context.key.parameter, context.key.root, context.key.otsSecret, context.key.ftsSecret⟩) = _
-  rw [hkey, ← fixedBoundaryRun_count context.key.parameter, Functor.map_map]
+      (gameRest scheme adversary ⟨context.keygenTop (layerHeight topLayer) 0, context.key.parameter⟩
+        ⟨context.key.parameter, context.keygenTop (layerHeight topLayer) 0, context.key.otsSecret, context.key.ftsSecret,
+          context.keygenTop⟩) = _
+  rw [context.gameRest_keygen hroot adversary, ← fixedBoundaryRun_count context.key.parameter, Functor.map_map]
   simp only [SigningBoundaryTrace.hashCalls_mul, SigningBoundaryTrace.hashCalls_pow_none]
 
 private theorem probEvent_denotation {Result : Type} (computation : ProbComp Result) (event : Result → Prop) :
@@ -209,7 +207,7 @@ theorem observedInitialSource_success_counted (parameter : PublicParameter) (inp
     (hinputs : ∀ key : SecretKey, sourceInputs key
       (FtsProbeSimulation.unloggedRetainedRestComputation adversary ⟨key.root, key.parameter⟩) ⊆ inputs) (q : Nat) :
     Pr[fun result => result.1 = true ∧ result.2.hashCalls ≤ q |
-      referenceFamilyFrontierRest ⟨parameter, 0, coordinateOtsSecrets labels, coordinateFtsSecrets labels⟩
+      referenceFamilyFrontierRest ⟨parameter, 0, coordinateOtsSecrets labels, coordinateFtsSecrets labels, fun _ _ => 0⟩
         (programmedHash parameter (coordinateOtsSecrets labels) (coordinateFtsSecrets labels) (coordinateGraphLabels labels high)
           (finiteHashAnswer ∅ inputs (canonicalPrefixResidual parameter inputs hcanonical (coordinateGraphLabels labels high)
             encoding.selections encoding.rows seed)))

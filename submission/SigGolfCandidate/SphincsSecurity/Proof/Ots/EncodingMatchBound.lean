@@ -55,7 +55,7 @@ theorem referenceEncodingContextGame_match_le (inputs : Finset HashInput)
   apply weighted_bound
   intro outside
   simpa only [probEvent_pure, mul_ite, mul_one, mul_zero, probEvent_eq_tsum_ite] using
-    referenceEncodingLazyRest_match_le ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) outside selections dummy adversary
+    referenceEncodingLazyRest_match_le ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) outside selections dummy adversary
 
 theorem referenceEncodingContextGame_expected_encodingCalls (inputs : Finset HashInput)
     (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs) (dummy : OtsReferenceWords) (adversary : Adversary) :

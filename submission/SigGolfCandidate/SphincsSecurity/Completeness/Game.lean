@@ -22,7 +22,7 @@ open Concrete
 /-- One seed's honest run, as a hash-only computation. -/
 def honest (seed : MasterSeed) (message : Message) : OracleComp HashSpec Bool := do
   let keys ← Seeded.keygenFromSeed seed
-  let result ← (Seeded.sign keys.2 message : OracleComp HashSpec (Option Signature))
+  let result ← (Seeded.sign keys.2.2 keys.2.1 message : OracleComp HashSpec (Option Signature))
   match result with
   | some signature => (Concrete.verify keys.1 message signature : OracleComp HashSpec Bool)
   | none => pure false
@@ -32,7 +32,7 @@ theorem seededGameCore_eq (seed : MasterSeed) (message : Message) :
   unfold seededGameCore honest
   simp only [liftM_bind]
   refine bind_congr fun keys => ?_
-  obtain ⟨pk, sk⟩ := keys
+  obtain ⟨pk, cache, sk⟩ := keys
   refine bind_congr fun result => ?_
   cases result <;> simp
 
@@ -74,9 +74,9 @@ theorem probEvent_prob_bind_le {α β : Type} (mx : ProbComp α) (my : α → Pr
 
 /-- Key generation followed by signing, keeping the keys. -/
 def signedWithKeys (seed : MasterSeed) (message : Message) :
-    OracleComp HashSpec ((PublicKey × Seeded.SecretKey) × Option Signature) := do
+    OracleComp HashSpec ((PublicKey × TopCache × Seeded.SecretKey) × Option Signature) := do
   let keys ← Seeded.keygenFromSeed seed
-  let result ← (Seeded.sign keys.2 message : OracleComp HashSpec (Option Signature))
+  let result ← (Seeded.sign keys.2.2 keys.2.1 message : OracleComp HashSpec (Option Signature))
   pure (keys, result)
 
 theorem honest_eq (seed : MasterSeed) (message : Message) :
@@ -90,21 +90,11 @@ theorem honest_eq (seed : MasterSeed) (message : Message) :
 attribute [local irreducible] Seeded.signDigestLoop Concrete.signFrom Concrete.buildLayerTree
   sequenceFin digestAttemptLimit encodingAttemptLimit
 
-/-- What key generation returns, the verifier accepts from the signer. -/
-theorem verify_of_keygen_sign (f : QueryImpl HashSpec Id) (seed : MasterSeed) (message : Message)
-    {signature : Signature}
-    (hsign : evalWithAnswerFn f (Seeded.sign (evalWithAnswerFn f (Seeded.keygenFromSeed seed)).2 message
-      : OracleComp HashSpec (Option Signature)) = some signature) :
-    evalWithAnswerFn f (Concrete.verify (evalWithAnswerFn f (Seeded.keygenFromSeed seed)).1 message
-      signature : OracleComp HashSpec Bool) = true := by
-  rw [eval_keygenFromSeed] at hsign ⊢
-  exact verify_of_sign f _ message (keygenRootValue_eq f seed) hsign
-
-/-- A signature the signer produces for a generated key verifies, under every hash function. -/
+/-- A signature the signer produces for a generated key and its cache verifies, under every hash
+function. -/
 theorem correct : SphincsCorrectnessStatement := by
-  intro hash seed publicKey secretKey message signature hkeys hsign
-  have h := verify_of_keygen_sign hash seed message (signature := signature) (by rw [hkeys]; exact hsign)
-  rwa [hkeys] at h
+  intro hash seed publicKey cache secretKey message signature hkeys hsign
+  exact verify_of_keygen_sign hash seed message hkeys hsign
 
 set_option maxHeartbeats 1000000 in
 /-- A signature the signer produced always verifies, so the honest run fails only when signing does. -/
@@ -114,7 +104,7 @@ theorem probEvent_honest_false_le (seed : MasterSeed) (message : Message) :
           (simulateQ (randomOracle : QueryImpl HashSpec _) (signedWithKeys seed message)).run ∅] := by
   rw [honest_eq]
   refine le_trans (probEvent_bind_le_add _ _ (fun r => r.1.2 = none) _ ∅ 0 ?_) (by rw [add_zero])
-  rintro ⟨⟨⟨pk, sk⟩, result⟩, cache⟩ hr hsome
+  rintro ⟨⟨⟨pk, topCache, sk⟩, result⟩, cache⟩ hr hsome
   obtain ⟨signature, rfl⟩ := Option.ne_none_iff_exists'.mp hsome
   dsimp only
   rw [nonpos_iff_eq_zero, probEvent_eq_zero_iff]
@@ -123,12 +113,11 @@ theorem probEvent_honest_false_le (seed : MasterSeed) (message : Message) :
   obtain ⟨hle, hverify, _⟩ := replay_of_mem_support _ cache b cache' hr' f hf
   obtain ⟨hsigned, _⟩ := replay_of_mem_support_of_le _ ∅ _ cache cache' hr hle f hf
   simp only [signedWithKeys, evalWithAnswerFn_bind, evalWithAnswerFn_pure] at hsigned
-  have hkeys : evalWithAnswerFn f (Seeded.keygenFromSeed seed) = (pk, sk) := congrArg Prod.fst hsigned
+  have hkeys : evalWithAnswerFn f (Seeded.keygenFromSeed seed) = (pk, topCache, sk) :=
+    congrArg Prod.fst hsigned
   have hsign := congrArg Prod.snd hsigned
   rw [hkeys] at hsign
-  have htrue := verify_of_keygen_sign f seed message (signature := signature)
-    (by rw [hkeys]; exact hsign)
-  rw [hkeys] at htrue
+  have htrue := verify_of_keygen_sign f seed message hkeys hsign
   try dsimp only at hverify
   rw [htrue] at hverify
   try dsimp only

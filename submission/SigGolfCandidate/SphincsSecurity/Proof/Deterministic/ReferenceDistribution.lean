@@ -33,25 +33,4 @@ theorem evalDist_referenceOutputs (adversary : Adversary) :
 
 theorem worldHandler_randomOracle : worldHandler randomOracle = romImpl := rfl
 
-theorem evalDist_independentTableGame_memo (adversary : Adversary) :
-    𝒮[independentTableGame (memoAdversary adversary)] =
-      𝒮[(simulateQ romImpl (gameCore Concrete.scheme (memoAdversary adversary))).run' ∅] := by
-  rw [← evalDist_referenceOutputs]
-  unfold independentTableGame drawSigningMaterial
-  simp only [bind_assoc, pure_bind]
-  apply evalSPMF_bind_congr'
-  intro outputs
-  have h := evalDist_tableGameAfterSecrets_memo randomOracle adversary outputs ∅
-  rw [worldHandler_randomOracle] at h
-  have heq := congrArg (fun distribution => Prod.fst <$> distribution) h
-  simpa only [StateT.run'_eq, evalSPMF_map, evalSPMF_bind, map_bind] using heq
-
-theorem forgeAdvantage_deterministic_le_reference (adversary : Adversary) (q : Nat)
-    (hbound : HasTableBudget adversary q) :
-    forgeAdvantage scheme adversary ≤ forgeAdvantage Concrete.scheme (memoAdversary adversary) +
-      q / ((2 ^ 256 : Nat) : ℝ≥0∞) := by
-  have hmemo := prob_independentTableGame_le_memo adversary
-  rw [probOutput_congr rfl (evalDist_independentTableGame_memo adversary)] at hmemo
-  exact (forgeAdvantage_deterministic_le_table adversary q hbound).trans (add_le_add hmemo le_rfl)
-
 end SphincsSecurity.Seeded

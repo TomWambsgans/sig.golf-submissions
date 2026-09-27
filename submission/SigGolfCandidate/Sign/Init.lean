@@ -173,3 +173,25 @@ theorem s0_zero (sk : SecretKey) (cache : Cache) (m : Message) (A : Nat) (hA : A
   rw [this]; rfl
 
 end SigGolfCandidate.Sign
+
+namespace SigGolfCandidate.Sign
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+
+theorem getD_slice (l : List Byte) (off len j : Nat) (hj : j < len) (hl : off + len ≤ l.length) :
+    (slice l off len).getD j 0 = l.getD (off + j) 0 := by
+  simp only [slice, List.getD_eq_getElem?_getD, List.getElem?_take, List.getElem?_drop]
+  rw [if_pos hj]
+
+/-- The initial cache words: `8 n` bytes at cache offset `off` (8-aligned). -/
+theorem s0_readWords_cache (sk : SecretKey) (cache : Cache) (m : Message) (off n : Nat)
+    (h8 : off % 8 = 0) (hn : off + 8 * n ≤ 131072) :
+    (s0 sk cache m).readWords (BitVec.ofNat 64 (0x44A0 + off)) n =
+      wordsOf (slice (toList cache) off (8 * n)) := by
+  have hlen : (toList cache).length = 131072 := by simp [toList, SigGolf.bytes]; rfl
+  apply readWords_of_bytes _ _ _ _ (by simp [slice, hlen]; omega) (by omega) (by omega)
+  intro j hj
+  rw [s0_getByte _ _ _ _ (by omega), if_neg (by omega), if_pos (by omega),
+    getD_slice _ _ _ _ hj (by rw [hlen]; omega), show 0x44A0 + off + j - 0x44A0 = off + j by omega]
+  rfl
+
+end SigGolfCandidate.Sign

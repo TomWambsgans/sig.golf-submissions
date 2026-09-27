@@ -61,7 +61,7 @@ noncomputable def referenceEncodingContextGame {Result : Type} (observer : Front
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let result ← referenceEncodingContextRest observer ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) dummy adversary
+  let result ← referenceEncodingContextRest observer ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) dummy adversary
   pure (parameter, result)
 
 theorem referenceEncodingContextGame_erased {Result : Type} (observer : FrontierObserver Result)
@@ -80,7 +80,7 @@ theorem referenceEncodingContextGame_lazy {Result : Type} (observer : FrontierOb
       let parameter ← 𝒮[sampleParameter]
       let otsSecret ← 𝒮[sampleOtsSecrets]
       let ftsSecret ← 𝒮[sampleFtsSecrets]
-      let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+      let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
       let selections ← 𝒮[FirstSuccessFamily.selected decodeEncodingOutput encodingAttemptLimit]
       let outside ← 𝒮[PMF.uniformOfFintype (NonencodingRows parameter inputs (hencoding parameter))]
       let result ← Prod.fst <$> referenceEncodingLazyRest observer key inputs (hencoding parameter) outside selections dummy adversary

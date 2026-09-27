@@ -32,7 +32,7 @@ theorem macro_le_visWeight (input : (OracleWorld + SigningSpec).Domain) :
   · simp [signingMacroHashCost, visWeight]
   · simp [signingMacroHashCost, visWeight]
   · simp only [signingMacroHashCost, visWeight]
-    exact_mod_cast two_pow_ftsTreeHeight_le_ftsOpenHashCost
+    exact_mod_cast two_pow_ftsTreeHeight_le_ftsOpenHashCost.trans ftsOpenHashCost_le_signCharge
 
 theorem certificateMonitorMass_le_visWeight (key : SecretKey) (input : (OracleWorld + SigningSpec).Domain)
     (state : CertificateMonitorState) :
@@ -189,12 +189,12 @@ theorem cachedNearGame_le_visAdversary (dummy : OtsReferenceWords) (adversary : 
       (⟨selections, Function.uncurry rows, seed⟩ : ReferenceAuxiliary (canonicalGraphGameInputs (visAdversary adversary visBudget))) ∈
         (referenceAuxiliarySample (canonicalGraphGameInputs (visAdversary adversary visBudget))).support :=
     fun seed => referenceAuxiliary_mem_support _ selections hsel rows hrow seed
-  have hcovered : ∀ monitor, CoveredRun parameter (canonicalGraphRoot labels) otsSecret
+  have hcovered : ∀ monitor, CoveredRun parameter (canonicalGraphRoot labels) otsSecret labels
       (canonicalGraphGameInputs (visAdversary adversary visBudget))
       ((visAdversary adversary visBudget).main ⟨canonicalGraphRoot labels, parameter⟩) ((∅, initialState PUnit.unit), monitor) :=
     fun _ secrets _ =>
       coveredInputs_main_subset (visAdversary adversary visBudget)
-        ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ hparameter
+        ⟨parameter, canonicalGraphRoot labels, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ hparameter
   have hwork : ∀ result : Completed × CachedState,
       nearLaw parameter (canonicalGraphRoot labels) otsSecret labels (canonicalGraphGameInputs (visAdversary adversary visBudget))
         (canonicalEncodingInputs_subset_gameInputs (visAdversary adversary visBudget) parameter) selections (Function.uncurry rows)

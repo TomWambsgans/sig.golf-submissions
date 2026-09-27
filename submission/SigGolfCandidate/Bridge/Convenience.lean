@@ -96,8 +96,6 @@ encoding of organizer queries (e.g. `defaultQEnc`). -/
 structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   /-- (A) abstract event-form security. -/
   security : EventSecurity
-  /-- The abstract signing budget covers the organizer lifetime. -/
-  lifetime_le : SigGolf.LIFETIME ≤ SphincsSecurity.signatureLimit
   /-- Organizer secret keys become abstract master seeds, with the right distribution. -/
   seedOf : SigGolf.SecretKey → SphincsSecurity.MasterSeed
   seedOf_dist : ∀ seed, Pr[= seed | seedOf <$> SigGolf.sampleSecretKey] =
@@ -111,9 +109,12 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   expandFn : SigGolf.Bytes sub.sizes.signature → SigGolf.Bytes sub.sizes.witness
   witDec : SigGolf.Bytes sub.sizes.witness → SphincsSecurity.Signature
   witDec_expandFn : ∀ b, witDec (expandFn b) = sigCodec b
-  /-- (B) public keys and the published cache. -/
+  /-- (B) public keys. -/
   pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
-  cacheOf : SphincsSecurity.PublicKey → SigGolf.Cache
+  /-- (B) caches: the bytes key generation publishes, and the abstract cache the signer reads from
+  arbitrary bytes. -/
+  cacheEnc : SphincsSecurity.TopCache → SigGolf.Cache
+  cacheDec : SigGolf.Cache → SphincsSecurity.TopCache
   /-- (C) zero padding, injective on honest inputs, which all start with byte `1`. -/
   pad : List UInt8 → SigGolf.Query
   Honest : List UInt8 → Prop
@@ -123,30 +124,30 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   qEnc_injective : Function.Injective qEnc
   /-- (D) key generation. -/
   keygen_eq : ∀ sk, (fun r => (r.value, r.hashCalls)) <$> sub.run .keygen sk =
-    (fun p => (some (pkEnc p.1.1, cacheOf p.1.1), p.2)) <$>
+    (fun p => (some (pkEnc p.1.1, cacheEnc p.1.2.1), p.2)) <$>
       countCalls (relabel pad (aKeygen (seedOf sk)))
   keygen_honest : ∀ seed, AllQ Honest (aKeygen seed)
-  /-- (D) signing, for the abstract secret key produced by key generation. -/
-  sign_eq : ∀ sk pk sk', (pk, sk') ∈ support (aKeygen (seedOf sk)) →
+  /-- (D) signing, for the abstract secret key produced by key generation and any cache bytes. -/
+  sign_eq : ∀ sk pk cache' sk', (pk, cache', sk') ∈ support (aKeygen (seedOf sk)) →
     ∀ cache message,
       (fun r => (r.value, r.hashCalls)) <$> sub.run .sign (sk, cache, message) =
         (fun p => (p.1.map sigCodec.symm, p.2)) <$>
           countCalls (relabel pad
-            (aSign sk' (msgOf message)))
-  sign_honest : ∀ seed pk sk', (pk, sk') ∈ support (aKeygen seed) →
-    ∀ message, AllQ Honest (aSign sk' message)
+            (aSign sk' (cacheDec cache) (msgOf message)))
+  sign_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
+    ∀ cache message, AllQ Honest (aSign sk' cache message)
   /-- (D) expansion: no hash calls. -/
   expand_eq : ∀ message pk signature,
     (fun r => (r.value, r.hashCalls)) <$> sub.run .expand (message, pk, signature) =
       pure (some (expandFn signature), 0)
   /-- (D) verification, for public keys produced by key generation. -/
-  verify_eq : ∀ seed pk sk', (pk, sk') ∈ support (aKeygen seed) →
+  verify_eq : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ message witness,
       (fun r => (r.value, r.hashCalls)) <$> sub.run .verify (message, pkEnc pk, witness) =
         (fun p => (if p.1 then some () else none, p.2)) <$>
           countCalls (relabel pad
             (aVerify pk (msgOf message) (witDec witness)))
-  verify_honest : ∀ seed pk sk', (pk, sk') ∈ support (aKeygen seed) →
+  verify_honest : ∀ seed pk cache' sk', (pk, cache', sk') ∈ support (aKeygen seed) →
     ∀ message signature,
       AllQ Honest (aVerify pk message signature)
 
@@ -165,7 +166,6 @@ lemma relabel_zp {α : Type} {X : OracleComp AHash α} (hX : AllQ Z.Honest X) :
 /-- Convert the zero-padding form of (C) into the bridge's `pad`/`unpad` form. -/
 noncomputable def toAssumptions : Assumptions sub where
   security := Z.security
-  lifetime_le := Z.lifetime_le
   seedOf := Z.seedOf
   seedOf_dist := Z.seedOf_dist
   msgOf := Z.msgOf
@@ -175,7 +175,8 @@ noncomputable def toAssumptions : Assumptions sub where
   witDec := Z.witDec
   witDec_expandFn := Z.witDec_expandFn
   pkEnc := Z.pkEnc
-  cacheOf := Z.cacheOf
+  cacheEnc := Z.cacheEnc
+  cacheDec := Z.cacheDec
   pad := zpPad Z.pad Z.Honest Z.qEnc
   unpad := zpUnpad Z.pad Z.Honest Z.qEnc
   Honest := Z.Honest
@@ -183,12 +184,12 @@ noncomputable def toAssumptions : Assumptions sub where
   unpad_pad := zpUnpad_zpPad Z.pad_injOn
   keygen_eq sk := by rw [Z.keygen_eq, Z.relabel_zp (Z.keygen_honest _)]
   keygen_honest := Z.keygen_honest
-  sign_eq sk pk sk' h cache m := by
-    rw [Z.sign_eq sk pk sk' h, Z.relabel_zp (Z.sign_honest _ pk sk' h _)]
+  sign_eq sk pk cache' sk' h cache m := by
+    rw [Z.sign_eq sk pk cache' sk' h, Z.relabel_zp (Z.sign_honest _ pk cache' sk' h _ _)]
   sign_honest := Z.sign_honest
   expand_eq := Z.expand_eq
-  verify_eq seed pk sk' h m w := by
-    rw [Z.verify_eq seed pk sk' h, Z.relabel_zp (Z.verify_honest _ pk sk' h _ _)]
+  verify_eq seed pk cache' sk' h m w := by
+    rw [Z.verify_eq seed pk cache' sk' h, Z.relabel_zp (Z.verify_honest _ pk cache' sk' h _ _)]
   verify_honest := Z.verify_honest
 
 end ZeroPadAssumptions

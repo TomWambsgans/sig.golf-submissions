@@ -44,7 +44,7 @@ theorem prefixSeedRest_eq (key : SecretKey) (inputs : Finset HashInput)
   funext tables
   apply congrArg (𝒮[segment.referenceAuxSeedLaw inputs hencoding hgraph selections] >>= ·)
   funext auxiliary
-  rw [segment.referenceSeedGame_eq inputs hencoding hgraph auxiliary key.root key.otsSecret key.ftsSecret selections dummy rfl tables]
+  rw [segment.referenceSeedGame_eq inputs hencoding hgraph auxiliary key.root key.top key.otsSecret key.ftsSecret selections dummy rfl tables]
 
 noncomputable def prefixSourceGame (inputs : Finset HashInput)
     (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs)
@@ -54,7 +54,7 @@ noncomputable def prefixSourceGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  prefixSeedRest ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) (hgraph parameter)
+  prefixSeedRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) (hgraph parameter)
     lay tree leaf chainIdx dummy adversary
 
 theorem prefixSourceGame_eq (inputs : Finset HashInput)

@@ -10,11 +10,11 @@ from the pending sign / verify / abstract-security statements (`Pending.lean`).
 | field | proof |
 |---|---|
 | `admissible` | `submission_admissible` (kernel `decide`) |
-| `termination` | keygen / expand exact (`keygen_runWith`, `expand_runWith`), sign / verify pending |
+| `termination` | expand exact (`expand_runWith`), keygen / sign / verify pending |
 | `completeness` | `submission_complete` (this directory) |
-| `compressionBounds` | `Budget.submission_compressionBounds_of_counts` |
-| `security` | `Equiv.submission_secure` (with `signatureLimit = 2^32 = LIFETIME`) |
-| `verificationBound` | `honest_success_verify` + `VerifyCyclesStatement` (`verifyCycleBound + 31`) |
+| `compressionBounds` | `Budget.submission_compressionBounds_of_counts'` |
+| `security` | `Equiv.submission_secure` |
+| `verificationBound` | `honest_success_verify` + `VerifyCyclesStatement` (`verifyCycleBound + witnessCharge`) |
 -/
 
 open OracleComp OracleSpec
@@ -25,16 +25,12 @@ open SigGolf
 set_option allowUnsafeReducibility true in
 attribute [local reducible] SigGolfCandidate.submission SigGolf.Output SigGolf.Input
 
-/-- **Termination**: keygen and expand are exact; sign and verify are pending. -/
-theorem submission_terminates (hS : SignTerminationStatement) (hV : VerifyTerminationStatement) :
-    submission.Terminates := by
+/-- **Termination**: expand is exact; keygen, sign and verify are pending. -/
+theorem submission_terminates (hK : KeygenTerminationStatement) (hS : SignTerminationStatement)
+    (hV : VerifyTerminationStatement) : submission.Terminates := by
   intro hash phase input
   cases phase with
-  | keygen =>
-    show (submission.runWith hash .keygen input).finished = true ∧
-      (submission.runWith hash .keygen input).cycles < CYCLE_LIMIT
-    rw [Keygen.keygen_runWith]
-    exact ⟨rfl, by show _ < 2 ^ 32; norm_num⟩
+  | keygen => exact hK hash input
   | sign =>
     obtain ⟨sk, cache, m⟩ := input
     exact hS hash sk cache m
@@ -43,16 +39,16 @@ theorem submission_terminates (hS : SignTerminationStatement) (hV : VerifyTermin
     show (submission.runWith hash .expand (m, pk, σ)).finished = true ∧
       (submission.runWith hash .expand (m, pk, σ)).cycles < CYCLE_LIMIT
     rw [Expand.expand_runWith]
-    exact ⟨rfl, show (11711 : Nat) < 2 ^ 32 by norm_num⟩
+    exact ⟨rfl, by show _ < 2 ^ 32; norm_num⟩
   | verify =>
     obtain ⟨m, pk, w⟩ := input
     exact hV hash m pk w
 
-theorem witnessCycles_eq : witnessCycles submission.sizes.witness = 31 := by
+theorem witnessCycles_eq : witnessCycles submission.sizes.witness = witnessCharge := by
   rw [submission_sizes]
   rfl
 
-/-- **Verification bound** `claimedC = verifyCycleBound + ⌈7756 / 256⌉`. -/
+/-- **Verification bound** `claimedC = verifyCycleBound + ⌈W / 256⌉`. -/
 theorem submission_verificationBound (hC : VerifyCyclesStatement) :
     submission.VerificationBound claimedC := by
   intro hash sk m
@@ -61,33 +57,31 @@ theorem submission_verificationBound (hC : VerifyCyclesStatement) :
   obtain ⟨⟨m', pk, w⟩, hacc, hcyc⟩ := honest_success_verify submission hash sk m h
   rw [hcyc, witnessCycles_eq]
   have := hC hash m' pk w hacc
-  unfold claimedC witnessCharge
+  unfold claimedC
   omega
 
-/-- **Compression bounds**, from the sign refinement (keygen and expand proved). -/
-theorem submission_compressionBounds (hS : SignRefinementStatement) :
-    submission.CompressionBounds := by
-  refine Budget.submission_compressionBounds_of_counts (fun sk cache m => ⟨id, ?_⟩) ?_
+/-- **Compression bounds**, from the keygen and sign refinements (expand proved). -/
+theorem submission_compressionBounds (hK : KeygenRefinementStatement)
+    (hS : SignRefinementStatement) : submission.CompressionBounds := by
+  refine Budget.submission_compressionBounds_of_counts' (fun sk => ⟨some, hK sk⟩)
+    (fun sk cache m => ⟨id, ?_⟩) ?_
   · exact (hS sk cache m).trans (id_map _).symm
   · rintro ⟨m, pk, σ⟩
     refine ⟨Unit, (), fun _ => some (Ref.expandRef σ), ?_⟩
     rw [Expand.expand_run, map_pure, Sign.countBoth_pure, map_pure]
 
-/-- The abstract signing budget covers the organizer lifetime (both `2^32`). -/
-theorem lifetime_le : LIFETIME ≤ SphincsSecurity.signatureLimit := le_refl _
-
-/-- **Security**, from (A) and the sign / verify refinements. -/
-theorem submission_secure (hS : SignRefinementStatement) (hV : VerifyRefinementStatement)
-    (hA : EventSecurityStatement) : submission.Secure :=
-  Equiv.submission_secure (eventSecurity_of hA) lifetime_le (refinements hS hV)
+/-- **Security**, from (A) and the keygen / sign / verify refinements. -/
+theorem submission_secure (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
+    (hV : VerifyRefinementStatement) (hA : EventSecurityStatement) : submission.Secure :=
+  Equiv.submission_secure (eventSecurity_of hA) (refinements hK hS hV)
 
 /-- **The competition certificate**, from the pending component statements. -/
 theorem certificate_of (P : Pending) : Certificate submission claimedC where
   admissible := submission_admissible
-  termination := submission_terminates P.signTermination P.verifyTermination
-  completeness := submission_complete P.signRefinement P.verifyRefinement
-  compressionBounds := submission_compressionBounds P.signRefinement
-  security := submission_secure P.signRefinement P.verifyRefinement P.eventSecurity
+  termination := submission_terminates P.keygenTermination P.signTermination P.verifyTermination
+  completeness := submission_complete P.keygenRefinement P.signRefinement P.verifyRefinement
+  compressionBounds := submission_compressionBounds P.keygenRefinement P.signRefinement
+  security := submission_secure P.keygenRefinement P.signRefinement P.verifyRefinement P.eventSecurity
   verificationBound := submission_verificationBound P.verifyCycles
 
 end SigGolfCandidate.Final

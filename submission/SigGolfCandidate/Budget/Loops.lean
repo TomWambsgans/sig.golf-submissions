@@ -237,15 +237,112 @@ theorem treeCost_4 : treeCost 4 = 5567 := by decide
 
 /-! ## keygen -/
 
+/-- Keygen queries: hypertree types `0..3`, masks (13), the MAC (14). -/
+def PK (q : Query) : Prop := qbyte q 1 ≤ 3 ∨ qbyte q 1 = 13 ∨ qbyte q 1 = 14
+
+theorem getD_append_left' {α : Type} (l l' : List α) (d : α) (n : Nat) (h : n < l.length) :
+    (l ++ l').getD n d = l.getD n d := by
+  simp only [List.getD_eq_getElem?_getD, List.getElem?_append_left h]
+
+theorem getD_append_single {α : Type} (l : List α) (a d : α) :
+    (l ++ [a]).getD l.length d = a := by
+  simp [List.getD_eq_getElem?_getD]
+
+theorem spec_buildAllLevels {P : Query → Prop} {node : NodeFmt} (hn : NodeOK P node) (h : Nat)
+    (leaves : List Val) (hlen : leaves.length = 2 ^ h) (hl : AllShort leaves) :
+    Spec P (fun levels : List (List Val) => ∀ k, k ≤ h →
+        (levels.getD k []).length = 2 ^ (h - k) ∧ AllShort (levels.getD k []))
+      (2 ^ h - 1) (buildAllLevels node h leaves) := by
+  unfold buildAllLevels
+  rw [← sum_levels h]
+  refine Spec.foldlM_range'_le (P := P) 1 h _
+    (fun i (levels : List (List Val)) => levels.length = i + 1 ∧ ∀ k, k ≤ i →
+      (levels.getD k []).length = 2 ^ (h - k) ∧ AllShort (levels.getD k []))
+    (fun i => 2 ^ (h - i) / 2) [leaves] ⟨rfl, fun k hk => ?_⟩ (fun i hi levels hlv => ?_)
+    (fun levels hlv k hk => hlv.2 k hk) le_rfl
+  · have : k = 0 := by omega
+    subst this; simp [hlen, hl]
+  · have hi' : 1 + i - 1 = i := by omega
+    rw [hi']
+    obtain ⟨hA, hB⟩ := hlv.2 i le_rfl
+    refine ((spec_buildLevel hn (1 + i) (levels.getD i []) hB).mono_k (by rw [hA])).bind'
+      (l := 0) (fun level hlevel => Spec.pure _ 0 ⟨by simp [hlv.1], fun k hk => ?_⟩) (by omega)
+    rcases Nat.lt_or_ge k (i + 1) with hk' | hk'
+    · rw [getD_append_left' _ _ _ _ (by rw [hlv.1]; exact hk')]
+      exact hlv.2 k (by omega)
+    · have : k = levels.length := by rw [hlv.1]; omega
+      rw [this, getD_append_single]
+      refine ⟨?_, hlevel.2⟩
+      rw [hlevel.1, hA, ← this, hlv.1] at *
+      have e : h - i = (h - (i + 1)) + 1 := by omega
+      rw [show k = i + 1 by omega, e, Nat.pow_succ, Nat.mul_div_cancel _ (by norm_num)]
+
+theorem length_xorBytes_le (a b : List Byte) (hb : b.length = 16) : (xorBytes a b).length ≤ 16 := by
+  unfold xorBytes; rw [List.length_zipWith]; omega
+
+theorem mask_ok (S : List Byte) (hS : S.length = 32) (l j : Nat) :
+    (13 = qbyte (fmt (maskInput S l j)) 1) ∧ (fmt (maskInput S l j)).blocks ≤ 1 := by
+  refine ⟨?_, blocks_fmt_le _ 1 (by simp [maskInput, hS]) le_rfl⟩
+  unfold maskInput; rw [qbyte_tag]
+
+theorem spec_maskLevel {P : Query → Prop} (hP : ∀ q, qbyte q 1 = 13 → P q) (S : List Byte)
+    (hS : S.length = 32) (l : Nat) (level : List Val) :
+    Spec P (fun r : List Val => r.length = level.length ∧ AllShort r) level.length
+      (maskLevel S l level) := by
+  unfold maskLevel
+  refine Spec.foldlM_range_le (P := P) level.length _
+    (fun i (acc : List Val) => acc.length = i ∧ AllShort acc) (fun _ => 1) [] ⟨rfl, AllShort.nil⟩
+    (fun j _ acc hacc => ?_) (fun _ h => h) (by simp)
+  obtain ⟨h1, h2⟩ := mask_ok S hS l j
+  exact spec_hash16_bind (maskInput S l j) (hP _ h1.symm) h2
+    (fun mk hmk => Spec.pure _ 0 ⟨by simp [hacc.1], hacc.2.append (length_xorBytes_le _ _ hmk)⟩)
+    le_rfl
+
+theorem topH_eq : topH = 11 := by decide
+
+theorem topN_succ (l : Nat) : topN (l + 1) = topN l + 2 ^ (topH - l) := by
+  simp [topN, List.range_succ]
+
+/-- Compressions of keygen: `2048 * 347 + 2047 + 4094 + 1025`. -/
+def keygenCost : Nat := 2 ^ 11 * 347 + (2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025
+
+theorem keygenCost_eq : keygenCost = 717822 := by decide
+
 theorem spec_keygenRef (sk : Bytes 32) :
-    Spec PT (fun _ => True) 11135 (keygenRef sk) := by
-  unfold keygenRef keygenList
-  refine Spec.bind' (Q := fun _ => True) (k := 11135) (l := 0) ?_ (fun _ _ => Spec.pure _ 0 trivial) (by omega)
-  refine Spec.bind' (l := 0) ((spec_buildTree (toList sk) (length_toList sk) 0 0 (height 0) 0 []).mono_k
-      (k' := 11135) (by decide))
-    (fun r _ => ?_) (by omega)
-  obtain ⟨root, _, _⟩ := r
-  exact Spec.pure (Post := fun _ => True) _ 0 trivial
+    Spec PK (fun _ => True) keygenCost (keygenRef sk) := by
+  have hS := length_toList sk
+  have hPT : ∀ q, PT q → PK q := fun q h => Or.inl h
+  unfold keygenRef keygenList keygenCost
+  refine Spec.bind' (Q := fun _ => True) (l := 0) ?_ (fun _ _ => Spec.pure _ 0 trivial) le_rfl
+  rw [topH_eq]
+  refine Spec.bind' (((spec_buildLeaves (toList sk) hS 0 0 11 0 []).mono hPT fun _ h => h))
+    (fun r hr => ?_) (show 2 ^ 11 * 347 + ((2 ^ 11 - 1) + ∑ l ∈ range 11, 2 ^ (11 - l) + 1025) ≤ _
+      by omega)
+  obtain ⟨leaves, _⟩ := r
+  refine Spec.bind' ((spec_buildAllLevels (nodeOK_nodeInput 0 0) 11 leaves hr.1 hr.2).mono hPT
+    fun _ h => h) (fun levels hlev => ?_) (show (2 ^ 11 - 1) + (∑ l ∈ range 11, 2 ^ (11 - l) + 1025)
+      ≤ _ by omega)
+  refine Spec.bind' (Spec.foldlM_range (P := PK) 11 _
+    (fun l (acc : List Val) => acc.length = topN l ∧ AllShort acc) (fun l => 2 ^ (11 - l)) []
+    ⟨rfl, AllShort.nil⟩ (fun l hl acc hacc => ?_)) (fun masked hm => ?_) le_rfl
+  · obtain ⟨hL, hA⟩ := hlev l (by omega)
+    refine ((spec_maskLevel (fun q h => Or.inr (Or.inl h)) (toList sk) hS l _ ).mono_k
+      (k' := 2 ^ (11 - l)) (by rw [hL])).bind' (l := 0)
+      (fun ml hml => Spec.pure _ 0 ⟨?_, fun w hw => ?_⟩) (by omega)
+    · rw [List.length_append, hacc.1, hml.1, hL, topN_succ, topH_eq]
+    · rw [List.mem_append] at hw
+      rcases hw with hw | hw
+      · exact hacc.2 w hw
+      · exact hml.2 w hw
+  · have hreg : masked.flatten.length ≤ 16 * 4094 := by
+      have := length_flatten_le hm.2
+      rw [hm.1, show topN 11 = 4094 by decide] at this
+      omega
+    show Spec PK _ _ (qry (fmt (macInput (toList sk) masked.flatten)) >>= fun tag => Pure.pure _)
+    refine Spec.qry_bind (Or.inr (Or.inr ?_)) (fun u => Spec.pure _ 0 trivial)
+      (blocks_fmt_le _ 1025 ?_ (by omega) |> fun h => by omega)
+    · unfold macInput; rw [qbyte_tag]
+    · simp only [macInput, length_thInput, length_tweak, List.length_append, hS]; omega
 
 /-! ## FORS -/
 
@@ -317,18 +414,32 @@ theorem enc_ok (lay tau e : Nat) (M : Val) (hM : M.length ≤ 16) (c : Nat) (hla
   · unfold encInput; rw [qbyte_tag]
   · unfold encInput; rw [qbyte_lay]; omega
 
+theorem decodeDigits_some {v : Val} {x : List Nat} (h : decodeDigits v = some x) :
+    x.length = 42 ∧ x.sum = targetSum := by
+  unfold decodeDigits at h
+  simp only at h
+  split_ifs at h with h1 h2
+  cases h
+  exact ⟨by simp [digitsOfWord], h2⟩
+
+/-- The counter search's results: accepted digit words. -/
+def DigOK (o : Option (Nat × List Nat)) : Prop :=
+  ∀ c x, o = some (c, x) → x.length = 42 ∧ x.sum = targetSum
+
 theorem spec_searchCounter (lay tau e : Nat) (M : Val) (hM : M.length ≤ 16) (hlay : lay < 256) :
-    ∀ fuel c, Spec (PC lay) (fun _ => True) fuel (searchCounter lay tau e M c fuel) := by
+    ∀ fuel c, Spec (PC lay) DigOK fuel (searchCounter lay tau e M c fuel) := by
   intro fuel
   induction fuel with
-  | zero => intro c; exact Spec.pure _ _ trivial
+  | zero => intro c; exact Spec.pure _ _ (by simp [DigOK])
   | succ n ih =>
     intro c
     unfold searchCounter
     obtain ⟨h1, h2⟩ := enc_ok lay tau e M hM c hlay
     refine spec_hash16_bind _ h1 h2 (l := n) (fun d _ => ?_) (by omega)
     split
-    · exact Spec.pure _ _ trivial
+    · next x hx =>
+      exact Spec.pure _ _ (by
+        intro c' x' h; cases h; exact decodeDigits_some hx)
     · exact ih (c + 1)
 
 theorem rnd_ok (S m : List Byte) (hS : S.length = 32) (hm : m.length = 32) (a : Nat) :

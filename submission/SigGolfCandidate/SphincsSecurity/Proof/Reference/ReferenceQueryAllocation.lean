@@ -28,7 +28,7 @@ theorem referenceRecordedGame_nonmessage_le (inputs : Finset HashInput)
   obtain ⟨parameter, _, otsSecret, _, ftsSecret, _, reference, _, output, houtput, hresult⟩ := hresult
   rw [mem_support_pure_iff] at hresult
   subst result
-  exact referenceRecordedRest_nonmessage_le ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs reference.2)
+  exact referenceRecordedRest_nonmessage_le ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs reference.2)
     (canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs reference.2)) reference.1 dummy adversary output
     (probComp_mem_of_evalDist _ output houtput)
 

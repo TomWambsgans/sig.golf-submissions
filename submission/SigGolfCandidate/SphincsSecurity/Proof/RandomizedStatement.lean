@@ -15,9 +15,6 @@ abbrev randomnessBytes (randomness : Randomness) : HashInput := bytesLE 16 rando
 
 end Concrete
 
-noncomputable def Seeded.keygen : OracleComp OracleWorld (PublicKey × Seeded.SecretKey) := do
-  let seed ← liftM sampleMasterSeed
-  liftM (Seeded.keygenFromSeed seed)
 
 /-- The random-oracle semantics: hash queries are answered lazily and consistently by uniform sampling and cached; uniform-sampling queries are forwarded unchanged. -/
 noncomputable def romImpl : QueryImpl OracleWorld (StateT (QueryCache HashSpec) ProbComp) :=
@@ -74,11 +71,5 @@ def HasHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary : Adversary)
 def HasClassicalSecurityBits {Key : Type} (scheme : Scheme Key) (bits : Nat) : Prop :=
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound scheme adversary q →
     forgeAdvantage scheme adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)
-
-noncomputable def Seeded.scheme : Scheme Seeded.SecretKey where
-  keygen := Seeded.keygen
-  sign := fun sk message => liftM (Seeded.sign sk message : OracleComp HashSpec _)
-  verify := fun publicKey message signature =>
-    liftM (Concrete.verify publicKey message signature : OracleComp HashSpec Bool)
 
 end SphincsSecurity

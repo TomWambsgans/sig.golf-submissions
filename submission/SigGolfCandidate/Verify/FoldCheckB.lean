@@ -10,6 +10,5 @@ theorem layFoldOk_2 : layFoldOk 2 = true := by decide +kernel
 theorem layFoldOk_3 : layFoldOk 3 = true := by decide +kernel
 theorem layFoldOk_4 : layFoldOk 4 = true := by decide +kernel
 theorem layFoldOk_5 : layFoldOk 5 = true := by decide +kernel
-theorem layFoldOk_6 : layFoldOk 6 = true := by decide +kernel
 
 end SigGolfCandidate.Verify

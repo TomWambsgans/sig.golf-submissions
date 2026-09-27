@@ -129,7 +129,7 @@ variable (hauxiliary : ∀ seed : inputs → HashOutput,
 
 include hauxiliary in
 theorem expectedMonitoredPayment_le_hashCalls (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : MonitoredState)
-    (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret inputs computation state) :
+    (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state) :
     expectedMonitoredPayment parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       (nativeMessageCharge (monitorKey parameter root)) computation state ≤
       ∑' result, Pr[= result | monitoredRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
@@ -147,8 +147,8 @@ theorem expectedMonitoredPayment_le_hashCalls (computation : OracleComp (OracleW
                 stopAfter (next step.1.1.1) step.2] * (tail.1.1.2.hashCalls : ENNReal) := by
           apply add_le_add (nativeMessageCharge_le_monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget
             required stopAfter input state hvalid
-            (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state hvalid hcovered)
-            (covered_step_digest parameter root otsSecret inputs input next state hvalid hcovered))
+            (fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state hvalid hcovered)
+            (covered_step_digest parameter root otsSecret labels inputs input next state hvalid hcovered))
           apply ENNReal.tsum_le_tsum
           intro step
           by_cases hs : Pr[= step | monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
@@ -240,7 +240,7 @@ theorem expectedMonitoredPayment_mul (charge : (OracleWorld + SigningSpec).Domai
 
 include hauxiliary in
 theorem expectedCompletedPayment_le_work (adversary : Adversary) (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state) :
     expectedMonitoredPayment parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
         (nativeMessageCharge (monitorKey parameter root)) (adversary.main ⟨root, parameter⟩) state +
       ∑' before, Pr[= before | monitoredRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
@@ -271,7 +271,7 @@ theorem expectedCompletedPayment_le_work (adversary : Adversary) (state : Monito
           hauxiliary (adversary.main ⟨root, parameter⟩) state hvalid hcovered before hb
         exact mul_le_mul' le_rfl (expectedWorldPayment_le_hashCalls parameter root otsSecret labels inputs hencoding selections rows dummy slot
           budget required stopAfter (verifyComputation parameter root before.1.1.1.1) before.2 hvalid'
-          (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2 hvalid' hfinal))
+          (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2 hvalid' hfinal))
     _ = _ := by
       rw [← ENNReal.tsum_add]
       apply tsum_congr

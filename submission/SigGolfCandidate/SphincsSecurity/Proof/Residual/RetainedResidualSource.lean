@@ -114,7 +114,8 @@ theorem Context.signing_memory {inputs : Finset HashInput} (context : Context in
       (fun record : SigningRecord => (some record.1.1, (state.memory.applyBoundary record.2).recordSigning message record)) <$>
         𝒮[fixedBoundaryRun context.key.parameter context.oracle (signWithView context.key message)] :=
   observedRun_signingProgram_original_memory context.key inputs context.encoding context.graph context.auxiliary
-    context.auxiliary_valid context.dummy context.publicReplies message hinputs state hcompatible.agrees hcompatible.replies
+    context.auxiliary_valid context.dummy context.publicReplies message hinputs state hcompatible.agrees context.top_graph
+    hcompatible.replies
     hcovered hcompatible.cached hcompatible.structural
 
 theorem observedRun_request_memory {inputs : Finset HashInput} (context : Context inputs)

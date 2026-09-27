@@ -14,7 +14,8 @@ noncomputable def graphFrontierGameRest (parameter : PublicParameter)
     (ftsSecret : Index → FtsTree → FtsLeaf → Digest) (labels : CanonicalGraphLabels)
     (f : QueryImpl HashSpec Id) (dummy : OtsReferenceWords) (adversary : Adversary) :
     ProbComp (Bool × SigningBoundaryTrace) := do
-  let key : SecretKey := ⟨parameter, canonicalGraphRoot labels, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, canonicalGraphRoot labels, otsSecret, ftsSecret,
+    honestTop f parameter (otsSecret topLayer rootTree)⟩
   let words := canonicalReferenceWords key f dummy
   frontierGame parameter f ftsSecret words (canonicalGraphFrontier otsSecret labels words) adversary
 
@@ -27,7 +28,8 @@ theorem graphFrontierGameRest_canonical (parameter : PublicParameter)
         fixedBoundaryRun parameter f (gameAfterSecrets adversary parameter otsSecret ftsSecret) := by
   rw [graphFrontierGameRest, canonicalGraphLabels_root,
     canonicalGraphLabels_frontier parameter otsSecret ftsSecret f _
-      (evalWithAnswerFn f (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree))),
+      (evalWithAnswerFn f (treeRoot parameter topLayer rootTree (otsSecret topLayer rootTree)))
+      (honestTop f parameter (otsSecret topLayer rootTree)),
     fixedBoundaryRun_gameAfterSecrets_canonical adversary parameter otsSecret ftsSecret f dummy]
 
 noncomputable def fixedGraphGame (f : QueryImpl HashSpec Id) (dummy : OtsReferenceWords)
@@ -90,9 +92,13 @@ theorem evalDist_boundaryGameCore_canonicalGraph (inputs : Finset HashInput)
   exact (evalDist_boundaryGameCore_frontier inputs dummy adversary hinputs).trans
     (evalDist_frontier_eq_canonicalGraph inputs hgraph dummy adversary)
 
+/-- The inputs the reference games sample the oracle on: those of the game, of the graph, of the encodings,
+and of the game after key generation for every key (up to its table off the cached region). -/
 noncomputable def canonicalGraphGameInputs (adversary : Adversary) : Finset HashInput :=
-  (hashInputs (boundaryGameCore adversary) ∪ Finset.univ.biUnion canonicalGraphInputs) ∪
-    Finset.univ.biUnion canonicalEncodingInputs
+  ((hashInputs (boundaryGameCore adversary) ∪ Finset.univ.biUnion canonicalGraphInputs) ∪
+    Finset.univ.biUnion canonicalEncodingInputs) ∪
+    Finset.univ.biUnion fun code : KeyCode =>
+      hashInputs (gameRest scheme adversary ⟨code.key.root, code.key.parameter⟩ code.key)
 
 attribute [local irreducible] canonicalGraphGameInputs
 
@@ -100,6 +106,8 @@ theorem canonicalGraphInputs_subset_gameInputs (adversary : Adversary) (paramete
     canonicalGraphInputs parameter ⊆ canonicalGraphGameInputs adversary := by
   intro input hinput
   rw [canonicalGraphGameInputs, Finset.mem_union]
+  apply Or.inl
+  rw [Finset.mem_union]
   apply Or.inl
   rw [Finset.mem_union]
   apply Or.inr
@@ -110,15 +118,29 @@ theorem canonicalGraphInputs_subset_gameInputs (adversary : Adversary) (paramete
 theorem hashInputs_subset_canonicalGraphGameInputs (adversary : Adversary) :
     hashInputs (boundaryGameCore adversary) ⊆ canonicalGraphGameInputs adversary := by
   rw [canonicalGraphGameInputs]
-  exact Finset.Subset.trans Finset.subset_union_left Finset.subset_union_left
+  exact Finset.Subset.trans Finset.subset_union_left
+    (Finset.Subset.trans Finset.subset_union_left Finset.subset_union_left)
 
 theorem canonicalEncodingInputs_subset_gameInputs (adversary : Adversary) (parameter : PublicParameter) :
     canonicalEncodingInputs parameter ⊆ canonicalGraphGameInputs adversary := by
   intro input hinput
   rw [canonicalGraphGameInputs, Finset.mem_union]
+  apply Or.inl
+  rw [Finset.mem_union]
   apply Or.inr
   rw [Finset.mem_biUnion]
   simp only [Finset.mem_univ, true_and]
   exact ⟨parameter, hinput⟩
+
+/-- The game after key generation, for any key, queries only inputs of the reference games. -/
+theorem hashInputs_gameRest_subset_canonicalGraphGameInputs (adversary : Adversary) (key : SecretKey) :
+    hashInputs (gameRest scheme adversary ⟨key.root, key.parameter⟩ key) ⊆ canonicalGraphGameInputs adversary := by
+  intro input hinput
+  rw [canonicalGraphGameInputs, Finset.mem_union]
+  apply Or.inr
+  rw [Finset.mem_biUnion]
+  refine ⟨keyCode key, Finset.mem_univ _, ?_⟩
+  rw [gameRest_keyCode]
+  exact hinput
 
 end SphincsSecurity.Concrete

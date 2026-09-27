@@ -25,6 +25,12 @@ theorem referenceAuxiliarySample_select (inputs : Finset HashInput) (auxiliary :
     exact mul_ne_zero ((PMF.mem_support_iff _ _).mp hselections) ((PMF.mem_support_iff _ _).mp hrows) hmass
   exact congrFun hselected position
 
+theorem topFromGraph_keyAtRoot_programmedHash (key : SecretKey) (labels : CanonicalGraphLabels)
+    (residual : QueryImpl HashSpec Id) (root : Digest) :
+    TopFromGraph (keyAtRoot (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) key root) labels := by
+  have h := topFromGraph_keyAtRoot (programmedHash key.parameter key.otsSecret key.ftsSecret labels residual) key root
+  rwa [canonicalGraphLabels_programmedHash] at h
+
 theorem referenceTableSelection_auxiliary (key : SecretKey) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs key.parameter ⊆ inputs) (labels : CanonicalGraphLabels)
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support) :
@@ -84,7 +90,8 @@ theorem fixedBoundaryRun_signWithView_auxiliary_public (key : SecretKey) (inputs
     (auxiliary : ReferenceAuxiliary inputs) (hauxiliary : auxiliary ∈ (referenceAuxiliarySample inputs).support)
     (dummy : OtsReferenceWords) (disclosed : Index → FtsTree → FtsLeaf → Prop) (known : Labels)
     (hagrees : PublicAgreement (referenceFamilyWords auxiliary.selections dummy) disclosed known
-      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (message : Message) :
+      (CanonicalCoordinate.value key.otsSecret key.ftsSecret labels)) (htop : TopFromGraph key labels)
+    (message : Message) :
     fixedBoundaryRun key.parameter
         (programmedHash key.parameter key.otsSecret key.ftsSecret labels
           (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed)))
@@ -93,8 +100,11 @@ theorem fixedBoundaryRun_signWithView_auxiliary_public (key : SecretKey) (inputs
         publicSigningRecord key.parameter key.root
           (finiteHashAnswer ∅ inputs (knownReferenceResidual key.parameter inputs hencoding known auxiliary.rows auxiliary.seed))
           known (referenceFamilyWords auxiliary.selections dummy) auxiliary.selections message := by
-  rw [fixedBoundaryRun_signWithView_canonical _ _ dummy,
-    ← canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret _ _ key.root,
+  have hhonest : KeyTopHonest (programmedHash key.parameter key.otsSecret key.ftsSecret labels
+      (finiteHashAnswer ∅ inputs (canonicalReferenceResidual key.parameter inputs hencoding labels auxiliary.rows auxiliary.seed))) key :=
+    keyTopHonest_of_graphTop key _ (by rw [canonicalGraphLabels_programmedHash]; exact htop)
+  rw [fixedBoundaryRun_signWithView_canonical _ _ hhonest dummy,
+    ← canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret _ _ key.root key.top,
     canonicalGraphLabels_programmedHash, ← referenceAuxiliary_words key inputs hencoding labels auxiliary hauxiliary dummy]
   exact frontierSigningRecord_auxiliary_public key key.root inputs hencoding labels auxiliary hauxiliary dummy disclosed known hagrees message
 

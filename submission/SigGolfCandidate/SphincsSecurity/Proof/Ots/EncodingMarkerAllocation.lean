@@ -44,7 +44,7 @@ theorem referenceContactGame_encodingCalls (inputs : Finset HashInput)
   apply congrArg (𝒮[referenceFamilyOracleSample _ inputs (hencoding parameter)] >>= ·)
   funext reference
   have h := congrArg (fun law => (fun result => (parameter, reference.1, result.1, result.2)) <$> 𝒮[law])
-    (referenceContactRest_encodingCalls ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs reference.2)
+    (referenceContactRest_encodingCalls ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs reference.2)
       (canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs reference.2)) reference.1 dummy adversary)
   simpa only [← bind_pure_comp, evalSPMF_bind, evalSPMF_pure, bind_assoc, pure_bind] using h
 

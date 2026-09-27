@@ -10,7 +10,8 @@ reference spec satisfies the organizer's `CompressionBounds`. The hypotheses are
 
 * keygen: `(value, hashCompressions)` is `countBlocks (keygenRef sk)` with the value some function
   `G` of the public key;
-* sign: `hashCompressions` is `countBlocks (signRef sk m)`'s count, for every cache input;
+* sign: `hashCompressions` is `countBlocks (signRef sk cache m)`'s count, for every cache input
+  (the bound holds for every cache, in particular the honest one from keygen);
 * expand: `hashCompressions` is `0`.
 
 These follow from bytecode refinement theorems of the form
@@ -135,14 +136,14 @@ variable (sub : Submission)
 
 /-- The keygen refinement hypothesis (compressions and value). -/
 def KeygenRefines : Prop :=
-  ∀ sk, ∃ G : Bytes 16 → Option (Output sub.sizes .keygen),
+  ∀ sk, ∃ G : Bytes 16 × Cache → Option (Output sub.sizes .keygen),
     (fun r => (r.value, r.hashCompressions)) <$> sub.run .keygen sk =
       (fun p => (G p.1, p.2)) <$> countBlocks (keygenRef sk)
 
 /-- The sign refinement hypothesis (compressions), for every cache input. -/
 def SignRefines : Prop :=
   ∀ sk cache m, (fun r => r.hashCompressions) <$> sub.run .sign (sk, cache, m) =
-    Prod.snd <$> countBlocks (signRef sk m)
+    Prod.snd <$> countBlocks (signRef sk cache m)
 
 /-- Expand makes no hash calls. -/
 def ExpandNoHash : Prop :=
@@ -155,6 +156,7 @@ theorem keygen_count (hK : KeygenRefines sub) (sk : SecretKey) :
   simp only [Functor.map_map] at h
   exact h
 
+set_option maxRecDepth 100000 in
 /-- States after keygen satisfy sign's cache invariant. -/
 theorem keygen_cacheInv (hK : KeygenRefines sub) (sk : SecretKey)
     (x : RunResult (Output sub.sizes .keygen) × RCache)
@@ -167,7 +169,7 @@ theorem keygen_cacheInv (hK : KeygenRefines sub) (sk : SecretKey)
   obtain ⟨y, hy, hyx⟩ := h1
   have hy' := mem_support_roRun_of_count _ _ _ y hy
   have := (spec_keygenRef sk).support (I := Inv0)
-    (fun q hq => by unfold PT at hq; unfold Inv0; omega) ∅ (fun q u h => by simp at h) _ hy'
+    (fun q hq => by unfold PK at hq; unfold Inv0; omega) ∅ (fun q u h => by simp at h) _ hy'
   have h2 : x.2 = y.2 := (congrArg Prod.snd hyx).symm
   rw [h2]; exact this.2
 
@@ -215,9 +217,9 @@ theorem sign_bound (hK : KeygenRefines sub) (hS : SignRefines sub) (sk : SecretK
             show Phase.sign.budget = 2 ^ 17 from rfl]
           simp only [recordCost, if_true]
           rw [costFun_eq]
-      _ = V (zOf (2 ^ 17)) (signRef sk m) c := by
+      _ = V (zOf (2 ^ 17)) (signRef sk cache m) c := by
           rw [← ev_count_eq_V, ← hS sk cache m, roRun_map, expectedValue_map]
-      _ ≤ 2 := V_signRef_le_two sk m c hinv
+      _ ≤ 2 := V_signRef_le_two sk cache m c hinv
   · simp only [roRun_pure, expectedValue_pure]
     simp only [recordCost, show Phase.sign ≠ Phase.keygen by decide, if_false]
     rw [ofReal_rpow_zero]; norm_num

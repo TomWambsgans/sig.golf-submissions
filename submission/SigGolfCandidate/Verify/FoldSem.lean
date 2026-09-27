@@ -44,8 +44,8 @@ structure FCtx where
   dst : Nat
 
 def FCtx.ok (fc : FCtx) : Prop :=
-  2 ≤ fc.h ∧ fc.h ≤ 10 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 7756 ∧
-  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 7756 ∧ safeDest fc.dst = true ∧
+  2 ≤ fc.h ∧ fc.h ≤ 11 ∧ fc.E < 2 ^ fc.h ∧ fc.t < 256 ∧ fc.f2 < 256 ∧ fc.wl.length = 7080 ∧
+  fc.sibOff % 8 = 0 ∧ fc.sibOff + 16 * fc.h ≤ 7080 ∧ safeDest fc.dst = true ∧
   (fc.dst + 32 ≤ 0x1C0 ∨ 0x210 ≤ fc.dst) ∧ fc.a1 < 2 ^ 20
 
 def FCtx.lo0 (fc : FCtx) : Nat := 1 + 256 * fc.t + 65536 * fc.f2 + 2 ^ 24 * (fc.tau / 2 ^ 32 % 256)
@@ -81,7 +81,7 @@ def FoldInv (fc : FCtx) (s0 : MachineState) (lam : Nat) (v : Val) (s : MachineSt
 def FoldEnd (fc : FCtx) (s0 : MachineState) (u : MachineState) : Prop :=
   Glob fc.gk fc.wl fc.pk u ∧ KnownOK (fk fc.kind 0x1C0 64 ++ [(.x12, BitVec.ofNat 64 fc.dst)]) u ∧
   FrameOK fc.kind s0 u ∧
-  u.pc = pcOf (lvlPc fc.rg (bitOf fc.E (fc.h - 1)) fc.j0 (fc.h - 1) + 7) ∧
+  u.pc = pcOf (lvlPc fc.rg (bitOf fc.E (fc.h - 1)) fc.j0 (fc.h - 1) + 7 + xp fc.kind (fc.h - 1)) ∧
   fetch image u = some (.base .ECALL) ∧
   (u.getMem (BitVec.ofNat 64 0x1C8)).toNat % 2 ^ 32 = fc.tau % 2 ^ 32
 
@@ -90,7 +90,7 @@ def FoldEnd (fc : FCtx) (s0 : MachineState) (u : MachineState) : Prop :=
 theorem land16 (n : Nat) : n &&& 16 = 16 * (n / 16 % 2) := by
   rw [show (16 : Nat) = 2 ^ 4 from rfl, Nat.and_two_pow, Nat.toNat_testBit, Nat.mul_comm]
 
-theorem srl_eval (u b : Nat) (hE : u < 2 ^ 10) (hb : b ≤ 10) (s : MachineState)
+theorem srl_eval (u b : Nat) (hE : u < 2 ^ 11) (hb : b ≤ 11) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     (Rv.E.bin .srl (.reg .x23) (cw b)).eval s = BitVec.ofNat 64 (u / 2 ^ b) := by
   apply BitVec.eq_of_toNat_eq
@@ -101,7 +101,7 @@ theorem srl_eval (u b : Nat) (hE : u < 2 ^ 10) (hb : b ≤ 10) (s : MachineState
     Nat.mod_eq_of_lt (show b < 64 by omega), Nat.mod_eq_of_lt (show u / 2 ^ b < 2 ^ 64 by omega)]
 
 /-- The branch point: `slli T, E, 62 - lam; blt/bge T, x0` tests bit `lam + 1` of `E`. -/
-theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 10) (hl : lam ≤ 8) (s : MachineState)
+theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 11) (hl : lam ≤ 9) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     CmpOp.lt.eval ((Rv.E.bin .sll (.reg .x23) (cw (62 - lam))).eval s) ((Rv.E.c 0).eval s) =
       decide (bitOf u (lam + 1) = 1) := by
@@ -113,7 +113,7 @@ theorem sll_lt (u lam : Nat) (hu : u < 2 ^ 10) (hl : lam ≤ 8) (s : MachineStat
   apply decide_eq_decide.mpr
   interval_cases lam <;> simp only [Nat.reduceSub, Nat.reduceAdd, Nat.reducePow] <;> omega
 
-theorem sll_ge (u lam : Nat) (hu : u < 2 ^ 10) (hl : lam ≤ 8) (s : MachineState)
+theorem sll_ge (u lam : Nat) (hu : u < 2 ^ 11) (hl : lam ≤ 9) (s : MachineState)
     (h23 : s.getReg .x23 = BitVec.ofNat 64 u) :
     CmpOp.ge.eval ((Rv.E.bin .sll (.reg .x23) (cw (62 - lam))).eval s) ((Rv.E.c 0).eval s) =
       decide (bitOf u (lam + 1) = 0) := by
@@ -309,7 +309,7 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
   intro t' r
   have hb2 := bitOf_lt fc.E lam
   have hlo := lo0_lt fc hfc
-  have hE : fc.E < 2 ^ 10 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+  have hE : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
   have ht' : t' < 2 := by simp only [t']; split; omega; exact bitOf_lt _ _
   obtain ⟨hrun, hok, hkn, hkeep⟩ := okFold_spec (foldCheck_at hchk lam (bitOf fc.E lam) t' (by omega) hb2 ht'
     (by simp only [t']; split <;> simp_all))
@@ -323,7 +323,7 @@ theorem level_step (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 ≤ fc.
       simp only [List.mem_singleton] at hb
       subst hb
       simp only [Br.holds]
-      have hl8 : lam ≤ 8 := by have := hfc.2.1; omega
+      have hl8 : lam ≤ 9 := by have := hfc.2.1; omega
       have ht'v : t' = bitOf fc.E (lam + 1) := by simp only [t', if_neg hne]
       rcases (show bitOf fc.E lam = 0 ∨ bitOf fc.E lam = 1 by omega) with h0 | h1
       · rw [h0]; simp only [if_true]
@@ -355,7 +355,8 @@ theorem lvl_nb8 (fc : FCtx) (lam t t' : Nat) (s : MachineState) :
 theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true)
     (s0 : MachineState) (v : Val) (s : MachineState) (hs : FoldInv fc s0 lam v s) :
-    ∃ t, Steps image s (if lam = 0 then 11 else 10) (if lam = 0 then 11 else 10) t ∧
+    ∃ t, Steps image s ((if lam = 0 then 11 else 10) + xp fc.kind lam)
+      ((if lam = 0 then 11 else 10) + xp fc.kind lam) t ∧
       fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
       hashInput t = pad64 (fc.input lam v) ∧
       ∀ a, FoldInv fc s0 (lam + 1) (answerBytes 16 a) (writeHash t a) := by
@@ -369,7 +370,7 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
   have hb2 := bitOf_lt fc.E lam
   have hb2' := bitOf_lt fc.E (lam + 1)
   have hlo := lo0_lt fc hfc
-  have hE : fc.E < 2 ^ 10 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
+  have hE : fc.E < 2 ^ 11 := lt_of_lt_of_le hfc.2.2.1 (Nat.pow_le_pow_right (by decide) hfc.2.1)
   obtain ⟨hG, hK, h23, hN0, hN8, hv0, hv1, hvl, hF, hpc⟩ := hs
   simp only [lvlPost, if_neg (show ¬ (lam + 1 = fc.h) by omega)] at hK'
   have h10 : (r.toState s).getReg .x10 = BitVec.ofNat 64 0x1C0 := hK' (.x10, _) (by simp [fk])
@@ -389,10 +390,10 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
   have mv1 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E8 + 16 * b)) = vw1 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv1
   refine ⟨r.toState s, ?_, hec, h5, ?_, ?_, ?_⟩
-  · have e1 : r.steps = if lam = 0 then 11 else 10 := by
-      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> rfl
-    have e2 : r.cycles = if lam = 0 then 11 else 10 := by
-      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> rfl
+  · have e1 : r.steps = (if lam = 0 then 11 else 10) + xp fc.kind lam := by
+      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> omega
+    have e2 : r.cycles = (if lam = 0 then 11 else 10) + xp fc.kind lam := by
+      simp only [hr, lvlExp, if_neg (show ¬ (lam + 1 = fc.h) by omega)]; split <;> omega
     rw [e1, e2] at hst; exact hst
   · exact hashArgs_ofNat _ _ _ _ h10 h11 h12 (by omega) (by omega) (by omega)
       (by simp only [hashArgsB, MEMORY_BYTES]; simp; omega)
@@ -443,7 +444,7 @@ theorem level_lt (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 < fc.h)
 theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true)
     (s0 : MachineState) (v : Val) (s : MachineState) (hs : FoldInv fc s0 lam v s) :
-    ∃ t, Steps image s 7 7 t ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
+    ∃ t, Steps image s (7 + xp fc.kind lam) (7 + xp fc.kind lam) t ∧ t.getReg .x5 = 0 ∧ hashArgumentsValid t = true ∧
       hashInput t = pad64 (fc.input lam v) ∧ FoldEnd fc s0 t := by
   obtain ⟨hst, hec, h5, hK', hkeep', hglob, m1C0, msib0, msib1, mfr, hspc⟩ :=
     level_step fc hfc lam (by omega) hchk s0 v s hs
@@ -471,8 +472,8 @@ theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
   have mv1 : (r.toState s).getMem (BitVec.ofNat 64 (0x1E8 + 16 * b)) = vw1 v := by
     rw [mfr _ (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hv1
   refine ⟨r.toState s, ?_, h5, ?_, ?_, ?_⟩
-  · have e1 : r.steps = 7 := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
-    have e2 : r.cycles = 7 := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
+  · have e1 : r.steps = 7 + xp fc.kind lam := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]; omega
+    have e2 : r.cycles = 7 + xp fc.kind lam := by simp only [hr, lvlExp, if_pos hlam, if_neg hl0]; omega
     rw [e1, e2] at hst; exact hst
   · have hs' := hsafe
     simp only [safeDest, Bool.and_eq_true, decide_eq_true_eq] at hs'
@@ -505,6 +506,7 @@ theorem level_last (fc : FCtx) (hfc : fc.ok) (lam : Nat) (hlam : lam + 1 = fc.h)
     · rw [PRes.toState_pc _ _ hspc]
       simp only [hr, lvlExp, if_pos hlam, if_neg hl0]
       rw [show fc.h - 1 = lam by omega]
+      congr 1; rw [hbdef]; omega
 
 /-! ## The whole fold -/
 
@@ -528,9 +530,12 @@ theorem foldPath_eq (fc : FCtx) (v : Val) :
   rw [show fc.path.length = fc.h by simp [FCtx.path], List.range_eq_range']
   rfl
 
-def levelCost (h lam : Nat) : Nat := if lam + 1 = h then 15 else if lam = 0 then 19 else 18
+theorem xp_le (kind : Bool) (lam : Nat) : xp kind lam ≤ 1 := by unfold xp; split <;> omega
 
-def foldCost (h lam k : Nat) : Nat := ((List.range' lam k).map (levelCost h)).sum
+def levelCost (kind : Bool) (h lam : Nat) : Nat :=
+  (if lam + 1 = h then 15 else if lam = 0 then 19 else 18) + xp kind lam
+
+def foldCost (kind : Bool) (h lam k : Nat) : Nat := ((List.range' lam k).map (levelCost kind h)).sum
 
 theorem fmt_input (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1) (lam : Nat) (v : Val) :
     fmt (fc.input lam v) = pad64 (fc.input lam v) := by
@@ -542,7 +547,7 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
     (K : Val → OracleComp HashSpec Obs) (N C : Nat)
     (hK : ∀ a u, FoldEnd fc s0 u → Good (writeHash u a) N C (K (answerBytes 16 a))) :
     ∀ k lam, lam + k = fc.h → 0 < k → ∀ v s, FoldInv fc s0 lam v s →
-      Good s (N + 14 * k) (C + foldCost fc.h lam k)
+      Good s (N + 14 * k) (C + foldCost fc.kind fc.h lam k)
         (cc ((List.range' lam k).foldlM fc.stepFn v) K) := by
   intro k
   induction k with
@@ -553,6 +558,7 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
     have hblk : (pad64 (fc.input lam v)).blocks = 1 := by
       rw [pad64_input fc hfc lam (by omega) v hvl]; rfl
     rw [List.range'_succ, List.foldlM_cons, stepFn_eq fc lam (by omega), cc_bind]
+    have hxp := xp_le fc.kind lam
     by_cases hlast : lam + 1 = fc.h
     · obtain rfl : k = 0 := by omega
       obtain ⟨t, hst, h5, hv, hin, hend⟩ := level_last fc hfc lam hlast hchk s0 v s hs
@@ -561,7 +567,7 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
         (fun a => hK a t hend)
       rw [hblk] at h3
       refine Good.steps' hst h3 (by omega) ?_
-      simp [foldCost, levelCost, hlast]
+      simp [foldCost, levelCost, hlast]; omega
     · obtain ⟨t, hst, hf, h5, hv, hin, hpost⟩ := level_lt fc hfc lam (by omega) hchk s0 v s hs
       have h3 := Good.hashP (K := fun v => cc ((List.range' (lam + 1) k).foldlM fc.stepFn v) K)
         (fmt_input fc hfc ht1 lam v) hf h5 hv hin (fun a => ih (lam + 1) (by omega) (by omega) _ _ (hpost a))

@@ -1,11 +1,11 @@
-import SigGolfCandidate.SphincsSecurity.Proof.Event.Boundary
+import SigGolfCandidate.SphincsSecurity.Proof.Event.Small.SignCharge
 import SigGolfCandidate.SphincsSecurity.Proof.Base.QueryCap
 /-!
 # The visibly capped adversary
 
 The adversary cannot see how many digest trials a signing request cost, but every request costs at
-least `ftsOpenHashCost` hash calls. The capped adversary charges one per own hash query and
-`ftsOpenHashCost` per signing request, and stops before the charge would exceed its limit. On a run
+least `signCharge` hash calls (the forest and the trees below the top layer, or a failed search). The
+capped adversary charges one per own hash query and `signCharge` per signing request, and stops before the charge would exceed its limit. On a run
 of the original adversary that stays within the budget the cap never fires. At the end it makes
 one marker query, a message-class input of even length whose payload length records how many
 nonmessage hash queries it made.
@@ -20,7 +20,7 @@ of a signing request. -/
 def visWeight : (OracleWorld + SigningSpec).Domain → Nat
   | .inl (.inl _) => 0
   | .inl (.inr _) => 1
-  | .inr _ => ftsOpenHashCost
+  | .inr _ => signCharge
 
 /-- Run a computation while the remaining charge covers each query; stop before one it does not. -/
 noncomputable def weightCap {α : Type} (computation : OracleComp (OracleWorld + SigningSpec) α) :

@@ -9,11 +9,11 @@ attribute [local irreducible] canonicalGraphLabels canonicalEncodingInputs canon
 theorem OtsPrefix.referenceSeedGame_counted (segment : OtsPrefix) (inputs : Finset HashInput)
     (hencoding : canonicalEncodingInputs segment.parameter ⊆ inputs) (hgraph : canonicalGraphInputs segment.parameter ⊆ inputs)
     (auxiliary : segment.ReferenceAuxSeed inputs hencoding hgraph)
-    (root : Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
+    (root : Digest) (top : Nat → Nat → Digest) (secrets : OtsFrontierValues) (ftsSecret : Index → FtsTree → FtsLeaf → Digest)
     (selections : ReferenceFamily) (dummy : OtsReferenceWords)
     (hword : referenceFamilyWords selections dummy segment.lay segment.tree segment.leaf segment.chainIdx = segment.digit)
     (tables : Fin segment.digit.val → Digest → Digest) (adversary : Adversary) :
-    let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret⟩
+    let key : SecretKey := ⟨segment.parameter, root, secrets, ftsSecret, top⟩
     let oracle := finiteHashAnswer ∅ inputs (referenceFamilySeedTable key inputs hencoding
       (segment.referenceSeed inputs hencoding hgraph selections tables auxiliary))
     (fun result => (result.1, QueryCap.calls segment.Selects result.2)) <$>
@@ -25,8 +25,8 @@ theorem OtsPrefix.referenceSeedGame_counted (segment : OtsPrefix) (inputs : Fins
   dsimp only
   rw [referenceRecordedRest, ← simulateQ_map, QueryCap.recorded_counted, segment.seedGame_replaceSecret, OtsPrefix.seedGame,
     segment.game_counted_source tables auxiliary.high _ ftsSecret (referenceFamilyWords selections dummy) (by rw [hword])]
-  rw [segment.referenceSeedFrontier_eq inputs hencoding hgraph auxiliary root secrets ftsSecret selections _ hword tables,
-    segment.referenceSeedOracle_eq inputs hencoding hgraph auxiliary root secrets ftsSecret selections _ hword tables]
+  rw [segment.referenceSeedFrontier_eq inputs hencoding hgraph auxiliary root top secrets ftsSecret selections _ hword tables,
+    segment.referenceSeedOracle_eq inputs hencoding hgraph auxiliary root top secrets ftsSecret selections _ hword tables]
 
 abbrev PrefixCountedResult := PublicParameter × ReferenceFamily × ((Bool × SigningBoundaryTrace) × Nat)
 
@@ -69,7 +69,7 @@ theorem prefixCountedSeedRest_eq (key : SecretKey) (inputs : Finset HashInput)
   funext tables
   apply congrArg (𝒮[segment.referenceAuxSeedLaw inputs hencoding hgraph selections] >>= ·)
   funext auxiliary
-  rw [← segment.referenceSeedGame_counted inputs hencoding hgraph auxiliary key.root key.otsSecret key.ftsSecret
+  rw [← segment.referenceSeedGame_counted inputs hencoding hgraph auxiliary key.root key.top key.otsSecret key.ftsSecret
     selections dummy rfl tables adversary, evalSPMF_map, bind_map_left]
   rfl
 
@@ -79,7 +79,7 @@ noncomputable def prefixCountedSourceGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  prefixCountedSeedRest ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs (hencoding parameter) (hgraph parameter) address dummy adversary
+  prefixCountedSeedRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs (hencoding parameter) (hgraph parameter) address dummy adversary
 
 theorem prefixCountedSourceGame_eq (inputs : Finset HashInput)
     (hencoding : ∀ parameter, canonicalEncodingInputs parameter ⊆ inputs) (hgraph : ∀ parameter, canonicalGraphInputs parameter ⊆ inputs)

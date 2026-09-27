@@ -6,7 +6,7 @@ import SigGolfCandidate.SphincsSecurity.Proof.Hypertree.FrontierSigningEvaluatio
 
 With the hash function fixed, a signing request makes at most `signHashBound` hash calls: the digest
 loop at most `digestAttemptLimit`, the forest `ftsOpenHashCost`, and each layer at most
-`encodingAttemptLimit` counter trials and one tree.
+`encodingAttemptLimit` counter trials and one tree (the top layer: its chain steps, which are fewer).
 -/
 
 namespace SphincsSecurity.Concrete.EventSmall
@@ -28,30 +28,6 @@ theorem evenBound_boundaryEval (parameter : PublicParameter) (f : QueryImpl Hash
       have hpos := h.1.2
       change 1 + _ ≤ budget
       omega
-
-theorem fixedBoundaryRun_lift_prob (parameter : PublicParameter) (f : QueryImpl HashSpec Id) {α : Type}
-    (computation : ProbComp α) :
-    fixedBoundaryRun parameter f (liftM computation : OracleComp OracleWorld α) = (fun value => (value, 1)) <$> computation := by
-  induction computation using OracleComp.inductionOn with
-  | pure value => rfl
-  | query_bind input next ih =>
-      rw [liftM_bind, fixedBoundaryRun_bind]
-      have hq : fixedBoundaryRun parameter f (liftM (liftM (unifSpec.query input) : ProbComp _) : OracleComp OracleWorld _) =
-          (fun value => (value, 1)) <$> (liftM (unifSpec.query input) : ProbComp _) := by
-        change (simulateQ ((fixedHashWorld f).withTrace (signingBoundaryTrace parameter))
-          (liftM (OracleWorld.query (.inl input)))).run = _
-        rw [simulateQ_spec_query]
-        simp [fixedHashWorld, WriterT.run_bind, WriterT.run_tell, signingBoundaryTrace]
-      rw [hq, bind_map_left]
-      simp only [ih, Functor.map_map, mul_one, map_bind]
-
-theorem fixed_lift_prob_hashCalls (parameter : PublicParameter) (f : QueryImpl HashSpec Id) {α : Type}
-    (computation : ProbComp α) (result : α × SigningBoundaryTrace)
-    (hresult : result ∈ support (fixedBoundaryRun parameter f (liftM computation : OracleComp OracleWorld α))) :
-    result.2.hashCalls = 0 := by
-  rw [fixedBoundaryRun_lift_prob, support_map] at hresult
-  obtain ⟨_, _, rfl⟩ := hresult
-  rfl
 
 theorem evenBound_messageDigest (parameter : PublicParameter) (root : Digest) (message : Message) (randomness : Randomness) :
     EvenBound (messageDigest parameter root message randomness : OracleComp HashSpec MessageDigest) 1 := by
@@ -120,6 +96,13 @@ theorem treeNodeHashCost_mono {low high : Nat} (h : low ≤ high) : treeNodeHash
   have := Nat.mul_le_mul_left (oneTimeKeyHashCost + 2) this
   omega
 
+theorem signingSteps_le (word : Encoding) : OtsCode.signingSteps word ≤ numChains * (chainLength - 1) := by
+  unfold OtsCode.signingSteps
+  calc
+    _ ≤ ∑ _index : ChainIndex, (chainLength - 1) :=
+      Finset.sum_le_sum fun index _ => Nat.le_sub_one_of_lt (word index).isLt
+    _ = _ := by simp
+
 theorem specLayerCost_le (key : SecretKey) (f : QueryImpl HashSpec Id) (index : Index) (lay : Layer) :
     (specLayerCost key f index lay).2 ≤ encodingAttemptLimit + treeNodeHashCost maxLayerHeight := by
   rw [specLayerCost]
@@ -127,10 +110,19 @@ theorem specLayerCost_le (key : SecretKey) (f : QueryImpl HashSpec Id) (index : 
   have hsearch := referenceEncodingSearch_cost_le key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
     (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0
   have htree : treeNodeHashCost (layerHeight lay) ≤ treeNodeHashCost maxLayerHeight :=
-    treeNodeHashCost_mono (by simp only [layerHeight]; split <;> decide)
+    treeNodeHashCost_mono (layerHeight_le lay)
+  have hsteps : numChains * (chainLength - 1) ≤ treeNodeHashCost maxLayerHeight := by
+    rw [treeNodeHashCost_def, oneTimeKeyHashCost_def]
+    decide
   cases (referenceEncodingSearch key.parameter f lay (treeIndexAt index lay) (leafIndexAt index lay)
-      (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0).1 <;>
-    simp only [Option.elim_none, Option.elim_some] <;> omega
+      (evalWithAnswerFn f (layerMessage key index lay)) encodingAttemptLimit 0).1 with
+  | none => simp only [Option.elim_none]; omega
+  | some result =>
+      simp only [Option.elim_some]
+      split
+      · have := signingSteps_le result.2
+        omega
+      · omega
 
 theorem layersHashCostFrom_le {α : Type} (layers : Layer → Option α × Nat) (bound : Nat)
     (h : ∀ lay, (layers lay).2 ≤ bound) (remaining : Nat) :
@@ -144,16 +136,6 @@ theorem layersHashCostFrom_le {α : Type} (layers : Layer → Option α × Nat) 
         have := h ⟨remaining, hlayer⟩
         split <;> rw [Nat.succ_mul] <;> omega
       · exact Nat.zero_le _
-
-theorem boundaryEval_hashCalls_parameter (parameter other : PublicParameter) (f : QueryImpl HashSpec Id) {α : Type}
-    (computation : OracleComp HashSpec α) :
-    (boundaryEval parameter f computation).2.hashCalls = (boundaryEval other f computation).2.hashCalls := by
-  induction computation using OracleComp.inductionOn with
-  | pure value => rfl
-  | query_bind input next ih =>
-      rw [boundaryEval_bind, boundaryEval_bind, boundaryEval_hash_query, boundaryEval_hash_query,
-        SigningBoundaryTrace.hashCalls_mul, SigningBoundaryTrace.hashCalls_mul, signingBoundaryTrace_hashCalls_eq,
-        signingBoundaryTrace_hashCalls_eq, ih]
 
 /-- A bound on the hash calls of one signing request. -/
 def signHashBound : Nat :=
@@ -189,19 +171,19 @@ theorem ftsOpenHashCost_eq : ftsOpenHashCost = 28659 := by
   rw [ftsOpenHashCost_def]
   decide
 
-theorem keygenHashCost_eq : keygenHashCost = 9471 := by
+theorem keygenHashCost_eq : keygenHashCost = 606207 := by
   rw [keygenHashCost_def, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
-theorem signHashBound_eq : signHashBound = 8483564 := by
+theorem signHashBound_eq : signHashBound = 29880301 := by
   rw [signHashBound, ftsOpenHashCost_eq, treeNodeHashCost_def, oneTimeKeyHashCost_def]
   decide
 
 /-- The ratio between the largest and the least cost of a signing request, rounded up. -/
-def signRatio : Nat := 297
+def signRatio : Nat := 450
 
-theorem signHashBound_le : signHashBound ≤ signRatio * ftsOpenHashCost := by
-  rw [signHashBound_eq, ftsOpenHashCost_eq, signRatio]
+theorem signHashBound_le : signHashBound ≤ signRatio * signCharge := by
+  rw [signHashBound_eq, signCharge_eq, signRatio]
   norm_num
 
 theorem verifyHashBound_lt_keygen : verifyHashBound + 1 ≤ keygenHashCost := by

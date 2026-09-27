@@ -68,7 +68,7 @@ noncomputable def referenceForgeryGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let reference ← 𝒮[referenceFamilyOracleSample key inputs (hencoding parameter)]
   let f := finiteHashAnswer ∅ inputs reference.2
   let before ← 𝒮[referenceForgeryRest key f (canonicalGraphLabels parameter otsSecret ftsSecret f) reference.1 dummy adversary]
@@ -103,9 +103,9 @@ theorem referenceForgeryGame_graph_trace (inputs : Finset HashInput)
   apply congrArg (𝒮[referenceFamilyOracleSample _ inputs (hencoding parameter)] >>= ·)
   funext reference
   have h := congrArg (Functor.map (fun result =>
-    ((⟨parameter, 0, otsSecret, ftsSecret⟩ : SecretKey),
+    ((⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ : SecretKey),
       canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs reference.2), reference.1, result)))
-    (referenceForgeryRest_contact_trace ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs reference.2)
+    (referenceForgeryRest_contact_trace ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs reference.2)
       (canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs reference.2)) reference.1 dummy adversary)
   have hd := congrArg (fun law : ProbComp GraphContextTraceResult => 𝒮[law]) h
   simpa only [Functor.map_map, evalSPMF_map, bind_pure_comp] using hd
@@ -195,10 +195,10 @@ noncomputable def ReferenceForgerySample.ftsOutcome {inputs : Finset HashInput} 
 
 theorem graphPrimitiveEvent_of_outcome_atRoot (key : SecretKey) (root : Digest) (f : QueryImpl HashSpec Id)
     (selections : ReferenceFamily) (dummy : OtsReferenceWords) (result : ContactResult)
-    (h : ReferencePrimitiveWitness.Outcome { key with root := root } f (referenceFamilyWords selections dummy)
+    (h : ReferencePrimitiveWitness.Outcome (keyAtRoot f key root) f (referenceFamilyWords selections dummy)
       (canonicalGraphMessage (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f)) selections result) :
     GraphPrimitiveEvent dummy (key, canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret f, selections, result) := by
-  have hp := graphPrimitiveEvent_of_outcome { key with root := root } f selections dummy result h
+  have hp := graphPrimitiveEvent_of_outcome (keyAtRoot f key root) f selections dummy result h
   simpa only [GraphPrimitiveEvent, ReferenceStructuralMatch.Seen, ReferenceStructuralMatch.Entry] using hp
 
 theorem referenceForgeryGame_success (inputs : Finset HashInput)

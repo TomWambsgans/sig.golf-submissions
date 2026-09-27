@@ -28,7 +28,7 @@ attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.diges
 /-- The input length of each tag. -/
 def tagLen : Nat → Nat
   | 0 => 64 | 1 => 48 | 2 => 704 | 3 => 64 | 4 => 52 | 7 => 96 | 8 => 64 | 9 => 48 | 10 => 64
-  | 11 => 256 | 12 => 96 | _ => 0
+  | 11 => 256 | 12 => 96 | 13 => 64 | 14 => 65568 | _ => 0
 
 /-- An honest hash input: protocol byte `1`, the length fixed by the tag byte, and for a chain
 input (tag 1) a zero parameter slot. -/
@@ -415,6 +415,13 @@ theorem hq_buildLayerTree (hP : P = 0) (lay : Layer) (tree : TreeIndex)
   hq_bind (hq_sequenceFin _ fun _ => hq_buildLeaf _ hP _ _ _ _ (hs _) _) fun _ =>
     hq_bind (hq_buildLevels _ (fun _ _ _ _ => hq_node _ _ _ _ _ _ _) _ _ _) fun _ => hq_pure _
 
+theorem hq_buildLayerTable (hP : P = 0) (lay : Layer) (tree : TreeIndex)
+    (secret : LeafIndex → ChainIndex → AComp Digest) (hs : ∀ e c, HQ (secret e c))
+    (leaf : LeafIndex) (digits : Encoding) :
+    HQ (buildLayerTable P lay tree secret leaf digits) :=
+  hq_bind (hq_sequenceFin _ fun _ => hq_buildLeaf _ hP _ _ _ _ (hs _) _) fun _ =>
+    hq_bind (hq_buildLevels _ (fun _ _ _ _ => hq_node _ _ _ _ _ _ _) _ _ _) fun _ => hq_pure _
+
 theorem hq_buildFtsTree (index : Index) (tree : FtsTree) (secret : FtsLeaf → AComp Digest)
     (hs : ∀ j, HQ (secret j)) (leaf : FtsLeaf) :
     HQ (buildFtsTree P index tree secret leaf) :=
@@ -439,55 +446,106 @@ theorem hq_encodingSearch (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M
     · exact hq_pure _
     · exact ih _
 
-theorem hq_signLayers (hP : P = 0) (index : Index) (secret : Layer → TreeIndex → LeafIndex → ChainIndex → AComp Digest)
-    (hs : ∀ a b c d, HQ (secret a b c d)) (n : Nat) (M : Digest) :
-    HQ (signLayers P index secret n M) := by
+theorem hq_signTopLayer (hP : P = 0) (index : Index) (secret : LeafIndex → ChainIndex → AComp Digest)
+    (hs : ∀ e c, HQ (secret e c)) (topNode : Nat → Nat → AComp Digest) (ht : ∀ l j, HQ (topNode l j))
+    (M : Digest) : HQ (signTopLayer P index secret topNode M) := by
+  unfold signTopLayer
+  refine hq_bind (hq_encodingSearch _ _ _ _ _ _ _) fun r => ?_
+  split
+  · exact hq_bind (hq_sequenceFin _ fun c => hq_bind (hs _ _) fun _ => hq_chainWalk _ hP _ _ _ _ _ _ _)
+      fun _ => hq_bind (hq_sequenceFin _ fun _ => ht _ _) fun _ => hq_pure _
+  · exact hq_pure _
+
+theorem hq_signLayers (hP : P = 0) (index : Index)
+    (secret : Layer → TreeIndex → LeafIndex → ChainIndex → AComp Digest)
+    (hs : ∀ a b c d, HQ (secret a b c d)) (topNode : Nat → Nat → AComp Digest)
+    (ht : ∀ l j, HQ (topNode l j)) (n : Nat) (M : Digest) :
+    HQ (signLayers P index secret topNode n M) := by
   induction n generalizing M with
   | zero => exact hq_pure _
   | succ n ih =>
     unfold signLayers
     split
-    · refine hq_bind (hq_encodingSearch _ _ _ _ _ _ _) fun r => ?_
-      split
-      · refine hq_bind (hq_buildLayerTree _ hP _ _ _ (hs _ _) _ _) fun _ => hq_bind (ih _) fun r' => ?_
+    · split
+      · refine hq_bind (hq_signTopLayer _ hP _ _ (hs _ _) _ ht _) fun r => ?_
         split <;> exact hq_pure _
-      · exact hq_pure _
+      · refine hq_bind (hq_encodingSearch _ _ _ _ _ _ _) fun r => ?_
+        split
+        · refine hq_bind (hq_buildLayerTree _ hP _ _ _ (hs _ _) _ _) fun _ => hq_bind (ih _) fun r' => ?_
+          split <;> exact hq_pure _
+        · exact hq_pure _
     · exact hq_pure _
 
 theorem hq_signFrom (hP : P = 0) (index : Index) (ftsSecret : FtsTree → FtsLeaf → AComp Digest)
     (hf : ∀ t j, HQ (ftsSecret t j))
     (otsSecret : Layer → TreeIndex → LeafIndex → ChainIndex → AComp Digest)
-    (ho : ∀ a b c d, HQ (otsSecret a b c d)) (randomness : Digest) (leaves : IndexGroup → FtsLeaf) :
-    HQ (signFrom P index ftsSecret otsSecret randomness leaves) := by
+    (ho : ∀ a b c d, HQ (otsSecret a b c d)) (topNode : Nat → Nat → AComp Digest)
+    (ht : ∀ l j, HQ (topNode l j)) (randomness : Digest) (leaves : IndexGroup → FtsLeaf) :
+    HQ (signFrom P index ftsSecret otsSecret topNode randomness leaves) := by
   unfold signFrom
-  refine hq_bind (hq_buildForest _ _ _ hf _) fun _ => hq_bind (hq_signLayers _ hP _ _ ho _ _) fun r => ?_
+  refine hq_bind (hq_buildForest _ _ _ hf _) fun _ =>
+    hq_bind (hq_signLayers _ hP _ _ ho _ ht _ _) fun r => ?_
   split <;> exact hq_pure _
 
 end algs
 
-/-- **sign** makes only honest queries. -/
-theorem hq_sign (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0) (m : Message) :
-    HQ (SphincsSecurity.Seeded.sign (m := AComp) sk m) := by
-  unfold SphincsSecurity.Seeded.sign
-  refine hq_bind ?_ fun r => ?_
-  · generalize SphincsSecurity.digestAttemptLimit = n
-    generalize (0 : Nat) = a
-    induction n generalizing a with
-    | zero => exact hq_pure _
-    | succ n ih =>
-      unfold SphincsSecurity.Seeded.signDigestLoop SphincsSecurity.Seeded.signAttempt
-      refine hq_bind (hq_deriveRandomizer _ _ _ _) fun _ => ?_
-      refine hq_bind (hq_bind (hq_messageDigest _ _ _ _) fun _ => by split <;> exact hq_pure _) fun r => ?_
-      split
+theorem hq_mac (P : SphincsSecurity.PublicParameter) (seed : MasterSeed)
+    (region : SphincsSecurity.TopRegion) :
+    HQ (SphincsSecurity.Concrete.oracleHash (m := AComp) (SphincsSecurity.macHashInput P seed region)) := by
+  apply hq_oracleHash
+  unfold SphincsSecurity.macHashInput
+  rw [List.append_assoc, List.append_assoc]
+  apply honest_fieldBytes
+  · have hr : (SphincsSecurity.regionBytes region).length = 65504 := by
+      unfold SphincsSecurity.regionBytes
+      rw [List.length_flatten, List.map_ofFn, List.sum_ofFn]
+      have : ∀ lv : Fin SphincsSecurity.maxLayerHeight,
+          (List.length ∘ fun level : Fin SphincsSecurity.maxLayerHeight =>
+            (List.ofFn (region level)).flatMap (SphincsSecurity.bytesLE 16)) lv =
+            16 * 2 ^ (SphincsSecurity.maxLayerHeight - lv.val) := by
+        intro lv
+        simp only [Function.comp, List.length_flatMap, List.map_ofFn, List.sum_ofFn]
+        simp [SphincsSecurity.bytesLE, Nat.mul_comm]
+      simp only [this]
+      decide
+    simp [tagLen, length_bytesLE, hr]
+  · simp
+
+theorem hq_maskSecret (P : SphincsSecurity.PublicParameter) (seed : MasterSeed) (l j : Nat) :
+    HQ (SphincsSecurity.Seeded.maskSecret (m := AComp) P seed l j) := hq_deriveKey _ _ _
+
+/-- **sign** makes only honest queries, for every cache. -/
+theorem hq_sign (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
+    (cache : SphincsSecurity.TopCache) (m : Message) :
+    HQ (SphincsSecurity.Seeded.sign (m := AComp) sk cache m) := by
+  unfold SphincsSecurity.Seeded.sign SphincsSecurity.Seeded.signChecked
+  refine hq_bind (hq_mac _ _ _) fun tag => ?_
+  split
+  · refine hq_bind ?_ fun r => ?_
+    · generalize SphincsSecurity.digestAttemptLimit = n
+      generalize (0 : Nat) = a
+      induction n generalizing a with
+      | zero => exact hq_pure _
+      | succ n ih =>
+        unfold SphincsSecurity.Seeded.signDigestLoop SphincsSecurity.Seeded.signAttempt
+        refine hq_bind (hq_deriveRandomizer _ _ _ _) fun _ => ?_
+        refine hq_bind (hq_bind (hq_messageDigest _ _ _ _) fun _ => by split <;> exact hq_pure _)
+          fun r => ?_
+        split
+        · exact hq_pure _
+        · exact ih _
+    · split
+      · exact hq_signFrom _ hP _ _ (fun _ _ => hq_deriveKey _ _ _) _ (fun _ _ _ _ => hq_deriveKey _ _ _)
+          _ (fun _ _ => hq_bind (hq_maskSecret _ _ _ _) fun _ => hq_pure _) _ _
       · exact hq_pure _
-      · exact ih _
-  · split
-    · exact hq_signFrom _ hP _ _ (fun _ _ => hq_deriveKey _ _ _) _ (fun _ _ _ _ => hq_deriveKey _ _ _) _ _
-    · exact hq_pure _
+  · exact hq_pure _
 
 /-- **keygen** makes only honest queries. -/
 theorem hq_keygen (seed : MasterSeed) : HQ (SphincsSecurity.Seeded.keygenFromSeed seed) := by
-  unfold SphincsSecurity.Seeded.keygenFromSeed
-  exact hq_bind (hq_buildLayerTree _ rfl _ _ _ (fun _ _ => hq_deriveKey _ _ _) _ _) fun _ => hq_pure _
+  unfold SphincsSecurity.Seeded.keygenFromSeed SphincsSecurity.Seeded.maskRegion
+  refine hq_bind (hq_buildLayerTable _ rfl _ _ _ (fun _ _ => hq_deriveKey _ _ _) _ _) fun _ => ?_
+  refine hq_bind (hq_bind (hq_sequenceFin _ fun _ => hq_bind (hq_sequenceFin _ fun _ =>
+    hq_bind (hq_maskSecret _ _ _ _) fun _ => hq_pure _) fun _ => hq_pure _) fun _ => hq_pure _) fun _ => ?_
+  exact hq_bind (hq_mac _ _ _) fun _ => hq_pure _
 
 end SigGolfCandidate.Equiv

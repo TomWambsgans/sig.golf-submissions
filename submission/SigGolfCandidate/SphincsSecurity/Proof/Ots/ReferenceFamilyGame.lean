@@ -59,7 +59,7 @@ noncomputable def referenceFamilyGame (inputs : Finset HashInput)
   let parameter ← 𝒮[sampleParameter]
   let otsSecret ← 𝒮[sampleOtsSecrets]
   let ftsSecret ← 𝒮[sampleFtsSecrets]
-  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret⟩
+  let key : SecretKey := ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩
   let reference ← 𝒮[referenceFamilyOracleSample key inputs (hencoding parameter)]
   let f := finiteHashAnswer ∅ inputs reference.2
   let result ← 𝒮[referenceFamilyFrontierRest key f
@@ -83,9 +83,9 @@ theorem referenceFamilyGame_erased (inputs : Finset HashInput)
   rw [evalSPMF_bind_comm, evalSPMF_bind]
   apply congrArg (𝒮[sampleFtsSecrets] >>= ·)
   funext ftsSecret
-  rw [referenceFamilyOracleSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret⟩ inputs
+  rw [referenceFamilyOracleSample_bind_selected ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ inputs
     (hencoding parameter) (hgraph parameter) (fun selections table =>
-      referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret⟩ (finiteHashAnswer ∅ inputs table)
+      referenceFamilyFrontierRest ⟨parameter, 0, otsSecret, ftsSecret, fun _ _ => 0⟩ (finiteHashAnswer ∅ inputs table)
         (canonicalGraphLabels parameter otsSecret ftsSecret (finiteHashAnswer ∅ inputs table)) selections dummy adversary)]
   simp only [referenceFamilyFrontierRest_selected]
 

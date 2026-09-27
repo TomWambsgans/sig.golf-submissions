@@ -43,18 +43,19 @@ theorem sll63_lt (u : Nat) (hu : u < 2 ^ 64) (s : MachineState) (h23 : s.getReg 
   omega
 
 def layFC (L : LCtx) : FCtx :=
-  ⟨L.wl, L.pk, L.e, heightL L.lay, false, 8 - L.lay, 0, 704, 3, L.lay, L.tau, 2480 + 752 * L.lay + 672,
+  ⟨L.wl, L.pk, L.e, heightL L.lay, false, 7 - L.lay, 0, 704, 3, L.lay, L.tau, layBody L.lay + 672,
     if L.lay = 0 then 0x180 else 0x120⟩
 
 theorem layFC_ok (L : LCtx) (hL : L.ok) : (layFC L).ok := by
   obtain ⟨hlay, hidx, hwl⟩ := hL
+  have hh := heightL_le L.lay hlay
   refine ⟨?_, ?_, ?_, by simp [layFC], ?_, hwl, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [layFC]
-  · unfold heightL; split <;> omega
-  · unfold heightL; split <;> omega
+  · omega
+  · omega
   · exact Nat.mod_lt _ (Nat.two_pow_pos _)
   · omega
-  · omega
-  · unfold heightL; split <;> omega
+  · interval_cases L.lay <;> decide
+  · interval_cases L.lay <;> decide
   · split <;> decide
   · split <;> omega
   · omega
@@ -64,8 +65,7 @@ theorem layFC_check (L : LCtx) (hL : L.ok) :
       (0x800 + (layFC L).sibOff) (layFC L).dst = true := by
   have := layFoldOk_at L.lay hL.1
   simp only [layFoldOk] at this
-  simp only [layFC, heightL]
-  rw [show 0x800 + (2480 + 752 * L.lay + 672) = 0x800 + (2480 + 752 * L.lay + 672) from rfl]
+  simp only [layFC]
   exact this
 
 /-- Carried through the leaf and the fold of layer `lay` to the precode of layer `lay - 1`. -/
@@ -84,7 +84,7 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
   obtain ⟨hG, hK, hR, hCB, hZ, hLB, hlen, hvs, ⟨tt, -, hpc⟩, -⟩ := hs
   obtain ⟨h16, h17, h23, h30, h31⟩ := hR
   have hpc' : s.pc = pcOf (nextPc' L.lay 41) := by rw [hpc]; simp [headPc, LCtx.cctx]
-  have he := e_lt L
+  have he := e_lt L ⟨hlay, hidx, hwl⟩
   have htau : L.tau < 2 ^ 30 := tau_lt L.lay L.idx hlay hidx
   set d := decide (L.e % 2 = 1) with hd
   obtain ⟨u, hu⟩ := spec_run (lc_leaf hlay d) s hpc' hK (by

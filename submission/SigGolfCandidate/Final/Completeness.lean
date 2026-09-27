@@ -1,4 +1,4 @@
-import SigGolfCandidate.SphincsSecurity
+import SigGolfCandidate.SphincsSecurity.Completeness.Assembly
 import SigGolfCandidate.Final.Refine
 import SigGolfCandidate.Final.RO
 import Mathlib.Data.Set.Finite.List
@@ -18,7 +18,8 @@ lazy random oracle, succeed with probability at least `1 - 2^-256`.
 4. On a finite domain the lazy oracle is the eager one; a union bound over messages then bounds the
    failure probability by the sum of the per-message failure probabilities
    (`probOutput_false_foldAll_le`), each of which is that of the seeded completeness experiment.
-5. Per-seed completeness (`sphincs_is_complete_for_every_seed`) bounds the sum by `2^-256`.
+5. Per-seed completeness (`Completeness.complete_seeded`, i.e. `sphincs_is_complete_for_every_seed`)
+   bounds the sum by `2^-256`.
 -/
 
 open OracleComp OracleSpec
@@ -68,13 +69,13 @@ theorem foldAll_relabel {ι ι' R κ : Type} (f : ι → ι') (L : List κ)
 /-- Honest abstract hash inputs. -/
 abbrev HD := {x : List UInt8 // Equiv.Honest x}
 
-theorem honest_length_le (x : List UInt8) (h : Equiv.Honest x) : x.length ≤ 704 := by
+theorem honest_length_le (x : List UInt8) (h : Equiv.Honest x) : x.length ≤ 65568 := by
   rw [h.2.1]
   unfold Equiv.tagLen
   split <;> omega
 
 instance : Finite HD :=
-  ((List.finite_length_le UInt8 704).subset fun x hx => honest_length_le x hx).to_subtype
+  ((List.finite_length_le UInt8 65568).subset fun x hx => honest_length_le x hx).to_subtype
 
 noncomputable instance : Fintype HD := Fintype.ofFinite HD
 
@@ -126,22 +127,21 @@ theorem probOutput_gameHD (sk : SecretKey) (m : Message) (b : Bool) :
 
 /-- The organizer's `allSucceed` bit is the conjunction fold of the abstract games on the honest
 domain, relabelled by `encHD`. -/
-theorem allSucceed_eq_relabel (hS : SignRefinementStatement) (hV : VerifyRefinementStatement)
-    (sk : SecretKey) :
+theorem allSucceed_eq_relabel (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
+    (hV : VerifyRefinementStatement) (sk : SecretKey) :
     HonestSummary.allSucceed <$> submission.allMessages sk =
       relabel encHD (foldAll (Finset.univ : Finset Message).toList (gameHD sk) true) := by
   rw [allSucceed_allMessages, ← foldAll_relabel]
-  congr 1
-  funext m
-  rw [success_honest_eq_game hS hV, ← relabel_val_gameHD, relabel_relabel]
+  refine congrArg (fun P => foldAll _ P true) (funext fun m => ?_)
+  rw [success_honest_eq_game hK hS hV, ← relabel_val_gameHD, relabel_relabel]
   rfl
 
 theorem failure_eq : FAILURE = ((2 ^ 256 : Nat) : ENNReal)⁻¹ := by
   rw [FAILURE, one_div, Nat.cast_pow, Nat.cast_ofNat]
 
-/-- **Completeness** of the submission, given the sign and verify refinements. -/
-theorem submission_complete (hS : SignRefinementStatement) (hV : VerifyRefinementStatement) :
-    submission.Complete := by
+/-- **Completeness** of the submission, given the keygen, sign and verify refinements. -/
+theorem submission_complete (hK : KeygenRefinementStatement) (hS : SignRefinementStatement)
+    (hV : VerifyRefinementStatement) : submission.Complete := by
   intro sk
   set L := (Finset.univ : Finset Message).toList
   set F := foldAll L (gameHD sk) true
@@ -153,7 +153,7 @@ theorem submission_complete (hS : SignRefinementStatement) (hV : VerifyRefinemen
         Pr[= true | withRandomOracle (HonestSummary.allSucceed <$> submission.allMessages sk)] := by
       rw [withRandomOracle_map, ← probEvent_eq_eq_probOutput, probEvent_map]
       rfl
-    rw [e1, allSucceed_eq_relabel hS hV]
+    rw [e1, allSucceed_eq_relabel hK hS hV]
     unfold withRandomOracle
     rw [← run'_relabel encHD encHD_injective F ∅ ∅ (fun _ => rfl)]
   have hF : Pr[= false | (simulateQ randomOracle F).run' ∅] ≤ FAILURE := by
@@ -161,7 +161,7 @@ theorem submission_complete (hS : SignRefinementStatement) (hV : VerifyRefinemen
     simp_rw [probOutput_gameHD]
     rw [Finset.sum_map_toList, failure_eq]
     rw [← tsum_fintype (L := SummationFilter.unconditional Message)]
-    exact SphincsSecurity.sphincs_is_complete_for_every_seed sk
+    exact SphincsSecurity.Completeness.complete_seeded sk
   have h1 : Pr[= true | (simulateQ randomOracle F).run' ∅] +
       Pr[= false | (simulateQ randomOracle F).run' ∅] = 1 := by
     simp

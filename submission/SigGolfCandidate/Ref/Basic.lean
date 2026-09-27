@@ -3,8 +3,8 @@ import SigGolf
 /-!
 # SPHINCS-golf reference specification: primitives
 
-Byte-level primitives of the reference specification (`work/py/ref.py`, `work/design/SPEC.md`,
-`work/py/PROGRAMS.md`):
+Byte-level primitives of the reference specification (`work/py-opt5/ref.py`,
+`work/design/SPEC-v4.md`, `work/py-opt5/PROGRAMS.md`):
 
 * byte encodings (little endian) and conversions between `List Byte` and `Bytes n`;
 * the parameters;
@@ -59,24 +59,29 @@ def answerBytes (k : Nat) (a : BitVec 256) : List Byte :=
 /-- `l[off .. off + len)`. -/
 def slice (l : List Byte) (off len : Nat) : List Byte := (l.drop off).take len
 
-/-! ## Parameters (SPEC.md) -/
+/-! ## Parameters (SPEC-v4.md) -/
 
 def nChains : Nat := 42
 /-- The WOTS target sum (the 42 3-bit digits of an accepted encoding sum to it). -/
-def targetSum : Nat := 179
+def targetSum : Nat := 186
 /-- Old name of `targetSum`. -/
 abbrev target : Nat := targetSum
-def nLayers : Nat := 7
+/-- The number of hypertree layers `d`. -/
+def nLayers : Nat := 6
+/-- The layer heights, layer 0 (the cached top tree) first. -/
+def heights : List Nat := [11, 5, 5, 5, 4, 4]
 def totalH : Nat := 34
 def ftsA : Nat := 10
 /-- Number of opened FORS trees (`k - 1`; tree 14 is the pinned group `u_14 = 0`). -/
 def ftsTrees : Nat := 14
+/-- Digest trials `A_max`. -/
 def aMax : Nat := 2 ^ 20
-def cMax : Nat := 2 ^ 20
-def sigBytes : Nat := 7756
+/-- The counter limit `C_max`: the signer tries `c < cMax`, the verifier rejects `c ≥ cMax`. -/
+def cMax : Nat := 2 ^ 22
+def sigBytes : Nat := 7080
 
-/-- Height of hypertree layer `lay` (layer 0 = top): `(5,5,5,5,5,5,4)`. -/
-def height (lay : Nat) : Nat := if lay = 6 then 4 else 5
+/-- Height of hypertree layer `lay` (layer 0 = top): `heights[lay]`. -/
+def height (lay : Nat) : Nat := heights.getD lay 0
 
 /-- `sum_{j > lay} h_j`, the position of `e_lay` in `idx`. -/
 def shiftBelow (lay : Nat) : Nat := ((List.range nLayers).filter (lay < ·)).foldr (height · + ·) 0
@@ -84,6 +89,35 @@ def shiftBelow (lay : Nat) : Nat := ((List.range nLayers).filter (lay < ·)).fol
 /-- `(e_lay, tau_lay)`: the leaf index in and the index of the tree of layer `lay`. -/
 def route (idx lay : Nat) : Nat × Nat :=
   (idx / 2 ^ shiftBelow lay % 2 ^ height lay, idx / 2 ^ (shiftBelow lay + height lay))
+
+/-! ### The cached top tree (layer 0) -/
+
+/-- Height of the top tree (`h_0 = 11`). -/
+abbrev topH : Nat := height 0
+
+/-- `N_l = sum_{k < l} 2^(topH - k)`: the index of the first node of level `l` in the region. -/
+def topN (l : Nat) : Nat := ((List.range l).map fun k => 2 ^ (topH - k)).sum
+
+/-- Bytes of the masked-node region (levels `0 .. topH - 1`): `16 * N_topH = 65504`. -/
+def regionBytes : Nat := 16 * topN topH
+
+/-- The cache: tag (32) | region | zeros, `CACHE_BYTES = 2^17` in total. -/
+def cacheBytes : Nat := CACHE_BYTES
+
+/-- Offset of the masked top-tree node `(l, j)` in the cache. -/
+def cacheNodeOff (l j : Nat) : Nat := 32 + 16 * (topN l + j)
+
+/-- The masked top-tree node `(l, j)` of a cache. -/
+def cacheNode (cache : List Byte) (l j : Nat) : Val := slice cache (cacheNodeOff l j) 16
+
+/-- The cache's MAC tag (bytes `0 .. 32`). -/
+def cacheTag (cache : List Byte) : List Byte := slice cache 0 32
+
+/-- The cache's masked-node region (bytes `32 .. 32 + regionBytes`). -/
+def cacheRegion (cache : List Byte) : List Byte := slice cache 32 regionBytes
+
+/-- Bytewise XOR (the shorter length). -/
+def xorBytes (a b : List Byte) : List Byte := List.zipWith (· ^^^ ·) a b
 
 /-! ## Tweaks and hashing -/
 
@@ -176,6 +210,13 @@ def rootsInput (idx : Nat) (roots : List Val) : List Byte :=
 
 /-- Message digest: `tw(12, 0, 0, 0, 0) || P || rho || 0^16 || m` (96 bytes). -/
 def digestInput (rho m : List Byte) : List Byte := thInput (tweak 12 0 0 0 0) (rho ++ zeros 16 ++ m)
+
+/-- Mask of top-tree node `(l, j)`: `tw(13, 0, 0, l, j) || P || S` (64 bytes). -/
+def maskInput (S : List Byte) (l j : Nat) : List Byte := thInput (tweak 13 0 0 l j) S
+
+/-- The cache MAC: `tw(14, 0, 0, 0, 0) || P || S || region` (65568 bytes); the full 32-byte
+answer is the tag. -/
+def macInput (S region : List Byte) : List Byte := thInput (tweak 14 0 0 0 0) (S ++ region)
 
 /-! ## Digest, index split, digit decoding -/
 

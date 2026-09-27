@@ -70,7 +70,7 @@ theorem joinedEncoding_isSigningFrontier (key : SecretKey) (inputs : Finset Hash
       words (canonicalGraphFrontier key.otsSecret (canonicalGraphLabels key.parameter key.otsSecret key.ftsSecret
         (nonencodingAnswer key.parameter inputs hencoding outside)) words) := by
   have hfrontier := canonicalGraphLabels_frontier key.parameter key.otsSecret key.ftsSecret
-    (finiteHashAnswer ∅ inputs (joinEncodingTable key.parameter inputs hencoding encoding outside)) words key.root
+    (finiteHashAnswer ∅ inputs (joinEncodingTable key.parameter inputs hencoding encoding outside)) words key.root key.top
   rw [canonicalGraphLabels_joinEncodingTable _ _ _ _ hencoding hgraph] at hfrontier
   rw [hfrontier]
   exact isSigningFrontier_canonical key _ words

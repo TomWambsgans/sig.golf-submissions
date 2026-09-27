@@ -88,13 +88,13 @@ theorem canonicalReferenceWords_valid (key : SecretKey) (f : QueryImpl HashSpec 
       exact referenceEncodingSearch_valid _ _ _ _ _ _ _ _ _ _ hsearch
 
 theorem boundaryEval_signAfterDigest_canonical (key : SecretKey) (f : QueryImpl HashSpec Id)
-    (dummy : OtsReferenceWords) (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
+    (htop : KeyTopHonest f key) (dummy : OtsReferenceWords) (randomness : Randomness) (index : Index) (leaves : IndexGroup → FtsLeaf) :
     let words := canonicalReferenceWords key f dummy
     let frontier := canonicalFrontierValues key f words
     let projected := frontierSignAfterDigest key.parameter f key.ftsSecret words frontier randomness index leaves
     boundaryEval key.parameter f (signAfterDigest key randomness index leaves) =
       (projected.1, (FreeMonoid.of none) ^ projected.2) :=
-  boundaryEval_signAfterDigest_frontier key f _ _ (isSigningFrontier_canonical key f _) randomness index leaves
+  boundaryEval_signAfterDigest_frontier key f _ _ (isSigningFrontier_canonical key f _) htop randomness index leaves
     (frontierReferenceWord_canonical key f dummy index)
 
 end SphincsSecurity.Concrete

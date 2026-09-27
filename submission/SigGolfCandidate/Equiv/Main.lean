@@ -1,4 +1,5 @@
 import SigGolfCandidate.Equiv.Verify
+import SigGolfCandidate.Equiv.Keygen
 import SigGolfCandidate.Equiv.Honest
 import SigGolfCandidate.Bridge.All
 import SigGolfCandidate.Submission
@@ -9,7 +10,7 @@ import SigGolfCandidate.Submission
 Given the four RISC-V refinement theorems (the programs compute the reference spec, with the call
 count), the Bridge's implementation equations (D) hold, and together with the equivalence of the
 reference spec and the abstract scheme this discharges every field of `ZeroPadAssumptions` except
-(A) security and `lifetime_le`.
+(A) security.
 -/
 
 open OracleComp OracleSpec
@@ -34,12 +35,12 @@ theorem countCalls_map {α β : Type} (f : α → β) (oa : OracleComp SigGolf.H
 
 /-- The keys produced by the abstract key generation. -/
 theorem keygen_support (seed : SphincsSecurity.MasterSeed)
-    (kp : SphincsSecurity.PublicKey × SphincsSecurity.Seeded.SecretKey)
+    (kp : SphincsSecurity.PublicKey × SphincsSecurity.TopCache × SphincsSecurity.Seeded.SecretKey)
     (h : kp ∈ support (SphincsSecurity.Seeded.keygenFromSeed seed)) :
-    kp.2.seed = seed ∧ kp.2.parameter = 0 ∧ kp.1 = ⟨kp.2.root, 0⟩ := by
+    kp.2.2.seed = seed ∧ kp.2.2.parameter = 0 ∧ kp.1 = ⟨kp.2.2.root, 0⟩ := by
   unfold SphincsSecurity.Seeded.keygenFromSeed at h
   simp only [support_bind, support_pure, Set.mem_iUnion, Set.mem_singleton_iff] at h
-  obtain ⟨x, _, rfl⟩ := h
+  obtain ⟨x, _, y, _, z, _, rfl⟩ := h
   exact ⟨rfl, rfl, rfl⟩
 
 /-! ## The bytecode refinements, as hypotheses -/
@@ -48,9 +49,9 @@ theorem keygen_support (seed : SphincsSecurity.MasterSeed)
 reference spec (`SigGolfCandidate/{Keygen,Sign,Expand,Verify}` prove them). -/
 structure Refinements : Prop where
   keygen : ∀ sk, (fun r => (r.value, r.hashCalls)) <$> submission.run .keygen sk =
-    (fun p => (some (p.1, (0 : SigGolf.Cache)), p.2)) <$> Ref.countCalls (Ref.keygenRef sk)
+    (fun p => (some p.1, p.2)) <$> Ref.countCalls (Ref.keygenRef sk)
   sign : ∀ sk cache m, (fun r => (r.value, r.hashCalls)) <$> submission.run .sign (sk, cache, m) =
-    (fun p => (p.1, p.2)) <$> Ref.countCalls (Ref.signRef sk m)
+    (fun p => (p.1, p.2)) <$> Ref.countCalls (Ref.signRef sk cache m)
   expand : ∀ m pk σ, (fun r => (r.value, r.hashCalls)) <$> submission.run .expand (m, pk, σ) =
     pure (some (Ref.expandRef σ), 0)
   verify : ∀ m pk w, (fun r => (r.value, r.hashCalls)) <$> submission.run .verify (m, pk, w) =
@@ -59,13 +60,11 @@ structure Refinements : Prop where
 /-- The published key: the root. -/
 def pkEnc (pk : SphincsSecurity.PublicKey) : SigGolf.PublicKey := pk.root
 
-/-- **The Bridge's assumptions**, except (A) security and `lifetime_le`, from the bytecode
-refinements and the equivalence of the reference spec with the abstract scheme. -/
+/-- **The Bridge's assumptions**, except (A) security, from the bytecode refinements and the
+equivalence of the reference spec with the abstract scheme. -/
 noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSecurity)
-    (lifetime_le : SigGolf.LIFETIME ≤ SphincsSecurity.signatureLimit) (R : Refinements) :
-    SigGolfCandidate.Bridge.ZeroPadAssumptions submission where
+    (R : Refinements) : SigGolfCandidate.Bridge.ZeroPadAssumptions submission where
   security := security
-  lifetime_le := lifetime_le
   seedOf := id
   seedOf_dist := SigGolfCandidate.Bridge.seedOf_id_dist
   msgOf := fun m => m
@@ -75,7 +74,8 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
   witDec := witDec
   witDec_expandFn := witDec_expandRef
   pkEnc := pkEnc
-  cacheOf := fun _ => 0
+  cacheEnc := cacheEnc
+  cacheDec := cacheDec
   pad := fmtQ
   Honest := Honest
   pad_injOn := fmtQ_injOn
@@ -83,24 +83,26 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
   qEnc := SigGolfCandidate.Bridge.defaultQEnc
   qEnc_injective := SigGolfCandidate.Bridge.defaultQEnc_injective
   keygen_eq (sk : Bytes 32) := by
-    have e1 : Ref.countCalls (Ref.keygenRef sk) = (fun p => ((p.1.1.root : Bytes 16), p.2)) <$>
-        Ref.countCalls (relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed sk)) := by
+    have e1 : Ref.countCalls (Ref.keygenRef sk) =
+        (fun p => (((p.1.1.root : Bytes 16), cacheEnc p.1.2.1), p.2)) <$>
+          Ref.countCalls (relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed sk)) := by
       rw [keygenRef_eq, countCalls_map]
     rw [R.keygen sk, e1, Functor.map_map]
     rfl
   keygen_honest seed := hq_keygen seed
-  sign_eq sk pk sk' h cache m := by
+  sign_eq sk pk cache' sk' h cache m := by
     obtain ⟨hs, hP, -⟩ := keygen_support _ _ h
     have hs' : sk'.seed = sk := hs
-    have e1 : Ref.countCalls (Ref.signRef sk m) =
+    have e1 : Ref.countCalls (Ref.signRef sk cache m) =
         (fun p => (Option.map sigCodec.symm p.1, p.2)) <$>
-          Ref.countCalls (relabel fmtQ (SphincsSecurity.Seeded.sign (m := AComp) sk' m)) := by
-      rw [← hs', signRef_eq sk' hP m, countCalls_map]
+          Ref.countCalls (relabel fmtQ
+            (SphincsSecurity.Seeded.sign (m := AComp) sk' (cacheDec cache) m)) := by
+      rw [← hs', signRef_eq sk' hP cache m, countCalls_map]
     rw [R.sign, e1, Functor.map_map]
     rfl
-  sign_honest seed pk sk' h m := hq_sign sk' (keygen_support _ _ h).2.1 m
+  sign_honest seed pk cache' sk' h cache m := hq_sign sk' (keygen_support _ _ h).2.1 cache m
   expand_eq m pk σ := R.expand m pk σ
-  verify_eq seed pk sk' h m (w : Bytes 7756) := by
+  verify_eq seed pk cache' sk' h m (w : Bytes 7080) := by
     obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
     have hpk' : pk = ⟨sk'.root, 0⟩ := hpk
     have e : (⟨pkEnc pk, 0⟩ : SphincsSecurity.PublicKey) = pk := by
@@ -110,15 +112,14 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
       rw [verifyRef_eq, e]
     rw [R.verify m (pkEnc pk) w, e2]
     rfl
-  verify_honest seed pk sk' h m σ := by
+  verify_honest seed pk cache' sk' h m σ := by
     obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
     exact hq_verify pk (by rw [show pk = _ from hpk]) m σ
 
-/-- **Security of the submission**, from (A) abstract security, the signing budget, and the four
-bytecode refinement theorems. -/
-theorem submission_secure (security : SigGolfCandidate.Bridge.EventSecurity)
-    (lifetime_le : SigGolf.LIFETIME ≤ SphincsSecurity.signatureLimit) (R : Refinements) :
+/-- **Security of the submission**, from (A) abstract security and the four bytecode refinement
+theorems. -/
+theorem submission_secure (security : SigGolfCandidate.Bridge.EventSecurity) (R : Refinements) :
     submission.Secure :=
-  (zeroPadAssumptions security lifetime_le R).secure
+  (zeroPadAssumptions security R).secure
 
 end SigGolfCandidate.Equiv

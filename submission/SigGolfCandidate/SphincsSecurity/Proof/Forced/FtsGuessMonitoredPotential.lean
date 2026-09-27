@@ -241,7 +241,7 @@ theorem expected_monitoredSignStep_potential_le (message : Message) (state : Mon
 theorem expected_monitoredStep_potential_le (input : (OracleWorld + SigningSpec).Domain)
     (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state) :
     (∑' result, Pr[= result | monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter input state] *
       certificateMonitorPotential (monitorKey parameter root) budget required (monitorView result.2)) ≤
@@ -250,10 +250,10 @@ theorem expected_monitoredStep_potential_le (input : (OracleWorld + SigningSpec)
   cases input with
   | inl input =>
       exact expected_monitoredWorldStep_potential_le parameter root otsSecret labels inputs hencoding selections rows dummy slot budget
-        required stopAfter input state (covered_world_inputs parameter root otsSecret inputs input next state hvalid hcovered)
+        required stopAfter input state (covered_world_inputs parameter root otsSecret labels inputs input next state hvalid hcovered)
   | inr message =>
       exact expected_monitoredSignStep_potential_le parameter root otsSecret labels inputs hencoding selections rows dummy slot budget
-        required stopAfter message state hvalid (covered_sign_digest parameter root otsSecret inputs message next state hvalid hcovered)
+        required stopAfter message state hvalid (covered_sign_digest parameter root otsSecret labels inputs message next state hvalid hcovered)
 
 /-! ### Telescoping over the adversary run -/
 
@@ -285,11 +285,11 @@ include hauxiliary in
 theorem covered_step_next (input : (OracleWorld + SigningSpec).Domain)
     (next : (OracleWorld + SigningSpec).Range input → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query input) >>= next) state)
     (result : AdversaryStep input × MonitoredState)
     (hresult : monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       input state result ≠ 0) :
-    CoveredRun parameter root otsSecret inputs (next result.1.1.1) result.2 := by
+    CoveredRun parameter root otsSecret labels inputs (next result.1.1.1) result.2 := by
   cases input with
   | inl input =>
       exact covered_world_next parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter input
@@ -300,7 +300,7 @@ theorem covered_step_next (input : (OracleWorld + SigningSpec).Domain)
 
 include hauxiliary in
 theorem expected_monitoredRun_potential_le (computation : OracleComp (OracleWorld + SigningSpec) Forgery)
-    (state : MonitoredState) (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret inputs computation state) :
+    (state : MonitoredState) (hvalid : Valid state) (hcovered : CoveredRun parameter root otsSecret labels inputs computation state) :
     (∑' result, Pr[= result | monitoredRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
         stopAfter computation state] *
       certificateMonitorPotential (monitorKey parameter root) budget required (monitorView result.2)) ≤

@@ -278,8 +278,9 @@ theorem leafOfNat_val (j : Nat) (hj : j < 2 ^ SphincsSecurity.maxLayerHeight) :
     (SphincsSecurity.Concrete.leafOfNat j).val = j := by
   simp [SphincsSecurity.Concrete.leafOfNat, Nat.mod_eq_of_lt hj]
 
-theorem layerHeight_le (lay : Layer) : SphincsSecurity.layerHeight lay ≤ 5 := by
-  unfold SphincsSecurity.layerHeight SphincsSecurity.maxLayerHeight; split <;> omega
+theorem layerHeight_le (lay : Layer) :
+    SphincsSecurity.layerHeight lay ≤ SphincsSecurity.maxLayerHeight := by
+  unfold SphincsSecurity.layerHeight SphincsSecurity.maxLayerHeight; split_ifs <;> omega
 
 theorem pow_layerHeight_le (lay : Layer) :
     2 ^ SphincsSecurity.layerHeight lay ≤ 2 ^ SphincsSecurity.maxLayerHeight :=
@@ -334,12 +335,6 @@ theorem buildLeaves_eq (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (lea
   rfl
 
 /-! ## Levels (shared by hypertree and few-time trees) -/
-
-theorem getD_ofFn {β : Type} {n : Nat} (f : Fin n → β) (i : Nat) (d : β) :
-    (List.ofFn f).getD i d = if h : i < n then f ⟨i, h⟩ else d := by
-  split_ifs with h
-  · simp [List.getD_eq_getElem?_getD, h]
-  · simp [List.getD_eq_getElem?_getD, h]
 
 section levels
 
@@ -455,29 +450,5 @@ theorem buildTree_eq (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (leaf 
   simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp]
   refine bind_congr (m := OracleComp SigGolf.HashSpec) fun T => ?_
   simp [hcap]
-
-theorem keygenList_eq (seed : MasterSeed) :
-    Ref.keygenList (Ref.toList (n := 32) seed) =
-      (fun kp => dv kp.1.root) <$> relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed seed) := by
-  unfold Ref.keygenList SphincsSecurity.Seeded.keygenFromSeed
-  have h := buildTree_eq seed SphincsSecurity.topLayer SphincsSecurity.Concrete.rootTree ⟨0, by decide⟩
-    (by decide) SphincsSecurity.Concrete.zeroEncoding [] (fun i => rfl)
-  rw [show Ref.height 0 = SphincsSecurity.layerHeight SphincsSecurity.topLayer by decide]
-  have e1 : ((SphincsSecurity.topLayer : Layer) : Nat) = 0 := rfl
-  have e2 : ((SphincsSecurity.Concrete.rootTree : TreeIndex) : Nat) = 0 := rfl
-  rw [e1, e2] at h
-  rw [h]
-  simp only [relabel_bind, relabel_pure, map_bind, bind_map_left, map_pure,
-    map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp]
-
-/-- **keygen**: the reference key generation is the relabelled abstract key generation. -/
-theorem keygenRef_eq (sk : Bytes 32) :
-    Ref.keygenRef sk =
-      (fun kp => (kp.1.root : Bytes 16)) <$> relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed sk) := by
-  unfold Ref.keygenRef
-  rw [keygenList_eq sk]
-  simp only [Functor.map_map, map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun kp => ?_
-  exact congrArg pure (Ref.ofList_toList (n := 16) kp.1.root)
 
 end SigGolfCandidate.Equiv

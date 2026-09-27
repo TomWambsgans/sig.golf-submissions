@@ -128,7 +128,7 @@ theorem cachedSigning_mem_support_sign' (message : Message) (state : CachedState
     (result : ((Option Signature × Option FewTimeView) × SigningBoundaryTrace) × CachedState)
     (hr : cachedForcedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot (signingProgram message) state result ≠ 0)
     (secrets : Coordinate → Digest) (hsecrets : complete result.2.2.allowed secrets ≠ 0) :
-    result.1.1.1 ∈ support (sign ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ message) := by
+    result.1.1.1 ∈ support (sign ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ message) := by
   rcases state with ⟨cache, guess⟩
   exact cachedSigning_mem_support_sign parameter root otsSecret labels inputs hencoding selections rows dummy slot message cache guess ha
     hauxiliary result hr secrets hsecrets
@@ -236,7 +236,7 @@ theorem monitoredWorldStep_bind_const {Other : Type} (input : OracleWorld.Domain
 
 def CoveredRun (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : MonitoredState) : Prop :=
   ∀ secrets : Coordinate → Digest, complete state.1.2.allowed secrets ≠ 0 →
-    coveredInputs ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩ computation ⊆ inputs
+    coveredInputs ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩ computation ⊆ inputs
 
 theorem exists_complete_ne_zero (allowed : Coordinate → Finset Digest) (ha : ∀ coordinate, (allowed coordinate).Nonempty) :
     ∃ secrets, complete allowed secrets ≠ 0 :=
@@ -248,7 +248,7 @@ theorem complete_ne_zero_of_subset (before after : Coordinate → Finset Digest)
 
 theorem covered_world_mem (input : HashInput) (next : HashOutput → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query (.inl (.inr input))) >>= next) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query (.inl (.inr input))) >>= next) state) :
     input ∈ inputs := by
   obtain ⟨secrets, hsecrets⟩ := exists_complete_ne_zero state.1.2.allowed hvalid
   exact hcovered secrets hsecrets (coveredInputs_world _ input next)
@@ -256,7 +256,7 @@ theorem covered_world_mem (input : HashInput) (next : HashOutput → OracleComp 
 set_option linter.constructorNameAsVariable false in
 theorem covered_world_inputs (input : OracleWorld.Domain) (next : OracleWorld.Range input → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query (.inl input)) >>= next) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query (.inl input)) >>= next) state) :
     hashInputs (liftM (OracleWorld.query input)) ⊆ inputs := by
   cases input with
   | inl sample =>
@@ -271,26 +271,26 @@ theorem covered_world_inputs (input : OracleWorld.Domain) (next : OracleWorld.Ra
       rcases hrow with hrow | ⟨_, _, hrow⟩
       · rw [Finset.mem_singleton] at hrow
         subst row
-        exact covered_world_mem parameter root otsSecret inputs hash next state hvalid hcovered
+        exact covered_world_mem parameter root otsSecret labels inputs hash next state hvalid hcovered
       · simp only [hashInputs_pure, Finset.notMem_empty] at hrow
 
 theorem covered_sign_digest (message : Message) (next : Option Signature → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query (.inr message)) >>= next) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query (.inr message)) >>= next) state) :
     hashInputs (publicDigestLoop parameter root message digestAttemptLimit) ⊆ inputs := by
   obtain ⟨secrets, hsecrets⟩ := exists_complete_ne_zero state.1.2.allowed hvalid
-  let key : SecretKey := ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets⟩
+  let key : SecretKey := ⟨parameter, root, otsSecret, FtsGuessSigning.secretTable.symm secrets, graphTop labels⟩
   have h := (coveredInputs_sign key message next).trans (hcovered secrets hsecrets)
   rw [← publicDigestLoop_eq key message digestAttemptLimit] at h
   exact h
 
 theorem covered_world_next (input : OracleWorld.Domain) (next : OracleWorld.Range input → OracleComp (OracleWorld + SigningSpec) Forgery)
     (state : MonitoredState)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query (.inl input)) >>= next) state)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query (.inl input)) >>= next) state)
     (result : AdversaryStep (.inl input) × MonitoredState)
     (hresult : monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       (.inl input) state result ≠ 0) :
-    CoveredRun parameter root otsSecret inputs (next result.1.1.1) result.2 := by
+    CoveredRun parameter root otsSecret labels inputs (next result.1.1.1) result.2 := by
   intro secrets hsecrets
   have hbefore := complete_ne_zero_of_subset _ _
     (monitoredStep_allowed_subset parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
@@ -301,11 +301,11 @@ theorem covered_sign_next (message : Message) (next : Option Signature → Oracl
     (state : MonitoredState) (hvalid : Valid state)
     (hauxiliary : ∀ seed : inputs → HashOutput,
       (⟨selections, rows, seed⟩ : ReferenceAuxiliary inputs) ∈ (referenceAuxiliarySample inputs).support)
-    (hcovered : CoveredRun parameter root otsSecret inputs (liftM ((OracleWorld + SigningSpec).query (.inr message)) >>= next) state)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (liftM ((OracleWorld + SigningSpec).query (.inr message)) >>= next) state)
     (result : AdversaryStep (.inr message) × MonitoredState)
     (hresult : monitoredStep parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
       (.inr message) state result ≠ 0) :
-    CoveredRun parameter root otsSecret inputs (next result.1.1.1) result.2 := by
+    CoveredRun parameter root otsSecret labels inputs (next result.1.1.1) result.2 := by
   intro secrets hsecrets
   have hbefore := complete_ne_zero_of_subset _ _
     (monitoredStep_allowed_subset parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required stopAfter
@@ -323,7 +323,7 @@ theorem covered_sign_next (message : Message) (next : Option Signature → Oracl
   exact (coveredInputs_sign_next _ message next raw.1.1.1 hsupport).trans (hcovered secrets hbefore)
 
 theorem covered_pure (forgery : Forgery) (state : MonitoredState) (hvalid : Valid state)
-    (hcovered : CoveredRun parameter root otsSecret inputs (pure forgery) state) :
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (pure forgery) state) :
     hashInputs (liftM (verify ⟨root, parameter⟩ forgery.message forgery.signature : OracleComp HashSpec Bool) :
       OracleComp OracleWorld Bool) ⊆ inputs := by
   obtain ⟨secrets, hsecrets⟩ := exists_complete_ne_zero state.1.2.allowed hvalid

@@ -177,7 +177,7 @@ variable (hauxiliary : ∀ seed : inputs → HashOutput,
 
 include hauxiliary in
 theorem exceptionRun_unstopped (computation : OracleComp (OracleWorld + SigningSpec) Forgery) (state : ExceptionState) (hvalid : Valid state.1)
-    (hcovered : CoveredRun parameter root otsSecret inputs computation state.1) (hcons : Consistent parameter root state.1)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs computation state.1) (hcons : Consistent parameter root state.1)
     (halive : state.1.2.stopped = false) (hbudget : budget ≤ 2 ^ 127) (result : AdversaryTrace × ExceptionState)
     (hresult : exceptionRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
       (proposalStop (fun _ _ _ _ => false)) computation state result ≠ 0)
@@ -201,8 +201,8 @@ theorem exceptionRun_unstopped (computation : OracleComp (OracleWorld + SigningS
         (proposalStop (fun _ _ _ _ => false)) input state step hstep).1
       simp only [combineStep, SigningBoundaryTrace.hashCalls_mul, List.length_append] at hcost hlog
       have hworld : ∀ world, input = .inl world → hashInputs (liftM (OracleWorld.query world)) ⊆ inputs :=
-        fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret inputs world next state.1 hvalid hcovered
-      have hsign := covered_step_digest parameter root otsSecret inputs input next state.1 hvalid hcovered
+        fun world heq => by subst heq; exact covered_world_inputs parameter root otsSecret labels inputs world next state.1 hvalid hcovered
+      have hsign := covered_step_digest parameter root otsSecret labels inputs input next state.1 hvalid hcovered
       obtain ⟨hstepAlive, hstepCons⟩ := exceptionStep_unstopped parameter root otsSecret labels inputs hencoding selections rows dummy slot budget
         required input state hvalid hworld hsign hcons halive hbudget step hstep (by omega) (by omega) hcleanState hcleanStep
       have haccount := monitoredStep_account parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
@@ -264,7 +264,7 @@ theorem exceptionWorldRun_unstopped {Result : Type} (computation : OracleComp Or
 
 include hauxiliary in
 theorem exceptionCompletedRun_unstopped (adversary : Adversary) (state : ExceptionState) (hvalid : Valid state.1)
-    (hcovered : CoveredRun parameter root otsSecret inputs (adversary.main ⟨root, parameter⟩) state.1) (hcons : Consistent parameter root state.1)
+    (hcovered : CoveredRun parameter root otsSecret labels inputs (adversary.main ⟨root, parameter⟩) state.1) (hcons : Consistent parameter root state.1)
     (halive : state.1.2.stopped = false) (hbudget : budget ≤ 2 ^ 127) (result : Completed × ExceptionState)
     (hresult : exceptionCompletedRun parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
       (proposalStop (fun _ _ _ _ => false)) adversary state result ≠ 0)
@@ -292,7 +292,7 @@ theorem exceptionCompletedRun_unstopped (adversary : Adversary) (state : Excepti
   change before.2.1.2.log = state.1.2.log ++ before.1.1.1.2 at hlogBefore
   exact (exceptionWorldRun_unstopped parameter root otsSecret labels inputs hencoding selections rows dummy slot budget required
     (verifyComputation parameter root before.1.1.1.1) before.2 hvalid'
-    (covered_pure parameter root otsSecret inputs before.1.1.1.1 before.2.1 hvalid' hfinal) hbeforeCons hbeforeAlive hbudget checked hchecked
+    (covered_pure parameter root otsSecret labels inputs before.1.1.1.1 before.2.1 hvalid' hfinal) hbeforeCons hbeforeAlive hbudget checked hchecked
     (by rw [hspent]; omega) (by rw [hlogBefore, List.length_append]; omega) hclean).1
 
 end SphincsSecurity.Concrete.FtsGuessHash
