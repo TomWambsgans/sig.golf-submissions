@@ -113,8 +113,8 @@ structure ZeroPadAssumptions (sub : SigGolf.Submission) where
   pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
   /-- (B) caches: the bytes key generation publishes, and the abstract cache the signer reads from
   arbitrary bytes. -/
-  cacheEnc : SphincsSecurity.TopCache → SigGolf.Cache
-  cacheDec : SigGolf.Cache → SphincsSecurity.TopCache
+  cacheEnc : SphincsSecurity.TopCache → SigGolf.Bytes sub.sizes.cache
+  cacheDec : SigGolf.Bytes sub.sizes.cache → SphincsSecurity.TopCache
   /-- (C) zero padding, injective on honest inputs, which all start with byte `1`. -/
   pad : List UInt8 → SigGolf.Query
   Honest : List UInt8 → Prop

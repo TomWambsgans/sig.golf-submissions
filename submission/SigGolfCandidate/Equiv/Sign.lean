@@ -337,10 +337,10 @@ theorem chainTo_eq (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
   exact h
 
 /-- The cached top node `(l, s)` as the signer reads it. -/
-abbrev absTopNode (seed : MasterSeed) (b : SigGolf.Cache) :=
+abbrev absTopNode (seed : MasterSeed) (b : SigGolfCandidate.Cache) :=
   SphincsSecurity.Seeded.cachedTopNode (m := AComp) 0 seed (cacheDec b)
 
-theorem topPath_eq (seed : MasterSeed) (b : SigGolf.Cache) (e : Nat)
+theorem topPath_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (e : Nat)
     (he : e < 2 ^ SphincsSecurity.maxLayerHeight) :
     Ref.topPath (Ref.toList (n := 32) seed) (Ref.toList b) e =
       (fun path : Fin SphincsSecurity.maxLayerHeight → Digest => List.ofFn fun l => dv (path l)) <$>
@@ -377,7 +377,7 @@ theorem topPath_eq (seed : MasterSeed) (b : SigGolf.Cache) (e : Nat)
   funext f
   rw [foldl_finRange_append, List.nil_append]
 
-theorem signTop_eq (seed : MasterSeed) (b : SigGolf.Cache) (index : Index) (M : Digest) :
+theorem signTop_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (index : Index) (M : Digest) :
     Ref.signTop (Ref.toList (n := 32) seed) (Ref.toList b) index (dv M) =
       Option.map (fun o => [layerRef SphincsSecurity.topLayer o]) <$> relabel fmtQ
         (SphincsSecurity.Concrete.signTopLayerPaired (m := AComp) 0 index
@@ -463,7 +463,7 @@ theorem signTop_eq (seed : MasterSeed) (b : SigGolf.Cache) (index : Index) (M : 
 
 /-! ### All layers -/
 
-theorem signLayers_eq (seed : MasterSeed) (b : SigGolf.Cache) (index : Index) (n : Nat)
+theorem signLayers_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (index : Index) (n : Nat)
     (hn : n + 1 ≤ SphincsSecurity.numLayers) (M : Digest) :
     Ref.signLayers (Ref.toList (n := 32) seed) (Ref.toList b) index n (dv M) =
       Option.map (fun parts => List.ofFn fun l : Fin (n + 1) =>
@@ -630,7 +630,7 @@ theorem serialize_eq (rho : Digest) (trees : FtsTree → Digest × (Nat → Dige
   rw [e]
   rfl
 
-theorem signCont_eq (seed : MasterSeed) (b : SigGolf.Cache) (randomness : Digest) (index : Index)
+theorem signCont_eq (seed : MasterSeed) (b : SigGolfCandidate.Cache) (randomness : Digest) (index : Index)
     (leaves : IndexGroup → FtsLeaf) :
     signCont (Ref.toList (n := 32) seed) (Ref.toList b) (dv randomness) index (uFun leaves) =
       Option.map sigToList <$> relabel fmtQ
@@ -651,7 +651,7 @@ theorem signCont_eq (seed : MasterSeed) (b : SigGolf.Cache) (randomness : Digest
   · simp only [Option.map_some, relabel_pure, map_pure]
     exact congrArg (fun x => pure (some x)) (serialize_eq randomness trees parts)
 
-theorem toB_macHashInput (seed : MasterSeed) (b : SigGolf.Cache) :
+theorem toB_macHashInput (seed : MasterSeed) (b : SigGolfCandidate.Cache) :
     toB (SphincsSecurity.macHashInput 0 seed (cacheDec b).region) =
       Ref.macInput (Ref.toList (n := 32) seed) (Ref.cacheRegion (Ref.toList b)) := by
   unfold SphincsSecurity.macHashInput
@@ -663,7 +663,7 @@ theorem toB_macHashInput (seed : MasterSeed) (b : SigGolf.Cache) :
 /-- **sign** (byte lists): the reference signer is the relabelled abstract signer on the decoded
 cache, for any secret key with the parameter `0` (the root is ignored). -/
 theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
-    (b : SigGolf.Cache) (m : Message) :
+    (b : SigGolfCandidate.Cache) (m : Message) :
     Ref.signList (Ref.toList (n := 32) sk.seed) (Ref.toList b) (Ref.toList (n := 32) m) =
       Option.map sigToList <$> relabel fmtQ
         (SphincsSecurity.Seeded.sign (m := AComp) sk (cacheDec b) m) := by
@@ -689,7 +689,7 @@ theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter =
 /-- **sign**: `signRef` is the relabelled abstract signer on the decoded cache, decoded by the
 signature codec. -/
 theorem signRef_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
-    (b : SigGolf.Cache) (m : Bytes 32) :
+    (b : SigGolfCandidate.Cache) (m : Bytes 32) :
     Ref.signRef sk.seed b m =
       Option.map sigCodec.symm <$> relabel fmtQ
         (SphincsSecurity.Seeded.sign (m := AComp) sk (cacheDec b) m) := by

@@ -140,10 +140,16 @@ def KeygenRefines : Prop :=
     (fun r => (r.value, r.hashCompressions)) <$> sub.run .keygen sk =
       (fun p => (G p.1, p.2)) <$> countBlocks (keygenRef sk)
 
+/-- A sign-input cache read as a reference cache, for a submission whose cache size `K` is the
+reference `CACHE_BYTES`. -/
+abbrev refCache {sub : Submission} (hc : sub.sizes.cache = CACHE_BYTES) (cache : Bytes sub.sizes.cache) :
+    Cache :=
+  cast (congrArg Bytes hc) cache
+
 /-- The sign refinement hypothesis (compressions), for every cache input. -/
-def SignRefines : Prop :=
+def SignRefines (hc : sub.sizes.cache = CACHE_BYTES) : Prop :=
   ∀ sk cache m, (fun r => r.hashCompressions) <$> sub.run .sign (sk, cache, m) =
-    Prod.snd <$> countBlocks (signRef sk cache m)
+    Prod.snd <$> countBlocks (signRef sk (refCache hc cache) m)
 
 /-- Expand makes no hash calls. -/
 def ExpandNoHash : Prop :=
@@ -191,7 +197,8 @@ theorem keygen_bound (hK : KeygenRefines sub) (sk : SecretKey) (m : Message) :
         rw [← ev_count_eq_V, ← keygen_count sub hK sk, roRun_map, expectedValue_map]
     _ ≤ 2 := V_keygenRef_le_two sk ∅
 
-theorem sign_bound (hK : KeygenRefines sub) (hS : SignRefines sub) (sk : SecretKey)
+theorem sign_bound (hK : KeygenRefines sub) (hc : sub.sizes.cache = CACHE_BYTES)
+    (hS : SignRefines sub hc) (sk : SecretKey)
     (m : Message) :
     expectedValue (withRandomOracle (sub.honest sk m)) (fun result => ENNReal.ofReal
       (Real.rpow 2 ((result.costs .sign : ℝ) / (Phase.sign.budget : ℝ)))) ≤ 2 := by
@@ -217,9 +224,9 @@ theorem sign_bound (hK : KeygenRefines sub) (hS : SignRefines sub) (sk : SecretK
             show Phase.sign.budget = 2 ^ 17 from rfl]
           simp only [recordCost, if_true]
           rw [costFun_eq]
-      _ = V (zOf (2 ^ 17)) (signRef sk cache m) c := by
+      _ = V (zOf (2 ^ 17)) (signRef sk (refCache hc cache) m) c := by
           rw [← ev_count_eq_V, ← hS sk cache m, roRun_map, expectedValue_map]
-      _ ≤ 2 := V_signRef_le_two sk cache m c hinv
+      _ ≤ 2 := V_signRef_le_two sk (refCache hc cache) m c hinv
   · simp only [roRun_pure, expectedValue_pure]
     simp only [recordCost, show Phase.sign ≠ Phase.keygen by decide, if_false]
     rw [ofReal_rpow_zero]; norm_num
@@ -272,7 +279,8 @@ theorem expand_bound (hE : ExpandNoHash sub) (sk : SecretKey) (m : Message) :
     rw [ofReal_rpow_zero]
 
 /-- **Compression bounds** for any submission refining the reference spec. -/
-theorem compressionBounds_of_refinement (hK : KeygenRefines sub) (hS : SignRefines sub)
+theorem compressionBounds_of_refinement (hK : KeygenRefines sub)
+    (hc : sub.sizes.cache = CACHE_BYTES) (hS : SignRefines sub hc)
     (hE : ExpandNoHash sub) : sub.CompressionBounds := by
   intro sk phase hphase
   unfold Submission.honestWorkload
@@ -280,15 +288,15 @@ theorem compressionBounds_of_refinement (hK : KeygenRefines sub) (hS : SignRefin
   simp only [Phase.budgeted, List.mem_cons, List.not_mem_nil, or_false] at hphase
   rcases hphase with rfl | rfl | rfl
   · exact keygen_bound sub hK sk m
-  · exact sign_bound sub hK hS sk m
+  · exact sign_bound sub hK hc hS sk m
   · exact expand_bound sub hE sk m
 
 end Phases
 
 /-- The competition statement for `SigGolfCandidate.submission`, modulo the refinement facts. -/
 theorem submission_compressionBounds (hK : KeygenRefines submission)
-    (hS : SignRefines submission) (hE : ExpandNoHash submission) :
+    (hS : SignRefines submission rfl) (hE : ExpandNoHash submission) :
     submission.CompressionBounds :=
-  compressionBounds_of_refinement submission hK hS hE
+  compressionBounds_of_refinement submission hK rfl hS hE
 
 end SigGolfCandidate.Budget

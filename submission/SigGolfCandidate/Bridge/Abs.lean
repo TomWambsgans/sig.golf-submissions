@@ -161,7 +161,7 @@ lemma absK_step {n : ℕ} {s s' : A.State} {k : ℕ} {lg : QueryLog RequestSpec}
   simp only [advLoop, h]
 
 lemma absK_sign_lt {n : ℕ} {s : A.State} {k : ℕ} {lg : QueryLog RequestSpec} {c : ℕ}
-    {req : SigningRequest} {resume : Option (Bytes sub.sizes.signature) → A.State}
+    {req : SigningRequest sub.sizes} {resume : Option (Bytes sub.sizes.signature) → A.State}
     (h : A.step s = .sign req resume) (hk : k < LIFETIME) :
     absK B A sk pk (n + 1) s k lg c =
       (liftM (countFrom (fun _ => 1) (aSign sk (B.cacheDec req.cache) (B.msgOf req.message)) c) :

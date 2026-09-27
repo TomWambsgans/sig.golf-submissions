@@ -1,4 +1,5 @@
 import SigGolf
+import SigGolfCandidate.CacheBytes
 
 /-!
 # SPHINCS-golf reference specification: primitives

@@ -4,7 +4,7 @@ import SigGolfCandidate.Final.Discharge
 /-!
 # sig.golf solution: a SPHINCS+ variant
 
-`S = W = 6404` bytes, `C = 11573` cycles. Layout (bytes): message 64, secret key 128,
+`S = W = 6404` bytes, `K = 131072` bytes (cache), `C = 11573` cycles. Layout (bytes): message 64, secret key 128,
 public key 160, cache 17568, signature 9808, witness 2048.
 
 The certificate is `SigGolfCandidate.Final.certificate`: the four RISC-V images are proved to refine
@@ -21,6 +21,8 @@ noncomputable def submission : SigGolf.Submission := SigGolfCandidate.submission
 theorem signature_bytes : submission.sizes.signature = 6404 := rfl
 
 theorem witness_bytes : submission.sizes.witness = 6404 := rfl
+
+theorem cache_bytes : submission.sizes.cache = 131072 := rfl
 
 theorem layout_offsets : submission.layout =
   { message := 64, secretKey := 128, publicKey := 160,

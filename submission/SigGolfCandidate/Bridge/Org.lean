@@ -83,7 +83,7 @@ lemma orgK_step {n : ℕ} {s s' : A.State} {T : Transcript sub.sizes} (h : A.ste
     orgK B A sk pk (n + 1) s T = orgK B A sk pk n s' T := by
   simp only [orgK, Submission.interact, h]
 
-lemma orgK_sign_ge {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : SigningRequest}
+lemma orgK_sign_ge {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : SigningRequest sub.sizes}
     {resume : Option (Bytes sub.sizes.signature) → A.State} (h : A.step s = .sign req resume)
     (hk : ¬ T.signingRequests < LIFETIME) :
     orgK B A sk pk (n + 1) s T = pure ⟨false, T.hashCalls⟩ := by
@@ -92,7 +92,7 @@ lemma orgK_sign_ge {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : Sig
 
 lemma orgK_sign_lt {cache' : SphincsSecurity.TopCache} {sk' : SphincsSecurity.Seeded.SecretKey}
     (hkey : (pk, cache', sk') ∈ support (aKeygen (B.seedOf sk)))
-    {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : SigningRequest}
+    {n : ℕ} {s : A.State} {T : Transcript sub.sizes} {req : SigningRequest sub.sizes}
     {resume : Option (Bytes sub.sizes.signature) → A.State} (h : A.step s = .sign req resume)
     (hk : T.signingRequests < LIFETIME) :
     orgK B A sk pk (n + 1) s T =
@@ -200,7 +200,7 @@ theorem securityExperiment_eq (rounds : ℕ) :
   rw [relabelW_bind, relabelW_liftM_unif]
   refine bind_congr fun sk => ?_
   refine (relabelW_liftM_proj B (sub.run .keygen sk) (fun r => (r.value, r.hashCalls))
-    (fun (p : Option (PublicKey × Cache) × ℕ) =>
+    (fun (p : Option (PublicKey × Bytes sub.sizes.cache) × ℕ) =>
       (match p.1 with
       | some (pk, cache) => sub.interact A sk pk rounds (A.initial pk cache) { hashCalls := p.2 }
       | none => pure ⟨false, p.2⟩ : OracleComp World AttackResult)) _ ?hK).trans ?_

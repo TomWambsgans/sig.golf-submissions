@@ -29,7 +29,7 @@ theorem keygen_value (hK : KeygenRefinementStatement) (sk : SecretKey) :
   have h := congrArg (fun x => Prod.fst <$> x) (hK sk)
   simp only [Functor.map_map] at h
   refine h.trans ?_
-  have e : (fun a : (SigGolf.PublicKey × SigGolf.Cache) × Nat × Nat => some a.1) <$>
+  have e : (fun a : (SigGolf.PublicKey × SigGolfCandidate.Cache) × Nat × Nat => some a.1) <$>
       Sign.countBoth (Ref.keygenRef sk) = some <$> (Prod.fst <$> Sign.countBoth (Ref.keygenRef sk)) :=
     (Functor.map_map _ _ _).symm
   rw [e, Sign.fst_countBoth]

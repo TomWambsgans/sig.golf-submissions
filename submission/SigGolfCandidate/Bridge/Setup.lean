@@ -70,8 +70,8 @@ structure Assumptions (submission : SigGolf.Submission) where
   pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
   /-- (B) caches: `cacheEnc` gives the bytes key generation publishes, `cacheDec` the abstract
   cache the signer reads from arbitrary bytes. No law relating them is needed for security. -/
-  cacheEnc : SphincsSecurity.TopCache → SigGolf.Cache
-  cacheDec : SigGolf.Cache → SphincsSecurity.TopCache
+  cacheEnc : SphincsSecurity.TopCache → SigGolf.Bytes submission.sizes.cache
+  cacheDec : SigGolf.Bytes submission.sizes.cache → SphincsSecurity.TopCache
   /-- (C) oracle relabelling: `pad` maps abstract inputs to organizer queries, and is
   inverted by `unpad` on every organizer query and on every honest abstract input. -/
   pad : List UInt8 → SigGolf.Query

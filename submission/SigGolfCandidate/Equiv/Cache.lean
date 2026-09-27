@@ -27,14 +27,14 @@ def cacheList (c : TopCache) : List Byte :=
     Ref.zeros (Ref.cacheBytes - 32 - Ref.regionBytes)
 
 /-- **The cache encoding** (what key generation publishes). -/
-def cacheEnc (c : TopCache) : SigGolf.Cache := Ref.ofList SigGolf.CACHE_BYTES (cacheList c)
+def cacheEnc (c : TopCache) : SigGolfCandidate.Cache := Ref.ofList SigGolfCandidate.CACHE_BYTES (cacheList c)
 
 /-- Read an abstract cache from bytes. -/
 def cacheOfList (l : List Byte) : TopCache :=
   ⟨Ref.ofList 32 (Ref.cacheTag l), fun lv j => Ref.ofList 16 (Ref.cacheNode l lv j)⟩
 
 /-- **The cache decoding** (what the signer reads from arbitrary bytes). -/
-def cacheDec (b : SigGolf.Cache) : TopCache := cacheOfList (Ref.toList b)
+def cacheDec (b : SigGolfCandidate.Cache) : TopCache := cacheOfList (Ref.toList b)
 
 theorem length_regionBytes (region : TopRegion) :
     (SphincsSecurity.regionBytes region).length = 65504 := by
@@ -63,7 +63,7 @@ theorem node_bound (lv j : Nat) (hlv : lv < SphincsSecurity.maxLayerHeight)
   have := key lv hlv
   unfold Ref.cacheNodeOff; omega
 
-theorem toB_regionBytes_cacheOfList (l : List Byte) (hl : l.length = SigGolf.CACHE_BYTES) :
+theorem toB_regionBytes_cacheOfList (l : List Byte) (hl : l.length = SigGolfCandidate.CACHE_BYTES) :
     toB (SphincsSecurity.regionBytes (cacheOfList l).region) = Ref.cacheRegion l := by
   unfold SphincsSecurity.regionBytes
   simp only [toB, List.map_flatten, List.map_ofFn]
@@ -82,22 +82,22 @@ theorem toB_regionBytes_cacheOfList (l : List Byte) (hl : l.length = SigGolf.CAC
       funext j
       simp only [Function.comp, cacheOfList, Ref.cacheNode]
       have hb := node_bound lv j lv.isLt j.isLt
-      rw [dv_ofList_slice _ _ (by rw [hl]; unfold SigGolf.CACHE_BYTES; omega)]
+      rw [dv_ofList_slice _ _ (by rw [hl]; unfold SigGolfCandidate.CACHE_BYTES; omega)]
       unfold Ref.cacheNodeOff; congr 1; ring
     rw [e2, flatten_ofFn_slices, topN_eq]
   rw [List.ofFn_inj.mpr (funext e), flatten_ofFn_slices_var]
   rfl
 
-theorem toB_regionBytes_cacheDec (b : SigGolf.Cache) :
+theorem toB_regionBytes_cacheDec (b : SigGolfCandidate.Cache) :
     toB (SphincsSecurity.regionBytes (cacheDec b).region) = Ref.cacheRegion (Ref.toList b) :=
   toB_regionBytes_cacheOfList _ (Ref.length_toList b)
 
-theorem length_cacheTag (l : List Byte) (hl : l.length = SigGolf.CACHE_BYTES) :
+theorem length_cacheTag (l : List Byte) (hl : l.length = SigGolfCandidate.CACHE_BYTES) :
     (Ref.cacheTag l).length = 32 :=
   length_slice _ _ _ (by rw [hl]; decide)
 
 /-- The reference's tag comparison is the abstract one. -/
-theorem cacheTag_iff (b : SigGolf.Cache) (tag : SphincsSecurity.HashOutput) :
+theorem cacheTag_iff (b : SigGolfCandidate.Cache) (tag : SphincsSecurity.HashOutput) :
     Ref.toList (n := 32) tag = Ref.cacheTag (Ref.toList b) ↔ tag = (cacheDec b).tag := by
   have hl := length_cacheTag _ (Ref.length_toList b)
   constructor
@@ -109,16 +109,16 @@ theorem cacheTag_iff (b : SigGolf.Cache) (tag : SphincsSecurity.HashOutput) :
     exact Ref.toList_ofList 32 _ hl
 
 /-- A cached node, as the reference reads it. -/
-theorem dv_cacheDec_node (b : SigGolf.Cache) (lv j : Nat) (hlv : lv < SphincsSecurity.maxLayerHeight)
+theorem dv_cacheDec_node (b : SigGolfCandidate.Cache) (lv j : Nat) (hlv : lv < SphincsSecurity.maxLayerHeight)
     (hj : j < 2 ^ (SphincsSecurity.maxLayerHeight - lv)) :
     dv ((cacheDec b).node lv j) = Ref.cacheNode (Ref.toList b) lv j := by
   unfold TopCache.node
   rw [dif_pos hlv, dif_pos hj]
   show dv (Ref.ofList 16 (Ref.cacheNode (Ref.toList b) lv j)) = _
   have hb := node_bound lv j hlv hj
-  exact dv_ofList_slice _ _ (by rw [Ref.length_toList]; unfold SigGolf.CACHE_BYTES; omega)
+  exact dv_ofList_slice _ _ (by rw [Ref.length_toList]; unfold SigGolfCandidate.CACHE_BYTES; omega)
 
-theorem length_cacheList (c : TopCache) : (cacheList c).length = SigGolf.CACHE_BYTES := by
+theorem length_cacheList (c : TopCache) : (cacheList c).length = SigGolfCandidate.CACHE_BYTES := by
   simp only [cacheList, List.length_append, Ref.length_toList, length_toB, length_regionBytes,
     Ref.length_zeros]
   decide
