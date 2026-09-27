@@ -6385,4 +6385,175 @@ theorem upper_honest_layer_step (target next : Fin 5) (hash : Hash)
 
 #print axioms upper_honest_layer_step
 
+theorem words20_eq_of_byte_eq (state : MachineState)
+    (left right : Nat)
+    (leftBound : left + 20 ≤ 0x50000)
+    (rightBound : right + 20 ≤ 0x50000)
+    (leftAligned : left % 4 = 0)
+    (rightAligned : right % 4 = 0)
+    (bytes : ∀ i, i < 20 →
+      state.getByte (BitVec.ofNat 64 (left + i)) =
+        state.getByte (BitVec.ofNat 64 (right + i))) :
+    ∀ index : Fin 5,
+      state.getWord32 (BitVec.ofNat 64 (left + 4 * index.val)) =
+        state.getWord32 (BitVec.ofNat 64 (right + 4 * index.val)) := by
+  intro index
+  apply BitVec.eq_of_getLsbD_eq
+  intro bit bitBound
+  let byte : Fin 4 := ⟨bit / 8, by omega⟩
+  have hi : 4 * index.val + byte.val < 20 := by
+    have := index.isLt
+    omega
+  have h := bytes (4 * index.val + byte.val) hi
+  rw [show left + (4 * index.val + byte.val) =
+      left + 4 * index.val + byte.val by omega,
+    show right + (4 * index.val + byte.val) =
+      right + 4 * index.val + byte.val by omega,
+    variableWord_byte state left leftBound leftAligned index byte,
+    variableWord_byte state right rightBound rightAligned index byte] at h
+  have hb := congrArg (fun x : BitVec 8 => x.getLsbD (bit % 8)) h
+  simpa [byte, BitVec.getLsbD_extractLsb',
+    show bit % 8 < 8 by omega,
+    show 8 * (bit / 8) + bit % 8 = bit by omega] using hb
+
+#print axioms words20_eq_of_byte_eq
+theorem final_root_words_of_bytes (state decoder : MachineState)
+    (pk : SphincsSecurity.PublicKey) (root : Digest)
+    (rootBytes : ∀ i, (hi : i < 20) →
+      state.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+        root.extractLsb' (8 * i) 8)
+    (rootEq : root = pk.root)
+    (hprefix : SphincsVerifierHashBytes.WitnessPrefix decoder pk)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = decoder.getByte address) :
+    ∀ index : Fin 5,
+      state.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * index.val)) =
+        state.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * index.val)) := by
+  apply words20_eq_of_byte_eq state 0x44a00 0x22ca0
+    (by decide) (by decide) (by decide) (by decide)
+  intro i hi
+  have low : (BitVec.ofNat 64 (0x22ca0 + i)).toNat < 0x40000 := by
+    simp only [BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega : 0x22ca0 + i < 2^64)]
+    omega
+  calc
+    state.getByte (BitVec.ofNat 64 (0x44a00 + i)) =
+        pk.root.extractLsb' (8 * i) 8 := by rw [rootBytes i hi, rootEq]
+    _ = decoder.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := (hprefix.root i hi).symm
+    _ = state.getByte (BitVec.ofNat 64 (0x22ca0 + i)) := (frame _ low).symm
+
+#print axioms final_root_words_of_bytes
+
+theorem upper_honest_final_accepts (hash : Hash)
+    (publicKey : SigGolf.PublicKey) (inputMessage : SigGolf.Message)
+    (pk : SphincsSecurity.PublicKey)
+    (signature : SphincsSecurity.Signature)
+    (initial state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (inputMessage, publicKey, SphincsWireEncoding.wire pk signature) = some initial)
+    (frame : ∀ address, address.toNat < 0x40000 →
+      state.getByte address = initial.getByte address)
+    (tree : TreeIndex) (leaf : LeafIndex) (message : Digest)
+    (encoding : Encoding)
+    (pc : state.pc = upperPrefixPc 0)
+    (small : BitVec.setWidth 64
+      (state.getWord32 (upperCounterSource 0)) >>> 20 = 0)
+    (layerCell : state.getMem 0x43000 =
+      BitVec.ofNat 64 (SphincsVerifierXmssTransition.targetLayer 0).val)
+    (treeCell : state.getMem 0x43008 = BitVec.ofNat 64 tree.val)
+    (leafCell : state.getMem 0x43018 = BitVec.ofNat 64 leaf.val)
+    (indexCell : state.getMem 0x43020 = BitVec.ofNat 64 leaf.val)
+    (query : hashInput (upperPrehashState 0 state) =
+      toQuery (firstUpperEncodingInput pk
+        (SphincsVerifierXmssTransition.targetLayer 0) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer 0)).counter))
+    (honest : evalWithAnswerFn (adaptOracle hash)
+      (Concrete.encodeAttempt pk.parameter
+        (SphincsVerifierXmssTransition.targetLayer 0) tree leaf message
+        (signature.layers
+          (SphincsVerifierXmssTransition.targetLayer 0)).counter) =
+        some encoding)
+    (rootEq : Concrete.foldValue (adaptOracle hash) pk.parameter
+      (SphincsVerifierXmssTransition.targetLayer 0) tree leaf
+      (Concrete.signaturePath signature
+        (SphincsVerifierXmssTransition.targetLayer 0))
+      (evalWithAnswerFn (adaptOracle hash)
+        (Concrete.leafHash pk.parameter
+          (SphincsVerifierXmssTransition.targetLayer 0) tree leaf
+          (fun chain => evalWithAnswerFn (adaptOracle hash)
+            (Concrete.recoverChain pk.parameter
+              (SphincsVerifierXmssTransition.targetLayer 0) tree leaf chain
+              (encoding chain)
+              ((signature.layers
+                (SphincsVerifierXmssTransition.targetLayer 0)).chainValues chain)))))
+      (layerHeight (SphincsVerifierXmssTransition.targetLayer 0)) = pk.root) :
+    ∃ (totalSteps : Nat) (result : Execution),
+      Executes hash SphincsImages.verify state totalSteps result ∧
+      result.exit = .success ∧ totalSteps ≤ 50000 ∧ result.cycles ≤ 50000 := by
+  let target : Fin 5 := 0
+  let lay := SphincsVerifierXmssTransition.targetLayer target
+  let decoder := firstUpperPaddingState
+    (writeHash (upperPrehashState target state)
+      (hash (hashInput (upperPrehashState target state))))
+  let ready := SphincsVerifierDecoderRelocation.setupState target
+    (SphincsVerifierDecoderRelocation.upperDecoderState target decoder)
+  have inputs := upper_loaded_handoff_premises target hash publicKey
+    inputMessage pk signature initial state loaded frame tree leaf message
+    encoding pc small layerCell treeCell leafCell indexCell query honest
+  obtain ⟨decoderPc, checksum, readyLayer, readyTree, readyLeaf,
+    readyIndex, decoded, prefixWitness, source, siblings⟩ := inputs
+  have prefixRun := upper_decoder_prefix_of_abstract target hash state pk
+    lay tree leaf message (signature.layers lay).counter encoding
+    pc small query honest
+  obtain ⟨final, steps, cycles, calls, blocks, run, stepsBound,
+    cyclesBound, callsBound, blocksBound, continuation, donePc,
+    rootBytes, pathCycleBound, _pathGlobal, pathFrame⟩ :=
+      upper_decoder_path_digest target hash decoder ready pk lay tree leaf
+        signature encoding (signature.layers lay).chainValues rfl rfl
+        decoderPc checksum readyLayer readyTree readyLeaf readyIndex
+        decoded prefixWitness source siblings
+  let pathEnd := SphincsVerifierXmssPathControl.pathState hash lay
+    (layerHeight lay) final
+  have finishPc : pathEnd.pc = 0x7c3c := by
+    rw [donePc]
+    decide
+  have rootWords : ∀ i : Fin 5,
+      pathEnd.getWord32 (BitVec.ofNat 64 (0x44a00 + 4 * i.val)) =
+        pathEnd.getWord32 (BitVec.ofNat 64 (0x22ca0 + 4 * i.val)) := by
+    apply final_root_words_of_bytes pathEnd decoder pk
+      (Concrete.foldValue (adaptOracle hash) pk.parameter lay tree leaf
+        (Concrete.signaturePath signature lay)
+        (evalWithAnswerFn (adaptOracle hash)
+          (Concrete.leafHash pk.parameter lay tree leaf
+            (fun chain => evalWithAnswerFn (adaptOracle hash)
+              (Concrete.recoverChain pk.parameter lay tree leaf chain
+                (encoding chain) ((signature.layers lay).chainValues chain)))))
+        (layerHeight lay)) rootBytes rootEq prefixWitness pathFrame
+  let terminal : Execution :=
+    ⟨.success, SphincsVerifierXmssFinish.finishState pathEnd, 22, 0, 0⟩
+  have finish : Executes hash SphincsImages.verify pathEnd 22 terminal :=
+    SphincsVerifierXmssFinish.finish_executes hash pathEnd finishPc rootWords
+  have rest := continuation 22 terminal finish
+  have whole := prefixRun.1.then_executes rest
+  let totalSteps := 61 + (steps + (22 +
+    SphincsVerifierXmssPathControl.pathInstructions hash lay
+      (layerHeight lay) final))
+  let result := (terminal.charge
+    (cycles + SphincsVerifierXmssPathControl.pathCycles hash lay
+      (layerHeight lay) final)
+    (calls + layerHeight lay)
+    (blocks + 2 * layerHeight lay)).charge 68 1 1
+  have stepPath := SphincsVerifierXmssPathControl.pathInstructions_le
+    hash lay (layerHeight lay) final
+  refine ⟨totalSteps, result, whole, rfl, ?_, ?_⟩
+  · have height : layerHeight lay ≤ 11 := by decide
+    dsimp [totalSteps]
+    omega
+  · have height : layerHeight lay ≤ 11 := by decide
+    dsimp [result, terminal, Execution.charge]
+    omega
+
+#print axioms upper_honest_final_accepts
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
