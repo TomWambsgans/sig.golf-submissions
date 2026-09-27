@@ -14,6 +14,9 @@ set_option linter.unnecessarySeqFocus false
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
+theorem fmt_digestInput (rho mm : List Byte) : fmt (digestInput rho mm) = pad64 (digestInput rho mm) :=
+  fmt_thInput _ _ _ _ _ _ (by decide)
+
 /-- Facts about the buffers used by the digest search (at the start of the loop). -/
 structure DigMem (S mm : List Byte) (u : MachineState) : Prop where
   rbS : u.readWords (BitVec.ofNat 64 0x640) 4 = wordsOf S
@@ -120,7 +123,7 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
     simp [pad64, Query.blocks, (words_rndInput _ _ hS hm a).1]
   refine (Sim.steps hs1 (Sim.hash16_bind (W := 4 + (16 + (4 + Wr))) e1 x5
     (hashArgs_of x10 x11 x12 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
-      (by norm_num)) hq1 (fun ans1 => ?_))).mono (by rw [hb1]; omega) (fun _ _ h => h)
+      (by norm_num)) hq1 (fmt_thInput _ _ _ _ _ _ (by decide)) (fun ans1 => ?_))).mono (by rw [hb1]; omega) (fun _ _ h => h)
   -- after the rnd hash
   set rho := answerBytes 16 ans1 with hrho
   set t2 := writeHash t1 ans1 with ht2
@@ -166,7 +169,7 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
     simp [pad64, Query.blocks, (words_digestInput _ _ hlen hm).1]
   refine (Sim.steps hs2 (Sim.query_bind (W := 4 + Wr) e3 y5
     (hashArgs_of y10 y11 y12 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
-      (by norm_num)) hq2 (fun ans2 => ?_))).mono (by rw [hb2]) (fun _ _ h => h)
+      (by norm_num)) (hq2.trans (fmt_digestInput _ _).symm) (fun ans2 => ?_))).mono (by first | rw [blocks_fmt, hb2] | rw [hb2]) (fun _ _ h => h)
   -- after the digest hash
   set t4 := writeHash t3 ans2 with ht4
   have f4 : Frame t3 t4 (fun x => 0x160 ≤ x ∧ x < 0x160 + 32) :=
@@ -218,7 +221,7 @@ theorem digTrial (sk : SecretKey) (m : Message) (u : MachineState)
 
 theorem searchDigest_succ (S mm : List Byte) (a f : Nat) :
     searchDigest S mm a (f + 1) = (hash16 (rndInput S mm a) >>= fun rho =>
-      (liftM (HashSpec.query (pad64 (digestInput rho mm))) : OracleComp HashSpec _) >>= fun ans =>
+      (liftM (HashSpec.query (fmt (digestInput rho mm))) : OracleComp HashSpec _) >>= fun ans =>
         if admissible (ans.toNat % 2 ^ 184) then pure (some (rho, ans.toNat % 2 ^ 184))
         else searchDigest S mm (a + 1) f) := by
   simp only [searchDigest, digest, H, bind_assoc, pure_bind]

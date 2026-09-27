@@ -27,7 +27,7 @@ theorem treeRest_good (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk : k < 
   obtain ⟨hfi, hcarry, hlen⟩ := hs
   rw [ftsNodeInput_eq, witFtsPath_eq, show nodeF 10 k d.idx = (forsFC d k).node from rfl,
     show d.u k = (forsFC d k).E from rfl, foldPath_eq]
-  have hfold := fold_good (forsFC d k) (forsFC_ok d hwl k hk) (forsFC_check d k hk) s Kr N C
+  have hfold := fold_good (forsFC d k) (forsFC_ok d hwl k hk) (by simp [forsFC]) (forsFC_check d k hk) s Kr N C
     (fun a u hend => hK a _ (tree_end d k hk roots s u hcarry hlen hend a)) 10 0 (by simp [forsFC])
     (by decide) v s hfi
   simpa [forsFC, foldCost_fors] using hfold
@@ -47,8 +47,9 @@ theorem tree_good (d : DCtx) (hwl : d.wl.length = 7756) (k : Nat) (hk1 : 1 ≤ k
   simp only [ftsRoot, bind_assoc, cc_bind, cc_pure]
   have hsl : (witFtsSecret d.wl k).length = 16 := by
     unfold witFtsSecret; apply length_slice16; omega
-  have h3 := Good.hash (K := fun v => cc (foldPath (ftsNodeInput k d.idx) (d.u k) v (witFtsPath d.wl k))
-      (fun r => K (roots ++ [r]))) hf h5 hv hin
+  have h3 := Good.hashP (x := ftsLeafInput k d.idx (d.u k) (witFtsSecret d.wl k))
+      (K := fun v => cc (foldPath (ftsNodeInput k d.idx) (d.u k) v (witFtsPath d.wl k))
+      (fun r => K (roots ++ [r]))) (fmt_th _ _ _ _ _ _ (by decide) (by decide)) hf h5 hv hin
     (fun ans => treeRest_good d hwl k hk roots (fun r => K (roots ++ [r])) N C hK _ _ (hpost ans))
   rw [pad64_ftsLeafInput _ _ _ _ hsl, blocks_q] at h3
   refine Good.steps' hst h3 (by have := uSteps_le k; unfold treeSteps; split <;> omega)
@@ -98,7 +99,7 @@ theorem roots_good (d : DCtx) (roots : List Val) (KM : Val → OracleComp HashSp
   have hK' := hu.known
   have h10 : u.getReg .x10 = BitVec.ofNat 64 0x220 := hK' (.x10, 544) (by simp [a6K])
   have h11 : u.getReg .x11 = BitVec.ofNat 64 (64 * (3 + 1)) := hK' (.x11, 256) (by simp [a6K])
-  have h12 : u.getReg .x12 = BitVec.ofNat 64 0xE0 := hK' (.x12, 224) (by simp [a6K])
+  have h12 : u.getReg .x12 = BitVec.ofNat 64 0x120 := hK' (.x12, 0x120) (by simp [a6K])
   have hidx := d_idx_lt d
   have mfr : ∀ A, u.getMem A = s.getMem A := fun A => by rw [hu.mem]; rfl
   have hvs : ∀ v ∈ roots, v.length = 16 := hrv
@@ -132,16 +133,18 @@ theorem roots_good (d : DCtx) (roots : List Val) (KM : Val → OracleComp HashSp
           (by rw [length_flat, hlen]; omega)]
   have hpost : ∀ ans, Good (writeHash u ans) N C (KM (answerBytes 16 ans)) := by
     intro ans
-    refine hK ans _ ⟨Glob_writeHash (hu.glob _ _ _ hG) ans _ h12 (by decide), ?_, ?_, ?_, ?_, by simp, ?_⟩
+    refine hK ans _ ⟨Glob_writeHash (hu.glob _ _ _ hG) ans _ h12 (by decide), ?_, ?_, ?_, ?_, by simp,
+      fun h => absurd h (by simp), ?_⟩
     · intro p hp; rw [writeHash_getReg]; exact hK' p (by simpa [preK] using hp)
     · simp only [routeReg, routeIn, if_true]
       rw [writeHash_getReg, hu.keep .x22 (by simp [forsKeep])]; exact h22
     · exact (writeHash_at0 _ ans _ h12 (by omega)).trans (vw0_answer ans).symm
-    · rw [show (0xE8 : Nat) = 0xE0 + 8 from rfl]
+    · rw [show (0x128 : Nat) = 0x120 + 8 from rfl]
       exact (writeHash_at8 _ ans _ h12 (by omega)).trans (vw1_answer ans).symm
     · refine ⟨t, ht, ?_⟩
       rw [writeHash_pc, hu.pc rfl, pcOf_add4]; rfl
-  have h3 := Good.hash (K := KM) (hu.ecall rfl) (hK' (.x5, 0) (by simp [a6K, gkF, baseK]))
+  have h3 := Good.hashP (x := rootsInput d.idx roots) (K := KM) (fmt_th _ _ _ _ _ _ (by decide) (by decide))
+    (hu.ecall rfl) (hK' (.x5, 0) (by simp [a6K, gkF, baseK]))
     (hashArgs_ofNat _ _ _ _ h10 h11 h12 (by omega) (by omega) (by omega) (by decide)) hin hpost
   rw [pad64_rootsInput _ _ hlen hvs, blocks_q] at h3
   exact Good.steps' hu.steps h3 (by simp [specRoots]) (by simp [specRoots])

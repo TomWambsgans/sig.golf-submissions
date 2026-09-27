@@ -11,9 +11,9 @@ lazy random oracle, succeed with probability at least `1 - 2^-256`.
 
 1. The `allSucceed` bit of `allMessages` is the conjunction fold (`foldAll`) of the success bits
    of the honest pipelines (`allSucceed_allMessages`).
-2. Each success bit is the abstract honest game relabelled by `padQ` (`success_honest_eq_game`).
+2. Each success bit is the abstract honest game relabelled by `fmtQ` (`success_honest_eq_game`).
 3. The abstract game only makes `Honest` queries; there are finitely many. Restricted to that
-   finite domain `HD`, the whole fold is a relabelling by the injective `padQ ∘ val`, so the
+   finite domain `HD`, the whole fold is a relabelling by the injective `fmtQ ∘ val`, so the
    organizer's lazy oracle on `Query` is the lazy oracle on `HD` (`run'_relabel`).
 4. On a finite domain the lazy oracle is the eager one; a union bound over messages then bounds the
    failure probability by the sum of the per-message failure probabilities
@@ -69,7 +69,7 @@ theorem foldAll_relabel {ι ι' R κ : Type} (f : ι → ι') (L : List κ)
 abbrev HD := {x : List UInt8 // Equiv.Honest x}
 
 theorem honest_length_le (x : List UInt8) (h : Equiv.Honest x) : x.length ≤ 704 := by
-  rw [h.2]
+  rw [h.2.1]
   unfold Equiv.tagLen
   split <;> omega
 
@@ -79,8 +79,7 @@ instance : Finite HD :=
 noncomputable instance : Fintype HD := Fintype.ofFinite HD
 
 theorem honest_witness : Equiv.Honest (1 :: List.replicate 63 0) := by
-  refine ⟨rfl, ?_⟩
-  rfl
+  refine ⟨rfl, rfl, fun h => absurd h (by decide)⟩
 
 /-- Restrict an abstract input to the honest domain (a fixed honest input otherwise). -/
 noncomputable def toHD (x : List UInt8) : HD := by
@@ -92,11 +91,11 @@ theorem val_toHD (x : List UInt8) (h : Equiv.Honest x) : (toHD x).val = x := by
   rw [dif_pos h]
 
 /-- The organizer query of an honest input. -/
-def encHD (x : HD) : Query := Equiv.padQ x.val
+def encHD (x : HD) : Query := Equiv.fmtQ x.val
 
 theorem encHD_injective : Function.Injective encHD := by
   intro x y h
-  exact Subtype.ext (Equiv.padQ_injOn x.2 y.2 h)
+  exact Subtype.ext (Equiv.fmtQ_injOn x.2 y.2 h)
 
 /-- The abstract honest game on the honest domain. -/
 noncomputable def gameHD (sk : SecretKey) (m : Message) :

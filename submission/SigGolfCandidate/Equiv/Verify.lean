@@ -41,7 +41,7 @@ theorem foldlM_congr_mem {m : Type → Type} [Monad m] {α β : Type} (l : List 
 section fold
 
 variable (node : Ref.NodeFmt) (hashNode : Nat → Nat → Digest → Digest → AComp Digest)
-  (hnode : ∀ lam j l r, Ref.hash16 (node lam j (dv l) (dv r)) = dv <$> relabel padQ (hashNode lam j l r))
+  (hnode : ∀ lam j l r, Ref.hash16 (node lam j (dv l) (dv r)) = dv <$> relabel fmtQ (hashNode lam j l r))
 
 include hnode in
 theorem foldPath_aux (leaf : Nat) (sib : Nat → Digest) (G : Nat → Digest → AComp Digest)
@@ -53,7 +53,7 @@ theorem foldPath_aux (leaf : Nat) (sib : Nat → Digest) (G : Nat → Digest →
     (List.range n).foldlM (fun v lam =>
       if leaf / 2 ^ lam % 2 = 1 then Ref.hash16 (node (lam + 1) (leaf / 2 ^ (lam + 1)) (ps.getD lam []) v)
       else Ref.hash16 (node (lam + 1) (leaf / 2 ^ (lam + 1)) v (ps.getD lam []))) (dv v) =
-      dv <$> relabel padQ (G n v) := by
+      dv <$> relabel fmtQ (G n v) := by
   induction n with
   | zero => simp [hG0]
   | succ n ih =>
@@ -74,7 +74,7 @@ theorem foldPath_eq (leaf : Nat) (sib : Nat → Digest) (G : Nat → Digest → 
       else hashNode (l + 1) (leaf / 2 ^ (l + 1)) cur (sib l))
     (n : Nat) (v : Digest) :
     Ref.foldPath node leaf (dv v) ((List.range n).map fun l => dv (sib l)) =
-      dv <$> relabel padQ (G n v) := by
+      dv <$> relabel fmtQ (G n v) := by
   unfold Ref.foldPath
   simp only [List.length_map, List.length_range]
   exact foldPath_aux node hashNode hnode leaf sib G hG0 hG _ n (fun l hl => by
@@ -170,7 +170,7 @@ theorem ftsRoot_eq (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (secret : D
     (path : Fin SphincsSecurity.ftsTreeHeight → Digest) :
     Ref.ftsRoot tree index leaf (dv secret) ((List.range SphincsSecurity.ftsTreeHeight).map fun l =>
         dv (if h : l < SphincsSecurity.ftsTreeHeight then path ⟨l, h⟩ else 0)) =
-      dv <$> relabel padQ (do
+      dv <$> relabel fmtQ (do
         let value ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree leaf secret
         SphincsSecurity.Concrete.ftsFold 0 index tree leaf path SphincsSecurity.ftsTreeHeight value) := by
   unfold Ref.ftsRoot
@@ -185,7 +185,7 @@ theorem ftsRoot_eq (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (secret : D
 
 theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7756) (d : SphincsSecurity.MessageDigest) :
     Ref.verifyFors wl d.toNat =
-      (fun roots : FtsTree → Digest => List.ofFn fun k => dv (roots k)) <$> relabel padQ
+      (fun roots : FtsTree → Digest => List.ofFn fun k => dv (roots k)) <$> relabel fmtQ
         (sequenceFin (m := AComp) fun tree => do
           let leaf := SphincsSecurity.Concrete.digestLeaves d (SphincsSecurity.Concrete.ftsIndexOf tree)
           let value ← SphincsSecurity.Concrete.ftsLeafHash 0 (SphincsSecurity.Concrete.digestIndex d)
@@ -194,7 +194,7 @@ theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7756) (d : SphincsSecur
             ((sigOfWit wl).ftsPath tree) SphincsSecurity.ftsTreeHeight value) := by
   unfold Ref.verifyFors
   rw [relabel_sequenceFin, show Ref.ftsTrees = SphincsSecurity.ftsTrees - 1 from rfl]
-  rw [foldlM_range_seq (fun tree : FtsTree => relabel padQ (do
+  rw [foldlM_range_seq (fun tree : FtsTree => relabel fmtQ (do
       let leaf := SphincsSecurity.Concrete.digestLeaves d (SphincsSecurity.Concrete.ftsIndexOf tree)
       let value ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0
         (SphincsSecurity.Concrete.digestIndex d) tree leaf ((sigOfWit wl).ftsSecret tree)
@@ -216,14 +216,14 @@ theorem verifyFors_eq (wl : List Byte) (hl : wl.length = 7756) (d : SphincsSecur
 theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 7756) (lay : Layer) (tree : TreeIndex)
     (leaf : LeafIndex) (enc : Encoding) :
     Ref.verifyLeaf wl lay tree leaf (List.ofFn fun i => (enc i).val) =
-      dv <$> relabel padQ (do
+      dv <$> relabel fmtQ (do
         let endpoints ← sequenceFin (m := AComp) fun c =>
           SphincsSecurity.Concrete.recoverChain 0 lay tree leaf c (enc c)
             (((sigOfWit wl).layers lay).chainValues c)
         SphincsSecurity.Concrete.leafHash 0 lay tree leaf endpoints) := by
   unfold Ref.verifyLeaf
   rw [show Ref.nChains = SphincsSecurity.numChains from rfl]
-  rw [foldlM_range_seq (fun c : ChainIndex => relabel padQ
+  rw [foldlM_range_seq (fun c : ChainIndex => relabel fmtQ
       (SphincsSecurity.Concrete.recoverChain (m := AComp) 0 lay tree leaf c (enc c)
         (((sigOfWit wl).layers lay).chainValues c))) _ dv (fun j hj => by
     rw [getD_ofFn, dif_pos hj, witChain_eq wl hl lay ⟨j, hj⟩]
@@ -241,7 +241,7 @@ theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 7756) (lay : Layer) (tr
 theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 7756) (index : Index) (n : Nat)
     (hn : n ≤ 7) (M : Digest) :
     Ref.verifyLayers wl index n (dv M) =
-      Option.map dv <$> relabel padQ
+      Option.map dv <$> relabel fmtQ
         (SphincsSecurity.Concrete.verifyLayers (m := AComp) 0 index (sigOfWit wl) n M) := by
   induction n generalizing M with
   | zero => simp [Ref.verifyLayers, SphincsSecurity.Concrete.verifyLayers]
@@ -286,7 +286,7 @@ theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 7756) (index : Index)
 `⟨pk, 0⟩` and the decoded witness. -/
 theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
     Ref.verifyRef m pk w =
-      relabel padQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (witDec w)) := by
+      relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (witDec w)) := by
   have hl : (Ref.toList w).length = 7756 := Ref.length_toList w
   unfold Ref.verifyRef Ref.verifyList SphincsSecurity.Concrete.verify SphincsSecurity.Concrete.verifyCore
   rw [countersOk_eq _ hl]
@@ -319,14 +319,14 @@ theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
 /-- **verify**, with the witness decoded through the signature codec. -/
 theorem verifyRef_eq' (m : Bytes 32) (pk : Bytes 16) (w : Bytes 7756) :
     Ref.verifyRef m pk w =
-      relabel padQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m
+      relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m
         (sigCodec (Ref.unexpandRef w))) := by
   rw [verifyRef_eq, witDec_eq]
 
 /-- **verify** on a signature (through `expandRef`). -/
 theorem verifySigRef_eq (m : Bytes 32) (pk : Bytes 16) (σ : Bytes 7756) :
     Ref.verifySigRef m pk σ =
-      relabel padQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (sigCodec σ)) := by
+      relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) ⟨pk, 0⟩ m (sigCodec σ)) := by
   rw [Ref.verifySigRef, verifyRef_eq, witDec_expandRef]
 
 end SigGolfCandidate.Equiv

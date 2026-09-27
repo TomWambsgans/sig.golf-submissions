@@ -76,15 +76,15 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
   witDec_expandFn := witDec_expandRef
   pkEnc := pkEnc
   cacheOf := fun _ => 0
-  pad := padQ
+  pad := fmtQ
   Honest := Honest
-  pad_injOn := padQ_injOn
+  pad_injOn := fmtQ_injOn
   honest_head := honest_head
   qEnc := SigGolfCandidate.Bridge.defaultQEnc
   qEnc_injective := SigGolfCandidate.Bridge.defaultQEnc_injective
   keygen_eq (sk : Bytes 32) := by
     have e1 : Ref.countCalls (Ref.keygenRef sk) = (fun p => ((p.1.1.root : Bytes 16), p.2)) <$>
-        Ref.countCalls (relabel padQ (SphincsSecurity.Seeded.keygenFromSeed sk)) := by
+        Ref.countCalls (relabel fmtQ (SphincsSecurity.Seeded.keygenFromSeed sk)) := by
       rw [keygenRef_eq, countCalls_map]
     rw [R.keygen sk, e1, Functor.map_map]
     rfl
@@ -94,11 +94,11 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
     have hs' : sk'.seed = sk := hs
     have e1 : Ref.countCalls (Ref.signRef sk m) =
         (fun p => (Option.map sigCodec.symm p.1, p.2)) <$>
-          Ref.countCalls (relabel padQ (SphincsSecurity.Seeded.sign (m := AComp) sk' m)) := by
+          Ref.countCalls (relabel fmtQ (SphincsSecurity.Seeded.sign (m := AComp) sk' m)) := by
       rw [← hs', signRef_eq sk' hP m, countCalls_map]
     rw [R.sign, e1, Functor.map_map]
     rfl
-  sign_honest seed pk sk' _ m := hq_sign sk' m
+  sign_honest seed pk sk' h m := hq_sign sk' (keygen_support _ _ h).2.1 m
   expand_eq m pk σ := R.expand m pk σ
   verify_eq seed pk sk' h m (w : Bytes 7756) := by
     obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
@@ -106,11 +106,13 @@ noncomputable def zeroPadAssumptions (security : SigGolfCandidate.Bridge.EventSe
     have e : (⟨pkEnc pk, 0⟩ : SphincsSecurity.PublicKey) = pk := by
       rw [hpk']; rfl
     have e2 : Ref.countCalls (Ref.verifyRef m (pkEnc pk) w) =
-        Ref.countCalls (relabel padQ (SphincsSecurity.Concrete.verify (m := AComp) pk m (witDec w))) := by
+        Ref.countCalls (relabel fmtQ (SphincsSecurity.Concrete.verify (m := AComp) pk m (witDec w))) := by
       rw [verifyRef_eq, e]
     rw [R.verify m (pkEnc pk) w, e2]
     rfl
-  verify_honest seed pk sk' _ m σ := hq_verify pk m σ
+  verify_honest seed pk sk' h m σ := by
+    obtain ⟨-, -, hpk⟩ := keygen_support _ _ h
+    exact hq_verify pk (by rw [show pk = _ from hpk]) m σ
 
 /-- **Security of the submission**, from (A) abstract security, the signing budget, and the four
 bytecode refinement theorems. -/

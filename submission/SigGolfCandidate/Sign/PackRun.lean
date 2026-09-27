@@ -12,11 +12,11 @@ import SigGolfCandidate.Sign.PackC8
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
-/-- The whole pack (instructions 614 .. 3394). -/
-theorem pack_run : PackStep 614 3395 0 660 2781 :=
-  ((((((((packStep_614.comp packStep_1053 (by norm_num)).comp packStep_1298 (by norm_num)).comp packStep_1651 (by norm_num)).comp packStep_1983 (by norm_num)).comp packStep_2249 (by norm_num)).comp packStep_2668 (by norm_num)).comp packStep_2867 (by norm_num)).comp packStep_3286 (by norm_num))
+/-- The whole pack (instructions 611 .. 3391). -/
+theorem pack_run : PackStep 611 3392 0 660 2781 :=
+  ((((((((packStep_611.comp packStep_1050 (by norm_num)).comp packStep_1295 (by norm_num)).comp packStep_1648 (by norm_num)).comp packStep_1980 (by norm_num)).comp packStep_2246 (by norm_num)).comp packStep_2665 (by norm_num)).comp packStep_2864 (by norm_num)).comp packStep_3283 (by norm_num))
 
 -- The final HALT.
-sym_block blk3395 := symRun { noAlias := true } seg3395 (pcOf 3395) 4
+sym_block blk3392 := symRun { noAlias := true } seg3392 (pcOf 3392) 4
 
 end SigGolfCandidate.Sign

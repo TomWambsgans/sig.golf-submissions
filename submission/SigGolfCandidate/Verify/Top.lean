@@ -8,7 +8,7 @@ namespace SigGolfCandidate.Verify
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- The cycle bound of the verify program (every run, honest or not). -/
-def cycleBound : Nat := 16514
+def cycleBound : Nat := 15494
 
 /-- A step bound (fuel) sufficient for every run. -/
 def fuelBound : Nat := 40100
@@ -76,11 +76,11 @@ theorem after_fors (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7756
   exact roots_good d roots _ _ _ (fun ans t ht => after_roots d.wl d.pk hpk hwl d.idx (d_idx_lt d) _ t ht) t ht
 
 theorem treesCost_val : treesCost 1 13 = 2601 := by decide
-theorem layersCost_val : layersCost 7 = 13608 := by decide
+theorem layersCost_val : layersCost 7 = 12588 := by decide
 
 theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 7756)
     (s : MachineState) (hs : DigestOut d s) :
-    Good s 40000 (13608 + 37 + 2601 + 178 + 8 + 34)
+    Good s 40000 (12588 + 37 + 2601 + 178 + 8 + 34)
       (cc (if (!admissible (d.A % 2 ^ 184)) = true then pure false else do
         let roots ← verifyFors d.wl (d.A % 2 ^ 184)
         let M ← hash16 (rootsInput (idxOf (d.A % 2 ^ 184)) roots)
@@ -112,10 +112,11 @@ theorem after_digest (d : DCtx) (hpk : d.pk.length = 16) (hwl : d.wl.length = 77
           (by simp only [cc_bind]))
         13 1 rfl (le_refl _) _ t ht)) _ _ (hpost ans)
     have hsl : (witFtsSecret d.wl 0).length = 16 := by unfold witFtsSecret; apply length_slice16; omega
-    have h3 := Good.hash (K := fun v => cc (foldPath (ftsNodeInput 0 d.idx) (d.u 0) v
-      (witFtsPath d.wl 0)) Kr) hf h5 hv hin H
+    have h3 := Good.hashP (x := ftsLeafInput 0 d.idx (d.u 0) (witFtsSecret d.wl 0))
+      (K := fun v => cc (foldPath (ftsNodeInput 0 d.idx) (d.u 0) v
+      (witFtsPath d.wl 0)) Kr) (fmt_th _ _ _ _ _ _ (by decide) (by decide)) hf h5 hv hin H
     rw [pad64_ftsLeafInput _ _ _ _ hsl, blocks_q] at h3
-    exact Good.steps' (N' := 40000) (C' := 13608 + 37 + 2601 + 178 + 8 + 34) hst h3 (by omega)
+    exact Good.steps' (N' := 40000) (C' := 12588 + 37 + 2601 + 178 + 8 + 34) hst h3 (by omega)
       (by rw [treesCost_val, layersCost_val])
 
 theorem main_good (ml pkl wl : List Byte) (hml : ml.length = 32) (hpk : pkl.length = 16)
@@ -134,7 +135,8 @@ theorem main_good (ml pkl wl : List Byte) (hml : ml.length = 32) (hpk : pkl.leng
     simp only [cc_pure]
     have H := fun a => after_digest ⟨wl, pkl, a⟩ hpk hwl _ (hpost a)
     have hrho : (witRho wl).length = 16 := by unfold witRho; apply length_slice16; omega
-    have h3 := Good.hashH hf h5 hv hin H
+    have h3 := Good.hashHP (x := digestInput (witRho wl) ml) (fmt_th _ _ _ _ _ _ (by decide) (by decide))
+      hf h5 hv hin H
     rw [pad64_digestInput _ _ hrho hml, blocks_q] at h3
     exact Good.steps' hst (h3.congr rfl) (by unfold fuelBound; omega) (by unfold cycleBound; omega)
 

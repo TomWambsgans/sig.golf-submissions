@@ -5,20 +5,20 @@ import SigGolfCandidate.Sign.PackC6
 namespace SigGolfCandidate.Sign
 open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
-/-! Pack chunk 7: instructions 2867 .. 3285, signature dwords 560 .. 639. -/
+/-! Pack chunk 7: instructions 2864 .. 3282, signature dwords 560 .. 639. -/
 
 set_option maxRecDepth 100000
 
-sym_block blk2867 := symRun { noAlias := true } seg2867 (pcOf 2867) 420
+sym_block blk2864 := symRun { noAlias := true } seg2864 (pcOf 2864) 420
 
-kernel_theorem blk2867_pc : ∀ t : MachineState, (blk2867.res.toState t).pc = pcOf 3286
-kernel_theorem blk2867_addrs : ∀ t : MachineState, blk2867.res.st.mem.map (fun p => p.1.eval t) =
+kernel_theorem blk2864_pc : ∀ t : MachineState, (blk2864.res.toState t).pc = pcOf 3283
+kernel_theorem blk2864_addrs : ∀ t : MachineState, blk2864.res.st.mem.map (fun p => p.1.eval t) =
     ((List.range 80).map (fun i => BitVec.ofNat 64 (packD + 8 * 560 + 8 * i))).reverse
-kernel_theorem blk2867_words : ∀ t : MachineState,
-    (blk2867.res.toState t).readWords (BitVec.ofNat 64 (packD + 8 * 560)) 80 =
+kernel_theorem blk2864_words : ∀ t : MachineState,
+    (blk2864.res.toState t).readWords (BitVec.ofNat 64 (packD + 8 * 560)) 80 =
       ((packTab.drop 560).take 80).map (packDW t)
 
-theorem packStep_2867 : PackStep 2867 3286 560 80 419 :=
-  packStep_of blk2867 codeAt_2867 rfl blk2867_pc rfl rfl blk2867_words blk2867_addrs (by norm_num)
+theorem packStep_2864 : PackStep 2864 3283 560 80 419 :=
+  packStep_of blk2864 codeAt_2864 rfl blk2864_pc rfl rfl blk2864_words blk2864_addrs (by norm_num)
 
 end SigGolfCandidate.Sign

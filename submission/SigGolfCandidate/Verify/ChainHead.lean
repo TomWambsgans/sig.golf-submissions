@@ -118,7 +118,8 @@ theorem entIdx_spec (c : CCtx) (i : Nat) (hi : i < 42) :
 
 def tabOk (lay i : Nat) : Bool :=
   decide (tabAddr lay i % 4 = 0) && decide (0x1000 ≤ tabAddr lay i) &&
-    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 399)) && decide (bVal lay i < 2 ^ 32) &&
+    decide (tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 387)) && decide (bVal lay i < 2 ^ 32) &&
+    decide (nextPc' lay i = s1Pc lay i + 22) &&
     (!(decide (i + 1 < 42) && !hasPrep (i + 1)) || bVal lay (i + 1) == bVal lay i)
 
 def tabOkAll : Bool := (List.range 7).all fun lay => (List.range 42).all fun i => tabOk lay i
@@ -130,12 +131,13 @@ theorem tabOk_at (lay i : Nat) (hl : lay < 7) (hi : i < 42) : tabOk lay i = true
     (List.mem_range.mpr hi)
 
 theorem tabOk_spec {lay i : Nat} (h : tabOk lay i = true) :
-    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 399) ∧
-      bVal lay i < 2 ^ 32 ∧ (i + 1 < 42 → hasPrep (i + 1) = false → bVal lay (i + 1) = bVal lay i) := by
+    tabAddr lay i % 4 = 0 ∧ 0x1000 ≤ tabAddr lay i ∧ tabAddr lay i + 1024 ≤ 0x1000 + 4 * (256 * 387) ∧
+      bVal lay i < 2 ^ 32 ∧ (i + 1 < 42 → hasPrep (i + 1) = false → bVal lay (i + 1) = bVal lay i) ∧
+      nextPc' lay i = s1Pc lay i + 22 := by
   simp only [tabOk, Bool.and_eq_true, decide_eq_true_eq, Bool.or_eq_true, Bool.not_eq_true',
     Bool.and_eq_false_imp, beq_iff_eq] at h
-  obtain ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩ := h
-  refine ⟨h1, h2, h3, h4, fun ha hb => ?_⟩
+  obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h6⟩, h5⟩ := h
+  refine ⟨h1, h2, h3, h4, fun ha hb => ?_, h6⟩
   rcases h5 with h5 | h5
   · have := h5 (by simpa using ha); rw [hb] at this; simp at this
   · exact h5
@@ -155,7 +157,7 @@ theorem rOf_next (c : CCtx) (i : Nat) (hl : c.lay < 7) (hi : i + 1 < 42)
     cases h1 : isFirst (i + 1) <;> cases h2 : isSingle (i + 1) <;> simp [h1, h2] at hp ⊢
   obtain ⟨hf1, hs1⟩ := hp2
   unfold rOf entIdx
-  rw [(tabOk_spec (tabOk_at c.lay i hl (by omega))).2.2.2.2 hi hp]
+  rw [(tabOk_spec (tabOk_at c.lay i hl (by omega))).2.2.2.2.1 hi hp]
   simp only [hs, hs1, pf, hf, hf1, if_true, if_false, Bool.false_eq_true, Nat.add_sub_cancel]
 
 /-! ## Word arithmetic -/
@@ -186,7 +188,7 @@ theorem Glob_frame {gk : List (Reg × Word)} {wl pk : List Byte} {s t : MachineS
 /-! ## Heads -/
 
 def headCost (lay i : Nat) : Nat :=
-  3 + (if hasPrep i then 3 else 0) + (if hasPrep i && hasLui lay i then 1 else 0)
+  4 + (if hasPrep i then 3 else 0) + (if hasPrep i && hasLui lay i then 1 else 0)
 
 theorem PRes.toState_pc_some (r : PRes) (s : MachineState) (e : E) (h : r.spc = some e) :
     (r.toState s).pc = e.eval s := by
@@ -194,22 +196,23 @@ theorem PRes.toState_pc_some (r : PRes) (s : MachineState) (e : E) (h : r.spc = 
 
 theorem headExp_x1 (lay i : Nat) : (headExp lay i).st.regs.get .x1 = ldE (chainAddr lay i) := by
   simp only [headExp]
-  rw [RegFile.get_set_ne _ _ (by decide), RegFile.get_set_self _ _ (by decide)]
+  rw [RegFile.get_set_ne _ _ (by decide), RegFile.get_set_ne _ _ (by decide),
+    RegFile.get_set_self _ _ (by decide)]
 
 theorem headExp_x2 (lay i : Nat) : (headExp lay i).st.regs.get .x2 = ldE (chainAddr lay i + 8) := by
   simp only [headExp]
-  rw [RegFile.get_set_self _ _ (by decide)]
+  rw [RegFile.get_set_ne _ _ (by decide), RegFile.get_set_self _ _ (by decide)]
 
 theorem headExp_x14 (lay i : Nat) (h : hasPrep i = true) : (headExp lay i).st.regs.get .x14 = rE lay i := by
   simp only [headExp, h, if_true]
   rw [RegFile.get_set_ne _ _ (by decide), RegFile.get_set_ne _ _ (by decide),
-    RegFile.get_set_self _ _ (by decide)]
+    RegFile.get_set_ne _ _ (by decide), RegFile.get_set_self _ _ (by decide)]
 
 theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42) (acc : List Val)
     (hchk : chainCheck c.lay i = true) (s : MachineState) (hs : HeadInv c i acc s) :
     ∃ t, Steps image s (headCost c.lay i) (headCost c.lay i) t ∧ EntInv c i acc t := by
   obtain ⟨hrun, hok, hkn, hkeep⟩ := okC_spec (check_head hchk (by omega))
-  obtain ⟨hG, hK, hR, hCB, hF0, hF8, hLB, hlen, hvs, ⟨tt, -, hpc⟩, hx14⟩ := hs
+  obtain ⟨hG, hK, hR, hCB, hZ, hLB, hlen, hvs, ⟨tt, -, hpc⟩, hx14⟩ := hs
   rw [headPc, if_neg (by omega)] at hpc
   obtain ⟨hst, -, hglob⟩ := run_post hrun hok s hpc hK (by simp [headExp])
   set r := headExp c.lay i with hr
@@ -217,7 +220,7 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
   rw [KnownOK_append] at hK'
   have hkeep' := keepB_ok hkeep s
   have hl := hc.1
-  obtain ⟨ht4, ht1, htb, hB, -⟩ := tabOk_spec (tabOk_at c.lay i hl hi)
+  obtain ⟨ht4, ht1, htb, hB, -, -⟩ := tabOk_spec (tabOk_at c.lay i hl hi)
   have hmem : r.st.mem = [] := by simp [hr, headExp]
   have fr : ∀ A, (r.toState s).getMem A = s.getMem A := by
     intro A; rw [PRes.toState_getMem, hmem]; rfl
@@ -255,7 +258,7 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
     unfold chainAddr witLayerOff; omega
   have hwl := hc.2.2.2.1
   refine ⟨r.toState s, by simpa [hr, headExp, headCost] using hst, hglob _ _ hG, hK'.1, ?_, ⟨?_, ?_⟩,
-    ⟨hx15, hR14.1⟩, by rw [fr]; exact hF0, by rw [fr]; exact hF8,
+    ⟨hx15, hR14.1⟩, ⟨by rw [fr]; exact hZ.1, by rw [fr]; exact hZ.2⟩,
     LBOk_frame hLB (fun j _ => ⟨fr _, fr _⟩), hlen, hvs, ?_, ?_, ?_⟩
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hR
     refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> (rw [hkeep' _ (by simp [headKeep])]; assumption)
@@ -279,12 +282,11 @@ theorem head_step (c : CCtx) (hc : c.ok) (i : Nat) (hi1 : 1 ≤ i) (hi : i < 42)
 /-! ## The checkpoint of the next chain -/
 
 theorem headInv_next (c : CCtx) (i : Nat) (hl : c.lay < 7) (hi : i < 42) (acc : List Val)
-    (t : MachineState) (hG : Glob gkL c.wl c.pk t) (hK : KnownOK (chK c.lay 0xE0) t) (hR : c.Regs t)
-    (hCB : CBOk c t) (hF0 : t.getMem (BitVec.ofNat 64 0xF0) = 0)
-    (hF8 : t.getMem (BitVec.ofNat 64 0xF8) = 0) (hLB : LBOk acc t) (hlen : acc.length = i + 1)
+    (t : MachineState) (hG : Glob gkL c.wl c.pk t) (hK : KnownOK (chK c.lay) t) (hR : c.Regs t)
+    (hCB : CBOk c t) (hZ : CBZ t) (hLB : LBOk acc t) (hlen : acc.length = i + 1)
     (hvs : ∀ v ∈ acc, v.length = 16) (hB : RB c i t) (hpc : t.pc = pcOf (nextPc' c.lay i)) :
     HeadInv c (i + 1) acc t := by
-  refine ⟨hG, KnownOK_append.mpr ⟨hK, fun p hp => ?_⟩, hR, hCB, hF0, hF8, hLB, hlen, hvs,
+  refine ⟨hG, KnownOK_append.mpr ⟨hK, fun p hp => ?_⟩, hR, hCB, hZ, hLB, hlen, hvs,
     ⟨0, by omega, by rw [headPc, if_neg (by omega), Nat.add_sub_cancel]; exact hpc⟩,
     fun h1 h2 => by rw [rOf_next c i hl h1 h2]; exact hB.2⟩
   rw [List.mem_singleton.mp hp]
@@ -310,8 +312,9 @@ theorem entry_mem (s : MachineState) (dst A : Nat) (hd : dst + 16 < 2 ^ 64) (hA 
 
 theorem entry_run (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (hchk : chainCheck c.lay i = true)
     (s : MachineState) (hpc : s.pc = pcOf (entryIdx c.lay i (entIdx c i))) :
-    Steps image s 3 3 ((entryRes c.lay i (dig c i)).toState s) := by
-  obtain ⟨ht4, ht1, htb, -, -⟩ := tabOk_spec (tabOk_at c.lay i hc.1 hi)
+    Steps image s (if dig c i < 7 then 3 else 4) (if dig c i < 7 then 3 else 4)
+      ((entryRes c.lay i (dig c i)).toState s) := by
+  obtain ⟨ht4, ht1, htb, -, -, -⟩ := tabOk_spec (tabOk_at c.lay i hc.1 hi)
   obtain ⟨he, hd⟩ := entIdx_spec c i hi
   have hsn : nEnt i ≤ 64 := by unfold nEnt; split <;> omega
   have hent : entriesCheck c.lay i = true := by
@@ -326,21 +329,22 @@ theorem entry_run (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (hchk : chainCh
 theorem entry_lt7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val)
     (hchk : chainCheck c.lay i = true) (s : MachineState) (hs : EntInv c i acc s) (hd : dig c i < 7) :
     ∃ t, Steps image s 3 3 t ∧ StepInv c i acc (dig c i + 1) (witChain c.wl c.lay i) t := by
-  obtain ⟨hG, hK, hR, hCB, hB, hF0, hF8, hLB, hlen, hvs, hx1, hx2, hpc⟩ := hs
+  obtain ⟨hG, hK, hR, hCB, hB, hZ, hLB, hlen, hvs, hx1, hx2, hpc⟩ := hs
   have hst := entry_run c hc i hi hchk s hpc
+  rw [if_pos hd] at hst
   set t := (entryRes c.lay i (dig c i)).toState s with ht
   have hreg : ∀ x, t.getReg x = s.getReg x := fun x => by
     rw [ht, Result.toState_getReg]; exact RegFile.init_get_eval s x
   have hmem : ∀ A, A < 2 ^ 64 → t.getMem (BitVec.ofNat 64 A) =
-      if A = 0xE8 then s.getReg .x2 else if A = 0xE0 then s.getReg .x1 else
+      if A = 0xF8 then s.getReg .x2 else if A = 0xF0 then s.getReg .x1 else
         s.getMem (BitVec.ofNat 64 A) := fun A hA => by
     rw [ht, Result.toState_getMem]; simp only [entryRes, if_pos hd]
-    exact entry_mem s 0xE0 A (by omega) hA
-  have fr : ∀ A, A < 2 ^ 64 → A ≠ 0xE0 → A ≠ 0xE8 → t.getMem (BitVec.ofNat 64 A) =
+    exact entry_mem s 0xF0 A (by omega) hA
+  have fr : ∀ A, A < 2 ^ 64 → A ≠ 0xF0 → A ≠ 0xF8 → t.getMem (BitVec.ofNat 64 A) =
       s.getMem (BitVec.ofNat 64 A) := fun A hA h1 h2 => by
     rw [hmem A hA, if_neg h2, if_neg h1]
   refine ⟨t, hst, Glob_frame hG hreg (fun A hA hp => fr A hA ?_ ?_),
-    fun p hp => (hreg _).trans (hK p hp), ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hlen, hvs,
+    fun p hp => (hreg _).trans (hK p hp), ?_, ?_, ?_, ⟨?_, ?_⟩, ?_, ?_, ?_, hlen, hvs,
     length_witChain c hc i hi, ?_⟩
   · rcases hp with h | h | h | h <;> simp_all [pSlots] <;> omega
   · rcases hp with h | h | h | h <;> simp_all [pSlots] <;> omega
@@ -349,10 +353,10 @@ theorem entry_lt7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val
   · exact ⟨by rw [fr _ (by omega) (by omega) (by omega)]; exact hCB.1,
       by rw [fr _ (by omega) (by omega) (by omega)]; exact hCB.2⟩
   · exact ⟨(hreg _).trans hB.1, (hreg _).trans hB.2⟩
+  · rw [fr _ (by omega) (by omega) (by omega)]; exact hZ.1
+  · rw [fr _ (by omega) (by omega) (by omega)]; exact hZ.2
   · rw [hmem _ (by omega)]; simpa using hx1
   · rw [hmem _ (by omega)]; simpa using hx2
-  · rw [fr _ (by omega) (by omega) (by omega)]; exact hF0
-  · rw [fr _ (by omega) (by omega) (by omega)]; exact hF8
   · exact LBOk_frame hLB (fun j hj => by
       rw [hlen] at hj
       exact ⟨fr _ (by omega) (by omega) (by omega), fr _ (by omega) (by omega) (by omega)⟩)
@@ -361,9 +365,10 @@ theorem entry_lt7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val
 
 theorem entry_7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val)
     (hchk : chainCheck c.lay i = true) (s : MachineState) (hs : EntInv c i acc s) (hd : dig c i = 7) :
-    ∃ t, Steps image s 3 3 t ∧ HeadInv c (i + 1) (acc ++ [witChain c.wl c.lay i]) t := by
-  obtain ⟨hG, hK, hR, hCB, hB, hF0, hF8, hLB, hlen, hvs, hx1, hx2, hpc⟩ := hs
+    ∃ t, Steps image s 4 4 t ∧ HeadInv c (i + 1) (acc ++ [witChain c.wl c.lay i]) t := by
+  obtain ⟨hG, hK, hR, hCB, hB, hZ, hLB, hlen, hvs, hx1, hx2, hpc⟩ := hs
   have hst := entry_run c hc i hi hchk s hpc
+  rw [if_neg (by omega)] at hst
   set t := (entryRes c.lay i (dig c i)).toState s with ht
   have hreg : ∀ x, t.getReg x = s.getReg x := fun x => by
     rw [ht, Result.toState_getReg]; exact RegFile.init_get_eval s x
@@ -377,16 +382,17 @@ theorem entry_7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val)
     rw [hmem A hA, if_neg h2, if_neg h1]
   have hw := length_witChain c hc i hi
   refine ⟨t, hst, headInv_next c i hc.1 hi _ t
-    (Glob_frame hG hreg (fun A hA hp => fr A hA ?_ ?_)) (fun p hp => (hreg _).trans (hK p hp))
-    ?_ ?_ ?_ ?_ ?_ (by simp [hlen]) ?_ ⟨(hreg _).trans hB.1, (hreg _).trans hB.2⟩ ?_⟩
+    (Glob_frame hG hreg (fun A hA hp => fr A hA ?_ ?_))
+    (fun p hp => (hreg _).trans (hK p (List.mem_append_left _ hp)))
+    ?_ ?_ ⟨?_, ?_⟩ ?_ (by simp [hlen]) ?_ ⟨(hreg _).trans hB.1, (hreg _).trans hB.2⟩ ?_⟩
   · rcases hp with h | h | h | h <;> simp_all [pSlots] <;> omega
   · rcases hp with h | h | h | h <;> simp_all [pSlots] <;> omega
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hR
     exact ⟨(hreg _).trans h1, (hreg _).trans h2, (hreg _).trans h3, (hreg _).trans h4, (hreg _).trans h5⟩
   · exact ⟨by rw [fr _ (by omega) (by omega) (by omega)]; exact hCB.1,
       by rw [fr _ (by omega) (by omega) (by omega)]; exact hCB.2⟩
-  · rw [fr _ (by omega) (by omega) (by omega)]; exact hF0
-  · rw [fr _ (by omega) (by omega) (by omega)]; exact hF8
+  · rw [fr _ (by omega) (by omega) (by omega)]; exact hZ.1
+  · rw [fr _ (by omega) (by omega) (by omega)]; exact hZ.2
   · refine LBOk_append (LBOk_frame hLB (fun j hj => ?_)) _ ?_ ?_
     · rw [hlen] at hj
       exact ⟨fr _ (by omega) (by omega) (by omega), fr _ (by omega) (by omega) (by omega)⟩
@@ -401,25 +407,14 @@ theorem entry_7 (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val)
 /-! ## Chain end -/
 
 theorem chain_end (c : CCtx) (hc : c.ok) (i : Nat) (hi : i < 42) (acc : List Val)
-    (hchk : chainCheck c.lay i = true) (v : Val) (s : MachineState) (hs : EndInv c i acc v s) :
-    ∃ t, Steps image s 1 1 t ∧ HeadInv c (i + 1) (acc ++ [v]) t := by
-  obtain ⟨hrun, hok, hkn, hkeep⟩ := okC_spec (check_end hchk)
-  obtain ⟨hG, hK, hR, hCB, hB, hF0, hF8, hLB, hlen, hvs, hv, hpc⟩ := hs
-  set r := endExp c.lay i with hr
-  obtain ⟨hst, -, hglob⟩ := run_post hrun hok s hpc hK (by simp [hr, endExp])
-  have hK' := knownB_ok hkn s
-  have hkeep' := keepB_ok hkeep s
-  have hmem : r.st.mem = [] := by simp [hr, endExp]
-  have fr : ∀ A, (r.toState s).getMem A = s.getMem A := by
-    intro A; rw [PRes.toState_getMem, hmem]; rfl
-  refine ⟨r.toState s, by simpa [hr, endExp] using hst, headInv_next c i hc.1 hi _ _ (hglob _ _ hG)
-    hK' (Regs_keep hR hkeep') ⟨by rw [fr]; exact hCB.1, by rw [fr]; exact hCB.2⟩
-    (by rw [fr]; exact hF0) (by rw [fr]; exact hF8) (LBOk_frame hLB (fun j _ => ⟨fr _, fr _⟩))
-    (by simp [hlen]) ?_ (RB_keep hB hkeep') ?_⟩
-  · intro w hw
-    rcases List.mem_append.mp hw with h | h
-    · exact hvs w h
-    · rw [List.mem_singleton.mp h]; exact hv
-  · rw [PRes.toState_pc _ _ (by simp [hr, endExp])]; simp only [hr, endExp]
+    (v : Val) (s : MachineState) (hs : EndInv c i acc v s) :
+    HeadInv c (i + 1) (acc ++ [v]) s := by
+  obtain ⟨hG, hK, hR, hCB, hB, hZ, hLB, hlen, hvs, hv, hpc⟩ := hs
+  have hn := (tabOk_spec (tabOk_at c.lay i hc.1 hi)).2.2.2.2.2
+  refine headInv_next c i hc.1 hi _ s hG hK hR hCB hZ hLB (by simp [hlen]) ?_ hB (by rw [hpc, hn])
+  intro w hw
+  rcases List.mem_append.mp hw with h | h
+  · exact hvs w h
+  · rw [List.mem_singleton.mp h]; exact hv
 
 end SigGolfCandidate.Verify

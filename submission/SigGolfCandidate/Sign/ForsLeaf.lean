@@ -105,7 +105,7 @@ theorem forsLeaf_tail (S : List Byte) (k idx u : Nat) (hk : k < 14) (hidx : idx 
     congrArg (· + 1) (words_th16 9 k idx 0 j s hs).1
   refine (Sim.steps hs1 (Sim.hash16_bind (W := 3) e1 x5
     (hashArgs_of x10 x11 x12 (by norm_num) (by norm_num) (by norm_num) (by omega) (by omega)
-      (by norm_num)) hq (fun a => ?_))).mono (by rw [hb]) (fun _ _ h => h)
+      (by norm_num)) hq (fmt_thInput _ _ _ _ _ _ (by decide)) (fun a => ?_))).mono (by rw [hb]) (fun _ _ h => h)
   set t2 := writeHash t1 a with ht2
   have f2 : Frame t1 t2 (fun x => 0x30000 + 16 * j ≤ x ∧ x < 0x30000 + 16 * j + 32) :=
     frame_writeHash t1 a _ x12 (by omega)
@@ -203,7 +203,7 @@ theorem forsLeaf_body (S : List Byte) (hS : S.length = 32) (k idx u : Nat) (hk :
     simp [pad64, Query.blocks, (words_ftsPrfInput S hS k idx j).1]
   refine (Sim.steps hs1 (Sim.hash16_bind (W := 3 + 4 + 15) e1 x5
     (hashArgs_of x10 x11 x12 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
-      (by norm_num)) hq1 (fun a => ?_))).mono (by rw [hb1]) (fun _ _ h => h)
+      (by norm_num)) hq1 (fmt_thInput _ _ _ _ _ _ (by decide)) (fun a => ?_))).mono (by rw [hb1]) (fun _ _ h => h)
   set sv := answerBytes 16 a with hsv
   have hsl : sv.length = 16 := by simp [hsv]
   set t2 := writeHash t1 a with ht2

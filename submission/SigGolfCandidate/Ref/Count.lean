@@ -78,8 +78,8 @@ theorem countWith_bind (oa : OracleComp HashSpec α) (f : α → OracleComp Hash
     exact ih a
 
 @[simp] theorem countWith_H (x : List Byte) :
-    countWith wt (H x) = (fun a => (a, wt (pad64 x))) <$> H x :=
-  countWith_query wt (pad64 x)
+    countWith wt (H x) = (fun a => (a, wt (fmt x))) <$> H x :=
+  countWith_query wt (fmt x)
 
 end
 

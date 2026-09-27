@@ -26,7 +26,7 @@ theorem fetch_ecall (t : MachineState) (i : Nat) (hi : image.code[i]? = some 0x0
 
 theorem code45 : image.code[45]? = some 0x00000073#32 := by decide +kernel
 theorem code369 : image.code[369]? = some 0x00000073#32 := by decide +kernel
-theorem code3397 : image.code[3397]? = some 0x00000073#32 := by decide +kernel
+theorem code3394 : image.code[3394]? = some 0x00000073#32 := by decide +kernel
 
 end SigGolfCandidate.Sign
 
@@ -267,11 +267,11 @@ theorem signList_sim (sk : SecretKey) (cache : Cache) (m : Message) :
       rw [List.drop_zero, List.take_of_length_le (by rw [packTab_length])] at hw5
       have hf5' : Frame t4 t5 (fun x => packD ≤ x ∧ x < packD + 8 * 660) :=
         hf5.mono (fun x hx => by simp only [packD] at hx ⊢; omega)
-      have hs6 := symRun_sound blk3395 codeAt_3395 t5 pc5 (by simp only [blk3395.res, rv_simp])
-      set t6 := blk3395.res.toState t5 with ht6
-      have hc : 2781 + blk3395.res.cycles = 2781 + 2 := rfl
+      have hs6 := symRun_sound blk3392 codeAt_3392 t5 pc5 (by simp only [blk3392.res, rv_simp])
+      set t6 := blk3392.res.toState t5 with ht6
+      have hc : 2781 + blk3392.res.cycles = 2781 + 2 := rfl
       have mem6 : ∀ a, t6.getMem a = t5.getMem a := by
-        intro a; rw [ht6, Result.toState_getMem, show blk3395.res.st.mem = [] from rfl, memEval_nil]
+        intro a; rw [ht6, Result.toState_getMem, show blk3392.res.st.mem = [] from rfl, memEval_nil]
       have by6 : bytesAt t6 0x2650 7756 = bytesAt t5 0x2650 7756 := by
         unfold bytesAt; apply List.map_congr_left; intro i _
         simp only [MachineState.getByte, mem6]
@@ -286,8 +286,8 @@ theorem signList_sim (sk : SecretKey) (cache : Cache) (m : Message) :
         rw [hl1] at hi
         exact (hopen i (by rw [hl1]; exact hi)).frame ft24 (by omega) (by
           intro a h1 h2; simp only [layW]; omega)
-      refine (Sim.pure_steps (hs5.trans hs6) ⟨fetch_ecall t6 3397 code3397 (by norm_num) rfl,
-        by simp only [ht6, blk3395.res, rv_simp], by simp only [ht6, blk3395.res, rv_simp], ?_⟩).mono
+      refine (Sim.pure_steps (hs5.trans hs6) ⟨fetch_ecall t6 3394 code3394 (by norm_num) rfl,
+        by simp only [ht6, blk3392.res, rv_simp], by simp only [ht6, blk3392.res, rv_simp], ?_⟩).mono
         (by rw [hc]) (fun _ _ h => h)
       rw [readBuffer_bytesAt, by6, final_bytes t4 rho p.1 lays hrl hrho4 hl1 hopen4 hll hst t5 hw5 hf5']
 

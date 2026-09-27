@@ -11,7 +11,7 @@ import SigGolfCandidate.Final.Abstract
 * `refinements`: the four bytecode refinements in the form of `Equiv.Refinements` (keygen and
   expand proved, sign and verify pending).
 * `successPipe_eq`: the success bit of the honest pipeline is the abstract honest game, relabelled
-  by `padQ`.
+  by `fmtQ`.
 -/
 
 open OracleComp OracleSpec
@@ -94,17 +94,17 @@ theorem successPipe_eq_ref (hS : SignRefinementStatement) (hV : VerifyRefinement
   exact verify_value hV m pk _
 
 
-/-- The reference pipeline is the abstract honest game relabelled by `padQ`. -/
+/-- The reference pipeline is the abstract honest game relabelled by `fmtQ`. -/
 theorem ref_pipeline_eq (sk : SecretKey) (m : Message) :
     (do
       let pk ← Ref.keygenRef sk
       match ← Ref.signRef sk m with
       | none => pure false
       | some σ => Ref.verifyRef m pk (Ref.expandRef σ)) =
-    relabel Equiv.padQ (game sk m) := by
+    relabel Equiv.fmtQ (game sk m) := by
   have hs : ∀ root : SphincsSecurity.Digest, Ref.signRef sk m =
       Option.map Equiv.sigCodec.symm <$>
-        relabel Equiv.padQ (SphincsSecurity.Seeded.sign (m := Equiv.AComp) ⟨sk, 0, root⟩ m) :=
+        relabel Equiv.fmtQ (SphincsSecurity.Seeded.sign (m := Equiv.AComp) ⟨sk, 0, root⟩ m) :=
     fun root => Equiv.signRef_eq ⟨sk, 0, root⟩ rfl m
   rw [Equiv.keygenRef_eq]
   unfold game SphincsSecurity.Seeded.keygenFromSeed
@@ -118,10 +118,10 @@ theorem ref_pipeline_eq (sk : SecretKey) (m : Message) :
     rw [Equiv.verifySigRef_eq, Equiv.sigCodec.apply_symm_apply]
 
 
-/-- **The honest pipeline's success bit is the abstract honest game** (relabelled by `padQ`). -/
+/-- **The honest pipeline's success bit is the abstract honest game** (relabelled by `fmtQ`). -/
 theorem success_honest_eq_game (hS : SignRefinementStatement) (hV : VerifyRefinementStatement)
     (sk : SecretKey) (m : Message) :
-    HonestResult.success <$> submission.honest sk m = relabel Equiv.padQ (game sk m) := by
+    HonestResult.success <$> submission.honest sk m = relabel Equiv.fmtQ (game sk m) := by
   rw [success_honest_eq, successPipe_eq_ref hS hV, ref_pipeline_eq]
 
 end SigGolfCandidate.Final

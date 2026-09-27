@@ -41,11 +41,13 @@ theorem seededExperiment_eq (seed : MasterSeed) (message : Message) :
   rw [seededGameCore_eq, QueryImpl.simulateQ_add_liftM_right]
 
 theorem hq_game (seed : MasterSeed) (message : Message) : Equiv.HQ (game seed message) := by
-  unfold game
-  refine Equiv.hq_bind (Equiv.hq_keygen seed) fun kp => ?_
-  refine Equiv.hq_bind (Equiv.hq_sign _ _) fun s => ?_
+  unfold game Seeded.keygenFromSeed
+  simp only [bind_assoc, pure_bind]
+  refine Equiv.hq_bind (Equiv.hq_buildLayerTree _ rfl _ _ _ (fun _ _ => Equiv.hq_deriveKey _ _ _) _ _)
+    fun t => ?_
+  refine Equiv.hq_bind (Equiv.hq_sign _ rfl _) fun s => ?_
   rcases s with _ | σ
   · exact Equiv.hq_pure _
-  · exact Equiv.hq_verify _ _ _
+  · exact Equiv.hq_verify _ rfl _ _
 
 end SigGolfCandidate.Final

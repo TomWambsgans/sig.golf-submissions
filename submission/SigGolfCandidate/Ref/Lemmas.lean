@@ -176,6 +176,50 @@ theorem pad64_eq (x : List Byte) (n : Nat) (h1 : x.length ≤ 64 * (n + 1)) (h2 
   unfold pad64 padTo64
   rw [padBlocks_eq _ _ h1 h2]
 
+/-! ## The oracle input format -/
+
+theorem fmt_of_not_chain (x : List Byte) (h : ¬ IsChainFmt x) : fmt x = pad64 x := by
+  unfold fmt; rw [if_neg h]
+
+theorem fmt_of_length_ne (x : List Byte) (h : x.length ≠ 48) : fmt x = pad64 x :=
+  fmt_of_not_chain x (fun hc => h hc.1)
+
+theorem fmt_of_chain (x : List Byte) (h : IsChainFmt x) : fmt x = ⟨0, ofList _ (chainBlock x)⟩ := by
+  unfold fmt; rw [if_pos h]
+
+theorem getD_one_thInput (t lay tau p j : Nat) (payload : List Byte) :
+    (thInput (tweak t lay tau p j) payload).getD 1 0 = byte t := by
+  simp [thInput, tweak]
+
+/-- `thInput` with a tag other than 1 is zero padded. -/
+theorem fmt_thInput (t lay tau p j : Nat) (payload : List Byte) (ht : byte t ≠ byte 1) :
+    fmt (thInput (tweak t lay tau p j) payload) = pad64 (thInput (tweak t lay tau p j) payload) :=
+  fmt_of_not_chain _ fun hc => ht ((getD_one_thInput t lay tau p j payload).symm.trans hc.2)
+
+/-- The block of a chain step: `tw || 0^32 || v`. -/
+theorem fmt_chainInput (lay tau e i mu : Nat) (v : Val) (hv : v.length = 16) :
+    fmt (chainInput lay tau e i mu v) =
+      ⟨0, ofList _ (tweak 1 lay tau (8 * i + mu - 1) e ++ zeros 32 ++ v)⟩ := by
+  have hc : IsChainFmt (chainInput lay tau e i mu v) :=
+    ⟨by simp [chainInput, hv], getD_one_thInput _ _ _ _ _ _⟩
+  rw [fmt_of_chain _ hc]
+  have h1 := length_tweak 1 lay tau (8 * i + mu - 1) e
+  have e : chainBlock (chainInput lay tau e i mu v) = tweak 1 lay tau (8 * i + mu - 1) e ++ zeros 32 ++ v := by
+    unfold chainBlock chainInput thInput
+    simp only [List.append_assoc]
+    rw [List.take_left' h1, List.drop_append, h1, List.drop_eq_nil_of_le (by omega), List.nil_append,
+      List.drop_append, length_P, List.drop_eq_nil_of_le (by simp), List.nil_append]
+    simp [zeros]
+  rw [e]
+
+/-- The chain block has as many blocks as its zero padding (one). -/
+theorem blocks_fmt (x : List Byte) : (fmt x).blocks = (pad64 x).blocks := by
+  unfold fmt
+  split
+  · rename_i h
+    simp [pad64, Query.blocks, padBlocks, h.1]
+  · rfl
+
 /-! ## Parameter tables -/
 
 theorem height_values : (List.range nLayers).map height = [5, 5, 5, 5, 5, 5, 4] := by decide

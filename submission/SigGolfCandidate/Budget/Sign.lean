@@ -43,9 +43,9 @@ theorem V_signLayers (z bC : ℝ≥0∞) (hz : 1 ≤ z) (hbC : 1 ≤ bC)
     rcases hr : route idx lay with ⟨e, tau⟩
     dsimp only
     have hfresh : ∀ c', 0 ≤ c' → c' < 2 ^ 32 →
-        cache (pad64 (encInput lay tau e M c')) = none := by
+        cache (fmt (encInput lay tau e M c')) = none := by
       intro c' _ _
-      cases hq : cache (pad64 (encInput lay tau e M c')) with
+      cases hq : cache (fmt (encInput lay tau e M c')) with
       | none => rfl
       | some u =>
         exfalso
@@ -128,12 +128,12 @@ theorem V_signList (z bD bC : ℝ≥0∞) (hz : 1 ≤ z) (hbD : 1 ≤ bD) (hbC :
         exact (spec_signFors S hS N).V_le hz c1
   · refine V_searchDigest z bD hz hbD hstepD S m hS hm aMax 0 cache ∅ (by simp [aMax]) (by simp)
       (fun a' _ _ => ?_) (fun rho _ _ => ?_)
-    · cases hq : cache (pad64 (rndInput S m a')) with
+    · cases hq : cache (fmt (rndInput S m a')) with
       | none => rfl
       | some u =>
         exfalso; have := (hinv _ u hq).2.1; unfold rndInput at this; rw [qbyte_tag] at this
         exact this rfl
-    · cases hq : cache (pad64 (digestInput rho m)) with
+    · cases hq : cache (fmt (digestInput rho m)) with
       | none => rfl
       | some u =>
         exfalso; have := (hinv _ u hq).2.2; unfold digestInput at this; rw [qbyte_tag] at this

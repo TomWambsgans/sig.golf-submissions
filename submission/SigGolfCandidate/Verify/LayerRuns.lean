@@ -17,15 +17,15 @@ def stepsA (lay : Nat) : Nat := if lay = 6 then 29 else 14
 def encPc (lay t : Nat) : Nat := preStart lay t + stepsA lay
 
 /-- Known registers at the precode start. -/
-def a6K : List (Reg × Word) := gkF ++ [(.x10, 544), (.x11, 256), (.x12, 224)]
+def a6K : List (Reg × Word) := gkF ++ [(.x10, 544), (.x11, 256), (.x12, 0x120)]
 def aK (lay : Nat) : List (Reg × Word) :=
-  gkL ++ [(.x10, 0x1C0), (.x11, 64), (.x12, 0xE0), (.x26, BitVec.ofNat 64 (h3Word (lay + 1))),
+  gkL ++ [(.x10, 0x1C0), (.x11, 64), (.x12, 0x120), (.x26, BitVec.ofNat 64 (h3Word (lay + 1))),
     (.x27, BitVec.ofNat 64 (hWord (lay + 1))), (.x15, BitVec.ofNat 64 (bVal (lay + 1) 41))]
 def preK (lay : Nat) : List (Reg × Word) := if lay = 6 then a6K else aK lay
 
 /-- Known registers after the encoding hash call. -/
 def bK (lay : Nat) : List (Reg × Word) :=
-  gkL ++ [(.x26, BitVec.ofNat 64 (h3Word lay)), (.x27, BitVec.ofNat 64 (hWord lay)), (.x10, 0xC0),
+  gkL ++ [(.x26, BitVec.ofNat 64 (h3Word lay)), (.x27, BitVec.ofNat 64 (hWord lay)), (.x10, 0x100),
     (.x11, 64), (.x12, 0x140)] ++
     (if lay < 6 then [(.x15, BitVec.ofNat 64 (bVal (lay + 1) 41))] else [])
 
@@ -36,8 +36,8 @@ def ctrE (lay : Nat) : E := .un (.ld .wu (4 * (lay % 2))) (ldE (0x2630 + 8 * (la
 
 def specA (lay t : Nat) : Spec :=
   ⟨[(.x23, uEr lay), (.x30, tauEr lay), (.x31, x31Er lay)],
-   [(⟨none, BitVec.ofNat 64 248⟩, .c 0), (⟨none, BitVec.ofNat 64 240⟩, ctrE lay),
-    (⟨none, BitVec.ofNat 64 200⟩, x31Er lay), (⟨none, BitVec.ofNat 64 192⟩, cw (hWord lay + 768))],
+   [(⟨none, BitVec.ofNat 64 312⟩, .c 0), (⟨none, BitVec.ofNat 64 304⟩, ctrE lay),
+    (⟨none, BitVec.ofNat 64 264⟩, x31Er lay), (⟨none, BitVec.ofNat 64 256⟩, cw (hWord lay + 768))],
    encPc lay t, true, stepsA lay, [], none⟩
 
 /-! ## The encoding check (`slli 52; bne KT`) -/
@@ -64,13 +64,17 @@ def maskD (i : Nat) (D : E) : E :=
 
 def rE0 (lay : Nat) : E := mkBin .add (maskD 0 d0E) (cw (bVal lay 0))
 
-def stepsB (lay : Nat) : Nat := if lay = 6 then 34 else 33
+def stepsB (lay : Nat) : Nat := if lay = 6 then 37 else 34
+
+/-- Chain setup: `sw H, CB; sd X31, CB+8` (layer 6 also zeroes CB+32..48, left by FORS). -/
+def setupMem (lay : Nat) : List (Addr × E) :=
+  (if lay = 6 then [(⟨none, BitVec.ofNat 64 232⟩, .c 0), (⟨none, BitVec.ofNat 64 224⟩, .c 0)] else []) ++
+  [(⟨none, BitVec.ofNat 64 200⟩, .reg .x31), (⟨none, BitVec.ofNat 64 192⟩, stW0 192 (cw (hWord lay)))]
 
 def specBok (lay t : Nat) : Spec :=
   ⟨[(.x1, ldE (chainAddr lay 0)), (.x2, ldE (chainAddr lay 0 + 8)), (.x14, rE0 lay),
     (.x15, cw (bVal lay 0)), (.x16, d0E), (.x17, d1E)],
-   [(⟨none, BitVec.ofNat 64 240⟩, .c 0), (⟨none, BitVec.ofNat 64 192⟩, stW0 192 (cw (hWord lay)))],
-   0, false, stepsB lay,
+   setupMem lay, 0, false, stepsB lay,
    [⟨.ne, swS, .c KT, false⟩, ⟨.lt, orE, .c 0, false⟩],
    some (mkBin .and (mkAdd (rE0 lay) (.c (BitVec.ofNat 64 (tabAddr lay 0) - BitVec.ofNat 64 (bVal lay 0))))
      (.c (~~~1#64)))⟩
@@ -112,7 +116,7 @@ def layerCheck (lay : Nat) : Bool :=
   ((List.range 2).all fun t =>
     specB gkL (runAt (preK lay) [] (preStart lay t) []) (specA lay t) (bK lay) [] &&
     specB gkL (runAt (bK lay) [] (encPc lay t + 1) [.br false, .br false, .jmp]) (specBok lay t)
-      (chK lay 0xE0) [.x22, .x23, .x30, .x31] &&
+      (chKa lay) [.x22, .x23, .x30, .x31] &&
     specB [] (runAt (bK lay) [] (encPc lay t + 1) [.br true]) specRej1 [] [] &&
     specB [] (runAt (bK lay) [] (encPc lay t + 1) [.br false, .br true]) specRej2 [] [] &&
     (lay != 0 || (specB [] (runAt cmpK [] (cmpPc t) [.br false, .br false]) (specAcc t) [] [] &&

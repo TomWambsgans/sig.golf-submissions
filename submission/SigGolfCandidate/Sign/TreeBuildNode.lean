@@ -159,7 +159,7 @@ theorem nodeLoop_sim {image : Image} {L : Nat} (hA : CodeAt image (pcOf L) nodeS
     (hB0 : 0x210 ≤ c.B) (hB8 : c.B % 8 = 0) (hBm : c.B + 32 * c.m + 32 ≤ 2 ^ 24)
     (s : MachineState) (hpc : s.pc = pcOf L) (h16 : s.getReg .x16 = 0)
     (h17 : s.getReg .x17 = BitVec.ofNat 64 c.m) (h19 : s.getReg .x19 = BitVec.ofNat 64 c.B)
-    (h5 : s.getReg .x5 = 0)
+    (h5 : s.getReg .x5 = 0) (htt : byte c.tt ≠ byte 1)
     (hw0 : s.getMem (BitVec.ofNat 64 448) = twWord0 c.tt c.lay c.tau c.lam)
     (hw1 : lo32 (s.getMem (BitVec.ofNat 64 456)) = BitVec.ofNat 32 c.tau)
     (hz0 : s.getMem (BitVec.ofNat 64 464) = 0) (hz1 : s.getMem (BitVec.ofNat 64 472) = 0)
@@ -213,7 +213,7 @@ theorem nodeLoop_sim {image : Image} {L : Nat} (hA : CodeAt image (pcOf L) nodeS
     have := Sim.steps st1 (Sim.hash16_bind (f := fun v => pure (acc ++ [v])) (W := 2) (Q := NodeInv c L lvl s (j + 1)) f1
       (by rw [regs1 .x5 (by decide) (by decide) (by decide) (by decide) (by decide), t5])
       (hashArgs_of a10 a11 a12 (by norm_num) (by norm_num) (by norm_num) (by omega) (by omega) (by omega))
-      hq (fun a => by
+      hq (fmt_thInput _ _ _ _ _ _ htt) (fun a => by
         obtain ⟨t3, st3, pc3, x16', regs3, mem3⟩ := nodeB_spec (L := L) hB (writeHash t1 a)
           (by rw [writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp; omega) j c.m
           (by rw [writeHash_getReg, regs1 .x16 (by decide) (by decide) (by decide) (by decide) (by decide), t16])

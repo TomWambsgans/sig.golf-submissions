@@ -532,7 +532,12 @@ def levelCost (h lam : Nat) : Nat := if lam + 1 = h then 15 else if lam = 0 then
 
 def foldCost (h lam k : Nat) : Nat := ((List.range' lam k).map (levelCost h)).sum
 
-theorem fold_good (fc : FCtx) (hfc : fc.ok)
+theorem fmt_input (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1) (lam : Nat) (v : Val) :
+    fmt (fc.input lam v) = pad64 (fc.input lam v) := by
+  unfold FCtx.input FCtx.node nodeF
+  split <;> exact fmt_th _ _ _ _ _ _ hfc.2.2.2.1 ht1
+
+theorem fold_good (fc : FCtx) (hfc : fc.ok) (ht1 : fc.t ≠ 1)
     (hchk : foldCheck fc.kind fc.a1 fc.rg fc.j0 fc.h (0x800 + fc.sibOff) fc.dst = true) (s0 : MachineState)
     (K : Val → OracleComp HashSpec Obs) (N C : Nat)
     (hK : ∀ a u, FoldEnd fc s0 u → Good (writeHash u a) N C (K (answerBytes 16 a))) :
@@ -552,13 +557,14 @@ theorem fold_good (fc : FCtx) (hfc : fc.ok)
     · obtain rfl : k = 0 := by omega
       obtain ⟨t, hst, h5, hv, hin, hend⟩ := level_last fc hfc lam hlast hchk s0 v s hs
       simp only [List.range'_zero, List.foldlM_nil, cc_pure]
-      have h3 := Good.hash (K := K) hend.2.2.2.2.1 h5 hv hin (fun a => hK a t hend)
+      have h3 := Good.hashP (K := K) (fmt_input fc hfc ht1 lam v) hend.2.2.2.2.1 h5 hv hin
+        (fun a => hK a t hend)
       rw [hblk] at h3
       refine Good.steps' hst h3 (by omega) ?_
       simp [foldCost, levelCost, hlast]
     · obtain ⟨t, hst, hf, h5, hv, hin, hpost⟩ := level_lt fc hfc lam (by omega) hchk s0 v s hs
-      have h3 := Good.hash (K := fun v => cc ((List.range' (lam + 1) k).foldlM fc.stepFn v) K)
-        hf h5 hv hin (fun a => ih (lam + 1) (by omega) (by omega) _ _ (hpost a))
+      have h3 := Good.hashP (K := fun v => cc ((List.range' (lam + 1) k).foldlM fc.stepFn v) K)
+        (fmt_input fc hfc ht1 lam v) hf h5 hv hin (fun a => ih (lam + 1) (by omega) (by omega) _ _ (hpost a))
       rw [hblk] at h3
       refine Good.steps' hst h3 (by split <;> omega) ?_
       simp only [foldCost, List.range'_succ, List.map_cons, List.sum_cons, levelCost, if_neg hlast]

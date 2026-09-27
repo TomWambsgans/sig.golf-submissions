@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. The 14 FORS roots form the FORS key; seven layers of WOTS target-sum signatures (42 chains, digit sum 179) and Merkle paths (heights 5,5,5,5,5,5,4) authenticate it to the 16-byte public root. Honest verification costs a constant 16,514 cycles.",
+  "summary": "SPHINCS+ variant with 16-byte hashes and P = 0. A 184-bit message digest (the signer grinds ρ until its last 10 bits are zero) yields 14 FORS+C leaf indices and a 34-bit hypertree index. The 14 FORS roots form the FORS key; seven layers of WOTS target-sum signatures (42 chains, digit sum 179) and Merkle paths (heights 5,5,5,5,5,5,4) authenticate it to the 16-byte public root. Honest verification costs a constant 15,494 cycles.",
   "diagram": true,
   "facts": [
     {
@@ -33,16 +33,16 @@
     },
     {
       "label": "Verification cost",
-      "value": "16,514 cycles on every accepting run + ⌈7,756 / 256⌉ = 31 → C = 16,545; 1,009 HASH calls, 1,083 blocks"
+      "value": "15,494 cycles on every accepting run + ⌈7,756 / 256⌉ = 31 → C = 15,525; 1,009 HASH calls, 1,083 blocks"
     }
   ],
   "profile": {
     "samples": 16,
-    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen+sign, expand on the emulator, verify traced on vm.py; all 16 accepted at 16,514 cycles each",
+    "method": "16 random keys and 32-byte messages (seeded PRNG): ref.py keygen+sign, expand on the emulator, verify traced on vm.py; all 16 accepted at 15,494 cycles each",
     "instructions": {
-      "SD": 34694,
-      "ADDI": 25570,
+      "ADDI": 27320,
       "SW": 18848,
+      "SD": 16624,
       "LD": 15840,
       "SRLI": 5744,
       "JAL": 4712,

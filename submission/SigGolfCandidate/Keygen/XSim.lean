@@ -113,25 +113,25 @@ theorem XSim.query {s : MachineState} {q : Query}
   · intro fuel
     rw [execute_hash fuel hf ht0 hv, bind_map_left]
 
-/-- `hash16 x` followed by a continuation. -/
+/-- `hash16 x` (one HASH `ECALL` on `fmt x`) followed by a continuation. -/
 theorem XSim.hash16_bind {s : MachineState} {x : List Byte} {k c n b : Nat}
     {f : Val → OracleComp HashSpec β} {Q : β → MachineState → Prop}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
-    (hv : hashArgumentsValid s = true) (hq : hashInput s = pad64 x)
+    (hv : hashArgumentsValid s = true) (hq : hashInput s = fmt x)
     (h : ∀ a, XSim image (writeHash s a) k c n b (f (answerBytes 16 a)) Q) :
     XSim image s (1 + k) (8 * (pad64 x).blocks + c) (1 + n) ((pad64 x).blocks + b)
       (Ref.hash16 x >>= f) Q := by
-  have : Ref.hash16 x >>= f = (liftM (HashSpec.query (pad64 x)) : OracleComp HashSpec _) >>=
+  have : Ref.hash16 x >>= f = (liftM (HashSpec.query (fmt x)) : OracleComp HashSpec _) >>=
       fun a => f (answerBytes 16 a) := by
     simp only [Ref.hash16, H, bind_assoc, pure_bind]
-  rw [this]
+  rw [this, ← blocks_fmt]
   exact XSim.bind (XSim.query hf ht0 hv hq) (fun a t ht => ht ▸ h a)
 
 /-- `hash16 x` at the end. -/
 theorem XSim.hash16 {s : MachineState} {x : List Byte} {k c n b : Nat}
     {Q : Val → MachineState → Prop}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
-    (hv : hashArgumentsValid s = true) (hq : hashInput s = pad64 x)
+    (hv : hashArgumentsValid s = true) (hq : hashInput s = fmt x)
     (h : ∀ a, XSim image (writeHash s a) k c n b (Pure.pure (answerBytes 16 a)) Q) :
     XSim image s (1 + k) (8 * (pad64 x).blocks + c) (1 + n) ((pad64 x).blocks + b)
       (Ref.hash16 x) Q := by

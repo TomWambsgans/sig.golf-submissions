@@ -65,7 +65,7 @@ theorem roots_sim (S : List Byte) (idx : Nat) (hidx : idx < 2 ^ 34) (roots : Lis
     congrArg (· + 1) (words_thVals 11 0 idx 0 0 roots hv 3 (by rw [hlen])).1
   refine (Sim.steps hs1 (Sim.hash16 (W := 3) e1 x5
     (hashArgs_of x10 x11 x12 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (by norm_num)
-      (by norm_num)) hq (fun a => ?_))).mono (by rw [hb]) (fun _ _ h => h)
+      (by norm_num)) hq (fmt_thInput _ _ _ _ _ _ (by decide)) (fun a => ?_))).mono (by rw [hb]) (fun _ _ h => h)
   set t2 := writeHash t1 a with ht2
   have f2 : Frame t1 t2 (fun x => 0x120 ≤ x ∧ x < 0x120 + 32) := frame_writeHash t1 a _ x12 (by norm_num)
   have pc2 : t2.pc = pcOf 202 := by rw [ht2, writeHash_pc, pc1]; apply BitVec.eq_of_toNat_eq; simp

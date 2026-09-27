@@ -130,7 +130,7 @@ theorem forsLevel_body (k idx u : Nat) (hk : k < 14) (hidx : idx < 2 ^ 34) (hu :
     intro a h1 h2; simp only [c]; omega
   have hnode := nodeLoop_sim codeAt_node161 codeAt_node177 c st.1 (by simp only [c]; rw [hlen, hpow])
     hvals (by simp only [c]; positivity) (by simp only [c]; norm_num) (by simp only [c])
-    (by simp only [c]; omega) t1 pc1 y16 y17 y19 y5 w448
+    (by simp only [c]; omega) t1 pc1 y16 y17 y19 y5 (by simp only [c]; decide) w448
     (by rw [f1.getMem (by norm_num) (by omega), tlo, ctx.nb8])
     (by rw [f1.getMem (by norm_num) (by omega), tframe.getMem (by norm_num) (by simp only [levW]; omega)]
         have := ctx.nbP; rw [readWords_ofNat_two] at this; simp only [List.cons.injEq] at this

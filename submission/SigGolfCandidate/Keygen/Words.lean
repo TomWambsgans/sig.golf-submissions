@@ -198,4 +198,15 @@ theorem hashInput_eq_pad64 (t : MachineState) (n B : Nat) (x : List Byte)
     pad64_eq x n h1 h2, h10, queryOfWords, hw]
   simp [ofList, leNat_append]
 
+/-- The HASH input is the one-block query `⟨0, ofList _ y⟩` when the 8 words of the buffer
+encode `y` (the value-last chain block, `fmt_chainInput`). -/
+theorem hashInput_eq_block (t : MachineState) (B : Nat) (y : List Byte)
+    (h11 : t.getReg .x11 = BitVec.ofNat 64 64) (h10 : t.getReg .x10 = BitVec.ofNat 64 B)
+    (hB : B % 8 = 0) (hB' : B < 2 ^ 64)
+    (hw : wordsToNat (t.readWords (BitVec.ofNat 64 B) 8) = leNat y) :
+    hashInput t = ⟨0, ofList _ y⟩ := by
+  rw [hashInput_eq_words t 0 h11 (by norm_num)
+      (by rw [h10, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hB']; exact hB), h10, queryOfWords, hw]
+  rfl
+
 end SigGolfCandidate.Keygen

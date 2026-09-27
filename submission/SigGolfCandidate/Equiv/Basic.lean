@@ -5,10 +5,11 @@ import SigGolfCandidate.Bridge.Basic
 /-!
 # Byte-level reference vs abstract scheme: basic tools
 
-* `toB` (abstract `List UInt8` ↦ organizer `List Byte`) and `padQ = pad64 ∘ toB`, the oracle
-  relabelling;
+* `toB` (abstract `List UInt8` ↦ organizer `List Byte`) and `fmtQ = Ref.fmt ∘ toB`, the oracle
+  relabelling (the input format of `PROGRAMS.md`: chain inputs `tw || P || v` become
+  `tw || 0^32 || v`, all others are zero padded);
 * byte encodings: `toB_bytesLE`, `leBytes_eq_toList`, `tweak_eq` (the 16-byte tweak);
-* hashing through `relabel padQ`: `relabel_oracleHash`, `hash16_eq`;
+* hashing through `relabel fmtQ`: `relabel_oracleHash`, `hash16_eq`;
 * generic loop lemmas: `relabel_sequenceFin`, `foldlM_range_seq` (a `List.range` fold whose
   state update is pure, against `sequenceFin`), `map_fst_foldlM`.
 -/
@@ -23,8 +24,8 @@ open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map rela
 /-- Abstract hash inputs as organizer bytes. -/
 def toB (x : List UInt8) : List Byte := x.map UInt8.toBitVec
 
-/-- The oracle relabelling: zero padding of the organizer bytes. -/
-def padQ (x : List UInt8) : Query := Ref.pad64 (toB x)
+/-- The oracle relabelling: the organizer query `Ref.fmt` of the organizer bytes. -/
+def fmtQ (x : List UInt8) : Query := Ref.fmt (toB x)
 
 @[simp] theorem toB_append (x y : List UInt8) : toB (x ++ y) = toB x ++ toB y := by
   simp [toB]
@@ -101,9 +102,9 @@ theorem toB_tweakFields (t lay tau p j : Nat) :
 abbrev AHash := List UInt8 →ₒ BitVec 256
 
 theorem relabel_oracleHash (x : List UInt8) :
-    relabel padQ (SphincsSecurity.Concrete.oracleHash (m := OracleComp SphincsSecurity.HashSpec) x) =
+    relabel fmtQ (SphincsSecurity.Concrete.oracleHash (m := OracleComp SphincsSecurity.HashSpec) x) =
       Ref.H (toB x) := by
-  simp [SphincsSecurity.Concrete.oracleHash, Ref.H, padQ]
+  simp [SphincsSecurity.Concrete.oracleHash, Ref.H, fmtQ]
   rfl
 
 
@@ -148,7 +149,7 @@ theorem hash16_eq (y : List Byte) :
 theorem hash16_tweakable (P : SphincsSecurity.PublicParameter) (dom : SphincsSecurity.HashDomain)
     (payload : List UInt8) (y : List Byte)
     (hy : toB (SphincsSecurity.tweakableHashInput P dom payload) = y) :
-    Ref.hash16 y = dv <$> relabel padQ
+    Ref.hash16 y = dv <$> relabel fmtQ
       (SphincsSecurity.Concrete.tweakableHash (m := AComp) P dom payload) := by
   subst hy
   simp only [SphincsSecurity.Concrete.tweakableHash, relabel_bind, relabel_oracleHash, hash16_eq,

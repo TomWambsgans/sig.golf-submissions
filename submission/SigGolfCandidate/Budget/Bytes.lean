@@ -55,15 +55,45 @@ theorem blocks_pad64_le (x : List Byte) (k : Nat) (h : x.length ≤ 64 * k) (hk 
     (pad64 x).blocks ≤ k := by
   rw [blocks_pad64]; unfold padBlocks; omega
 
+/-! ## The oracle input format -/
+
+theorem blocks_fmt_le (x : List Byte) (k : Nat) (h : x.length ≤ 64 * k) (hk : 1 ≤ k) :
+    (fmt x).blocks ≤ k := by
+  rw [blocks_fmt]; exact blocks_pad64_le x k h hk
+
+/-- The first 16 bytes (the tweak) of a formatted query are those of the input. -/
+theorem qbyte_fmt (x : List Byte) (i : Nat) (hi : i < 16) : qbyte (fmt x) i = (x.getD i 0).toNat := by
+  by_cases hc : IsChainFmt x
+  · rw [fmt_of_chain _ hc]
+    unfold qbyte ofList
+    simp only [BitVec.toNat_ofNat]
+    have hl : (chainBlock x).length = 64 := by
+      simp only [chainBlock, List.length_append, List.length_take, List.length_drop, hc.1, length_zeros]
+      omega
+    have hlt := leNat_lt (chainBlock x)
+    rw [hl] at hlt
+    rw [show (2 : Nat) ^ (8 * (64 * (0 + 1))) = 256 ^ 64 by rw [Nat.pow_mul], Nat.mod_eq_of_lt hlt,
+      leNat_div_mod]
+    unfold chainBlock
+    simp only [List.getD_eq_getElem?_getD, List.append_assoc]
+    rw [List.getElem?_append_left (by simp [hc.1]; omega), List.getElem?_take_of_lt hi]
+  · rw [fmt_of_not_chain _ hc, qbyte_pad64]
+
+/-- Inputs of a tag other than `1` are zero padded. -/
+theorem fmt_eq_pad64 (t lay tau p j : Nat) (pl : List Byte) (ht : t % 256 ≠ 1) :
+    fmt (thInput (tweak t lay tau p j) pl) = pad64 (thInput (tweak t lay tau p j) pl) :=
+  fmt_thInput _ _ _ _ _ _ (fun h => ht (by
+    have := congrArg BitVec.toNat h; simpa [byte_toNat] using this))
+
 /-! ## Tweak bytes -/
 
 theorem qbyte_tag (t lay tau p j : Nat) (pl : List Byte) :
-    qbyte (pad64 (thInput (tweak t lay tau p j) pl)) 1 = t % 256 := by
-  rw [qbyte_pad64]; simp [thInput, tweak, byte_toNat]
+    qbyte (fmt (thInput (tweak t lay tau p j) pl)) 1 = t % 256 := by
+  rw [qbyte_fmt _ _ (by omega)]; simp [thInput, tweak, byte_toNat]
 
 theorem qbyte_lay (t lay tau p j : Nat) (pl : List Byte) :
-    qbyte (pad64 (thInput (tweak t lay tau p j) pl)) 2 = lay % 256 := by
-  rw [qbyte_pad64]; simp [thInput, tweak, byte_toNat]
+    qbyte (fmt (thInput (tweak t lay tau p j) pl)) 2 = lay % 256 := by
+  rw [qbyte_fmt _ _ (by omega)]; simp [thInput, tweak, byte_toNat]
 
 theorem leNat_leBytes (k v : Nat) : leNat (leBytes k v) = v % 256 ^ k := leNat_map_range k v
 

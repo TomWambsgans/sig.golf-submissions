@@ -14,11 +14,11 @@ namespace SigGolfCandidate.Budget
 open SigGolf SigGolfCandidate.Ref OracleComp OracleSpec ENNReal OracleComp.EvalDist
 
 theorem hash16_bind_eq {β : Type} (x : List Byte) (f : Val → OracleComp HashSpec β) :
-    Ref.hash16 x >>= f = qry (pad64 x) >>= fun a => f (answerBytes 16 a) := by
+    Ref.hash16 x >>= f = qry (fmt x) >>= fun a => f (answerBytes 16 a) := by
   simp only [Ref.hash16, Ref.H, bind_assoc, pure_bind]
 
 theorem digest_bind_eq {β : Type} (rho m : List Byte) (f : Nat → OracleComp HashSpec β) :
-    digest rho m >>= f = qry (pad64 (digestInput rho m)) >>= fun a => f (a.toNat % 2 ^ 184) := by
+    digest rho m >>= f = qry (fmt (digestInput rho m)) >>= fun a => f (a.toNat % 2 ^ 184) := by
   simp only [digest, Ref.H, bind_assoc, pure_bind]
 
 /-- Averaging a function bounded by a two-valued one. -/
@@ -45,8 +45,20 @@ theorem probEvent_not_uniform (P : BitVec 256 → Prop) [DecidablePred P] :
 
 /-! ## Counter search -/
 
+theorem fmt_encInput (lay tau e : Nat) (M : Val) (c : Nat) :
+    fmt (encInput lay tau e M c) = pad64 (encInput lay tau e M c) :=
+  fmt_eq_pad64 _ _ _ _ _ _ (by decide)
+
+theorem fmt_rndInput (S m : List Byte) (a : Nat) : fmt (rndInput S m a) = pad64 (rndInput S m a) :=
+  fmt_eq_pad64 _ _ _ _ _ _ (by decide)
+
+theorem fmt_digestInput (rho m : List Byte) :
+    fmt (digestInput rho m) = pad64 (digestInput rho m) :=
+  fmt_eq_pad64 _ _ _ _ _ _ (by decide)
+
 theorem enc_inj (lay tau e : Nat) (M : Val) {c c' : Nat} (hc : c < 2 ^ 32) (hc' : c' < 2 ^ 32)
-    (h : pad64 (encInput lay tau e M c) = pad64 (encInput lay tau e M c')) : c = c' := by
+    (h : fmt (encInput lay tau e M c) = fmt (encInput lay tau e M c')) : c = c' := by
+  rw [fmt_encInput, fmt_encInput] at h
   have h2 := pad64_inj (by simp [encInput]) h
   simp only [encInput, thInput, List.append_assoc, List.append_cancel_left_eq] at h2
   exact le32_inj hc hc' h2
@@ -60,7 +72,7 @@ theorem V_searchCounter (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
     (hstep : z * (rhoC * b + (1 - rhoC)) ≤ b)
     (lay tau e : Nat) (M : Val) (hM : M.length ≤ 16) :
     ∀ fuel c (cache : RCache), c + fuel ≤ 2 ^ 32 →
-      (∀ c', c ≤ c' → c' < 2 ^ 32 → cache (pad64 (encInput lay tau e M c')) = none) →
+      (∀ c', c ≤ c' → c' < 2 ^ 32 → cache (fmt (encInput lay tau e M c')) = none) →
       V z (searchCounter lay tau e M c fuel) cache ≤ b := by
   intro fuel
   induction fuel with
@@ -70,10 +82,10 @@ theorem V_searchCounter (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
     unfold searchCounter
     rw [hash16_bind_eq, V_query,
       expectedValue_ro_fresh _ _ (hfresh c le_rfl (by omega))]
-    have hbl : (pad64 (encInput lay tau e M c)).blocks ≤ 1 :=
-      blocks_pad64_le _ 1 (by simp [encInput]; omega) le_rfl
-    have hz1 : z ^ (pad64 (encInput lay tau e M c)).blocks ≤ z := by
-      calc z ^ (pad64 (encInput lay tau e M c)).blocks ≤ z ^ 1 := pow_le_pow_right₀ hz hbl
+    have hbl : (fmt (encInput lay tau e M c)).blocks ≤ 1 :=
+      blocks_fmt_le _ 1 (by simp [encInput]; omega) le_rfl
+    have hz1 : z ^ (fmt (encInput lay tau e M c)).blocks ≤ z := by
+      calc z ^ (fmt (encInput lay tau e M c)).blocks ≤ z ^ 1 := pow_le_pow_right₀ hz hbl
         _ = z := pow_one z
     refine le_trans (mul_le_mul' hz1 (ev_ite_le
       (fun u => decodeDigits (answerBytes 16 u) = none) b 1 _ fun u => ?_)) ?_
@@ -94,14 +106,15 @@ theorem V_searchCounter (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
 /-! ## Digest search -/
 
 theorem rnd_inj (S m : List Byte) {a a' : Nat} (ha : a < 2 ^ 32) (ha' : a' < 2 ^ 32)
-    (h : pad64 (rndInput S m a) = pad64 (rndInput S m a')) : a = a' := by
+    (h : fmt (rndInput S m a) = fmt (rndInput S m a')) : a = a' := by
+  rw [fmt_rndInput, fmt_rndInput] at h
   have h2 := pad64_inj (by simp [rndInput]) h
   simp only [rndInput, thInput] at h2
   have h3 := List.append_inj_left' (List.append_inj_left' h2 rfl) (by simp)
   exact tweak_p_inj ha ha' h3
 
 theorem rnd_ne_dig (S m rho m' : List Byte) (a : Nat) :
-    pad64 (rndInput S m a) ≠ pad64 (digestInput rho m') := by
+    fmt (rndInput S m a) ≠ fmt (digestInput rho m') := by
   intro h
   have := congrArg (fun q => qbyte q 1) h
   simp only [rndInput, digestInput, qbyte_tag] at this
@@ -109,7 +122,8 @@ theorem rnd_ne_dig (S m rho m' : List Byte) (a : Nat) :
 
 theorem dig_inj (m : List Byte) {rho rho' : List Byte} (hr : rho.length = 16)
     (hr' : rho'.length = 16)
-    (h : pad64 (digestInput rho m) = pad64 (digestInput rho' m)) : rho = rho' := by
+    (h : fmt (digestInput rho m) = fmt (digestInput rho' m)) : rho = rho' := by
+  rw [fmt_digestInput, fmt_digestInput] at h
   have h2 := pad64_inj (by simp [digestInput, hr, hr']) h
   simp only [digestInput, thInput, List.append_assoc, List.append_cancel_left_eq] at h2
   exact List.append_inj_left' h2 rfl
@@ -126,8 +140,8 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
     (hstep : z ^ 4 * ((epsD + rhoD) * b + (1 - rhoD)) ≤ b)
     (S m : List Byte) (hS : S.length = 32) (hm : m.length = 32) :
     ∀ fuel a (cache : RCache) (R : Finset Val), a + fuel ≤ 2 ^ 20 → R.card ≤ a →
-      (∀ a', a ≤ a' → a' < 2 ^ 32 → cache (pad64 (rndInput S m a')) = none) →
-      (∀ rho, rho.length = 16 → rho ∉ R → cache (pad64 (digestInput rho m)) = none) →
+      (∀ a', a ≤ a' → a' < 2 ^ 32 → cache (fmt (rndInput S m a')) = none) →
+      (∀ rho, rho.length = 16 → rho ∉ R → cache (fmt (digestInput rho m)) = none) →
       V z (searchDigest S m a fuel) cache ≤ b := by
   intro fuel
   induction fuel with
@@ -144,24 +158,24 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
         V z (digest (answerBytes 16 u) m >>= fun N =>
             if admissible N = true then pure (some (answerBytes 16 u, N))
             else searchDigest S m (a + 1) n)
-          ((cache.cacheQuery (pad64 (rndInput S m a)) u)) ≤
+          ((cache.cacheQuery (fmt (rndInput S m a)) u)) ≤
         if answerBytes 16 u ∈ R then z ^ 2 * b else z ^ 2 * (rhoD * b + (1 - rhoD)) := by
       intro u
       set rho := answerBytes 16 u with hrho_def
       have hrho : rho.length = 16 := by simp [rho]
-      have hc1rnd : ∀ a', a + 1 ≤ a' → a' < 2 ^ 32 → (cache.cacheQuery (pad64 (rndInput S m a)) u) (pad64 (rndInput S m a')) = none := by
+      have hc1rnd : ∀ a', a + 1 ≤ a' → a' < 2 ^ 32 → (cache.cacheQuery (fmt (rndInput S m a)) u) (fmt (rndInput S m a')) = none := by
         intro a' ha' ha'b
         rw [QueryCache.cacheQuery_of_ne]
         · exact hrnd a' (by omega) ha'b
         · intro h; have := rnd_inj S m ha'b (by omega) h; omega
-      have hc1dig : ∀ rho', (cache.cacheQuery (pad64 (rndInput S m a)) u) (pad64 (digestInput rho' m)) = cache (pad64 (digestInput rho' m)) :=
+      have hc1dig : ∀ rho', (cache.cacheQuery (fmt (rndInput S m a)) u) (fmt (digestInput rho' m)) = cache (fmt (digestInput rho' m)) :=
         fun rho' => QueryCache.cacheQuery_of_ne _ _ fun h => rnd_ne_dig S m rho' m a h.symm
       obtain ⟨-, hb2⟩ := dig_ok rho m hrho hm
       rw [digest_bind_eq, V_query]
       -- after the digest query: continuation bound from any state keeping the invariants
       have hk : ∀ (R' : Finset Val) (c2 : RCache), R'.card ≤ a + 1 →
-          (∀ a', a + 1 ≤ a' → a' < 2 ^ 32 → c2 (pad64 (rndInput S m a')) = none) →
-          (∀ rho', rho'.length = 16 → rho' ∉ R' → c2 (pad64 (digestInput rho' m)) = none) →
+          (∀ a', a + 1 ≤ a' → a' < 2 ^ 32 → c2 (fmt (rndInput S m a')) = none) →
+          (∀ rho', rho'.length = 16 → rho' ∉ R' → c2 (fmt (digestInput rho' m)) = none) →
           ∀ v : BitVec 256,
           V z (if admissible (v.toNat % 2 ^ 184) = true then
               pure (some (rho, v.toNat % 2 ^ 184)) else searchDigest S m (a + 1) n) c2 ≤
@@ -188,7 +202,7 @@ theorem V_searchDigest (z b : ℝ≥0∞) (hz : 1 ≤ z) (hb : 1 ≤ b)
               hc1dig]
             exact hdig rho' hl hn
       · rw [if_neg hmem]
-        have hfresh : (cache.cacheQuery (pad64 (rndInput S m a)) u) (pad64 (digestInput rho m)) = none := by
+        have hfresh : (cache.cacheQuery (fmt (rndInput S m a)) u) (fmt (digestInput rho m)) = none := by
           rw [hc1dig]; exact hdig rho hrho hmem
         rw [expectedValue_ro_fresh _ _ hfresh]
         refine mul_le_mul' (hz2 _ hb2) ?_

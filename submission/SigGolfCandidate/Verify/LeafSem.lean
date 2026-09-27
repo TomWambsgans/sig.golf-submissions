@@ -44,7 +44,7 @@ theorem sll63_lt (u : Nat) (hu : u < 2 ^ 64) (s : MachineState) (h23 : s.getReg 
 
 def layFC (L : LCtx) : FCtx :=
   ⟨L.wl, L.pk, L.e, heightL L.lay, false, 8 - L.lay, 0, 704, 3, L.lay, L.tau, 2480 + 752 * L.lay + 672,
-    if L.lay = 0 then 0x180 else 0xE0⟩
+    if L.lay = 0 then 0x180 else 0x120⟩
 
 theorem layFC_ok (L : LCtx) (hL : L.ok) : (layFC L).ok := by
   obtain ⟨hlay, hidx, hwl⟩ := hL
@@ -71,7 +71,7 @@ theorem layFC_check (L : LCtx) (hL : L.ok) :
 /-- Carried through the leaf and the fold of layer `lay` to the precode of layer `lay - 1`. -/
 def LeafCarry (L : LCtx) (s : MachineState) : Prop :=
   s.getReg .x26 = BitVec.ofNat 64 (h3Word L.lay) ∧ s.getReg .x27 = BitVec.ofNat 64 (hWord L.lay) ∧
-  s.getReg .x15 = BitVec.ofNat 64 (bVal L.lay 41) ∧ s.getReg .x30 = BitVec.ofNat 64 L.tau
+  s.getReg .x15 = BitVec.ofNat 64 (bVal L.lay 41) ∧ s.getReg .x30 = BitVec.ofNat 64 L.tau ∧ CBZ s
 
 theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s : MachineState)
     (hs : HeadInv (L.cctx a) 42 ends s) :
@@ -81,7 +81,7 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
       ∀ ans, FoldInv (layFC L) (writeHash u ans) 0 (answerBytes 16 ans) (writeHash u ans) ∧
         LeafCarry L (writeHash u ans) := by
   obtain ⟨hlay, hidx, hwl⟩ := hL
-  obtain ⟨hG, hK, hR, hCB, hF0, hF8, hLB, hlen, hvs, ⟨tt, -, hpc⟩, -⟩ := hs
+  obtain ⟨hG, hK, hR, hCB, hZ, hLB, hlen, hvs, ⟨tt, -, hpc⟩, -⟩ := hs
   obtain ⟨h16, h17, h23, h30, h31⟩ := hR
   have hpc' : s.pc = pcOf (nextPc' L.lay 41) := by rw [hpc]; simp [headPc, LCtx.cctx]
   have he := e_lt L
@@ -152,7 +152,7 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
     have hK2 := KnownOK_append.mp hK'
     refine ⟨⟨Glob_writeHash (hu.glob _ _ _ hG) ans _ h12 (by
         rcases Nat.mod_two_eq_zero_or_one L.e with h | h <;> rw [h] <;> decide),
-      ?_, ?_, ?_, ?_, ?_, ?_, by simp, ⟨fun _ _ => rfl, fun _ _ _ => rfl⟩, ?_⟩, ?_, ?_, ?_, ?_⟩
+      ?_, ?_, ?_, ?_, ?_, ?_, by simp, ⟨fun _ _ => rfl, fun _ _ _ => rfl⟩, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩
     · have := Known_writeHash hK2.1 ans
       simpa [layFC] using this
     · rw [writeHash_getReg, hu.keep .x23 (by simp [leafKeep])]; exact h23
@@ -179,5 +179,9 @@ theorem leaf_step (L : LCtx) (hL : L.ok) (a : BitVec 256) (ends : List Val) (s :
     · rw [writeHash_getReg]; exact hK2.2 (.x27, BitVec.ofNat 64 (hWord L.lay)) (by simp)
     · rw [writeHash_getReg]; exact hK2.2 (.x15, BitVec.ofNat 64 (bVal L.lay 41)) (by simp)
     · rw [writeHash_getReg, hu.keep .x30 (by simp [leafKeep])]; exact h30
+    · exact ⟨by rw [wf 0xE0 (by omega) (by omega), mfr 0xE0 (by omega) (by omega) (by omega) (by omega)
+          (by omega)]; exact hZ.1,
+        by rw [wf 0xE8 (by omega) (by omega), mfr 0xE8 (by omega) (by omega) (by omega) (by omega)
+          (by omega)]; exact hZ.2⟩
 
 end SigGolfCandidate.Verify

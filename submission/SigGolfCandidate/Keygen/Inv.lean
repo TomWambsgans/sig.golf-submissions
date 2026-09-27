@@ -10,8 +10,9 @@ open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.R
 /-- Tree array base (`addrTA`). -/
 abbrev TA : Nat := 0x34100
 
-/-- Doublewords kept at zero: the `P` parts of the PRF, chain, leaf and node buffers. -/
-def zeroKeys : List Nat := [1712, 1720, 208, 216, 848, 856, 464, 472]
+/-- Doublewords kept at zero: the `P` parts of the PRF, chain, leaf and node buffers, and the
+zero half `CB+32 .. CB+48` of the value-last chain block (cleared once by the first block). -/
+def zeroKeys : List Nat := [1712, 1720, 208, 216, 224, 232, 848, 856, 464, 472]
 
 /-- Facts that hold from the end of the first block until the final block. -/
 structure Base (W : List Word) (t : MachineState) : Prop where

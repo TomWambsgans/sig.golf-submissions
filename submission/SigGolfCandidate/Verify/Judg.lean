@@ -76,7 +76,7 @@ theorem cc_bind {α β : Type} (oa : OracleComp HashSpec α) (f : α → OracleC
 
 theorem cc_hash16 (x : List Byte) (K : Val → OracleComp HashSpec Obs) :
     cc (hash16 x) K = (do
-      let a ← (HashSpec.query (pad64 x) : OracleComp HashSpec _)
+      let a ← (HashSpec.query (fmt x) : OracleComp HashSpec _)
       (fun q => (q.1, 1 + q.2)) <$> K (answerBytes 16 a)) := by
   simp only [hash16, cc_bind]
   simp only [cc, H, countCalls_query, bind_map_left, countCalls_pure, pure_bind,
@@ -87,9 +87,9 @@ theorem cc_hash16 (x : List Byte) (K : Val → OracleComp HashSpec Obs) :
 theorem Good.hash {s : MachineState} {N C : Nat} {x : List Byte}
     {K : Val → OracleComp HashSpec Obs}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
-    (hv : hashArgumentsValid s = true) (hin : hashInput s = pad64 x)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = fmt x)
     (h : ∀ a, Good (writeHash s a) N C (K (answerBytes 16 a))) :
-    Good s (N + 1) (C + 8 * (pad64 x).blocks) (cc (hash16 x) K) := by
+    Good s (N + 1) (C + 8 * (fmt x).blocks) (cc (hash16 x) K) := by
   intro F hF
   have hF' : F = (F - 1) + 1 := by omega
   refine ⟨?_, fun hash => ?_⟩
@@ -98,22 +98,22 @@ theorem Good.hash {s : MachineState} {N C : Nat} {x : List Byte}
     rw [Functor.map_map, ← (h a (F - 1) (by omega)).1, Functor.map_map]
     congr 1
   · rw [hF', evalWith_hash hash (F - 1) hf ht0 hv, hin]
-    obtain ⟨h1, h2⟩ := (h (hash (pad64 x)) (F - 1) (by omega)).2 hash
+    obtain ⟨h1, h2⟩ := (h (hash (fmt x)) (F - 1) (by omega)).2 hash
     simp only [Execution.charge_exit, Execution.charge_cycles]
     exact ⟨h1, by omega⟩
 
 theorem cc_H (x : List Byte) (K : BitVec 256 → OracleComp HashSpec Obs) :
     cc (H x) K = (do
-      let a ← (HashSpec.query (pad64 x) : OracleComp HashSpec _)
+      let a ← (HashSpec.query (fmt x) : OracleComp HashSpec _)
       (fun q => (q.1, 1 + q.2)) <$> K a) := by
   simp only [cc, H, countCalls_query, bind_map_left]
 
 theorem Good.hashH {s : MachineState} {N C : Nat} {x : List Byte}
     {K : BitVec 256 → OracleComp HashSpec Obs}
     (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
-    (hv : hashArgumentsValid s = true) (hin : hashInput s = pad64 x)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = fmt x)
     (h : ∀ a, Good (writeHash s a) N C (K a)) :
-    Good s (N + 1) (C + 8 * (pad64 x).blocks) (cc (H x) K) := by
+    Good s (N + 1) (C + 8 * (fmt x).blocks) (cc (H x) K) := by
   intro F hF
   have hF' : F = (F - 1) + 1 := by omega
   refine ⟨?_, fun hash => ?_⟩
@@ -122,7 +122,7 @@ theorem Good.hashH {s : MachineState} {N C : Nat} {x : List Byte}
     rw [Functor.map_map, ← (h a (F - 1) (by omega)).1, Functor.map_map]
     congr 1
   · rw [hF', evalWith_hash hash (F - 1) hf ht0 hv, hin]
-    obtain ⟨h1, h2⟩ := (h (hash (pad64 x)) (F - 1) (by omega)).2 hash
+    obtain ⟨h1, h2⟩ := (h (hash (fmt x)) (F - 1) (by omega)).2 hash
     simp only [Execution.charge_exit, Execution.charge_cycles]
     exact ⟨h1, by omega⟩
 
@@ -140,5 +140,39 @@ theorem Good.halt {s : MachineState} (hf : fetch image s = some (.base .ECALL))
     by_cases hx : s.getReg .x10 = 0
     · simp only [hx, if_true]; decide
     · simp only [hx, if_false]; decide
+
+end SigGolfCandidate.Verify
+
+namespace SigGolfCandidate.Verify
+open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+
+/-- HASH on a zero-padded (non-chain) input. -/
+theorem Good.hashP {s : MachineState} {N C : Nat} {x : List Byte}
+    {K : Val → OracleComp HashSpec Obs} (hx : fmt x = pad64 x)
+    (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = pad64 x)
+    (h : ∀ a, Good (writeHash s a) N C (K (answerBytes 16 a))) :
+    Good s (N + 1) (C + 8 * (pad64 x).blocks) (cc (hash16 x) K) := by
+  have := Good.hash hf ht0 hv (hin.trans hx.symm) h
+  rwa [hx] at this
+
+theorem Good.hashHP {s : MachineState} {N C : Nat} {x : List Byte}
+    {K : BitVec 256 → OracleComp HashSpec Obs} (hx : fmt x = pad64 x)
+    (hf : fetch image s = some (.base .ECALL)) (ht0 : s.getReg .x5 = 0)
+    (hv : hashArgumentsValid s = true) (hin : hashInput s = pad64 x)
+    (h : ∀ a, Good (writeHash s a) N C (K a)) :
+    Good s (N + 1) (C + 8 * (pad64 x).blocks) (cc (H x) K) := by
+  have := Good.hashH hf ht0 hv (hin.trans hx.symm) h
+  rwa [hx] at this
+
+theorem byte_ne_one (t : Nat) (h1 : t < 256) (h2 : t ≠ 1) : byte t ≠ byte 1 := by
+  intro h
+  have := congrArg BitVec.toNat h
+  simp [byte] at this
+  omega
+
+theorem fmt_th (t lay tau p j : Nat) (payload : List Byte) (h1 : t < 256) (h2 : t ≠ 1) :
+    fmt (thInput (tweak t lay tau p j) payload) = pad64 (thInput (tweak t lay tau p j) payload) :=
+  fmt_thInput t lay tau p j payload (byte_ne_one t h1 h2)
 
 end SigGolfCandidate.Verify

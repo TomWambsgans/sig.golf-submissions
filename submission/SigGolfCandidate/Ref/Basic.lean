@@ -9,7 +9,9 @@ Byte-level primitives of the reference specification (`work/py/ref.py`, `work/de
 * byte encodings (little endian) and conversions between `List Byte` and `Bytes n`;
 * the parameters;
 * the 16-byte tweak;
-* `pad64` (zero padding to whole 64-byte blocks) and the hash wrappers `H`, `hash16`, `th`;
+* `pad64` (zero padding to whole 64-byte blocks), the oracle input format `fmt` (chain inputs
+  `tw || P || v` become `tw || 0^32 || v`, everything else `pad64`), and the hash wrappers `H`,
+  `hash16`, `th`;
 * every per-hash input format (`*Input`), the exact byte list *before* padding;
 * digest split (`idxOf`, `uOf`, `admissible`), routing (`route`), digit decoding
   (`decodeDigits`).
@@ -106,15 +108,29 @@ def padTo64 (x : List Byte) : List Byte :=
 /-- The oracle query of `x`: `x` zero padded to a nonzero multiple of 64 bytes. -/
 def pad64 (x : List Byte) : Query := ⟨padBlocks x.length, ofList _ (padTo64 x)⟩
 
-/-- One oracle call on `pad64 x`. -/
-def H (x : List Byte) : OracleComp HashSpec (BitVec 256) := HashSpec.query (pad64 x)
+/-- WOTS chain inputs (`PROGRAMS.md`, FORMAT): 48 bytes with tag byte (byte 1) `1`. -/
+def IsChainFmt (x : List Byte) : Prop := x.length = 48 ∧ x.getD 1 0 = byte 1
 
-/-- One oracle call on `pad64 x`, truncated to its first 16 bytes. -/
+instance (x : List Byte) : Decidable (IsChainFmt x) :=
+  inferInstanceAs (Decidable (x.length = 48 ∧ x.getD 1 0 = byte 1))
+
+/-- The 64-byte block of a chain input `x = tw || P || v`: `tw || 0^32 || v` (value last). -/
+def chainBlock (x : List Byte) : List Byte := x.take 16 ++ zeros 32 ++ x.drop 32
+
+/-- **The oracle input format** `f` (`PROGRAMS.md`, FORMAT; `ref.f_query`): chain inputs become
+the block `tw || 0^32 || v`; every other input is zero padded (`pad64`). -/
+def fmt (x : List Byte) : Query :=
+  if IsChainFmt x then ⟨0, ofList _ (chainBlock x)⟩ else pad64 x
+
+/-- One oracle call on `fmt x`. -/
+def H (x : List Byte) : OracleComp HashSpec (BitVec 256) := HashSpec.query (fmt x)
+
+/-- One oracle call on `fmt x`, truncated to its first 16 bytes. -/
 def hash16 (x : List Byte) : OracleComp HashSpec Val := do
   let a ← H x
   pure (answerBytes 16 a)
 
-/-- `Th(P, tw, payload)`: the first 16 bytes of `H(pad64(tw || 0^16 || payload))`. -/
+/-- `Th(P, tw, payload)`: the first 16 bytes of `H(fmt(tw || 0^16 || payload))`. -/
 def th (tw payload : List Byte) : OracleComp HashSpec Val := hash16 (thInput tw payload)
 
 /-! ## Hash input formats (exact byte lists before padding)

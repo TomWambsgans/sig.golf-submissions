@@ -299,6 +299,19 @@ theorem words_th16 (t lay tau p j : Nat) (v : Val) (hv : v.length = 16) :
   rw [show 64 * (0 + 1) - (16 + 16 + 16) = 8 * 2 from rfl, wordsOf_zeros]
   simp
 
+/-- The HASH input of a chain step (value-last format `tw || 0^32 || v`, `fmt_chainInput`). -/
+theorem hashInput_eq_chain (t : MachineState) (lay tau e i mu : Nat) (v : Val) (hv : v.length = 16)
+    (h11 : t.getReg .x11 = BitVec.ofNat 64 64) (h10 : (t.getReg .x10).toNat % 8 = 0)
+    (hw : t.readWords (t.getReg .x10) 8 =
+      twWords 1 lay tau (8 * i + mu - 1) e ++ [0, 0, 0, 0] ++ wordsOf v) :
+    hashInput t = fmt (chainInput lay tau e i mu v) := by
+  rw [hashInput_eq_words t 0 h11 (by norm_num) h10, hw, fmt_chainInput _ _ _ _ _ _ hv]
+  unfold queryOfWords ofList
+  rw [← wordsToNat_wordsOf (tweak 1 lay tau (8 * i + mu - 1) e ++ zeros 32 ++ v),
+    wordsOf_append _ _ (by simp [zeros]), wordsOf_append _ _ (by simp), wordsOf_tweak,
+    show (32 : Nat) = 8 * 4 from rfl, wordsOf_zeros]
+  rfl
+
 /-- A 64-byte input `tw | P | l | r` (tree node, FORS node). -/
 theorem words_th32 (t lay tau p j : Nat) (l r : Val) (hl : l.length = 16) (hr : r.length = 16) :
     padBlocks (thInput (tweak t lay tau p j) (l ++ r)).length = 0 ∧

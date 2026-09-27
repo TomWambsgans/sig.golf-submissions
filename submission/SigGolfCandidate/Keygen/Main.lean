@@ -5,9 +5,9 @@ import SigGolfCandidate.Keygen.Output
 # `keygen` refines `keygenRef`
 
 `keygen_run` : for every secret key `sk`,
-`submission.run .keygen sk = (fun pk => ⟨some (pk, 0), true, 196282, 10815, 11135⟩) <$> keygenRef sk`:
+`submission.run .keygen sk = (fun pk => ⟨some (pk, 0), true, 165372, 10815, 11135⟩) <$> keygenRef sk`:
 the machine makes exactly the oracle queries of `keygenRef sk` (in order), outputs its public key
-and an all-zero cache, and always takes 196282 cycles, 10815 calls and 11135 compressions.
+and an all-zero cache, and always takes 165372 cycles, 10815 calls and 11135 compressions.
 -/
 
 namespace SigGolfCandidate.Keygen
@@ -81,12 +81,12 @@ theorem kW_skOk (sk : SecretKey) : SkOk (kW sk) (toList sk) := by
   rfl
 
 theorem leaves_xsim (sk : SecretKey) :
-    XSim image (kInit sk) (23 + sumTo (fun _ => 3668) (2 ^ 5)) (23 + sumTo (fun _ => 6107) (2 ^ 5))
+    XSim image (kInit sk) (25 + sumTo (fun _ => 2702) (2 ^ 5)) (25 + sumTo (fun _ => 5141) (2 ^ 5))
       (sumTo (fun _ => 337) (2 ^ 5)) (sumTo (fun _ => 347) (2 ^ 5))
       (buildLeaves (toList sk) 0 0 5 0 [])
-      (fun p u => LCtx (kW sk) (2 ^ 5) p.1 u ∧ u.pc = if 2 ^ 5 < 32 then pcOf 23 else pcOf 64) := by
+      (fun p u => LCtx (kW sk) (2 ^ 5) p.1 u ∧ u.pc = if 2 ^ 5 < 32 then pcOf 25 else pcOf 61) := by
   obtain ⟨t, hst, tpc, t8, t30, t9, t19, t17, t20, t5, t1728, t1736, t1744, t1752, t1696, t192,
-    t832, tfr⟩ := spec_0 (kInit sk) (kInit_pc sk) (by rw [kInit_mem sk 1696 (by norm_num)]; rfl)
+    t832, t224, t232, tfr⟩ := spec_0 (kInit sk) (kInit_pc sk) (by rw [kInit_mem sk 1696 (by norm_num)]; rfl)
       (by rw [kInit_mem sk 192 (by norm_num)]; rfl)
   have zi : ∀ A < 2 ^ 64, (A < 128 ∨ 160 ≤ A) → (kInit sk).getMem (BitVec.ofNat 64 A) = 0 := by
     intro A hA h; rw [kInit_mem sk A hA, if_neg (by omega)]
@@ -100,26 +100,30 @@ theorem leaves_xsim (sk : SecretKey) :
       · exact t1752
     · intro A hA
       simp [zeroKeys] at hA
+      by_cases h224 : A = 224
+      · subst h224; exact t224
+      by_cases h232 : A = 232
+      · subst h232; exact t232
       rw [tfr A (by omega) (by simp; omega), zi A (by omega) (by omega)]
     · intro A h1 h2
       rw [tfr A (by omega) (by simp; omega), zi A (by omega) (by omega)]
   have h0 : LCtx (kW sk) 0 [] t := ⟨hb, t1696, t192, t17, t20, rfl, Vals.nil t TA⟩
   unfold buildLeaves
   refine XSim.steps hst (XSim.foldlM_range (2 ^ 5) _ ([], [])
-    (fun e acc u => LCtx (kW sk) e acc.1 u ∧ u.pc = if e < 32 then pcOf 23 else pcOf 64)
-    (fun _ => 3668) (fun _ => 6107) (fun _ => 337) (fun _ => 347)
+    (fun e acc u => LCtx (kW sk) e acc.1 u ∧ u.pc = if e < 32 then pcOf 25 else pcOf 61)
+    (fun _ => 2702) (fun _ => 5141) (fun _ => 337) (fun _ => 347)
     (fun e he acc u hu => leaf_xsim (kW sk) (toList sk) (kW_skOk sk) e (by norm_num at he; omega)
       acc u hu.1 (by rw [hu.2, if_pos (by norm_num at he; omega)])) ⟨h0, by rw [tpc]; rfl⟩)
 
 /-- The tree levels, from the leaves in the tree array. -/
 theorem levels_xsim (W : List Word) (leaves : List Val) (u : MachineState)
-    (h : LCtx W 32 leaves u) (hpc : u.pc = pcOf 64) :
+    (h : LCtx W 32 leaves u) (hpc : u.pc = pcOf 61) :
     XSim image u (1 + sumTo (fun k => 10 + 2 ^ (4 - k) * 18) 5)
       (1 + sumTo (fun k => 10 + 2 ^ (4 - k) * 25) 5) (sumTo (fun k => 2 ^ (4 - k)) 5)
       (sumTo (fun k => 2 ^ (4 - k)) 5)
       (buildLevels (nodeInput 0 0) 0 5 leaves)
-      (fun r w => Base W w ∧ ValAt w TA r.1 ∧ r.1.length = 16 ∧ w.pc = pcOf 93) := by
-  obtain ⟨v, vst, vpc, v15, vun, vfr⟩ := spec_64 u hpc
+      (fun r w => Base W w ∧ ValAt w TA r.1 ∧ r.1.length = 16 ∧ w.pc = pcOf 90) := by
+  obtain ⟨v, vst, vpc, v15, vun, vfr⟩ := spec_61 u hpc
   have h0 : VCtx W 0 leaves v := by
     refine ⟨h.base.frame (fun r hr => vun r (by rcases hr with h | h | h | h | h <;> simp [h])) vfr
       (by simp), v15, ?_, by rw [h.len]; rfl, ?_⟩
@@ -129,7 +133,7 @@ theorem levels_xsim (W : List Word) (leaves : List Val) (u : MachineState)
   unfold buildLevels
   refine (XSim.steps vst (XSim.bind (k₂ := 0) (c₂ := 0) (n₂ := 0) (b₂ := 0)
     (XSim.foldlM_range' 1 5 _ (leaves, [])
-      (fun k st w => VCtx W k st.1 w ∧ w.pc = if k < 5 then pcOf 65 else pcOf 93)
+      (fun k st w => VCtx W k st.1 w ∧ w.pc = if k < 5 then pcOf 62 else pcOf 90)
       (fun k => 10 + 2 ^ (4 - k) * 18) (fun k => 10 + 2 ^ (4 - k) * 25) (fun k => 2 ^ (4 - k))
       (fun k => 2 ^ (4 - k))
       (fun k hk st w hw => level_xsim W k hk st w hw.1 (by rw [hw.2, if_pos hk]))
@@ -144,17 +148,17 @@ theorem levels_xsim (W : List Word) (leaves : List Val) (u : MachineState)
 
 /-- The whole of `keygen`. -/
 theorem keygen_xsim (sk : SecretKey) :
-    XSim image (kInit sk) 118016 196281 10815 11135 (keygenRef sk)
+    XSim image (kInit sk) 87106 165371 10815 11135 (keygenRef sk)
       (fun pk t => fetch image t = some (.base .ECALL) ∧ t.getReg .x5 = 1 ∧ t.getReg .x10 = 0 ∧
         readOutput submission.sizes submission.layout .keygen t = (pk, 0)) := by
   unfold keygenRef keygenList buildTree
   simp only [show height 0 = 5 from rfl]
-  have htree : XSim image (kInit sk) 118008 196273 10815 11135
+  have htree : XSim image (kInit sk) 87098 165363 10815 11135
       (do
         let x ← buildLeaves (toList sk) 0 0 5 0 []
         let y ← buildLevels (nodeInput 0 0) 0 5 x.1
         pure (y.1, x.2, y.2))
-      (fun r w => Base (kW sk) w ∧ ValAt w TA r.1 ∧ r.1.length = 16 ∧ w.pc = pcOf 93) := by
+      (fun r w => Base (kW sk) w ∧ ValAt w TA r.1 ∧ r.1.length = 16 ∧ w.pc = pcOf 90) := by
     refine (XSim.bind (k₂ := 1 + sumTo (fun k => 10 + 2 ^ (4 - k) * 18) 5)
       (c₂ := 1 + sumTo (fun k => 10 + 2 ^ (4 - k) * 25) 5) (n₂ := sumTo (fun k => 2 ^ (4 - k)) 5)
       (b₂ := sumTo (fun k => 2 ^ (4 - k)) 5) (leaves_xsim sk) (fun p u hu => ?_)).of_eq rfl
@@ -163,26 +167,26 @@ theorem keygen_xsim (sk : SecretKey) :
       (levels_xsim (kW sk) p.1 u hu.1 (by rw [hu.2]; rfl))
       (fun y w hw => XSim.pure (Q := fun (r : Val × List Val × List Val) w => Base (kW sk) w ∧
         ValAt w TA r.1 ∧ r.1.length = 16 ∧
-        w.pc = pcOf 93) hw)).of_eq rfl (by simp) (by simp) (by simp) (by simp)
+        w.pc = pcOf 90) hw)).of_eq rfl (by simp) (by simp) (by simp) (by simp)
   refine (XSim.bind (k₂ := 8) (c₂ := 8) (n₂ := 0) (b₂ := 0)
     (XSim.bind (k₂ := 0) (c₂ := 0) (n₂ := 0) (b₂ := 0) htree
       (fun x w hw => XSim.pure (Q := fun r w => Base (kW sk) w ∧ ValAt w TA r ∧ r.length = 16 ∧
-        w.pc = pcOf 93) hw))
+        w.pc = pcOf 90) hw))
     (fun root w hw => ?_)).of_eq rfl (by decide) (by decide) (by decide) (by decide)
   obtain ⟨hb, hv, hl, hpc⟩ := hw
-  obtain ⟨t, tst, tpc, t5, t10, t160, t168, tfr⟩ := spec_93 w hpc
-  refine XSim.pure_steps tst ⟨(codeAt_101.fetch t tpc).trans rfl, t5, t10, ?_⟩
+  obtain ⟨t, tst, tpc, t5, t10, t160, t168, tfr⟩ := spec_90 w hpc
+  refine XSim.pure_steps tst ⟨(codeAt_98.fetch t tpc).trans rfl, t5, t10, ?_⟩
   show (readBuffer t 160 16, readBuffer t 0x44A0 CACHE_BYTES) = (ofList 16 root, 0)
   rw [readBuffer_val t 160 root hl (by norm_num) (by norm_num) ⟨by rw [t160]; exact hv.1,
     by rw [t168]; exact hv.2⟩, readBuffer_cache t (fun A h1 h2 => by
       rw [tfr A (by omega) (by simp; omega)]; exact hb.cache A h1 h2)]
 
 /-- **keygen**: for every secret key, one run makes exactly the oracle queries of
-`keygenRef sk`, outputs its public key and an all-zero cache, and always takes 196282 cycles,
+`keygenRef sk`, outputs its public key and an all-zero cache, and always takes 165372 cycles,
 10815 calls and 11135 compressions. -/
 theorem keygen_run (sk : SecretKey) :
     submission.run .keygen sk =
-      (fun pk => ⟨some (pk, 0), true, 196282, 10815, 11135⟩) <$> keygenRef sk :=
+      (fun pk => ⟨some (pk, 0), true, 165372, 10815, 11135⟩) <$> keygenRef sk :=
   XSim.run_eq submission .keygen sk (kInit_eq sk) (keygen_xsim sk) (by decide) (fun pk => (pk, 0))
     (fun _ _ h => h)
 
@@ -204,10 +208,10 @@ theorem keygen_run_counts (sk : SecretKey) :
       (fun p => (some (p.1, 0), p.2.1, p.2.2)) <$> Sign.countBoth (keygenRef sk) := by
   rw [keygen_run, keygenRef_countBoth, Functor.map_map, Functor.map_map]; rfl
 
-/-- Fixed-oracle form: finished, exactly 196282 cycles (`< 2^32`), for every oracle. -/
+/-- Fixed-oracle form: finished, exactly 165372 cycles (`< 2^32`), for every oracle. -/
 theorem keygen_runWith (hash : Hash) (sk : SecretKey) :
     submission.runWith hash .keygen sk =
-      ⟨some (evalWithAnswerFn hash (keygenRef sk), 0), true, 196282, 10815, 11135⟩ := by
+      ⟨some (evalWithAnswerFn hash (keygenRef sk), 0), true, 165372, 10815, 11135⟩ := by
   unfold Submission.runWith
   rw [keygen_run, evalWithAnswerFn_map]
 

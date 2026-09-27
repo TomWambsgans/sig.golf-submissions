@@ -34,7 +34,7 @@ theorem submission_terminates (hS : SignTerminationStatement) (hV : VerifyTermin
     show (submission.runWith hash .keygen input).finished = true ∧
       (submission.runWith hash .keygen input).cycles < CYCLE_LIMIT
     rw [Keygen.keygen_runWith]
-    exact ⟨rfl, show (196282 : Nat) < 2 ^ 32 by norm_num⟩
+    exact ⟨rfl, by show _ < 2 ^ 32; norm_num⟩
   | sign =>
     obtain ⟨sk, cache, m⟩ := input
     exact hS hash sk cache m

@@ -6,7 +6,7 @@ import SigGolfCandidate.Equiv.Codec
 # Signing
 
 The few-time forest, the digest search, the counter search, the layer loop and the whole signer:
-each reference routine is `f <$> relabel padQ A` for the abstract routine `A`.
+each reference routine is `f <$> relabel fmtQ A` for the abstract routine `A`.
 -/
 
 open OracleComp OracleSpec
@@ -29,14 +29,14 @@ attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.diges
 
 theorem hash16_ftsPrf (seed : MasterSeed) (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
     Ref.hash16 (Ref.ftsPrfInput (Ref.toList (n := 32) seed) tree index leaf) =
-      dv <$> relabel padQ (SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index tree leaf) := by
+      dv <$> relabel fmtQ (SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index tree leaf) := by
   apply hash16_derive
   simp [SphincsSecurity.keygenHashInput, SphincsSecurity.keygenDomainFields, toB_tweakFields,
     toB_seed, Ref.ftsPrfInput, Ref.thInput]
 
 theorem hash16_ftsLeaf (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (s : Digest) :
     Ref.hash16 (Ref.ftsLeafInput tree index leaf (dv s)) =
-      dv <$> relabel padQ (SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree leaf s) := by
+      dv <$> relabel fmtQ (SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree leaf s) := by
   apply hash16_tweakable
   rw [toB_tweakableHashInput]
   simp only [SphincsSecurity.tweakBytes, SphincsSecurity.hashDomainFields, toB_tweakFields,
@@ -44,7 +44,7 @@ theorem hash16_ftsLeaf (index : Index) (tree : FtsTree) (leaf : FtsLeaf) (s : Di
 
 theorem hash16_ftsNode (index : Index) (tree : FtsTree) (lam j : Nat) (l r : Digest) :
     Ref.hash16 (Ref.ftsNodeInput tree index lam j (dv l) (dv r)) =
-      dv <$> relabel padQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
+      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
         (.ftsNode index tree lam j) (SphincsSecurity.Concrete.nodePayload l r)) := by
   apply hash16_tweakable
   rw [toB_tweakableHashInput]
@@ -54,7 +54,7 @@ theorem hash16_ftsNode (index : Index) (tree : FtsTree) (lam j : Nat) (l r : Dig
 
 theorem hash16_roots (index : Index) (roots : FtsTree → Digest) :
     Ref.hash16 (Ref.rootsInput index (List.ofFn fun k => dv (roots k))) =
-      dv <$> relabel padQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
+      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
         (.ftsRoots index) (SphincsSecurity.Concrete.ftsRootsPayload roots)) := by
   apply hash16_tweakable
   rw [toB_tweakableHashInput]
@@ -75,7 +75,7 @@ abbrev absFtsLeaves (seed : MasterSeed) (index : Index) (tree : FtsTree) :=
 theorem buildFtsLeaves_eq (seed : MasterSeed) (index : Index) (tree : FtsTree) (leaf : FtsLeaf) :
     Ref.buildFtsLeaves (Ref.toList (n := 32) seed) tree index Ref.ftsA leaf =
       (fun f => (List.ofFn fun j => dv (f j).2, dv (f leaf).1)) <$>
-        relabel padQ (absFtsLeaves seed index tree) := by
+        relabel fmtQ (absFtsLeaves seed index tree) := by
   unfold Ref.buildFtsLeaves
   have hbody : (fun (st : List Ref.Val × Ref.Val) (j : Nat) => do
       let s ← Ref.hash16 (Ref.ftsPrfInput (Ref.toList (n := 32) seed) tree index j)
@@ -87,7 +87,7 @@ theorem buildFtsLeaves_eq (seed : MasterSeed) (index : Index) (tree : FtsTree) (
     funext st j; simp only [bind_assoc, pure_bind]
   rw [hbody, show Ref.ftsA = SphincsSecurity.ftsTreeHeight from rfl, absFtsLeaves,
     relabel_sequenceFin]
-  rw [foldlM_range_seq (fun leafIdx : FtsLeaf => relabel padQ (do
+  rw [foldlM_range_seq (fun leafIdx : FtsLeaf => relabel fmtQ (do
       let value ← SphincsSecurity.Seeded.ftsSecret (m := AComp) 0 seed index tree leafIdx
       let hashed ← SphincsSecurity.Concrete.ftsLeafHash (m := AComp) 0 index tree leafIdx value
       return (value, hashed))) _ (fun r : Digest × Digest => (dv r.1, dv r.2)) (fun j hj => by
@@ -108,7 +108,7 @@ theorem buildFtsTree_eq (seed : MasterSeed) (index : Index) (tree : FtsTree) (le
     Ref.buildFtsTree (Ref.toList (n := 32) seed) tree index Ref.ftsA leaf =
       (fun r => (dv r.1, (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv (r.2.1 l)),
           dv r.2.2)) <$>
-        relabel padQ (SphincsSecurity.Concrete.buildFtsTree (m := AComp) 0 index tree
+        relabel fmtQ (SphincsSecurity.Concrete.buildFtsTree (m := AComp) 0 index tree
           (SphincsSecurity.Seeded.ftsSecret 0 seed index tree) leaf) := by
   unfold Ref.buildFtsTree SphincsSecurity.Concrete.buildFtsTree
   rw [buildFtsLeaves_eq seed index tree leaf]
@@ -145,7 +145,7 @@ theorem signForsU_eq (seed : MasterSeed) (index : Index) (leaves : IndexGroup �
         (List.ofFn fun k => (dv (trees k).1,
             (List.range SphincsSecurity.ftsTreeHeight).map (fun l => dv ((trees k).2.1 l))),
           List.ofFn fun k => dv (trees k).2.2)) <$>
-        relabel padQ (absTrees seed index leaves) := by
+        relabel fmtQ (absTrees seed index leaves) := by
   unfold signForsU
   have hbody : (fun (st : List (Ref.Val × List Ref.Val) × List Ref.Val) (k : Nat) =>
       Ref.buildFtsTree (Ref.toList (n := 32) seed) k index Ref.ftsA (uFun leaves k) >>= fun p =>
@@ -154,7 +154,7 @@ theorem signForsU_eq (seed : MasterSeed) (index : Index) (leaves : IndexGroup �
       Ref.buildFtsTree (Ref.toList (n := 32) seed) k index Ref.ftsA (uFun leaves k) >>= fun r =>
         pure (st.1 ++ [(r.1, r.2.1)], st.2 ++ [r.2.2]) := rfl
   rw [hbody, show Ref.ftsTrees = SphincsSecurity.ftsTrees - 1 from rfl, absTrees, relabel_sequenceFin]
-  rw [foldlM_range_seq (fun tree : FtsTree => relabel padQ
+  rw [foldlM_range_seq (fun tree : FtsTree => relabel fmtQ
       (SphincsSecurity.Concrete.buildFtsTree (m := AComp) 0 index tree
         (SphincsSecurity.Seeded.ftsSecret 0 seed index tree)
         (leaves (SphincsSecurity.Concrete.ftsIndexOf tree)))) _
@@ -177,7 +177,7 @@ theorem signForsU_eq (seed : MasterSeed) (index : Index) (leaves : IndexGroup �
 
 theorem hash16_enc (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M : Digest) (c : Nat) :
     Ref.hash16 (Ref.encInput lay tree leaf (dv M) c) =
-      dv <$> relabel padQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
+      dv <$> relabel fmtQ (SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
         (.encoding lay tree leaf)
         (SphincsSecurity.bytesLE 16 M ++ SphincsSecurity.bytesLE 4 (BitVec.ofNat SphincsSecurity.counterBits c))) := by
   apply hash16_tweakable
@@ -192,7 +192,7 @@ theorem searchCounter_eq (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (M 
     (fuel c : Nat) (h : c + fuel ≤ 2 ^ 32) :
     Ref.searchCounter lay tree leaf (dv M) c fuel =
       Option.map (fun r => (r.1.toNat, List.ofFn fun i => (r.2 i).val)) <$>
-        relabel padQ (SphincsSecurity.Concrete.encodingSearch (m := AComp) 0 lay tree leaf M fuel c) := by
+        relabel fmtQ (SphincsSecurity.Concrete.encodingSearch (m := AComp) 0 lay tree leaf M fuel c) := by
   induction fuel generalizing c with
   | zero => simp [Ref.searchCounter, SphincsSecurity.Concrete.encodingSearch]
   | succ fuel ih =>
@@ -243,7 +243,7 @@ theorem signLayers_eq (seed : MasterSeed) (index : Index) (n : Nat) (hn : n ≤ 
     Ref.signLayers (Ref.toList (n := 32) seed) index n (dv M) =
       Option.map (fun parts => List.ofFn fun l : Fin n =>
           layerRef (Fin.castLE hn l) (parts (Fin.castLE hn l))) <$>
-        relabel padQ (SphincsSecurity.Concrete.signLayers (m := AComp) 0 index
+        relabel fmtQ (SphincsSecurity.Concrete.signLayers (m := AComp) 0 index
           (SphincsSecurity.Seeded.otsSecret 0 seed) n M) := by
   induction n generalizing M with
   | zero => simp [Ref.signLayers, SphincsSecurity.Concrete.signLayers]
@@ -293,7 +293,7 @@ theorem toB_msg (m : Message) :
 
 theorem hash16_rnd (seed : MasterSeed) (m : Message) (a : Nat) :
     Ref.hash16 (Ref.rndInput (Ref.toList (n := 32) seed) (Ref.toList (n := 32) m) a) =
-      dv <$> relabel padQ (SphincsSecurity.deriveRandomizer (m := AComp) 0 seed m (BitVec.ofNat 32 a)) := by
+      dv <$> relabel fmtQ (SphincsSecurity.deriveRandomizer (m := AComp) 0 seed m (BitVec.ofNat 32 a)) := by
   apply hash16_derive
   simp only [SphincsSecurity.randomizerHashInput, toB_append, toB_P, toB_seed, toB_msg,
     Ref.rndInput, Ref.thInput, List.append_assoc]
@@ -302,7 +302,7 @@ theorem hash16_rnd (seed : MasterSeed) (m : Message) (a : Nat) :
 
 theorem digest_eq (root rho : Digest) (m : Message) :
     Ref.digest (dv rho) (Ref.toList (n := 32) m) =
-      (fun d => d.toNat) <$> relabel padQ
+      (fun d => d.toNat) <$> relabel fmtQ
         (SphincsSecurity.Concrete.messageDigest (m := AComp) 0 root m rho) := by
   unfold Ref.digest SphincsSecurity.Concrete.messageDigest
   simp only [relabel_bind, relabel_oracleHash, relabel_pure, map_bind, map_pure]
@@ -327,7 +327,7 @@ def projA (r : Digest × Index × (IndexGroup → FtsLeaf)) : Ref.Val × Nat × 
 theorem searchDigest_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0)
     (m : Message) (fuel a : Nat) :
     Option.map projN <$> Ref.searchDigest (Ref.toList (n := 32) sk.seed) (Ref.toList (n := 32) m) a fuel =
-      Option.map projA <$> relabel padQ
+      Option.map projA <$> relabel fmtQ
         (SphincsSecurity.Seeded.signDigestLoop (m := AComp) sk m fuel a) := by
   induction fuel generalizing a with
   | zero => simp [Ref.searchDigest, SphincsSecurity.Seeded.signDigestLoop]
@@ -398,7 +398,7 @@ theorem serialize_eq (rho : Digest) (trees : FtsTree → Digest × (Nat → Dige
 theorem signCont_eq (seed : MasterSeed) (randomness : Digest) (index : Index)
     (leaves : IndexGroup → FtsLeaf) :
     signCont (Ref.toList (n := 32) seed) (dv randomness) index (uFun leaves) =
-      Option.map sigToList <$> relabel padQ
+      Option.map sigToList <$> relabel fmtQ
         (SphincsSecurity.Concrete.signFrom (m := AComp) 0 index
           (SphincsSecurity.Seeded.ftsSecret 0 seed index) (SphincsSecurity.Seeded.otsSecret 0 seed)
           randomness leaves) := by
@@ -420,7 +420,7 @@ theorem signCont_eq (seed : MasterSeed) (randomness : Digest) (index : Index)
 key with the seed `S` and the parameter `0` (the root is ignored). -/
 theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0) (m : Message) :
     Ref.signList (Ref.toList (n := 32) sk.seed) (Ref.toList (n := 32) m) =
-      Option.map sigToList <$> relabel padQ (SphincsSecurity.Seeded.sign (m := AComp) sk m) := by
+      Option.map sigToList <$> relabel fmtQ (SphincsSecurity.Seeded.sign (m := AComp) sk m) := by
   rw [signList_eq_cont, show Ref.aMax = SphincsSecurity.digestAttemptLimit from rfl,
     searchDigest_eq sk hP m, bind_map_left]
   unfold SphincsSecurity.Seeded.sign
@@ -434,7 +434,7 @@ theorem signList_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter =
 /-- **sign**: `signRef` is the relabelled abstract signer, decoded by the signature codec. -/
 theorem signRef_eq (sk : SphincsSecurity.Seeded.SecretKey) (hP : sk.parameter = 0) (m : Bytes 32) :
     Ref.signRef sk.seed m =
-      Option.map sigCodec.symm <$> relabel padQ (SphincsSecurity.Seeded.sign (m := AComp) sk m) := by
+      Option.map sigCodec.symm <$> relabel fmtQ (SphincsSecurity.Seeded.sign (m := AComp) sk m) := by
   unfold Ref.signRef
   rw [signList_eq sk hP m]
   simp only [Functor.map_map, map_eq_bind_pure_comp, bind_assoc, pure_bind]
