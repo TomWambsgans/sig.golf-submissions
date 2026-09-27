@@ -1358,4 +1358,58 @@ theorem loaded_honest_middleCounter (publicKey : SigGolf.PublicKey)
 #guard_msgs (whitespace := lax) in
 #print axioms loaded_honest_middleCounter
 
+theorem wire_bottomCounter (pk : SphincsSecurity.PublicKey)
+    (signature : Signature) (i : Nat) (hi : i < counterBytes) :
+    (wire pk signature).extractLsb' (8 * (bottomOffset + i)) 8 =
+      (BitVec.ofNat 32 (signature.layers bottomLayer).counter.toNat).extractLsb'
+        (8*i) 8 := by
+  let before : List Byte :=
+    (prefixBytes pk signature).map UInt8.toBitVec ++
+      (concatFields (ftsTrees - 1) (ftsOpening signature)).map UInt8.toBitVec ++
+      (layerEncoding signature topLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middleLayer).map UInt8.toBitVec ++
+      (layerEncoding signature middle2Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle3Layer).map UInt8.toBitVec ++
+      (layerEncoding signature middle4Layer).map UInt8.toBitVec
+  let after : List Byte := []
+  have split : encodeBytes pk signature = before ++
+      (layerEncoding signature bottomLayer).map UInt8.toBitVec ++ after := by
+    rw [encodeBytes_prefix]
+    simp only [before, after, restBytes, List.map_append, List.append_assoc,
+      List.append_nil]
+  have beforeLength : before.length = bottomOffset := by
+    simp only [before, List.length_append, List.length_map]
+    rw [concatFields_length _ _ _ (ftsOpening_length signature)]
+    simp_rw [layerEncoding_length]
+    simp [prefixBytes, bytesLE, bottomOffset,
+      middle4Offset, middle3Offset, middle2Offset, middleOffset,
+      topOffset, ftsOffset, randomizerOffset, parameterOffset, rootOffset,
+      ftsOpeningBytes, ftsTrees, digestBytes, layerBytes,
+      numChains, counterBytes, layerHeight, maxLayerHeight]
+  exact wire_counter_of_split pk signature bottomLayer bottomOffset
+    before after split beforeLength i hi
+
+theorem loaded_honest_bottomCounter (publicKey : SigGolf.PublicKey)
+    (message : SigGolf.Message) (inner : SphincsSecurity.PublicKey)
+    (signature : Signature) (state : MachineState)
+    (loaded : initialState SphincsSubmission.submission .verify
+      (message, publicKey, wire inner signature) = some state)
+    (i : Nat) (hi : i < counterBytes) :
+    state.getByte (BitVec.ofNat 64 (0x22ca0 + bottomOffset + i)) =
+      (BitVec.ofNat 32 (signature.layers bottomLayer).counter.toNat).extractLsb'
+        (8*i) 8 := by
+  have full : bottomOffset + i < SphincsWire.signatureBytes := by
+    have layerFits : bottomOffset + layerBytes bottomLayer ≤
+      SphincsWire.signatureBytes := by decide
+    have counterFits : counterBytes ≤ layerBytes bottomLayer := by decide
+    omega
+  have addressEq : 0x22ca0 + bottomOffset + i =
+      0x22ca0 + (bottomOffset + i) := by omega
+  rw [addressEq, SphincsVerifierLoader.loaded_witness publicKey message
+    (wire inner signature) state loaded _ full]
+  exact wire_bottomCounter inner signature i hi
+
+#print axioms wire_bottomCounter
+#print axioms loaded_honest_bottomCounter
+
 end SigGolfCandidate.SphincsWireEncoding
