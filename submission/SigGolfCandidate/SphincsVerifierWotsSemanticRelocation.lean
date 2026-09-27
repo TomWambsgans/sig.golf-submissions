@@ -6905,4 +6905,398 @@ theorem upper_honest_five_layers (hash : Hash)
 
 #print axioms upper_honest_five_layers
 
+private def bottomCounterSchedule : List (Word × Instr) :=
+  [ (0x1e20, .LUI .x6 0x25),
+    (0x1e24, .ADDI .x6 .x6 1144),
+    (0x1e28, .LWU .x10 .x6 0),
+    (0x1e2c, .SRLI .x11 .x10 20),
+    (0x1e30, .BEQ .x11 .x0 8),
+    (0x1e38, .LUI .x7 0x40),
+    (0x1e3c, .ADDI .x7 .x7 0),
+    (0x1e40, .SW .x7 .x10 60) ]
+
+private theorem bottomCounter_code :
+    ∀ entry ∈ bottomCounterSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def bottomCounterState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule bottomCounterSchedule state
+
+private theorem bottomCounter_checked (state : MachineState)
+    (pc : state.pc = 0x1e20)
+    (small : BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0) :
+    SphincsMaskedKeygenPrefix.Checked bottomCounterSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, bottomCounterSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setWord32, alignToDword, byteOffset, pc] at small ⊢
+  all_goals simp [small]
+
+theorem bottom_counter_block (state : MachineState)
+    (pc : state.pc = 0x1e20)
+    (small : BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0) :
+    OrdinarySteps SphincsImages.verify state 8
+      (bottomCounterState state) := by
+  simpa only [bottomCounterState, bottomCounterSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+      SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+        bottomCounterSchedule bottomCounter_code state
+        (bottomCounter_checked state pc small)
+
+#print axioms bottom_counter_block
+
+private def bottomHeaderSchedule : List (Word × Instr) := [
+  (0x1e44, .ADDI .x6 .x0 1025),
+  (0x1e48, .LUI .x28 0x43),
+  (0x1e4c, .ADDI .x28 .x28 0),
+  (0x1e50, .LD .x7 .x28 0),
+  (0x1e54, .SLLI .x7 .x7 16),
+  (0x1e58, .ADD .x6 .x6 .x7),
+  (0x1e5c, .LUI .x7 0x40),
+  (0x1e60, .ADDI .x7 .x7 0),
+  (0x1e64, .SW .x7 .x6 0),
+  (0x1e68, .LUI .x28 0x43),
+  (0x1e6c, .ADDI .x28 .x28 16),
+  (0x1e70, .LD .x6 .x28 0),
+  (0x1e74, .SW .x7 .x6 4),
+  (0x1e78, .LUI .x28 0x43),
+  (0x1e7c, .ADDI .x28 .x28 8),
+  (0x1e80, .LD .x6 .x28 0),
+  (0x1e84, .SD .x7 .x6 8),
+  (0x1e88, .LUI .x28 0x43),
+  (0x1e8c, .ADDI .x28 .x28 24),
+  (0x1e90, .LD .x6 .x28 0),
+  (0x1e94, .SW .x7 .x6 16)]
+
+private theorem bottomHeader_code :
+    ∀ entry ∈ bottomHeaderSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def bottomHeaderState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule bottomHeaderSchedule state
+
+private theorem bottomHeader_checked (state : MachineState)
+    (pc : state.pc = 0x1e44) :
+    SphincsMaskedKeygenPrefix.Checked bottomHeaderSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, bottomHeaderSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    MachineState.setWord32, alignToDword, byteOffset, pc]
+
+theorem bottom_header_block (state : MachineState)
+    (pc : state.pc = 0x1e44) :
+    OrdinarySteps SphincsImages.verify state 21
+      (bottomHeaderState state) := by
+  simpa only [bottomHeaderState, bottomHeaderSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+      SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+        bottomHeaderSchedule bottomHeader_code state
+        (bottomHeader_checked state pc)
+
+#print axioms bottom_header_block
+
+private def bottomParamPointers : List (Word × Instr) := [
+  (0x1e98, .LUI .x6 0x23),
+  (0x1e9c, .ADDI .x6 .x6 (-844)),
+  (0x1ea0, .LUI .x7 0x40),
+  (0x1ea4, .ADDI .x7 .x7 20)]
+
+private theorem bottomParamPointers_code :
+    ∀ entry ∈ bottomParamPointers,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def bottomParamPointerState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule bottomParamPointers state
+
+private theorem bottomParamPointers_checked (state : MachineState)
+    (pc : state.pc = 0x1e98) :
+    SphincsMaskedKeygenPrefix.Checked bottomParamPointers state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, bottomParamPointers,
+    execInstrBr, ordinaryStep, memoryArgumentsValid,
+    signExtend12, pc]
+
+private theorem bottomParamPointer_block (state : MachineState)
+    (pc : state.pc = 0x1e98) :
+    OrdinarySteps SphincsImages.verify state 4
+      (bottomParamPointerState state) := by
+  simpa only [bottomParamPointerState, bottomParamPointers,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      bottomParamPointers bottomParamPointers_code state
+      (bottomParamPointers_checked state pc)
+
+private theorem bottomParamPointer_regs (state : MachineState) :
+    (bottomParamPointerState state).getReg .x6 = 0x22cb4 ∧
+    (bottomParamPointerState state).getReg .x7 = 0x40014 := by
+  simp [bottomParamPointerState, bottomParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne]
+
+private theorem bottomParamPointer_pc (state : MachineState)
+    (pc : state.pc = 0x1e98) :
+    (bottomParamPointerState state).pc = 0x1ea8 := by
+  simp [bottomParamPointerState, bottomParamPointers,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
+
+private theorem bottomParamCopy_code :
+    SphincsVerifierMessageCopy.Copy20Code SphincsImages.verify 938 := by
+  constructor <;> intro offset <;> fin_cases offset <;> decide
+
+private def bottomParamState (state : MachineState) : MachineState :=
+  SphincsVerifierCopy.copyRootState (bottomParamPointerState state)
+
+theorem bottom_parameter_block (state : MachineState)
+    (pc : state.pc = 0x1e98) :
+    OrdinarySteps SphincsImages.verify state 14
+      (bottomParamState state) := by
+  have first := bottomParamPointer_block state pc
+  have source := (bottomParamPointer_regs state).1
+  have destination := (bottomParamPointer_regs state).2
+  have second := SphincsVerifierFtsCopyAccess.copy20_block_general
+    SphincsImages.verify 938 bottomParamCopy_code
+    (bottomParamPointerState state) 0x22cb4 0x40014
+    (by simpa using bottomParamPointer_pc state pc)
+    (by simpa using source) (by simpa using destination)
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+  simpa [bottomParamState] using first.append second
+
+#print axioms bottom_parameter_block
+
+private def bottomServiceSchedule : List (Word × Instr) := [
+  (0x1ed0, .LUI .x10 0x40),
+  (0x1ed4, .ADDI .x10 .x10 0),
+  (0x1ed8, .ADDI .x11 .x0 512),
+  (0x1edc, .LUI .x12 0x42),
+  (0x1ee0, .ADDI .x12 .x12 0),
+  (0x1ee4, .ADDI .x5 .x0 1)]
+
+private theorem bottomService_code :
+    ∀ entry ∈ bottomServiceSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def bottomServiceState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule bottomServiceSchedule state
+
+private theorem bottomService_checked (state : MachineState)
+    (pc : state.pc = 0x1ed0) :
+    SphincsMaskedKeygenPrefix.Checked bottomServiceSchedule state := by
+  simp [SphincsMaskedKeygenPrefix.Checked, bottomServiceSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid,
+    signExtend12, pc]
+
+theorem bottom_service_setup_block (state : MachineState)
+    (pc : state.pc = 0x1ed0) :
+    OrdinarySteps SphincsImages.verify state 6
+      (bottomServiceState state) := by
+  simpa only [bottomServiceState, bottomServiceSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      bottomServiceSchedule bottomService_code state
+      (bottomService_checked state pc)
+
+theorem bottom_service_ready (state : MachineState)
+    (pc : state.pc = 0x1ed0) :
+    let ready := bottomServiceState state
+    ready.pc = 0x1ee8 ∧ ready.getReg .x10 = 0x40000 ∧
+    ready.getReg .x11 = 512 ∧ ready.getReg .x12 = 0x42000 ∧
+    ready.getReg .x5 = 1 := by
+  simp [bottomServiceState, bottomServiceSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, MachineState.getReg_setReg_eq,
+    MachineState.getReg_setReg_ne, pc]
+
+#print axioms bottom_service_setup_block
+
+private def bottomPaddingSchedule : List (Word × Instr) := [
+  (0x1eec, .LUI .x6 0x42),
+  (0x1ef0, .ADDI .x6 .x6 0),
+  (0x1ef4, .LBU .x10 .x6 9),
+  (0x1ef8, .ANDI .x10 .x10 192),
+  (0x1efc, .BEQ .x10 .x0 8),
+  (0x1f04, .LUI .x6 0x42),
+  (0x1f08, .ADDI .x6 .x6 0),
+  (0x1f0c, .LBU .x10 .x6 19),
+  (0x1f10, .ANDI .x10 .x10 192),
+  (0x1f14, .BEQ .x10 .x0 8),
+  (0x1f1c, .ADDI .x15 .x0 0)]
+
+private theorem bottomPadding_code :
+    ∀ entry ∈ bottomPaddingSchedule,
+      SphincsVerifierFtsRootCopy.instructionAt SphincsImages.verify entry.1 =
+        some (.base entry.2) := by decide
+
+private def bottomPaddingState (state : MachineState) : MachineState :=
+  SphincsMaskedKeygenPrefix.runSchedule bottomPaddingSchedule state
+
+private theorem bottomPadding_checked (state : MachineState)
+    (pc : state.pc = 0x1eec)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    SphincsMaskedKeygenPrefix.Checked bottomPaddingSchedule state := by
+  have first' : BitVec.setWidth 64 (state.getByte (270345#64)) &&& (192#64) = (0#64) := first
+  have second' : BitVec.setWidth 64 (state.getByte (270355#64)) &&& (192#64) = (0#64) := second
+  simp only [MachineState.getByte] at first' second'
+  simp [SphincsMaskedKeygenPrefix.Checked, bottomPaddingSchedule,
+    execInstrBr, ordinaryStep, memoryArgumentsValid, accessValid,
+    rangeValid, MEMORY_BYTES, signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq,
+    MachineState.getByte, MachineState.getMem_setPC,
+    MachineState.getMem_setReg, pc, first', second']
+
+theorem bottom_padding_block (state : MachineState)
+    (pc : state.pc = 0x1eec)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    OrdinarySteps SphincsImages.verify state 11
+      (bottomPaddingState state) := by
+  simpa only [bottomPaddingState, bottomPaddingSchedule,
+    List.length_cons, List.length_nil, Nat.reduceAdd] using
+    SphincsMaskedKeygenPrefix.checked_sound SphincsImages.verify
+      bottomPaddingSchedule bottomPadding_code state
+      (bottomPadding_checked state pc first second)
+
+theorem bottom_padding_ready (state : MachineState)
+    (pc : state.pc = 0x1eec)
+    (first : BitVec.setWidth 64 (state.getByte 0x42009) &&& 192 = (0 : Word))
+    (second : BitVec.setWidth 64 (state.getByte 0x42013) &&& 192 = (0 : Word)) :
+    (bottomPaddingState state).pc = 0x1f20 ∧
+    (bottomPaddingState state).getReg .x15 = 0 := by
+  have first' : BitVec.setWidth 64 (state.getByte (270345#64)) &&& (192#64) = (0#64) := first
+  have second' : BitVec.setWidth 64 (state.getByte (270355#64)) &&& (192#64) = (0#64) := second
+  simp only [MachineState.getByte] at first' second'
+  simp [bottomPaddingState, bottomPaddingSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, signExtend12,
+    signExtend13, MachineState.getReg_setReg_eq,
+    MachineState.getByte,
+    MachineState.getMem_setPC, MachineState.getMem_setReg,
+    pc, first', second']
+
+#print axioms bottom_padding_block
+
+theorem bottom_hash_site (state : MachineState)
+    (pc : state.pc = 0x1ee8) :
+    fetch SphincsImages.verify state = some (.base .ECALL) := by
+  rw [SphincsVerifierMessageCopy.fetch_index SphincsImages.verify state 954
+    (by decide) (by simpa using pc)]
+  decide
+
+theorem bottom_hash_step (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x1ee8)
+    (source : state.getReg .x10 = 0x40000)
+    (bits : state.getReg .x11 = 512)
+    (destination : state.getReg .x12 = 0x42000)
+    (service : state.getReg .x5 = 1) :
+    Trace hash SphincsImages.verify state 1 8 1 1
+      (writeHash state (hash (hashInput state))) := by
+  have valid : hashArgumentsValid state = true := by
+    simp [hashArgumentsValid, source, bits, destination,
+      accessValid, rangeValid, MEMORY_BYTES]
+  have cost : compressions (hashInput state).1 = 1 := by
+    simp [hashInput, source, bits, compressions]
+  have run := Trace.hash state
+    (writeHash state (hash (hashInput state))) 0 0 0 0
+    (bottom_hash_site state pc) service valid
+    (Trace.refl _)
+  simpa [cost] using run
+
+#print axioms bottom_hash_step
+
+private theorem bottomCounter_pc (state : MachineState)
+    (pc : state.pc = 0x1e20)
+    (small : BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0) :
+    (bottomCounterState state).pc = 0x1e44 := by
+  simp [bottomCounterState, bottomCounterSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr,
+    signExtend12, signExtend13,
+    MachineState.getReg_setReg_eq, MachineState.getReg_setReg_ne,
+    pc] at small ⊢
+  simp [small]
+
+private theorem bottomHeader_pc (state : MachineState)
+    (pc : state.pc = 0x1e44) :
+    (bottomHeaderState state).pc = 0x1e98 := by
+  simp [bottomHeaderState, bottomHeaderSchedule,
+    SphincsMaskedKeygenPrefix.runSchedule, execInstrBr, pc]
+
+private theorem bottomParameter_pc (state : MachineState)
+    (pc : state.pc = 0x1e98) :
+    (bottomParamState state).pc = 0x1ed0 := by
+  have start := bottomParamPointer_pc state pc
+  have finish := SphincsVerifierMessageCopy.copy20_final_pc
+    (bottomParamPointerState state) 938 (by simpa using start)
+  change (SphincsVerifierCopy.copyRootState (bottomParamPointerState state)).pc = 0x1ed0
+  calc
+    _ = BitVec.ofNat 64 (0x1000 + 4 * (938 + 10)) := finish
+    _ = 0x1ed0 := by decide
+
+private def bottomPrehashState (state : MachineState) : MachineState :=
+  bottomServiceState (bottomParamState
+    (bottomHeaderState (bottomCounterState state)))
+
+theorem bottom_prehash_block (state : MachineState)
+    (pc : state.pc = 0x1e20)
+    (small : BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0) :
+    OrdinarySteps SphincsImages.verify state 49 (bottomPrehashState state) ∧
+    (bottomPrehashState state).pc = 0x1ee8 ∧
+    (bottomPrehashState state).getReg .x10 = 0x40000 ∧
+    (bottomPrehashState state).getReg .x11 = 512 ∧
+    (bottomPrehashState state).getReg .x12 = 0x42000 ∧
+    (bottomPrehashState state).getReg .x5 = 1 := by
+  let counter := bottomCounterState state
+  let header := bottomHeaderState counter
+  let parameter := bottomParamState header
+  let ready := bottomServiceState parameter
+  have counterRun := bottom_counter_block state pc small
+  have counterPc := bottomCounter_pc state pc small
+  have headerRun := bottom_header_block counter counterPc
+  have headerPc := bottomHeader_pc counter counterPc
+  have parameterRun := bottom_parameter_block header headerPc
+  have parameterPc := bottomParameter_pc header headerPc
+  have serviceRun := bottom_service_setup_block parameter parameterPc
+  have serviceReady := bottom_service_ready parameter parameterPc
+  refine ⟨?_, serviceReady⟩
+  simpa only [bottomPrehashState, ready, parameter, header, counter,
+    show 8 + 21 + 14 + 6 = 49 by decide] using
+    ((counterRun.append headerRun).append parameterRun).append serviceRun
+
+theorem bottom_decoder_prefix (hash : Hash) (state : MachineState)
+    (pc : state.pc = 0x1e20)
+    (small : BitVec.setWidth 64 (state.getWord32 0x25478) >>> 20 = 0)
+    (encoding : Encoding)
+    (decoded : TargetSum.decodeDigest
+      (truncateHash (hash (hashInput (bottomPrehashState state)))) =
+        some encoding) :
+    let hashed := writeHash (bottomPrehashState state)
+      (hash (hashInput (bottomPrehashState state)))
+    Trace hash SphincsImages.verify state 61 68 1 1
+      (bottomPaddingState hashed) ∧
+    (bottomPaddingState hashed).pc = 0x1f20 ∧
+    (bottomPaddingState hashed).getReg .x15 = 0 := by
+  obtain ⟨preRun, readyPc, source, bits, destination, service⟩ :=
+    bottom_prehash_block state pc small
+  let ready := bottomPrehashState state
+  let answer := hash (hashInput ready)
+  let hashed := writeHash ready answer
+  have hashRun := bottom_hash_step hash ready readyPc source bits
+    destination service
+  have hashedPc : hashed.pc = 0x1eec := by
+    change ready.pc + 4 = 0x1eec
+    rw [readyPc]
+    decide
+  have padding := first_upper_hash_padding ready destination answer encoding decoded
+  have tail := bottom_padding_block hashed hashedPc padding.1 padding.2
+  have final := bottom_padding_ready hashed hashedPc padding.1 padding.2
+  refine ⟨?_, final⟩
+  simpa [ready, answer, hashed, Nat.add_assoc] using
+    ((preRun.trace (hash := hash)).trans hashRun).trans (tail.trace (hash := hash))
+
+#print axioms bottom_prehash_block
+#print axioms bottom_decoder_prefix
+
 end SigGolfCandidate.SphincsVerifierWotsSemanticRelocation
