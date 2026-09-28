@@ -16,7 +16,7 @@ deterministic part (paired PRF secrets, 5 layers (11,6,6,6,5), T = 182) is MAC 1
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp OracleSpec ENNReal OracleComp.EvalDist Finset
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp OracleSpec ENNReal OracleComp.EvalDist Finset
 
 /-- Compressions of the trees of layers `1 .. n`. -/
 def layerCost (n : Nat) : Nat := ∑ l ∈ Finset.range n, treeCost (height (l + 1))

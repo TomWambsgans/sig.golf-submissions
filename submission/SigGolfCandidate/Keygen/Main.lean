@@ -11,7 +11,7 @@ and cache, and always takes 13500615 cycles, 653310 calls and 674814 compression
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
   SigGolfCandidate.Mem OracleComp
 
 /-- The initial state of `keygen`. -/
@@ -37,7 +37,7 @@ theorem kInit_mem (sk : SecretKey) (A : Nat) (hA : A < 2 ^ 64) :
       if 128 ≤ A ∧ A < 160 ∧ (A - 128) % 8 = 0 then
         BitVec.ofNat 64 (leNat (((bytes sk).drop (A - 128)).take 8))
       else 0 := by
-  have hl : (bytes sk).length = 32 := by simp [SigGolf.bytes]
+  have hl : (bytes sk).length = 32 := by simp [SigGolfCandidate.Legacy.bytes]
   unfold kInit
   simp only [MachineState.getMem_setReg]
   rw [getMem_writeBytesAsWords _ _ _ _ (by rw [hl]; norm_num) hA, hl, bytesToWordLE_eq]

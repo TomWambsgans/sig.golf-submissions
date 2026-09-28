@@ -1,5 +1,5 @@
 import SigGolf
-import SigGolfCandidate.Final.Discharge
+import SigGolfCandidate.Transfer.Final
 
 /-!
 # sig.golf solution: SPHINCS+ with PORS+FP (forced-pruning single-tree few-time signature)
@@ -8,16 +8,20 @@ import SigGolfCandidate.Final.Discharge
 `11882` plus the witness charge `⌈6348 / 256⌉ = 25`). Layout (bytes): message 64, secret key 128,
 public key 160, cache 19200, signature 13056, witness 2048.
 
-The certificate is `SigGolfCandidate.Final.certificate`: the four RISC-V images are proved to refine
-a byte-level reference (`SigGolfCandidate.Ref`), which is proved equal to the abstract SPHINCS+
-scheme with PORS+FP (`SigGolfCandidate.SphincsSecurity`) up to the oracle input format; the abstract
-scheme's 127-bit event-form security, per-seed completeness and correctness are transported to the
-organizer's game through `SigGolfCandidate.Bridge`.
+The certificate is `SigGolfCandidate.certificateNew`. It is transferred from
+`SigGolfCandidate.Final.certificate`, a certificate for the same images under the previous
+organizer contract (70ba436, kept verbatim as `SigGolfCandidate.Legacy`): `SigGolfCandidate.Transfer`
+proves that both contracts' machines and runs agree on admissible images and transfers each statement.
+In the legacy certificate the four RISC-V images are proved to refine a byte-level reference
+(`SigGolfCandidate.Ref`), which is proved equal to the abstract SPHINCS+ scheme with PORS+FP
+(`SphincsSecurity`) up to the oracle input format; the abstract scheme's 127-bit event-form
+security, per-seed completeness and correctness are transported to the organizer's game through
+`SigGolfCandidate.Bridge`.
 -/
 
 namespace SigGolf.Challenge
 
-noncomputable def submission : SigGolf.Submission := SigGolfCandidate.submission
+def submission : SigGolf.Submission := SigGolfCandidate.submissionNew
 
 theorem signature_bytes : submission.sizes.signature = 6100 := rfl
 
@@ -30,6 +34,6 @@ theorem layout_offsets : submission.layout =
     cache := 19200, signature := 13056, witness := 2048 } := rfl
 
 theorem certificate : SigGolf.Certificate submission 11907 :=
-  SigGolfCandidate.Final.certificate
+  SigGolfCandidate.certificateNew
 
 end SigGolf.Challenge

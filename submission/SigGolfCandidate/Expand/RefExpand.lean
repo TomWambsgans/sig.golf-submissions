@@ -9,7 +9,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref
 
 theorem sigAuth_zero_iff (sig : List Byte) (hsig : sig.length = 6100) (i : Nat) (hi : i < 120) :
     sigAuth sig i = zeros 16 ↔ ∀ k < 16, sig.getD (256 + 16 * i + k) 0 = 0 := by

@@ -3,7 +3,7 @@ import SigGolfCandidate.Sign.PackStep
 import SigGolfCandidate.Sign.PackC0
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 /-! Pack chunk 1: instructions 1158 .. 1437, signature dwords 80 .. 159. -/
 

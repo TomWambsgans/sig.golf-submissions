@@ -11,7 +11,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed Index FtsTree
   FtsLeaf IndexGroup Message Signature LayerSignature)
@@ -59,7 +59,7 @@ theorem foldPath_aux (leaf : Nat) (sib : Nat → Digest) (G : Nat → Digest →
   | succ n ih =>
     rw [List.range_succ, List.foldlM_append, ih (fun l hl => hps l (by omega))]
     simp only [List.foldlM_cons, List.foldlM_nil, bind_pure, bind_map_left, hG, relabel_bind, map_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun cur => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun cur => ?_
     rw [hps n (by omega)]
     by_cases hb : leaf.testBit n = true
     · rw [if_pos ((testBit_iff _ _).mpr hb), if_pos hb, hnode]
@@ -179,7 +179,7 @@ theorem verifyLeaf_eq (wl : List Byte) (hl : wl.length = 6348) (lay : Layer) (tr
       show SphincsSecurity.chainLength - 1 - (enc ⟨j, hj⟩).val = 7 - (enc ⟨j, hj⟩).val by
         simp [SphincsSecurity.chainLength, SphincsSecurity.winternitzBits]]) (fun acc _ v => acc ++ [v])]
   simp only [relabel_bind, relabel_sequenceFin, map_bind, bind_map_left]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun f => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun f => ?_
   rw [foldl_finRange_append, List.nil_append, hash16_leaf]
 
 theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 6348) (index : Index) (n : Nat)
@@ -199,7 +199,7 @@ theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 6348) (index : Index)
     unfold SphincsSecurity.Concrete.otsLeaf SphincsSecurity.Concrete.encode
     rw [hash16_enc lay, witCounter_eq wl lay]
     simp only [relabel_bind, relabel_pure, bind_map_left, map_bind, bind_assoc, pure_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun d => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun d => ?_
     rw [decodeDigits_dv]
     cases hd : SphincsSecurity.TargetSum.decodeDigest d with
     | none => simp
@@ -207,8 +207,8 @@ theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 6348) (index : Index)
       simp only [Option.map_some]
       rw [verifyLeaf_eq wl hl lay _ _ enc]
       simp only [relabel_bind, relabel_pure, bind_map_left, map_bind, bind_assoc, pure_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun ends => ?_
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun v => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun ends => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun v => ?_
       rw [witPath_eq wl hl lay]
       have hfold := foldPath_eq (Ref.nodeInput lay (SphincsSecurity.Concrete.treeIndexAt index lay))
         (fun lam j l r => SphincsSecurity.Concrete.tweakableHash (m := AComp) 0
@@ -221,7 +221,7 @@ theorem verifyLayers_eq (wl : List Byte) (hl : wl.length = 6348) (index : Index)
           (SphincsSecurity.Concrete.signaturePath (witSig wl) lay) k v)
         (fun v => rfl) (fun l v => rfl) (SphincsSecurity.layerHeight lay) v
       rw [hfold, bind_map_left]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun root => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun root => ?_
       exact ih (by omega) root
 
 
@@ -266,12 +266,12 @@ theorem segFolds_aux (seg : SphincsSecurity.Segment) (ptr : Nat)
     · simp only [hE, if_true, decide_true, SphincsSecurity.Concrete.foldPayload]
       rw [hash16_porsNode]
       simp only [relabel_bind, bind_map_left, map_bind, bind_assoc, pure_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun v => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun v => ?_
       exact ih (p + 1) v (E / 2) (by omega) (fun h => absurd h (by omega))
     · simp only [hE, if_false, decide_false, SphincsSecurity.Concrete.foldPayload, Bool.false_eq_true]
       rw [hash16_porsNode]
       simp only [relabel_bind, bind_map_left, map_bind, bind_assoc, pure_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun v => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun v => ?_
       exact ih (p + 1) v (E / 2) (by omega) (fun h => absurd h (by omega))
 
 theorem segFolds_eq (seg : SphincsSecurity.Segment) (ptr : Nat)
@@ -386,17 +386,17 @@ theorem segment_eq (j E folds : Nat) (ap : PendingHash) (cur : Digest) :
         rw [this]
       rw [pend_eq, bind_map_left]
       simp only [relabel_bind, map_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun start => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun start => ?_
       rw [segFolds_eq index wl (segAt wl (segPtr wl j)) (segPtr wl j) (fun i h => rfl) (b % 16) start E
         (by rw [segAt_folds, hb]) hpar]
       rw [bind_map_left, map_eq_bind_pure_comp]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun x => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun x => ?_
       have hp : segPtr wl (j + 1) = segPtr wl j + 8 + 16 * (b % 16) := by
         rw [segPtr, hb]
       simp only [Function.comp, hp]
 
 theorem segLoop_bind {β : Type}
-    (Kr : Option (Nat × Nat × Nat × Ref.Val × List (Ref.Val × Nat)) → OracleComp SigGolf.HashSpec β)
+    (Kr : Option (Nat × Nat × Nat × Ref.Val × List (Ref.Val × Nat)) → OracleComp SigGolfCandidate.Legacy.HashSpec β)
     (Ka : Option RecoverState → AComp β) :
     ∀ (astack : List (Digest × Nat)) (fuel : Nat) (ap : PendingHash) (st : RecoverState),
       st.stack = astack → st.segment + astack.length < 29 → astack.length < fuel →
@@ -429,8 +429,8 @@ theorem segLoop_bind {β : Type}
       · rw [if_neg h2, if_neg h2]
         rw [bind_map_left]
         simp only [bind_assoc, relabel_bind]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun start => ?_
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun x => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun start => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun x => ?_
         rw [← relabel_bind]
         unfold segCont
         rw [hst]
@@ -460,8 +460,8 @@ theorem segLoop_bind {β : Type}
       · rw [if_neg h2, if_neg h2]
         rw [bind_map_left]
         simp only [bind_assoc, relabel_bind]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun start => ?_
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun x => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun start => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun x => ?_
         rw [← relabel_bind]
         unfold segCont
         rw [hst]
@@ -580,7 +580,7 @@ theorem porsRoot_eq (hl : wl.length = 6348) (leaves : IndexGroup → FtsLeaf) :
         (Option.map projR <$> Ref.porsLeaves (↑index) (List.ofFn fun r => (leaves r).val) wl
           (List.range' 0 15) ⟨Ref.wStream, 0, 0, 0, dv 0, []⟩)) ?_ ?_
   · rw [Functor.map_map, map_eq_bind_pure_comp]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun r => ?_
     rcases r with _ | st
     · rfl
     · simp only [Function.comp, Option.map_some, Option.bind_some, projR]
@@ -614,16 +614,16 @@ theorem verifyRef_eq (m : Bytes 32) (pk : Bytes 16) (w : Bytes 6348) :
   by_cases hc : SphincsSecurity.Concrete.CountersInRange (witSig (Ref.toList w))
   · simp only [hc, decide_true, Bool.not_true, Bool.false_eq_true, if_false, if_true]
     rw [witRho_eq _ hl, digest_eq pk _ m, relabel_bind, bind_map_left]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun d => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun d => ?_
     rw [idxOf_eq, leavesOf_eq, porsRoot_eq _ _ hl, bind_map_left]
     simp only [relabel_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun r => ?_
     rcases r with _ | key
     · simp [relabel_pure]
     · simp only [Option.map_some]
       rw [show Ref.nLayers = SphincsSecurity.numLayers from rfl,
         verifyLayers_eq _ hl _ SphincsSecurity.numLayers (le_refl 5), bind_map_left, relabel_bind]
-      refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r => ?_
+      refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun r => ?_
       rcases r with _ | root
       · simp [relabel_pure]
       · simp only [Option.map_some, relabel_pure]

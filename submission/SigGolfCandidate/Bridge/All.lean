@@ -6,7 +6,7 @@ import SigGolfCandidate.Bridge.Convenience
 namespace SigGolfCandidate.Bridge
 
 /-- The bridge with (C) in zero-padding form. -/
-theorem ZeroPadAssumptions.secure {sub : SigGolf.Submission} (Z : ZeroPadAssumptions sub) :
+theorem ZeroPadAssumptions.secure {sub : SigGolfCandidate.Legacy.Submission} (Z : ZeroPadAssumptions sub) :
     sub.Secure :=
   Z.toAssumptions.secure
 

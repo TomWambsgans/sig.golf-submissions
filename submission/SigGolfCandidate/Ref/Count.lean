@@ -9,7 +9,7 @@ counts calls, `countBlocks = countWith Query.blocks` counts compressions.
 -/
 
 namespace SigGolfCandidate.Ref
-open SigGolf OracleComp OracleSpec
+open SigGolfCandidate.Legacy OracleComp OracleSpec
 
 universe u
 

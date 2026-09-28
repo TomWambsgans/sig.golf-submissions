@@ -12,7 +12,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 theorem words_macInput (S region : List Byte) (hS : S.length = 32) (hR : region.length = 65504) :
     padBlocks (macInput S region).length = 1024 ∧

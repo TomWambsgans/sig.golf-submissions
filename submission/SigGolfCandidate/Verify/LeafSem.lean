@@ -7,7 +7,7 @@ import SigGolfCandidate.Verify.FoldSem
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem flat_get? (f g : Val → Word) : ∀ (vs : List Val) (m : Nat), m < 2 * vs.length →
     ((vs.map fun v => [f v, g v]).flatten)[m]? =

@@ -6,7 +6,7 @@ import SigGolfCandidate.Keygen.Inv
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
   SigGolfCandidate.Mem
 
 theorem getByte_eq_word (t : MachineState) (a : Nat) (ha : a < 2 ^ 64) :
@@ -94,23 +94,23 @@ theorem readBuffer_cache_eq (t : MachineState) (a : BitVec 256) (masked : List V
     rw [readBuffer_eq, ofList, hl]
   apply List.ext_getElem (by
     rw [List.length_map, List.length_range, List.length_append, List.length_append, hfl, zeros,
-      List.length_replicate, regionBytes_eq, toList, SigGolf.bytes, List.length_map, List.length_range]
+      List.length_replicate, regionBytes_eq, toList, SigGolfCandidate.Legacy.bytes, List.length_map, List.length_range]
     rfl)
   intro i h1 h2
   simp only [List.length_map, List.length_range, CACHE_BYTES] at h1
   simp only [List.getElem_map, List.getElem_range]
   rw [getByte_eq_word t _ (by omega)]
   by_cases hi32 : i < 32
-  · rw [List.getElem_append_left (by simp [hfl, toList, SigGolf.bytes]; omega),
-      List.getElem_append_left (by simp [toList, SigGolf.bytes]; omega)]
-    simp only [toList, SigGolf.bytes, List.getElem_map, List.getElem_range]
+  · rw [List.getElem_append_left (by simp [hfl, toList, SigGolfCandidate.Legacy.bytes]; omega),
+      List.getElem_append_left (by simp [toList, SigGolfCandidate.Legacy.bytes]; omega)]
+    simp only [toList, SigGolfCandidate.Legacy.bytes, List.getElem_map, List.getElem_range]
     rw [show 0x4B00 + i - (0x4B00 + i) % 8 = 0x4B00 + 8 * (i / 8) by omega,
       htag (i / 8) (by omega), show (0x4B00 + i) % 8 = i % 8 by omega,
       extractByte_extractLsb a (i / 8) (i % 8) (by omega), show 8 * (i / 8) + i % 8 = i by omega]
   · by_cases hir : i < 32 + 65504
-    · rw [List.getElem_append_left (by simp [hfl, toList, SigGolf.bytes]; omega),
-        List.getElem_append_right (by simp [toList, SigGolf.bytes]; omega)]
-      simp only [toList, SigGolf.bytes, List.length_map, List.length_range]
+    · rw [List.getElem_append_left (by simp [hfl, toList, SigGolfCandidate.Legacy.bytes]; omega),
+        List.getElem_append_right (by simp [toList, SigGolfCandidate.Legacy.bytes]; omega)]
+      simp only [toList, SigGolfCandidate.Legacy.bytes, List.length_map, List.length_range]
       have hm : (i - 32) / 16 < masked.length := by rw [hlen]; omega
       have hv := hreg.2 ((i - 32) / 16) hm
       rw [getD_lt' masked _ [] hm] at hv
@@ -130,7 +130,7 @@ theorem readBuffer_cache_eq (t : MachineState) (a : BitVec 256) (masked : List V
             leNat masked[(i - 32) / 16] / 2 ^ (64 * 1) by simp,
           extractByte_ofNat_leNat _ 1 _ (by omega)]
         congr 1; omega
-    · rw [List.getElem_append_right (by simp [hfl, toList, SigGolf.bytes]; omega)]
+    · rw [List.getElem_append_right (by simp [hfl, toList, SigGolfCandidate.Legacy.bytes]; omega)]
       simp only [zeros, List.getElem_replicate]
       rw [hz _ (by omega) (by omega) (by omega)]
       simp [extractByte]

@@ -1,5 +1,5 @@
 import SigGolfCandidate.Bridge.Basic
-import SigGolf.Security
+import SigGolfCandidate.Legacy.Security
 import SigGolfCandidate.SphincsSecurity.Statement
 
 /-!
@@ -47,45 +47,45 @@ def EventSecurity : Prop :=
       SphincsSecurity.Security.experiment adversary] ≤ (q : ℝ≥0∞) / 2 ^ 127
 
 /-- The abstract signing budget covers the organizer lifetime (both are `2^32`). -/
-theorem lifetime_le : SigGolf.LIFETIME ≤ SphincsSecurity.signatureLimit := le_of_eq rfl
+theorem lifetime_le : SigGolfCandidate.Legacy.LIFETIME ≤ SphincsSecurity.signatureLimit := le_of_eq rfl
 
 /-- Everything the bridge assumes about a submission.
 
 The abstract signature is witness-shaped: the signer outputs `compress Σ`, expansion
 (`aExpand`, which may query the oracle and fail) recovers a witness `w` with
 `compress (witDec w) = σ`, and verification checks `witDec w` at the abstract level. -/
-structure Assumptions (submission : SigGolf.Submission) where
+structure Assumptions (submission : SigGolfCandidate.Legacy.Submission) where
   /-- (A) abstract event-form security. -/
   security : EventSecurity
   /-- Organizer secret keys become abstract master seeds, with the right distribution. -/
-  seedOf : SigGolf.SecretKey → SphincsSecurity.MasterSeed
-  seedOf_dist : ∀ seed, Pr[= seed | seedOf <$> SigGolf.sampleSecretKey] =
+  seedOf : SigGolfCandidate.Legacy.SecretKey → SphincsSecurity.MasterSeed
+  seedOf_dist : ∀ seed, Pr[= seed | seedOf <$> SigGolfCandidate.Legacy.sampleSecretKey] =
     Pr[= seed | SphincsSecurity.sampleMasterSeed]
   /-- (B) messages. -/
-  msgOf : SigGolf.Message → SphincsSecurity.Message
+  msgOf : SigGolfCandidate.Legacy.Message → SphincsSecurity.Message
   msgOf_injective : Function.Injective msgOf
   /-- (B) signatures. The abstract signature is witness-shaped: `compress` gives the compact
   signature bytes the signer outputs, and `witDec` parses a witness into an abstract signature.
   No codec law is assumed; the only link is `expand_compress` below. -/
-  compress : SphincsSecurity.Signature → SigGolf.Bytes submission.sizes.signature
-  witDec : SigGolf.Bytes submission.sizes.witness → SphincsSecurity.Signature
+  compress : SphincsSecurity.Signature → SigGolfCandidate.Legacy.Bytes submission.sizes.signature
+  witDec : SigGolfCandidate.Legacy.Bytes submission.sizes.witness → SphincsSecurity.Signature
   /-- (B) public keys. -/
-  pkEnc : SphincsSecurity.PublicKey → SigGolf.PublicKey
+  pkEnc : SphincsSecurity.PublicKey → SigGolfCandidate.Legacy.PublicKey
   /-- (B) caches: `cacheEnc` gives the bytes key generation publishes, `cacheDec` the abstract
   cache the signer reads from arbitrary bytes. No law relating them is needed for security. -/
-  cacheEnc : SphincsSecurity.TopCache → SigGolf.Bytes submission.sizes.cache
-  cacheDec : SigGolf.Bytes submission.sizes.cache → SphincsSecurity.TopCache
+  cacheEnc : SphincsSecurity.TopCache → SigGolfCandidate.Legacy.Bytes submission.sizes.cache
+  cacheDec : SigGolfCandidate.Legacy.Bytes submission.sizes.cache → SphincsSecurity.TopCache
   /-- (C) oracle relabelling: `pad` maps abstract inputs to organizer queries, and is
   inverted by `unpad` on every organizer query and on every honest abstract input. -/
-  pad : List UInt8 → SigGolf.Query
-  unpad : SigGolf.Query → List UInt8
+  pad : List UInt8 → SigGolfCandidate.Legacy.Query
+  unpad : SigGolfCandidate.Legacy.Query → List UInt8
   Honest : List UInt8 → Prop
   pad_unpad : ∀ y, pad (unpad y) = y
   unpad_pad : ∀ x, Honest x → unpad (pad x) = x
   /-- (B) the abstract expansion: it may query the oracle and may fail. -/
   aExpand : SphincsSecurity.Message → SphincsSecurity.PublicKey →
-    SigGolf.Bytes submission.sizes.signature →
-      OracleComp AHash (Option (SigGolf.Bytes submission.sizes.witness))
+    SigGolfCandidate.Legacy.Bytes submission.sizes.signature →
+      OracleComp AHash (Option (SigGolfCandidate.Legacy.Bytes submission.sizes.witness))
   /-- (D) key generation. -/
   keygen_eq : ∀ sk, (fun r => (r.value, r.hashCalls)) <$> submission.run .keygen sk =
     (fun p => (some (pkEnc p.1.1, cacheEnc p.1.2.1), p.2)) <$>

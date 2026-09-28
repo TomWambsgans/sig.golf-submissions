@@ -7,7 +7,7 @@ import SigGolfCandidate.Bridge.Setup
 With the implementation equations (D) it unfolds into the abstract algorithms.
 -/
 
-open OracleSpec OracleComp SigGolf
+open OracleSpec OracleComp SigGolfCandidate.Legacy
 
 namespace SigGolfCandidate.Bridge
 
@@ -19,7 +19,7 @@ lemma relabel_unpad_countCalls {α : Type} (X : OracleComp AHash α) (hX : AllQ 
   congr 1
   exact relabel_eq_self_of_allQ B.Honest _ (fun x hx => B.unpad_pad x hx) hX
 
-lemma relabelW_liftM_proj {α β γ : Type} (Y : OracleComp SigGolf.HashSpec α) (proj : α → β)
+lemma relabelW_liftM_proj {α β γ : Type} (Y : OracleComp SigGolfCandidate.Legacy.HashSpec α) (proj : α → β)
     (K' : β → OracleComp World γ) (K : α → OracleComp World γ) (hK : ∀ r, K r = K' (proj r)) :
     relabelW B.unpad ((liftM Y : OracleComp World α) >>= K) =
       (liftM (relabel B.unpad (proj <$> Y)) : OracleComp AW β) >>= fun p => relabelW B.unpad (K' p) := by
@@ -118,12 +118,12 @@ lemma relabel_verify {cache' : SphincsSecurity.TopCache}
     (m : Message) (w : Bytes sub.sizes.witness) (fresh : Bool) (calls : ℕ) :
     relabel B.unpad ((sub.run .verify (m, B.pkEnc pk, w)) >>= fun verify =>
         (pure (⟨verify.value.isSome && fresh, calls + verify.hashCalls⟩ : AttackResult) :
-          OracleComp SigGolf.HashSpec AttackResult)) =
+          OracleComp SigGolfCandidate.Legacy.HashSpec AttackResult)) =
       (fun p => (⟨p.1 && fresh, calls + p.2⟩ : AttackResult)) <$>
         countCalls (aVerify pk (B.msgOf m) (B.witDec w)) := by
   have e : ((sub.run .verify (m, B.pkEnc pk, w)) >>= fun verify =>
         (pure (⟨verify.value.isSome && fresh, calls + verify.hashCalls⟩ : AttackResult) :
-          OracleComp SigGolf.HashSpec AttackResult)) =
+          OracleComp SigGolfCandidate.Legacy.HashSpec AttackResult)) =
       (fun p => (⟨p.1.isSome && fresh, calls + p.2⟩ : AttackResult)) <$>
         ((fun r => (r.value, r.hashCalls)) <$> sub.run .verify (m, B.pkEnc pk, w)) := by
     rw [Functor.map_map, map_eq_bind_pure_comp]
@@ -177,7 +177,7 @@ lemma orgK_submit_signature {cache' : SphincsSecurity.TopCache}
           | some witness => (do
               let verify ← sub.run .verify (m, B.pkEnc pk, witness)
               pure ⟨verify.value.isSome && T.freshSignature m σ,
-                T.hashCalls + p.2 + verify.hashCalls⟩) : OracleComp SigGolf.HashSpec AttackResult))
+                T.hashCalls + p.2 + verify.hashCalls⟩) : OracleComp SigGolfCandidate.Legacy.HashSpec AttackResult))
       _ (fun r => by rcases r with ⟨v, f, c, h, hc⟩; cases v <;> rfl))).trans ?_
   refine (congrArg liftM (relabel_bind B.unpad _ _)).trans ?_
   refine (liftM_bind _ _).trans ?_

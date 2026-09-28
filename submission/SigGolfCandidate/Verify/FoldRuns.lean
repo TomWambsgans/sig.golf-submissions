@@ -4,7 +4,7 @@ import SigGolfCandidate.Verify.Tab
 /-! # Merkle fold levels (two-track regions): expected symbolic results -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 def cw (n : Nat) : E := .c (BitVec.ofNat 64 n)
 def ldE (a : Nat) : E := .ld (cw a)

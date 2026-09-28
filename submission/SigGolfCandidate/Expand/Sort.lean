@@ -16,7 +16,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- The 15 keys in digest-slot order. -/
 def keysOf (N : Nat) : List Nat := (List.range 15).map (keyOf N)

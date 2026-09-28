@@ -12,7 +12,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed TopCache
   TopRegion)
@@ -77,7 +77,7 @@ theorem buildAllLevels_steps (h : Nat) (leaves : Nat → Digest) (L : Nat) (hL :
         relabel fmtQ (hashNode (L + 1) j (T L (2 * j)) (T L (2 * j + 1)))) _ dv (fun j hj => hb j hj)]
     simp only [relabel_bind, relabel_pure, relabel_sequenceFin, map_bind, map_pure, Functor.map_map,
       bind_map_left, bind_assoc, pure_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun row => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun row => ?_
     congr 1
     rw [foldl_finRange_append, List.nil_append, List.range_succ (n := L + 1), List.map_append]
     simp only [List.map_cons, List.map_nil]
@@ -123,12 +123,12 @@ theorem maskLevel_eq (seed : MasterSeed) (l : Nat) (hl : l < SphincsSecurity.max
       lt_of_lt_of_le hj (Nat.pow_le_pow_right (by omega) (by omega))
     rw [getD_ofFn, dif_pos hj, hash16_mask seed l j hl hj']
     simp only [relabel_bind, relabel_pure, bind_map_left, map_bind, map_pure]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun mk => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun mk => ?_
     rw [dv_xor])]
   simp only [relabel_bind, relabel_pure, relabel_sequenceFin, map_bind, map_pure, Functor.map_map,
     bind_map_left, bind_assoc, pure_bind]
   rw [map_eq_bind_pure_comp]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun row => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun row => ?_
   simp only [Function.comp]
   rw [foldl_finRange_append, List.nil_append]
   congr 1
@@ -168,7 +168,7 @@ theorem keygenList_eq (seed : MasterSeed) :
   rw [e1, e2] at h
   rw [show Ref.topH = SphincsSecurity.layerHeight SphincsSecurity.topLayer from rfl, h]
   simp only [relabel_bind, relabel_pure, map_bind, bind_map_left, bind_assoc, pure_bind]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun f => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun f => ?_
   rw [ofFn_leaves f Prod.snd]
   unfold Ref.buildAllLevels
   rw [buildAllLevels_steps (Ref.nodeInput 0 0) (fun level nodeIdx left right =>
@@ -179,7 +179,7 @@ theorem keygenList_eq (seed : MasterSeed) :
       (fun k => if h : k < 2 ^ SphincsSecurity.layerHeight SphincsSecurity.topLayer then (f ⟨k, h⟩).2 else 0)
       _ le_rfl]
   rw [bind_map_left]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun T => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun T => ?_
   unfold SphincsSecurity.Seeded.maskRegion
   simp only [relabel_bind, relabel_pure, relabel_sequenceFin, map_bind, bind_assoc, pure_bind]
   rw [show SphincsSecurity.layerHeight SphincsSecurity.topLayer = SphincsSecurity.maxLayerHeight from rfl]
@@ -189,14 +189,14 @@ theorem keygenList_eq (seed : MasterSeed) :
           pure (T level.val j.val ^^^ x)
         pure fun nodeIdx =>
           if h : nodeIdx < 2 ^ (SphincsSecurity.maxLayerHeight - level.val) then x ⟨nodeIdx, h⟩ else 0 :
-        OracleComp SigGolf.HashSpec (Nat → Digest)))
+        OracleComp SigGolfCandidate.Legacy.HashSpec (Nat → Digest)))
       _ (fun level row =>
         List.ofFn fun j : Fin (2 ^ (SphincsSecurity.maxLayerHeight - level.val)) => dv (row j))
       (fun l hl => by
         rw [getD_map_range_list _ _ _ (by omega), maskLevel_eq seed l hl T]
         simp only [relabel_bind, relabel_sequenceFin, relabel_pure])]
   rw [bind_map_left]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun rows => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun rows => ?_
   rw [foldl_finRange_appendList, List.nil_append, relabel_oracleHash, toB_macHashInput',
     toB_regionBytes]
   have hreg : ((List.ofFn fun l : Fin SphincsSecurity.maxLayerHeight =>
@@ -207,7 +207,7 @@ theorem keygenList_eq (seed : MasterSeed) :
             rows level nodeIdx.val) lv j)).flatten).flatten := by
     rw [List.flatten_flatten, List.map_ofFn]; rfl
   rw [hreg]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun tag => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun tag => ?_
   simp only [map_pure]
   refine congrArg pure ?_
   rw [getD_map_range_list _ _ _ (by omega), levelList, getD_ofFn, dif_pos (by simp)]
@@ -222,7 +222,7 @@ theorem keygenRef_eq (sk : Bytes 32) :
   unfold Ref.keygenRef
   rw [keygenList_eq sk]
   simp only [Functor.map_map, map_eq_bind_pure_comp, bind_assoc, pure_bind]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun kp => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun kp => ?_
   simp only [Function.comp_apply, pure_bind]
   refine congrArg pure (Prod.ext ?_ rfl)
   exact Ref.ofList_toList (n := 16) kp.1.root

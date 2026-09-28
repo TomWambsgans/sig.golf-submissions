@@ -13,7 +13,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 theorem decode_ecall : decodeInstruction 0x00000073#32 = some (.base .ECALL) := rfl
 
@@ -112,7 +112,7 @@ theorem signRest_sim (sk : SecretKey) (cache : Cache) (m : Message) (u : Machine
     (hu : MacOk sk cache m u) :
     Sim image u restW (signRest (toList sk) (toList cache) (toList m)) ListPost := by
   have hS : (toList sk).length = 32 := length_toList sk
-  have hcache : (toList cache).length = 131072 := by simp [toList, SigGolf.bytes]; rfl
+  have hcache : (toList cache).length = 131072 := by simp [toList, SigGolfCandidate.Legacy.bytes]; rfl
   have dmem := hu.mem
   have u5 := hu.x5
   have u7 := hu.x7

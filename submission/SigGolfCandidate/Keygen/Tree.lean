@@ -11,7 +11,7 @@ so far, flattened, is stored from `REGION` on.
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- Index of the first node of level `k` in the region. -/
 def lvOff (k : Nat) : Nat := ((List.range k).map fun i => 2 ^ (11 - i)).sum

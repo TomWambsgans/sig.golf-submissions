@@ -16,7 +16,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref
 
 theorem keyOf_div (N r : Nat) (hr : r < 15) : keyOf N r / 256 = leafOf N r := by
   unfold keyOf; omega

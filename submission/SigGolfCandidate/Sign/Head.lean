@@ -13,7 +13,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem length_porsOpening (vs : List Nat) (levels : List (List Val)) (secrets : List Val)
     (hvs : vs.length = 15) (hR : (schedule vs).2.length ≤ 120) :

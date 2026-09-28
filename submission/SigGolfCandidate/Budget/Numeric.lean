@@ -18,7 +18,7 @@ Real bounds used: `log 2 < 0.6931471808`, `log 2 > 0.6931471803`, `exp x < 1 / (
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp ENNReal
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp ENNReal
 
 /-- `2 ^ (1 / B)` as an extended real. -/
 noncomputable def zOf (B : Nat) : ℝ≥0∞ := ENNReal.ofReal ((2 : ℝ) ^ (1 / (B : ℝ)))

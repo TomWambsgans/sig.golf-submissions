@@ -4,7 +4,7 @@ import SigGolfCandidate.Verify.Spec
 /-! # Layer blocks: precode (route, encoding, check, chain-0 dispatch), leaf, compare -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 
 /-- The number of copies of the precode of layer `lay` (layer 4: one per PORS root tail). -/

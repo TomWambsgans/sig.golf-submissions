@@ -9,7 +9,7 @@ type byte (`qbyte _ 1`) and layer byte (`qbyte _ 2`) can be read off the query.
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref
 
 /-- Byte `i` of a query. -/
 def qbyte (q : Query) (i : Nat) : Nat := q.2.toNat / 256 ^ i % 256

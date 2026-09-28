@@ -14,7 +14,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref
 
 /-- The number of auth items consumed by the segments `segs`. -/
 def nsum (segs : List Nat) : Nat := (segs.map (· % 16)).sum

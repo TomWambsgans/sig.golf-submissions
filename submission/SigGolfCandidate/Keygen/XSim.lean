@@ -16,7 +16,7 @@ programs whose control flow does not depend on the answers, like `keygen`.
 -/
 
 namespace SigGolfCandidate.Keygen
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec SigGolfCandidate.Rv
   SigGolfCandidate.Ref SigGolfCandidate.Sign
 
 def XSim {α : Type} (image : Image) (s : MachineState) (k c n b : Nat)

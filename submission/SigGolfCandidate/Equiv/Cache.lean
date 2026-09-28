@@ -12,7 +12,7 @@ bytes (`toB_regionBytes_cacheDec`), and its tag comparison is the abstract one (
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes)
+open SigGolfCandidate.Legacy (Byte Bytes)
 open SphincsSecurity (Digest TopCache TopRegion)
 
 set_option linter.unusedSimpArgs false

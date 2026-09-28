@@ -14,7 +14,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 theorem layer_entry (S cache : List Byte) (idx : Nat) (hidx : idx < 2 ^ 34) (M : Val) (hM : M.length = 16)
     (t : MachineState) (tpc : t.pc = pcOf 296) (t5 : t.getReg .x5 = 0)

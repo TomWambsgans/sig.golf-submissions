@@ -1,4 +1,4 @@
-import SigGolf
+import SigGolfCandidate.Legacy
 
 /-!
 # The cache size
@@ -10,10 +10,10 @@ submission-chosen (the cache content uses its first 65 536 bytes; the rest is ze
 
 namespace SigGolfCandidate
 
-/-- The cache size `K` this submission declares (`claim.json`, `SigGolf.Challenge.cache_bytes`). -/
+/-- The cache size `K` this submission declares (`claim.json`, `SigGolfCandidate.Legacy.Challenge.cache_bytes`). -/
 def CACHE_BYTES : Nat := 2 ^ 17
 
 /-- The cache bytes key generation publishes and signing reads. -/
-abbrev Cache := SigGolf.Bytes CACHE_BYTES
+abbrev Cache := SigGolfCandidate.Legacy.Bytes CACHE_BYTES
 
 end SigGolfCandidate

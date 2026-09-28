@@ -17,7 +17,7 @@ import SigGolfCandidate.Ref.Count
 -/
 
 namespace SigGolfCandidate.Ref
-open SigGolf
+open SigGolfCandidate.Legacy
 
 theorem byte_toNat (v : Nat) : (byte v).toNat = v % 256 := by simp [byte]
 
@@ -65,16 +65,16 @@ theorem extractByte_ofNat (w v i : Nat) (h : 8 * i + 8 ≤ w) :
 
 theorem toList_ofList (n : Nat) (l : List Byte) (h : l.length = n) : toList (ofList n l) = l := by
   subst h
-  apply List.ext_getElem (by simp [toList, SigGolf.bytes])
+  apply List.ext_getElem (by simp [toList, SigGolfCandidate.Legacy.bytes])
   intro i h1 h2
-  simp only [toList, SigGolf.bytes, ofList, List.getElem_map, List.getElem_range]
-  rw [extractByte_ofNat _ _ _ (by simp [toList, SigGolf.bytes] at h1; omega)]
+  simp only [toList, SigGolfCandidate.Legacy.bytes, ofList, List.getElem_map, List.getElem_range]
+  rw [extractByte_ofNat _ _ _ (by simp [toList, SigGolfCandidate.Legacy.bytes] at h1; omega)]
   apply BitVec.eq_of_toNat_eq
   rw [byte_toNat, leNat_div_mod, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h2]; rfl
 
 theorem toList_eq_map {n : Nat} (x : Bytes n) :
     toList x = (List.range n).map fun i => byte (x.toNat / 256 ^ i) := by
-  simp only [toList, SigGolf.bytes]
+  simp only [toList, SigGolfCandidate.Legacy.bytes]
   apply List.map_congr_left
   intro i hi
   rw [List.mem_range] at hi
@@ -91,7 +91,7 @@ theorem ofList_toList {n : Nat} (x : Bytes n) : ofList n (toList x) = x := by
   simp [ofList, leNat_toList]
 
 theorem length_toList {n : Nat} (x : Bytes n) : (toList x).length = n := by
-  simp [toList, SigGolf.bytes]
+  simp [toList, SigGolfCandidate.Legacy.bytes]
 
 /-! ## Lengths and padding -/
 

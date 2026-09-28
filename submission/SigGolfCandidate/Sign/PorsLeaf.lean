@@ -16,7 +16,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- The key index `c`'s leaf, `2^14` past the last one. -/
 def vsAt (vs : List Nat) (c : Nat) : Nat := if c < 15 then vs.getD c 0 else 2 ^ 14

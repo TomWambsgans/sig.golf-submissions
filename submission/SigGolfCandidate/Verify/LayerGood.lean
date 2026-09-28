@@ -7,7 +7,7 @@ import SigGolfCandidate.Verify.ChainCheckAll
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 def layerSpec (w : List Byte) (idx lay : Nat) (M : Val) : OracleComp HashSpec (Option Val) := do
   let (e, tau) := route idx lay

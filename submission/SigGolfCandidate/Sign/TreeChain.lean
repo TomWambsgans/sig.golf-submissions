@@ -13,7 +13,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- Parameters of the chains of leaf `ep` of tree `(lay, tau)` with capture leaf `e`. -/
 structure LeafPar where

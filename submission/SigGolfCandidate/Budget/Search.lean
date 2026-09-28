@@ -11,7 +11,7 @@ the geometric bound `E[w^N] ≤ (1-ρ) w / (1 - ρ w)` by induction on the fuel.
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp OracleSpec ENNReal OracleComp.EvalDist
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp OracleSpec ENNReal OracleComp.EvalDist
 
 theorem hash16_bind_eq {β : Type} (x : List Byte) (f : Val → OracleComp HashSpec β) :
     Ref.hash16 x >>= f = qry (fmt x) >>= fun a => f (answerBytes 16 a) := by

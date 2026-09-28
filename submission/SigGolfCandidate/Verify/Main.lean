@@ -11,15 +11,15 @@ import SigGolfCandidate.Verify.Top
 -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
-theorem init_exists (input : SigGolf.Input submission.sizes .verify) :
+theorem init_exists (input : SigGolfCandidate.Legacy.Input submission.sizes .verify) :
     ∃ s, initialState submission .verify input = some s := by
   unfold initialState
   simp only [submission_admissible.2 .verify, if_true]
   exact ⟨_, rfl⟩
 
-theorem verify_good (input : SigGolf.Input submission.sizes .verify) (s : MachineState)
+theorem verify_good (input : SigGolfCandidate.Legacy.Input submission.sizes .verify) (s : MachineState)
     (hs : initialState submission .verify input = some s) :
     GoodQ s fuelBound cycleBoundAll True cycleBound (cc (verifyRef input.1 input.2.1 input.2.2) Kb) := by
   obtain ⟨m, pk, w⟩ := input
@@ -44,7 +44,7 @@ theorem verify_refines (m : Message) (pk : PublicKey) (w : Bytes 6348) :
   · simp only [h, decide_true, if_true]; rfl
   · simp only [h, decide_false, if_false, Bool.false_eq_true]; rfl
 
-theorem verify_terminates (hash : Hash) (input : SigGolf.Input submission.sizes .verify) :
+theorem verify_terminates (hash : Hash) (input : SigGolfCandidate.Legacy.Input submission.sizes .verify) :
     (submission.runWith hash .verify input).finished = true ∧
       (submission.runWith hash .verify input).cycles ≤ cycleBoundAll ∧
       (submission.runWith hash .verify input).cycles < CYCLE_LIMIT := by
@@ -55,7 +55,7 @@ theorem verify_terminates (hash : Hash) (input : SigGolf.Input submission.sizes 
   refine ⟨?_, hg.2.1, lt_of_le_of_lt hg.2.1 (by unfold CYCLE_LIMIT cycleBoundAll; norm_num)⟩
   simpa using hg.1
 
-theorem verify_accept_cycles (hash : Hash) (input : SigGolf.Input submission.sizes .verify)
+theorem verify_accept_cycles (hash : Hash) (input : SigGolfCandidate.Legacy.Input submission.sizes .verify)
     (h : (submission.runWith hash .verify input).value = some ()) :
     (submission.runWith hash .verify input).cycles ≤ cycleBound := by
   obtain ⟨s, hs⟩ := init_exists input

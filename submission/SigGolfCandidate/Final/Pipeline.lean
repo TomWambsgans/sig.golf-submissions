@@ -11,7 +11,7 @@ run and is charged its cycles plus the witness charge.
 open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Final
-open SigGolf
+open SigGolfCandidate.Legacy
 
 variable (sub : Submission)
 

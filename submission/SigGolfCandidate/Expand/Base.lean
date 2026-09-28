@@ -17,7 +17,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-! ## `leNat` -/
 
@@ -635,7 +635,7 @@ end SigGolfCandidate.Expand
 namespace SigGolfCandidate.Expand
 theorem ofNat_congr {a b : Nat} (h : a = b) : BitVec.ofNat 64 a = BitVec.ofNat 64 b := h ▸ rfl
 
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 def Frame (s t : MachineState) (W : Nat → Prop) : Prop :=
   ∀ a, a < 2 ^ 64 → ¬ W a → t.getMem (BitVec.ofNat 64 a) = s.getMem (BitVec.ofNat 64 a)

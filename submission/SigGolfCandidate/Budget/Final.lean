@@ -13,7 +13,7 @@ The forms with the expand refinement as a hypothesis are kept (`_of_counts`, `_o
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp
 
 theorem submission_keygenRefinesCounts (sk : SecretKey) :
     RefinesCounts submission .keygen sk (keygenRef sk) :=

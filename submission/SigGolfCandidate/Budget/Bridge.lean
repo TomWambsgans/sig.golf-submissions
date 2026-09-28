@@ -12,7 +12,7 @@ Keygen / Sign proofs; `Final.lean` discharges keygen and sign with them).
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp
 
 section
 variable (sub : Submission)

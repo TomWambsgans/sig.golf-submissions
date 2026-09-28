@@ -13,7 +13,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 set_option maxRecDepth 100000
 
@@ -21,9 +21,9 @@ set_option maxRecDepth 100000
 def sI (m : Message) (pk : PublicKey) (σ : Bytes 6100) : MachineState :=
   let blank : MachineState := { regs := fun _ => 0, mem := fun _ => 0, pc := 0x1000 }
   ((((blank.writeBytesAsWords (BitVec.ofNat 64 (dataBase image)) image.data).writeBytesAsWords
-      (BitVec.ofNat 64 0x40) (SigGolf.bytes m)).writeBytesAsWords (BitVec.ofNat 64 0xA0)
-      (SigGolf.bytes pk)).writeBytesAsWords
-      (BitVec.ofNat 64 0x3300) (SigGolf.bytes σ)).setReg .x2 (BitVec.ofNat 64 (dataBase image))
+      (BitVec.ofNat 64 0x40) (SigGolfCandidate.Legacy.bytes m)).writeBytesAsWords (BitVec.ofNat 64 0xA0)
+      (SigGolfCandidate.Legacy.bytes pk)).writeBytesAsWords
+      (BitVec.ofNat 64 0x3300) (SigGolfCandidate.Legacy.bytes σ)).setReg .x2 (BitVec.ofNat 64 (dataBase image))
 
 theorem initialState_eq (m : Message) (pk : PublicKey) (σ : Bytes 6100) :
     initialState submission .expand (m, pk, σ) = some (sI m pk σ) := by
@@ -66,21 +66,21 @@ theorem sI_getReg (m : Message) (pk : PublicKey) (σ : Bytes 6100) (r : Reg) (hr
 
 theorem image_data : image.data = [] := by kernel_rfl
 
-theorem length_bytes {n : Nat} (x : Bytes n) : (SigGolf.bytes x).length = n := by
-  simp [SigGolf.bytes]
+theorem length_bytes {n : Nat} (x : Bytes n) : (SigGolfCandidate.Legacy.bytes x).length = n := by
+  simp [SigGolfCandidate.Legacy.bytes]
 
 /-- Bytes of the initial memory. -/
 theorem sI_getByte (m : Message) (pk : PublicKey) (σ : Bytes 6100) (a : Nat) (ha : a < 2 ^ 64) :
     (sI m pk σ).getByte (BitVec.ofNat 64 a) =
-      if 0x3300 ≤ a ∧ a < 0x3300 + 6104 then (SigGolf.bytes σ).getD (a - 0x3300) 0
-      else if 0xA0 ≤ a ∧ a < 0xB0 then (SigGolf.bytes pk).getD (a - 0xA0) 0
-      else if 0x40 ≤ a ∧ a < 0x60 then (SigGolf.bytes m).getD (a - 0x40) 0
+      if 0x3300 ≤ a ∧ a < 0x3300 + 6104 then (SigGolfCandidate.Legacy.bytes σ).getD (a - 0x3300) 0
+      else if 0xA0 ≤ a ∧ a < 0xB0 then (SigGolfCandidate.Legacy.bytes pk).getD (a - 0xA0) 0
+      else if 0x40 ≤ a ∧ a < 0x60 then (SigGolfCandidate.Legacy.bytes m).getD (a - 0x40) 0
       else 0 := by
   unfold sI
   simp only [getByte_setReg, image_data]
-  have L1 : (SigGolf.bytes σ).length = 6100 := length_bytes σ
-  have L2 : (SigGolf.bytes pk).length = 16 := length_bytes pk
-  have L3 : (SigGolf.bytes m).length = 32 := length_bytes m
+  have L1 : (SigGolfCandidate.Legacy.bytes σ).length = 6100 := length_bytes σ
+  have L2 : (SigGolfCandidate.Legacy.bytes pk).length = 16 := length_bytes pk
+  have L3 : (SigGolfCandidate.Legacy.bytes m).length = 32 := length_bytes m
   rw [getByte_writeBytesAsWords _ _ _ _ (by decide) (by rw [L1]; norm_num) ha, L1]
   by_cases h1 : 0x3300 ≤ a ∧ a < 0x3300 + 6104
   · rw [if_pos (by omega), if_pos h1]

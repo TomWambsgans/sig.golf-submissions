@@ -15,7 +15,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem nat_xor_eq_zero (a b : Nat) : a ^^^ b = 0 ↔ a = b := by
   constructor

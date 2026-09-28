@@ -14,7 +14,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 def bytesAt (t : MachineState) (a n : Nat) : List Byte :=
   (List.range n).map fun i => t.getByte (BitVec.ofNat 64 (a + i))
@@ -93,7 +93,7 @@ theorem bytesAt_of_readWords (t : MachineState) : ∀ (k a : Nat) (l : List Byte
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 theorem lwuW_toNat (w : Word) (bo : Nat) :
     (lwuW w bo).toNat = w.toNat / 2 ^ (32 * (bo / 4)) % 2 ^ 32 := by

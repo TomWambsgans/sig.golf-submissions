@@ -16,7 +16,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (AllQ allQ_pure allQ_bind allQ_query allQ_map)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed Index FtsTree
   FtsLeaf IndexGroup Message Signature)

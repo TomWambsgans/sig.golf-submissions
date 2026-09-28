@@ -14,7 +14,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem xor1_lt (a n : Nat) (ha : a < 2 ^ n) (hn : 1 ≤ n) : a ^^^ 1 < 2 ^ n :=
   Nat.xor_lt_two_pow ha (lt_of_lt_of_le (by norm_num) (Nat.pow_le_pow_right (by norm_num) hn))
@@ -234,7 +234,7 @@ theorem tlevel_body (p : TreePar) (t0 : MachineState) (ctx : TLevCtx p t0) (j : 
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- **Tree levels** `1 .. h` (with capture of the path of leaf `e`). -/
 theorem tlevels_sim (p : TreePar) (t0 : MachineState) (ctx : TLevCtx p t0) (leaves : List Val)

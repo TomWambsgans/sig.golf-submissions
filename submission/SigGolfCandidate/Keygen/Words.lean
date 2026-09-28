@@ -10,7 +10,7 @@ import SigGolfCandidate.Expand.Mem
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-! ## Sub-doubleword merges -/
 

@@ -8,7 +8,7 @@ Generic lemmas on `Ref.slice` of concatenations, used by the cache, witness and 
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes)
+open SigGolfCandidate.Legacy (Byte Bytes)
 open SphincsSecurity (Digest)
 
 set_option linter.unusedSimpArgs false

@@ -2,7 +2,7 @@
 import SigGolfCandidate.Expand.Code
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 /-! Symbolic blocks of the expand program (the word-copy loop bodies are handled by `Copy.lean`). -/
 

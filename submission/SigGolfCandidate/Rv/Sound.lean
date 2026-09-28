@@ -15,7 +15,7 @@ pc `r.pc.eval s`, all other fields as in `s`.
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64
 
 /-! ## Register file -/
 

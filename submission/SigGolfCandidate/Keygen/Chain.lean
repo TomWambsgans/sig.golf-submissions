@@ -6,7 +6,7 @@ import SigGolfCandidate.Keygen.XSim
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- `pc` of instruction `k`. -/
 abbrev pcOf (k : Nat) : Word := BitVec.ofNat 64 (0x1000 + 4 * k)

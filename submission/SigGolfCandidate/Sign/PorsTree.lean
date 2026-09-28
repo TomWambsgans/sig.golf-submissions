@@ -17,7 +17,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 def digokW (a : Nat) : Prop :=
   a = 0x3300 ∨ a = 0x3308 ∨ a = 0x6A0 ∨ a = 0x6A8 ∨ a = 0xC0 ∨ a = 0xC8 ∨ a = 0x1C0 ∨ a = 0x1C8

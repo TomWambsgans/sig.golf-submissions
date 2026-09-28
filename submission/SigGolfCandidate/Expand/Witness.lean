@@ -13,7 +13,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref
 
 theorem getD_app (l1 l2 : List Byte) (i : Nat) :
     (l1 ++ l2).getD i 0 = if i < l1.length then l1.getD i 0 else l2.getD (i - l1.length) 0 := by

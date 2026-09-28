@@ -9,7 +9,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem xor1_eq (E : Nat) : E ^^^ 1 = 2 * (E / 2) + (E + 1) % 2 := by
   have h1 : (E ^^^ 1) / 2 = E / 2 := by rw [Nat.xor_div_two]; simp

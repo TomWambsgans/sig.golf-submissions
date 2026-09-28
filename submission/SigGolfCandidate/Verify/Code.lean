@@ -3,7 +3,7 @@ import SigGolfCandidate.Verify.Exec
 /-! # Fast instruction lookup in the verify image (chunks of 256 words) -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 abbrev image : Image := Images.verifyImage
 

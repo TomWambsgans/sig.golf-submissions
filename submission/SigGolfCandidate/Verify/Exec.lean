@@ -15,7 +15,7 @@ The initial symbolic state `σK known` has the registers in `known` replaced by 
 -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 /-- An assumed branch outcome: `op.eval x y = d`. -/
 structure Br where

@@ -18,7 +18,7 @@ All values are symbolic expressions over the initial state (see `E`).
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64
 
 /-- Symbolic register file (`x0` is hard-wired to `0`). -/
 structure RegFile where

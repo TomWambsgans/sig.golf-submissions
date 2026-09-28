@@ -3,7 +3,7 @@ import SigGolfCandidate.Verify.FoldRuns
 /-! # Partial specifications of path runs (only the registers of interest are pinned down) -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 structure Spec where
   regs : List (Reg × E)

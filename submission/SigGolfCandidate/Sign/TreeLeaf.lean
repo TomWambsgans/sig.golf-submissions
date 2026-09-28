@@ -12,7 +12,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- Parameters of a tree: layer, tree index, height, capture leaf, stage base. -/
 structure TreePar where
@@ -249,7 +249,7 @@ theorem tleaf_body (S : List Byte) (hS : S.length = 32) (x : List Nat) (p : Tree
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- Cycle bound of one leaf. -/
 def tleafCyc : Nat := 7 + (21 * 480 + (4 + (88 + 2)))

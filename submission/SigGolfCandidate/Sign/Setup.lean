@@ -18,7 +18,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 -- Memory / register effect of the setup block (kernel-checked with a variable state).
 kernel_theorem blk0_pbS : ∀ t : MachineState,
@@ -66,11 +66,11 @@ theorem MacOk.inv {sk : SecretKey} {cache : Cache} {m : Message} {u : MachineSta
   ⟨h.pc, by rw [h.x6]; rfl, by norm_num, RegsEq.refl _ _, Frame.refl _ _, rfl⟩
 
 theorem length_cacheRegion (cache : Cache) : (cacheRegion (toList cache)).length = 65504 := by
-  have hlen : (toList cache).length = 131072 := by simp [toList, SigGolf.bytes]; rfl
+  have hlen : (toList cache).length = 131072 := by simp [toList, SigGolfCandidate.Legacy.bytes]; rfl
   simp [cacheRegion, slice, hlen, regionBytes]; decide
 
 theorem length_cacheTag (cache : Cache) : (cacheTag (toList cache)).length = 32 := by
-  have hlen : (toList cache).length = 131072 := by simp [toList, SigGolf.bytes]; rfl
+  have hlen : (toList cache).length = 131072 := by simp [toList, SigGolfCandidate.Legacy.bytes]; rfl
   simp [cacheTag, slice, hlen]
 
 /-- A compare block `ld ra, D; bne ra, aK, fail`. -/

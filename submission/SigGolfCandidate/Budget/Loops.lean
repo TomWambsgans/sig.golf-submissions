@@ -14,7 +14,7 @@ secrets, two leaves per pair, then the levels).
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf SigGolfCandidate.Ref OracleComp OracleSpec Finset
+open SigGolfCandidate.Legacy SigGolfCandidate.Ref OracleComp OracleSpec Finset
 
 /-! ## Loops -/
 

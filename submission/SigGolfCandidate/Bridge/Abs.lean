@@ -10,7 +10,7 @@ pk σ` through its own hash oracle (so these queries are counted exactly as the 
 expansion's queries) and submits `⟨msgOf m, witDec w⟩` on success.
 -/
 
-open OracleSpec OracleComp SigGolf
+open OracleSpec OracleComp SigGolfCandidate.Legacy
 
 namespace SigGolfCandidate.Bridge
 

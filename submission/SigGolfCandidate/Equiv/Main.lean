@@ -19,7 +19,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query AllQ)
 
 set_option allowUnsafeReducibility true in
@@ -27,10 +27,10 @@ attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.diges
   SphincsSecurity.messageBits SphincsSecurity.publicParameterBits SphincsSecurity.counterBits
   SigGolfCandidate.submission
 
-theorem countCalls_eq {α : Type} (oa : OracleComp SigGolf.HashSpec α) :
+theorem countCalls_eq {α : Type} (oa : OracleComp SigGolfCandidate.Legacy.HashSpec α) :
     Ref.countCalls oa = SigGolfCandidate.Bridge.countCalls oa := rfl
 
-theorem countCalls_map {α β : Type} (f : α → β) (oa : OracleComp SigGolf.HashSpec α) :
+theorem countCalls_map {α β : Type} (f : α → β) (oa : OracleComp SigGolfCandidate.Legacy.HashSpec α) :
     Ref.countCalls (f <$> oa) = (fun p => (f p.1, p.2)) <$> Ref.countCalls oa := by
   unfold Ref.countCalls Ref.countWith
   rw [simulateQ_map, StateT.run_map]
@@ -60,7 +60,7 @@ structure Refinements : Prop where
     (fun p => (if p.1 then some () else none, p.2)) <$> Ref.countCalls (Ref.verifyRef m pk w)
 
 /-- The published key: the root. -/
-def pkEnc (pk : SphincsSecurity.PublicKey) : SigGolf.PublicKey := pk.root
+def pkEnc (pk : SphincsSecurity.PublicKey) : SigGolfCandidate.Legacy.PublicKey := pk.root
 
 /-- **The Bridge's assumptions**, except (A) security, from the bytecode refinements and the
 equivalence of the reference spec with the abstract scheme. -/

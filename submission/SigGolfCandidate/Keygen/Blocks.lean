@@ -9,7 +9,7 @@ placement. The `ecall`s (39, 56, 73, 101, 132, 171, 174) are singleton segments.
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv
 
 set_option maxRecDepth 8192
 

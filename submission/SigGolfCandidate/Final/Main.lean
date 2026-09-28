@@ -4,7 +4,7 @@ import SigGolfCandidate.Budget.Final
 /-!
 # The certificate
 
-`certificate_of : Pending → SigGolf.Certificate submission claimedC`: every organizer requirement,
+`certificate_of : Pending → SigGolfCandidate.Legacy.Certificate submission claimedC`: every organizer requirement,
 from the pending sign / verify / abstract-security statements (`Pending.lean`).
 
 | field | proof |
@@ -20,10 +20,10 @@ from the pending sign / verify / abstract-security statements (`Pending.lean`).
 open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Final
-open SigGolf
+open SigGolfCandidate.Legacy
 
 set_option allowUnsafeReducibility true in
-attribute [local reducible] SigGolfCandidate.submission SigGolf.Output SigGolf.Input
+attribute [local reducible] SigGolfCandidate.submission SigGolfCandidate.Legacy.Output SigGolfCandidate.Legacy.Input
 
 /-- **Termination**: expand is exact; keygen, sign and verify are pending. -/
 theorem submission_terminates (hK : KeygenTerminationStatement) (hS : SignTerminationStatement)

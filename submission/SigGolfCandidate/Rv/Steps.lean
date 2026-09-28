@@ -1,4 +1,4 @@
-import SigGolf
+import SigGolfCandidate.Legacy
 
 /-!
 # Generic execution lemmas for the organizer interpreter
@@ -15,7 +15,7 @@ Main laws:
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec
 
 /-- `k` ordinary steps with total cycle count `c`. -/
 inductive Steps (image : Image) : MachineState → Nat → Nat → MachineState → Prop where

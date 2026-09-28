@@ -6,7 +6,7 @@ import SigGolfCandidate.Submission
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
   SigGolfCandidate.Mem
 
 theorem getMem_setMem_ofNat (s : MachineState) (B A : Nat) (w : Word) (hB : B < 2 ^ 64)

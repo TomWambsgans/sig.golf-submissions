@@ -11,7 +11,7 @@ doublewords of a byte list. The HASH query of a padded input is `queryOfWords` o
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 def w64 (l : List Byte) : Word := BitVec.ofNat 64 (leNat l)
 

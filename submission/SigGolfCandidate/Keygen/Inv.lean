@@ -5,7 +5,7 @@ import SigGolfCandidate.Keygen.Spec
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- The masked-node region of the cache (`CACHE + 32`): the top tree is built here. -/
 abbrev REGION : Nat := 0x4B20

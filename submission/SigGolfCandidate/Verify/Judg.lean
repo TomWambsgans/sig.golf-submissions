@@ -12,7 +12,7 @@ within `C` cycles.
 -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 abbrev Obs := Bool × Nat
 
@@ -144,7 +144,7 @@ theorem Good.halt {s : MachineState} (hf : fetch image s = some (.base .ECALL))
 end SigGolfCandidate.Verify
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- HASH on a zero-padded (non-chain) input. -/
 theorem Good.hashP {s : MachineState} {N C : Nat} {x : List Byte}
@@ -180,7 +180,7 @@ end SigGolfCandidate.Verify
 all runs: an accepting run passed the check "total folds `≤ 120`".) -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 def GoodQ (s : MachineState) (N C : Nat) (Q : Prop) (A : Nat) (X : OracleComp HashSpec Obs) : Prop :=
   ∀ F, N ≤ F → obs <$> Riscv.execute F image s = X ∧

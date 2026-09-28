@@ -15,7 +15,7 @@ bytecode does it, but it never affects the queries.
 -/
 
 namespace SigGolfCandidate.Ref
-open SigGolf OracleComp OracleSpec
+open SigGolfCandidate.Legacy OracleComp OracleSpec
 
 /-- A tree node format: `node lam j l r` is the input of node `j` of level `lam`. -/
 abbrev NodeFmt := Nat → Nat → Val → Val → List Byte

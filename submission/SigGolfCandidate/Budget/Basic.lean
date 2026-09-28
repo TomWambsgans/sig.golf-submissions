@@ -16,7 +16,7 @@ result satisfies `Post`, and the compressions along every path are at most `k`. 
 -/
 
 namespace SigGolfCandidate.Budget
-open SigGolf OracleComp OracleSpec ENNReal OracleComp.EvalDist
+open SigGolfCandidate.Legacy OracleComp OracleSpec ENNReal OracleComp.EvalDist
 open SigGolfCandidate.Ref
 
 /-- The random-oracle cache. -/

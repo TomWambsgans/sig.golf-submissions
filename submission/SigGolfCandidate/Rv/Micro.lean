@@ -9,7 +9,7 @@ micro-semantics `Micro.exec`. The symbolic executor only has to be proven sound 
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64
 
 /-- ALU operand. -/
 inductive Src where

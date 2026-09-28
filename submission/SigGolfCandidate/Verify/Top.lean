@@ -5,7 +5,7 @@ import SigGolfCandidate.Verify.PorsGood
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-- The cycle bound of accepting runs: `9784 + 17 · 120 + 2 · 29` (every accepting run costs
 exactly `9784 + 17 F + 2 G`, `F ≤ 120` the total folds, `G ≤ 29` the segments with `a ≥ 1`). -/

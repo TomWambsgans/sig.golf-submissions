@@ -25,7 +25,7 @@ lazy random oracle, succeed with probability at least `1 - 2^-256`.
 open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Final
-open SigGolf
+open SigGolfCandidate.Legacy
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_relabel)
 
 set_option allowUnsafeReducibility true in

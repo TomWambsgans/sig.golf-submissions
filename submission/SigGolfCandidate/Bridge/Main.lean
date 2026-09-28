@@ -7,7 +7,7 @@ import SigGolfCandidate.Bridge.Abs
 `Submission.Secure`.
 -/
 
-open OracleSpec OracleComp SigGolf ENNReal
+open OracleSpec OracleComp SigGolfCandidate.Legacy ENNReal
 
 namespace SigGolfCandidate.Bridge
 

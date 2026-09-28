@@ -15,7 +15,7 @@ import SigGolfCandidate.Rv.SimpAttr
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 OracleComp
 
 /-! ## Block specifications -/
 

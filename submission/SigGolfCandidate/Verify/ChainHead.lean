@@ -5,7 +5,7 @@ import SigGolfCandidate.Verify.ChainSem
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem land1008 (n : Nat) : n &&& 1008 = 16 * (n / 16 % 64) := by
   apply Nat.eq_of_testBit_eq; intro j

@@ -15,7 +15,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- `node_hash` with the destination in `x25` (`add a2, s9, gp`). -/
 def nodeSegD : List (BitVec 32) := [0x01180133#32, 0x1c202623#32, 0x00581193#32, 0x013181b3#32, 0x0001b083#32,

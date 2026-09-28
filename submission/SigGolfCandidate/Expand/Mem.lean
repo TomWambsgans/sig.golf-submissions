@@ -11,7 +11,7 @@ import SigGolfCandidate.Ref
 -/
 
 namespace SigGolfCandidate.Mem
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 
 theorem ofNat_toNat_lt {a : Nat} (h : a < 2 ^ 64) : (BitVec.ofNat 64 a).toNat = a := by
@@ -187,7 +187,7 @@ theorem readBuffer_eq (t : MachineState) (addr n : Nat) :
   rw [foldl_bytes_eq_leNat (fun i => t.getByte (BitVec.ofNat 64 (addr + i)))]
 
 theorem getD_bytes {n : Nat} (x : Bytes n) (j : Nat) (hj : j < n) :
-    (SigGolf.bytes x).getD j 0 = x.extractLsb' (8 * j) 8 := by
-  simp [SigGolf.bytes, hj]
+    (SigGolfCandidate.Legacy.bytes x).getD j 0 = x.extractLsb' (8 * j) 8 := by
+  simp [SigGolfCandidate.Legacy.bytes, hj]
 
 end SigGolfCandidate.Mem

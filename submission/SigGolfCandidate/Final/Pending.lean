@@ -36,7 +36,7 @@ proof of `Bridge.EventSecurity` is one of it).
 -/
 
 namespace SigGolfCandidate.Final
-open SigGolf
+open SigGolfCandidate.Legacy
 
 /-- **Keygen refinement** (keygen agent). For every secret key, the keygen program outputs the
 reference's `(pk, cache) = Ref.keygenRef sk`, with its joint call / compression counter. -/

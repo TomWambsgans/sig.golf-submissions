@@ -14,7 +14,7 @@ normalize additive constants so that addresses have the shape `base + const`.
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64
 
 deriving instance Lean.ToExpr for Reg
 deriving instance Lean.ToExpr for WordOp

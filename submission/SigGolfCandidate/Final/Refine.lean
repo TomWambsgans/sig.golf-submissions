@@ -16,20 +16,20 @@ import SigGolfCandidate.Final.Abstract
 open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Final
-open SigGolf
+open SigGolfCandidate.Legacy
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map)
 
 set_option allowUnsafeReducibility true in
 attribute [local reducible] SphincsSecurity.hashOutputBits SphincsSecurity.digestBits
   SphincsSecurity.messageBits SphincsSecurity.publicParameterBits SphincsSecurity.counterBits
-  SigGolfCandidate.submission SigGolf.Output SigGolf.Input
+  SigGolfCandidate.submission SigGolfCandidate.Legacy.Output SigGolfCandidate.Legacy.Input
 
 theorem keygen_value (hK : KeygenRefinementStatement) (sk : SecretKey) :
     (fun r => r.value) <$> submission.run .keygen sk = some <$> Ref.keygenRef sk := by
   have h := congrArg (fun x => Prod.fst <$> x) (hK sk)
   simp only [Functor.map_map] at h
   refine h.trans ?_
-  have e : (fun a : (SigGolf.PublicKey × SigGolfCandidate.Cache) × Nat × Nat => some a.1) <$>
+  have e : (fun a : (SigGolfCandidate.Legacy.PublicKey × SigGolfCandidate.Cache) × Nat × Nat => some a.1) <$>
       Sign.countBoth (Ref.keygenRef sk) = some <$> (Prod.fst <$> Sign.countBoth (Ref.keygenRef sk)) :=
     (Functor.map_map _ _ _).symm
   rw [e, Sign.fst_countBoth]

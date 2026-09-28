@@ -13,7 +13,7 @@ the HASH input of a buffer written by a block.
 -/
 
 namespace SigGolfCandidate.Rv
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64
 
 /-- Little-endian concatenation of doublewords. -/
 def wordsToNat : List Word → Nat

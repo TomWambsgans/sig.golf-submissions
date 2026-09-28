@@ -6,7 +6,7 @@ import SigGolfCandidate.Verify.Judg
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 def restFold (c : CCtx) (i mu : Nat) (v : Val) : OracleComp HashSpec Val :=
   (List.range' mu (8 - mu)).foldlM (fun v mu => hash16 (chainInput c.lay c.tau c.e i mu v)) v

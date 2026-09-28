@@ -9,7 +9,7 @@ nodes). The mask loop walks the region in order: node `(l, j)` (index `lvOff l +
 -/
 
 namespace SigGolfCandidate.Keygen
-open RiscvZkvm.Rv64 SigGolf SigGolf.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
+open RiscvZkvm.Rv64 SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv SigGolfCandidate.Rv SigGolfCandidate.Ref OracleComp
 
 /-! ## Bytewise XOR of 16-byte values -/
 

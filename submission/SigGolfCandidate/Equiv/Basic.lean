@@ -18,7 +18,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query)
 
 /-- Abstract hash inputs as organizer bytes. -/
@@ -44,13 +44,13 @@ theorem toB_injective : Function.Injective toB := by
 
 theorem toB_bytesLE (n : Nat) (v : BitVec (8 * n)) :
     toB (SphincsSecurity.bytesLE n v) = Ref.toList v := by
-  simp only [toB, SphincsSecurity.bytesLE, Ref.toList, SigGolf.bytes, List.map_ofFn]
+  simp only [toB, SphincsSecurity.bytesLE, Ref.toList, SigGolfCandidate.Legacy.bytes, List.map_ofFn]
   apply List.ext_getElem (by simp)
   intro i h1 h2
   simp
 
 theorem leBytes_eq_toList (k v : Nat) : Ref.leBytes k v = Ref.toList (BitVec.ofNat (8 * k) v) := by
-  simp only [Ref.leBytes, Ref.toList, SigGolf.bytes]
+  simp only [Ref.leBytes, Ref.toList, SigGolfCandidate.Legacy.bytes]
   apply List.map_congr_left
   intro i hi
   rw [List.mem_range] at hi
@@ -61,7 +61,7 @@ theorem toB_bytesLE_ofNat (k v : Nat) :
   rw [toB_bytesLE, leBytes_eq_toList]
 
 theorem toList_zero (n : Nat) : Ref.toList (0 : Bytes n) = Ref.zeros n := by
-  simp only [Ref.toList, SigGolf.bytes, Ref.zeros]
+  simp only [Ref.toList, SigGolfCandidate.Legacy.bytes, Ref.zeros]
   apply List.ext_getElem (by simp)
   intro i h1 h2
   simp
@@ -128,7 +128,7 @@ theorem dv_injective : Function.Injective dv := by
 
 theorem answerBytes_eq (a : BitVec 256) :
     Ref.answerBytes 16 a = dv (SphincsSecurity.truncateHash a) := by
-  simp only [Ref.answerBytes, dv, Ref.toList, SigGolf.bytes, SphincsSecurity.truncateHash]
+  simp only [Ref.answerBytes, dv, Ref.toList, SigGolfCandidate.Legacy.bytes, SphincsSecurity.truncateHash]
   apply List.map_congr_left
   intro i hi
   rw [List.mem_range] at hi

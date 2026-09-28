@@ -5,7 +5,7 @@ import SigGolfCandidate.Verify.Mem
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 def pcOf (n : Nat) : Word := BitVec.ofNat 64 (0x1000 + 4 * n)
 

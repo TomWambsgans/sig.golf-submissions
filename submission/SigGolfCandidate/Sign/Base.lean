@@ -19,7 +19,7 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedVariables false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 open Lean Elab Command Meta in
 /-- `kernel_theorem name : ∀ xs, lhs = rhs` — proof `fun xs => Eq.refl lhs`, checked by the

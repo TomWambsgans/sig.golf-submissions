@@ -20,7 +20,7 @@ Combinators: `Sim.pure`, `Sim.steps` (prefix a block of ordinary steps), `Sim.qu
 -/
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 OracleComp OracleSpec SigGolfCandidate.Rv
   SigGolfCandidate.Ref
 
 /-! ## Joint call / compression counter -/

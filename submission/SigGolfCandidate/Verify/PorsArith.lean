@@ -6,7 +6,7 @@ import SigGolfCandidate.Verify.LayArith
 set_option linter.unusedSimpArgs false
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem ext_toNat (a : BitVec 256) (i : Nat) :
     (a.extractLsb' (64 * i) 64).toNat = a.toNat / 2 ^ (64 * i) % 2 ^ 64 := by

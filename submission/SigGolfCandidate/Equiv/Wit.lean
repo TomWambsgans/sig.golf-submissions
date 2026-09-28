@@ -23,7 +23,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes)
+open SigGolfCandidate.Legacy (Byte Bytes)
 open SphincsSecurity (Digest Signature Layer ChainIndex Segment FtsSignature LayerSignature Message
   PublicKey)
 

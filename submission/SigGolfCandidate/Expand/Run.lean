@@ -11,7 +11,7 @@ for `none`, success with witness buffer bytes `w` for `some w`.
 -/
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 def Run (s : MachineState) (B : Nat) (P : MachineState → Prop) : Prop :=
   ∃ t k c, Steps image s k c t ∧ c ≤ B ∧ P t

@@ -16,7 +16,7 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 100000
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 theorem packTab_length : packTab.length = 491 := by decide +kernel
 
@@ -97,7 +97,7 @@ theorem pack_bytes (t u : MachineState)
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref SigGolfCandidate.Mem
 
 /-- The source addresses of the table entries, 8 per entry. -/
 def blocks8 (T : List (Nat × Nat × Nat)) : List Nat := T.flatMap (fun e => (List.range 8).map (srcA e))

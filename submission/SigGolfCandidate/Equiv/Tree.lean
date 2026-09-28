@@ -12,7 +12,7 @@ open OracleComp OracleSpec
 
 namespace SigGolfCandidate.Equiv
 
-open SigGolf (Byte Bytes Query)
+open SigGolfCandidate.Legacy (Byte Bytes Query)
 open SigGolfCandidate.Bridge (relabel relabel_pure relabel_bind relabel_map relabel_query)
 open SphincsSecurity (Digest Layer TreeIndex LeafIndex ChainIndex Encoding MasterSeed)
 open SphincsSecurity.Concrete (sequenceFin)
@@ -59,7 +59,7 @@ theorem answerBytes_take (a : BitVec 256) :
 
 theorem answerBytes_drop (a : BitVec 256) :
     (Ref.answerBytes 32 a).drop 16 = dv (a.extractLsb' 128 128) := by
-  simp only [Ref.answerBytes, dv, Ref.toList, SigGolf.bytes, ← List.map_drop]
+  simp only [Ref.answerBytes, dv, Ref.toList, SigGolfCandidate.Legacy.bytes, ← List.map_drop]
   have hr : (List.range 32).drop 16 = (List.range 16).map (· + 16) := by decide
   rw [hr, List.map_map]
   apply List.map_congr_left
@@ -79,7 +79,7 @@ theorem prf2_eq (x : List UInt8) (y : List Byte) (hy : toB x = y) :
   subst hy
   unfold Ref.prf2
   simp only [relabel_bind, relabel_oracleHash, relabel_pure, map_bind, map_pure]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun a => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun a => ?_
   rw [answerBytes_take, answerBytes_drop]
   rfl
 
@@ -287,11 +287,11 @@ theorem buildLeaf_eq (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (leaf 
         have e3 : 2 * j + 1 = (SphincsSecurity.oddChain ⟨j, hj⟩).val := rfl
         rw [prf2_ots seed lay tree leaf ⟨j, hj⟩, e3, e2, hx, hx, bind_map_left]
         simp only [absPair, relabel_bind, relabel_pure, map_bind, bind_assoc]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun sec => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun sec => ?_
         rw [chainSteps_eq lay tree leaf _ _ (digit_le enc _) sec.1, bind_map_left]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r0 => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun r0 => ?_
         rw [chainSteps_eq lay tree leaf _ _ (digit_le enc _) sec.2, bind_map_left]
-        refine bind_congr (m := OracleComp SigGolf.HashSpec) fun r1 => ?_
+        refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun r1 => ?_
         rfl)]
   simp only [relabel_bind, relabel_sequenceFin, relabel_pure, map_bind, bind_map_left, map_pure]
   refine bind_congr fun f => ?_
@@ -307,7 +307,7 @@ theorem buildLeaf_eq (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (leaf 
 theorem fst_chainSteps (lay tau e i x : Nat) (v : Ref.Val) :
     Prod.fst <$> Ref.chainSteps lay tau e i x v = Prod.fst <$> Ref.chainSteps lay tau e i 0 v := by
   unfold Ref.chainSteps
-  have h := fun y => map_fst_foldlM (m := OracleComp SigGolf.HashSpec) (List.range' 1 7)
+  have h := fun y => map_fst_foldlM (m := OracleComp SigGolfCandidate.Legacy.HashSpec) (List.range' 1 7)
     (fun (a : Ref.Val) mu => Ref.hash16 (Ref.chainInput lay tau e i mu a)) (fun _ _ r => r)
     (fun st mu r => if mu = y then r else st.2) (v, v)
   exact (h x).trans (h 0).symm
@@ -374,7 +374,7 @@ theorem fst_buildLeaf (S : List Byte) (lay tau e : Nat) (x y : List Nat) :
       funext st k
       simp only [bind_assoc, pure_bind]
     rw [hbody]
-    have h := map_fst_foldlM (m := OracleComp SigGolf.HashSpec) (List.range (Ref.nChains / 2))
+    have h := map_fst_foldlM (m := OracleComp SigGolfCandidate.Legacy.HashSpec) (List.range (Ref.nChains / 2))
       (fun (_ : List Ref.Val) k =>
         Ref.prf2 (Ref.prfInput S lay tau e k) >>= fun s =>
           Ref.chainSteps lay tau e (2 * k) (z.getD (2 * k) 0) s.1 >>= fun r0 =>
@@ -511,7 +511,7 @@ theorem buildLevels_steps (h cap : Nat) (hcap : cap < 2 ^ h) (leaves : Nat → D
         relabel fmtQ (hashNode (L + 1) j (T L (2 * j)) (T L (2 * j + 1)))) _ dv (fun j hj => hb j hj)]
     simp only [relabel_bind, relabel_pure, relabel_sequenceFin, map_bind, map_pure, Functor.map_map,
       bind_map_left, bind_assoc, pure_bind]
-    refine bind_congr (m := OracleComp SigGolf.HashSpec) fun row => ?_
+    refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun row => ?_
     congr 1
     rw [foldl_finRange_append, List.nil_append, getD_ofFn]
     have hk : (cap / 2 ^ L) ^^^ 1 < 2 ^ (h - L) := by
@@ -575,14 +575,14 @@ theorem buildTree_eq (seed : MasterSeed) (lay : Layer) (tree : TreeIndex) (leaf 
     SphincsSecurity.Concrete.buildLayerTablePaired
   rw [buildLeaves_eq seed lay tree leaf hcap digits x hx]
   simp only [relabel_bind, relabel_pure, map_bind, bind_map_left, map_pure, bind_assoc, pure_bind]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun f => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun f => ?_
   rw [ofFn_leaves f Prod.snd]
   rw [buildLevels_eq (Ref.nodeInput lay tree) (fun level nodeIdx left right =>
       SphincsSecurity.Concrete.tweakableHash (m := AComp) 0 (.node lay tree level nodeIdx)
         (SphincsSecurity.Concrete.nodePayload left right)) (hash16_node lay tree) _ _ hcap
       (fun k => if h : k < 2 ^ SphincsSecurity.layerHeight lay then (f ⟨k, h⟩).2 else 0)]
   simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp]
-  refine bind_congr (m := OracleComp SigGolf.HashSpec) fun T => ?_
+  refine bind_congr (m := OracleComp SigGolfCandidate.Legacy.HashSpec) fun T => ?_
   simp [hcap]
 
 end SigGolfCandidate.Equiv

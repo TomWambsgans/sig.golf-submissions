@@ -24,7 +24,7 @@ Variants: `V = 0` (M, merge), `1` (P, push), `2` (F, root).
 -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 /-! ## pcs -/
 
@@ -250,7 +250,7 @@ def leafCheck (s : Nat) : Bool :=
 end SigGolfCandidate.Verify
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 /-! ## Prologue, counter check, digest, PORS setup -/
 

@@ -3,7 +3,7 @@ import SigGolfCandidate.Verify.FoldRuns
 /-! # Chains (JALR dispatch tables): expected symbolic results -/
 
 namespace SigGolfCandidate.Verify
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 def tget (tab : List (List Nat)) (lay i : Nat) : Nat := (tab.getD lay []).getD i 0
 

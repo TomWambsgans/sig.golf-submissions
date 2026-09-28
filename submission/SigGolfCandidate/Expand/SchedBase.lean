@@ -18,7 +18,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- `RegsEq` of a block result, by evaluation (the registers outside `l` are `.reg r`). -/
 macro "regs_eq" : tactic => `(tactic| (apply regsEq_toState; intro x hx; cases x <;> first | (simp at hx; done) | rfl))
@@ -70,7 +70,7 @@ theorem sig_dword_byte {t : MachineState} {sig : List Byte} (h : SigOK t sig) (d
 end SigGolfCandidate.Expand
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-! ## The reference schedule step, unfolded -/
 

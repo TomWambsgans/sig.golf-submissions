@@ -14,7 +14,7 @@ set_option linter.unusedVariables false
 set_option linter.unnecessarySeqFocus false
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- Buffers that stay constant during the layer phase (P slots, `S`). -/
 structure Statics (S : List Byte) (t : MachineState) : Prop where
@@ -385,7 +385,7 @@ theorem tree_setup (S : List Byte) (lay tau h e d0 d1 : Nat) (hlay : lay < 6) (h
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem signLayers_succ (S cache : List Byte) (idx lay : Nat) (M : Val) :
     signLayers S cache idx (lay + 1) M =
@@ -419,7 +419,7 @@ theorem signTop_eq (S cache : List Byte) (idx : Nat) (M : Val) :
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 /-- A staged layer signature (counter, 42 chain values, path) of layer `l`. -/
 def StageAt (t : MachineState) (l : Nat) (ls : LayerSig) : Prop :=
@@ -480,7 +480,7 @@ theorem layer_tail (lay : Nat) (hlay : lay < 6) (h1 : 1 ≤ lay) (t : MachineSta
 end SigGolfCandidate.Sign
 
 namespace SigGolfCandidate.Sign
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv SigGolfCandidate.Ref
 
 theorem length_cacheNode (cache : List Byte) (hc : cache.length = 131072) (l j : Nat) (hl : l < 11)
     (hj : j < 2 ^ (11 - l)) : (cacheNode cache l j).length = 16 := by

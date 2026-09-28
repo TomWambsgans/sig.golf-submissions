@@ -3,7 +3,7 @@ import SigGolfCandidate.Expand.Base
 import SigGolfCandidate.Submission
 
 namespace SigGolfCandidate.Expand
-open SigGolf SigGolf.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
+open SigGolfCandidate.Legacy SigGolfCandidate.Legacy.Riscv RiscvZkvm.Rv64 SigGolfCandidate.Rv
 
 set_option maxRecDepth 16384
 
